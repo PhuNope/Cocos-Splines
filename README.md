@@ -108,3 +108,9 @@ The extension follows the runtime `contributions.asset-db.mount` and editor `dis
 Install: replace `<Project>/extensions/cocos-splines` with the folder in the release ZIP. See `README_VI.md` for step-by-step guidance.
 
 Tests cover offline math and Editor mocks, not a live Cocos Creator 3.8.8 project or shader compiler.
+
+## Offline HTML documentation (v0.9.1)
+
+Open [`docs/index.html`](docs/index.html) in your browser. It contains 20 linked Vietnamese pages (API, Inspector usage, code examples, troubleshooting).
+
+**Follower speed fix:** Set `SplineAnimate.constantSpeedWithOffset = true` (on by default) for uniform physical speed when using spline-frame offsets. **Morph preview fix:** After Restore with Preview enabled, changing Blend updates the output again.

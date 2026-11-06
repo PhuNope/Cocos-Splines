@@ -1,0 +1,28 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Các đoạn mã khởi tạo phổ biến để copy vào component script trong Cocos Creator."><title>Ví dụ TypeScript | Cocos Splines Docs 0.9.1</title><link rel="stylesheet" href="../assets/style.css"></head><body><div class="app"><aside class="sidebar"><a class="brand" href="../index.html"><span class="logo">S</span>Cocos Splines</a><div class="version">DOCS v0.9.1 · Cocos Creator 3.8.8</div><input class="search" id="nav-search" placeholder="Tìm trang... ( / )" aria-label="Tìm trang"><nav><div class="group-label">Bắt đầu</div><a class="navlink" href="../index.html">Tổng quan</a><a class="navlink" href="install.html">Cài đặt &amp; cấu trúc</a><a class="navlink" href="core.html">Spline Container &amp; Knot</a><a class="navlink" href="coordinates.html">t, Distance, Progress</a><div class="group-label">Di chuyển &amp; events</div><a class="navlink" href="animate.html">Spline Animate</a><a class="navlink" href="junction.html">Junction / Routing</a><a class="navlink" href="events.html">Trigger &amp; Events</a><a class="navlink" href="positioner.html">Positioner / Projector</a><a class="navlink" href="length-modifiers.html">Length Monitor / Modifiers</a><div class="group-label">Hình học &amp; bố trí</div><a class="navlink" href="road.html">Road &amp; Extrude</a><a class="navlink" href="deform.html">Mesh Deform</a><a class="navlink" href="objects.html">Instantiate / Object Controller</a><a class="navlink" href="bender.html">Object Bender</a><a class="navlink" href="morph.html">Spline Morph</a><a class="navlink" href="junction-mesh.html">Junction Mesh</a><a class="navlink" href="2d-gizmos.html">Spline 2D / Gizmos</a><div class="group-label">Tham khảo</div><a class="navlink" href="api.html">API Reference</a><a class="navlink active" href="examples.html">Ví dụ TypeScript</a><a class="navlink" href="troubleshooting.html">Xử lý lỗi</a><a class="navlink" href="git.html">Git dev → main → Release</a></nav><div class="bottom">Tài liệu HTML offline · Không cần server</div></aside><div class="wrap"><div class="topbar"><span>DOCS / <b>Ví dụ TypeScript</b></span><span class="pill">v0.9.1</span></div><main class="article"><div class="eyebrow">Cocos Creator 3.8.8 · Guide &amp; API</div><h1>Ví dụ TypeScript</h1><p class="lead">Các đoạn mã khởi tạo phổ biến để copy vào component script trong Cocos Creator.</p><h2>1. TrafficSignals — tự chọn đường rẽ</h2><pre><code>import { _decorator, Component } from &#x27;cc&#x27;;
+import { SplineJunction, type JunctionEvent } from &#x27;db://cocos-splines/splines/Components/SplineJunction&#x27;;
+const { ccclass, property } = _decorator;
+@ccclass(&#x27;TrafficSignals&#x27;)
+export class TrafficSignals extends Component {
+  @property(SplineJunction) junction: SplineJunction | null = null;
+  private next = 1;
+  onEnable() { this.junction?.AddOnReachEvent(this.onReach, this); }
+  onDisable() { this.junction?.RemoveOnReachEvent(this.onReach, this); }
+  private onReach(event: JunctionEvent) {
+    if (event.entryIndex === 0) {
+      event.follower.requestJunctionExit(this.next);
+      this.next = this.next === 1 ? 2 : 1;
+    } else event.follower.requestJunctionExit(0);
+  }
+}</code></pre><h2>2. Chạy làn lệch với tốc độ đều</h2><pre><code>import { SplineAnimate, AnimateMethod, Easing } from &#x27;db://cocos-splines/splines/Components/SplineAnimate&#x27;;
+const animate = this.getComponent(SplineAnimate)!;
+animate.method = AnimateMethod.Speed;
+animate.speed = 5;
+animate.easing = Easing.Linear;
+animate.splineOffset.set(1.8, 0, 0);
+animate.constantSpeedWithOffset = true;
+animate.restart();</code></pre><h2>3. Project object vào đường</h2><pre><code>const point = spline.projectWorld(myNode.worldPosition);
+console.log(point.t, point.progress, point.distance);
+myNode.setWorldPosition(point.worldPosition);</code></pre><h2>4. Blend spline bằng script</h2><pre><code>morph.blend = 0.25;
+morph.apply();
+// Khi cần bỏ thay đổi runtime/Editor:
+morph.restore();</code></pre></main><footer class="page-footer"><span>← <a href="api.html">API Reference</a></span><span><a href="troubleshooting.html">Xử lý lỗi</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>

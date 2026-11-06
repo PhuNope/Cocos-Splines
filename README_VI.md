@@ -298,3 +298,9 @@ Dành cho người phát triển: `npm run build`, `npm run check:runtime`, `npm
 
 ## v0.8.1 — Runtime event subscription
 Xem [RuntimeEvents_VI.md](docs/RuntimeEvents_VI.md) để sử dụng `AddOnReachEvent(cb, target)` và `RemoveOnReachEvent(cb, target)`.
+
+## Tài liệu HTML nhiều trang — v0.9.1
+
+Mở [`docs/index.html`](docs/index.html) để xem 20 trang hướng dẫn tiếng Việt (cài đặt, Spline, Animate, Junction, Event API, Road, MeshDeform, Morph, ví dụ và xử lý lỗi). Tài liệu có thể mở offline.
+
+Trong `SplineAnimate`, thuộc tính **Constant Speed With Offset** mặc định bật: Linear sẽ bù độ dài đường chạy thực khi có Offset, khắc phục nhanh/chậm ở đoạn cong. Trong `SplineMorph`, sau khi nhấn Restore nhưng Preview In Editor vẫn bật, chỉnh Blend lại sẽ preview bình thường.

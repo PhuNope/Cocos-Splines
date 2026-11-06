@@ -25,6 +25,7 @@ export class SplineMorph extends Component {
     private _signature='';
     private _applying=false;
     private holdRestore=false;
+    private _restoreKey='';
     private key():string{return JSON.stringify([this.sourceA?.getRevision(),this.sourceB?.getRevision(),
         this.sourceA?.node.worldMatrix,this.sourceB?.node.worldMatrix,this.outputSpline?.node.worldMatrix,this.blend]);}
     private sample():boolean {
@@ -86,7 +87,7 @@ export class SplineMorph extends Component {
     }
     public apply():boolean {
         if(this._applying)return false;
-        this._applying=true;this.holdRestore=false;
+        this._applying=true;this.holdRestore=false;this._restoreKey='';
         try{const ok=this.sample();if(ok)this._signature=this.key();return ok;}
         finally{this._applying=false;}
     }
@@ -96,13 +97,24 @@ export class SplineMorph extends Component {
             k.node.setPosition(state.position);k.tangentIn.set(state.input);k.tangentOut.set(state.output);
             k.mode=state.mode;k.tangentsInKnotSpace=state.local;
         }
-        this.outputSpline?.refresh();this._snapshot=[];this._signature='';this.holdRestore=true;
+        this.outputSpline?.refresh();this._snapshot=[];this._signature='';
+        // A manual Restore must hold its result until a property/source changes.
+        // Prior versions held it indefinitely, making Blend appear frozen.
+        this.holdRestore=true;this._restoreKey=this.key();
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW||this.previewInEditor)this.apply();}
     update():void{
-        if(EDITOR_NOT_IN_PREVIEW&&!this.previewInEditor){if(this._snapshot.length)this.restore();this.holdRestore=false;return;}
-        if(this.holdRestore)return;
-        if(this.updateOnChange&&this.key()!==this._signature)this.apply();
+        if(EDITOR_NOT_IN_PREVIEW&&!this.previewInEditor){
+            if(this._snapshot.length)this.restore();
+            this.holdRestore=false;this._restoreKey='';return;
+        }
+        const key=this.key();
+        if(this.holdRestore){
+            if(key===this._restoreKey)return;
+            // Changing Blend or either source after Restore re-enables preview.
+            this.holdRestore=false;this._restoreKey='';
+        }
+        if(this.updateOnChange&&key!==this._signature)this.apply();
     }
     onDisable():void{this.restore();}
     onDestroy():void{this.restore();}

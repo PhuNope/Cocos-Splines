@@ -6,7 +6,7 @@ import { SplineTrigger } from './SplineTrigger';
 import { SplineJunction, JunctionExitDirection } from './SplineJunction';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
-import { clamp01, crosses, easing, inverseEasing, orderCrossings, type Direction, type Crossing } from '../Core/SplineTraversal';
+import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
 const {ccclass,property,menu,executeInEditMode}= _decorator;
 export interface SplineBoundaryEvent {
     follower:SplineAnimate;target:Node;spline:SplineContainer;progress:number;direction:Direction;
@@ -33,7 +33,7 @@ export class SplineAnimate extends Component {
     @property({type:SplineModifiers,tooltip:'Optional path-local Offset, Speed, Roll keyframe modifiers.'}) modifiers:SplineModifiers|null=null;
     @property({type:Enum(AnimateMethod)}) method:AnimateMethod=AnimateMethod.Time;
     @property({min:0.001,tooltip:'Seconds to complete one traversal when Method = Time.'}) duration=4;
-    @property({min:0,tooltip:'Spline local units per second when Method = Speed.'}) speed=2;
+    @property({min:0,tooltip:'Units per second. With Constant Speed with Offset enabled, uses the actual world-space offset trajectory.'}) speed=2;
     @property({type:Enum(LoopMode)}) loopMode:LoopMode=LoopMode.Loop;
     @property({type:Enum(Easing)}) easing:Easing=Easing.Linear;
     @property({tooltip:'Orient target local +Z along the spline tangent.'}) alignToSpline=true;
@@ -54,6 +54,7 @@ export class SplineAnimate extends Component {
     @property({min:0,tooltip:'Start at this absolute spline-local distance when Start Position Mode = Distance.'}) startDistance=0;
     @property({type:Vec3}) worldOffset=new Vec3();
     @property({type:Vec3,tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units). Applied after deformation; World Offset remains world-axis-aligned.'}) splineOffset=new Vec3();
+    @property({tooltip:'Compensate for the longer/shorter offset trajectory at bends. Linear easing then means uniform movement in world space, not just along the centerline. Uses a cached arc-length lookup.'}) constantSpeedWithOffset=true;
     @property({tooltip:'Temporary preview in the Scene Editor; turn off to restore original transform.'}) previewInEditor=false;
     @property({type:Enum(SplinePositionMode),tooltip:'Choose editor preview coordinate: normalized distance, absolute distance or geometric t.'})
     previewPositionMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
@@ -83,26 +84,70 @@ export class SplineAnimate extends Component {
     private _previewPosition:Vec3|null=null;
     private _previewRotation:Quat|null=null;
     private _previewKey='';
+    private _offsetArcCache:{spline:SplineContainer;key:string;lut:OffsetArcLUT}|null=null;
 
     public get currentSpline():SplineContainer|null { return this.source(); }
-    public get currentProgress():number {return easing(this._raw,this.easing);}
+    public get currentProgress():number {return this.progressAtRaw(this._raw,this.source());}
     /** Arc distance of the current follower position, in spline-local units. */
     public get currentDistance():number{return this.currentProgress*(this.source()?.length||0);}
     /** Uniform Bezier parameter of the current visible position (not raw easing time). */
     public get currentT():number{return this.source()?.tAtProgress(this.currentProgress)||0;}
     private coordinateRaw(spline:SplineContainer|null,mode:SplinePositionMode,progress:number,distance:number):number {
-        if(!spline||mode===SplinePositionMode.NormalizedDistance)return clamp01(progress); // legacy saved values
-        return inverseEasing(toNormalizedDistance(spline,mode,progress,distance),this.easing);
+        if(!spline)return clamp01(progress);
+        // With the compensation disabled, retain the original normalized start
+        // progress semantics of existing scenes (legacy raw playback input).
+        if(mode===SplinePositionMode.NormalizedDistance&&!this.offsetArc(spline))return clamp01(progress);
+        return this.rawAtProgress(toNormalizedDistance(spline,mode,progress,distance),spline);
     }
 
+    /** Samples the SAME world positions used to place the follower. */
+    private pathWorldPosition(spline:SplineContainer,progress:number):Vec3 {
+        const position=spline.evaluateWorldPosition(progress);
+        const modifier=this.modifiers?.sample(progress);
+        if(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z||modifier){
+            const frame=Quat.multiply(new Quat(),spline.node.worldRotation,spline.evaluateRotation(progress));
+            const offset=new Vec3(this.splineOffset.x+(modifier?.offset.x||0),
+                this.splineOffset.y+(modifier?.offset.y||0),this.splineOffset.z+(modifier?.offset.z||0));
+            Vec3.add(position,position,Vec3.transformQuat(offset,offset,frame));
+        }
+        Vec3.add(position,position,this.worldOffset);
+        return position;
+    }
+    /** Cached offset arc. World transform and keyframe changes invalidate it. */
+    private offsetArc(spline:SplineContainer|null):OffsetArcLUT|null {
+        if(!this.constantSpeedWithOffset||!spline||spline.count<2)return null;
+        const o=this.splineOffset;
+        const hasOffset=!!(o.x||o.y||o.z)||!!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
+        if(!hasOffset)return null;
+        const world=spline.node.worldMatrix;
+        const key=JSON.stringify([spline.getRevision(),spline.length,
+            world?.m00,world?.m01,world?.m02,world?.m04,world?.m05,world?.m06,
+            world?.m08,world?.m09,world?.m10,world?.m12,world?.m13,world?.m14,
+            o.x,o.y,o.z,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
+        if(this._offsetArcCache?.spline===spline&&this._offsetArcCache.key===key)return this._offsetArcCache.lut;
+        const steps=Math.min(2048,Math.max(256,Math.floor((spline.segmentCount||1)*64)));
+        const lut=buildOffsetArcLUT(p=>this.pathWorldPosition(spline,p),steps);
+        this._offsetArcCache={spline,key,lut};
+        return lut;
+    }
+    private progressAtRaw(raw:number,spline:SplineContainer|null):number {
+        const fraction=easing(raw,this.easing),lut=this.offsetArc(spline);
+        return lut?offsetDistanceFractionToProgress(lut,fraction):fraction;
+    }
+    private rawAtProgress(progress:number,spline:SplineContainer|null):number {
+        const lut=this.offsetArc(spline);
+        const fraction=lut?offsetProgressToDistanceFraction(lut,progress):clamp01(progress);
+        return inverseEasing(fraction,this.easing);
+    }
     public get travelDirection():Direction {return this._travelDirection;}
     private source():SplineContainer|null {
         return this._activeSpline||this.spline||this.getComponent(SplineContainer)||this.node.parent?.getComponent(SplineContainer)||null;
     }
     private getDuration():number {
         const spline=this.source();
+        const distance=spline?(this.offsetArc(spline)?.length??spline.length):0;
         return this.method===AnimateMethod.Speed
-            ? Math.max(0.001,(spline?.length||0)/Math.max(0.001,this.speed))
+            ? Math.max(0.001,distance/Math.max(0.001,this.speed))
             : Math.max(0.001,this.duration);
     }
     onEnable():void {
@@ -132,7 +177,7 @@ export class SplineAnimate extends Component {
     /** Switch to a source manually, without firing triggers or traveling. */
     public setCurrentSpline(spline:SplineContainer,progress=0,direction:Direction=1):void{
         this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
-        this._raw=inverseEasing(clamp01(progress),this.easing);
+        this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);
     }
     /** Switch spline at an absolute distance, not at a normalized progress. */
@@ -142,12 +187,12 @@ export class SplineAnimate extends Component {
     /** Seek by absolute arc distance, respecting eased movement and optional events. */
     public seekDistance(distance:number,fireEvents=false):void {
         const spline=this.source();if(!spline)return;
-        this.seek(inverseEasing(toNormalizedDistance(spline,SplinePositionMode.Distance,0,distance),this.easing),fireEvents);
+        this.seek(this.rawAtProgress(toNormalizedDistance(spline,SplinePositionMode.Distance,0,distance),spline),fireEvents);
     }
     /** Seek by geometric Bezier t, not normalized arc fraction. */
     public seekAtT(t:number,fireEvents=false):void {
         const spline=this.source();if(!spline)return;
-        this.seek(inverseEasing(toNormalizedDistance(spline,SplinePositionMode.SplineT,t,0),this.easing),fireEvents);
+        this.seek(this.rawAtProgress(toNormalizedDistance(spline,SplinePositionMode.SplineT,t,0),spline),fireEvents);
     }
     /** Seek does not dispatch triggers unless explicitly requested. */
     public seek(t:number,fireEvents=false):void {
@@ -166,7 +211,8 @@ export class SplineAnimate extends Component {
         const m=spline?.node.worldMatrix;
         return JSON.stringify([spline?.getRevision(),m?.m00,m?.m01,m?.m02,m?.m04,m?.m05,m?.m06,
             m?.m08,m?.m09,m?.m10,m?.m12,m?.m13,m?.m14,this.target?.uuid,
-            this.previewProgress,this.previewPositionMode,this.previewDistance,this.alignToSpline,this.orient2D,this.orient2DAngleOffset,this.upMode,this.forwardAxis,this.rotationOffset,this.worldOffset,this.splineOffset]);
+            this.previewProgress,this.previewPositionMode,this.previewDistance,this.alignToSpline,this.orient2D,this.orient2DAngleOffset,this.upMode,this.forwardAxis,this.rotationOffset,this.worldOffset,this.splineOffset,
+            this.constantSpeedWithOffset,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
     }
     update(dt:number):void {
         if(EDITOR_NOT_IN_PREVIEW){
@@ -201,11 +247,11 @@ export class SplineAnimate extends Component {
     }
     /** Preview at an absolute distance. Does not fire gameplay events or change saved preview settings. */
     public previewAtDistance(distance:number):boolean {
-        const spline=this.source();return !!spline&&this.previewAt(inverseEasing(toNormalizedDistance(spline,SplinePositionMode.Distance,0,distance),this.easing));
+        const spline=this.source();return !!spline&&this.previewAt(this.rawAtProgress(toNormalizedDistance(spline,SplinePositionMode.Distance,0,distance),spline));
     }
     /** Preview at geometric Bezier t. */
     public previewAtT(t:number):boolean {
-        const spline=this.source();return !!spline&&this.previewAt(inverseEasing(toNormalizedDistance(spline,SplinePositionMode.SplineT,t,0),this.easing));
+        const spline=this.source();return !!spline&&this.previewAt(this.rawAtProgress(toNormalizedDistance(spline,SplinePositionMode.SplineT,t,0),spline));
     }
     public restorePreview():void {
         if(this._previewNode&&this._previewNode.isValid){
@@ -269,7 +315,7 @@ export class SplineAnimate extends Component {
             }
             const step=Math.min(toBoundary,remaining/duration);
             if(step<=1e-10)break;
-            const next=clamp01(this._raw+dir*step),from=this.ease(this._raw),to=this.ease(next);
+            const next=clamp01(this._raw+dir*step),from=this.progressAtRaw(this._raw,spline),to=this.progressAtRaw(next,spline);
             let jumped=false;
             for(const hit of this.crossings(spline,from,to,dir)){
                 const e=hit.payload;
@@ -299,11 +345,11 @@ export class SplineAnimate extends Component {
                         break; // On Reach still fires, routing never occurs.
                 }
                 if(!destination?.link.spline)continue;
-                const rawAtMarker=inverseEasing(hit.progress,this.easing);
+                const rawAtMarker=this.rawAtProgress(hit.progress,spline);
                 const elapsed=Math.min(remaining,Math.max(0,Math.abs(rawAtMarker-this._raw)*duration));
                 remaining=Math.max(0,remaining-elapsed);
                 this._activeSpline=destination.link.spline;
-                this._raw=inverseEasing(destination.link.getProgress(),this.easing);
+                this._raw=this.rawAtProgress(destination.link.getProgress(),this._activeSpline);
                 const newDir=destination.link.exitDirection;
                 this._travelDirection=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
                 this.elapsed=this._raw*this.getDuration();
@@ -365,20 +411,11 @@ export class SplineAnimate extends Component {
     private apply(progress:number):void {
         const spline=this.source();if(!spline||spline.count<2)return;
         const t=clamp01(progress);
-        const p=this.ease(t);
+        const p=this.progressAtRaw(t,spline);
         const target=this.target||this.node;
         if(target===spline.node)return;
-        const position=spline.evaluateWorldPosition(p);
-        // Keep old worldOffset semantics unchanged for existing scenes; apply
-        // additional offsets in the spline's uncorrected tangent/up frame.
+        const position=this.pathWorldPosition(spline,p);
         const modifier=this.modifiers?.sample(p);
-        if(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z||modifier){
-            const frame=Quat.multiply(new Quat(),spline.node.worldRotation,spline.evaluateRotation(p));
-            const off=new Vec3(this.splineOffset.x+(modifier?.offset.x||0),this.splineOffset.y+(modifier?.offset.y||0),
-                this.splineOffset.z+(modifier?.offset.z||0));
-            Vec3.add(position,position,Vec3.transformQuat(off,off,frame));
-        }
-        Vec3.add(position,position,this.worldOffset);
         target.setWorldPosition(position);
         if(this.alignToSpline){
             if(this.orient2D&&spline.dimension===SplineDimension.XY2D){

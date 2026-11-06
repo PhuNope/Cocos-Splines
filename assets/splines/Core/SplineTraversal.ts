@@ -38,3 +38,37 @@ export interface Crossing<T>{ progress:number; priority:number; payload:T }
 export function orderCrossings<T>(items:Crossing<T>[],direction:Direction):Crossing<T>[] {
     return items.sort((a,b)=>direction*(a.progress-b.progress)||a.priority-b.priority);
 }
+
+/** Cumulative world-space arc length for a path whose positions are sampled
+ * at normalized spline progress (not the original Bezier t). The input point
+ * may include spline-frame offsets and modifier animation.
+ */
+export interface OffsetArcLUT { distances:number[]; length:number; steps:number }
+export interface Point3Like {x:number;y:number;z:number}
+export function buildOffsetArcLUT(sample:(progress:number)=>Point3Like,steps=256):OffsetArcLUT {
+    const n=Math.max(2,Math.min(4096,Math.floor(steps)||256));
+    const distances=[0];let prev=sample(0),total=0;
+    for(let i=1;i<=n;i++){
+        const next=sample(i/n);
+        const segment=Math.hypot(next.x-prev.x,next.y-prev.y,next.z-prev.z);
+        total+=Number.isFinite(segment)?segment:0;
+        distances.push(total);prev=next;
+    }
+    return {distances,length:total,steps:n};
+}
+/** Map the centerline progress to a normalized fraction of the offset distance. */
+export function offsetProgressToDistanceFraction(lut:OffsetArcLUT,progress:number):number {
+    const x=clamp01(progress)*lut.steps,i=Math.min(lut.steps-1,Math.floor(x));
+    const a=lut.distances[i],b=lut.distances[i+1];
+    return lut.length>EPSILON?(a+(b-a)*(x-i))/lut.length:clamp01(progress);
+}
+/** Map normalized offset distance back to normalized *centerline* progress. */
+export function offsetDistanceFractionToProgress(lut:OffsetArcLUT,fraction:number):number {
+    const value=clamp01(fraction);
+    if(value===0||value===1||lut.length<=EPSILON)return value;
+    const distance=value*lut.length,d=lut.distances;
+    let lo=0,hi=lut.steps;
+    while(lo+1<hi){const mid=(lo+hi)>>1;if(d[mid]<distance)lo=mid;else hi=mid;}
+    const size=d[hi]-d[lo],u=size>EPSILON?(distance-d[lo])/size:0;
+    return clamp01((lo+u)/lut.steps);
+}

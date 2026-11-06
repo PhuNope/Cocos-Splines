@@ -1,3 +1,14 @@
+# v0.9.1 — Offset travel speed, Morph Preview and HTML documentation
+
+- **SplineAnimate:** Added `constantSpeedWithOffset` (defaults `true`). With nonzero Spline Offset or keyed Modifier Offset, a cached world-space arc-length lookup maps eased elapsed time to the actual follower trajectory. Linear Easing now keeps approximately constant physical speed on bends; Speed mode measures units/second on the offset path, Time mode still takes the requested duration.
+- Trigger and Junction markers remain at normalized *centerline* arc positions. `seekDistance`, `seekAtT` and `setCurrentSpline` map back to the correct centerline progress while compensation is active. Disabling compensation preserves the old centerline-speed behavior.
+- **SplineMorph:** After Restore while Preview In Editor remains ON, changes to Blend or source reactivate preview; no further change leaves the output restored, without the old permanent lock.
+- **Documentation:** 20-page Vietnamese offline HTML documentation set at `docs/index.html`, with individual pages for every major system, API reference, TypeScript examples, troubleshooting and Git workflow.
+- New runtime regression tests for real offset world-space step uniformity (Speed and Time), reverse mapping, and Morph Restore -> Blend -> Preview off.
+- Unchanged UUIDs for existing runtime scripts; no main branch release is triggered from dev.
+
+---
+
 # v0.9.0 — Advanced spline tools (dev)
 
 - Added keyed SplineModifiers (offset, scale, speed, width, roll) with deterministic interpolation.
