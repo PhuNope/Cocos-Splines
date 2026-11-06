@@ -1,3 +1,8 @@
+## 0.9.7
+- Visualize SplineModifiers with selected-only Gizmos: offset trajectory, configurable width guides, speed-colored key markers, optional roll/scale key axes.
+- Full Vietnamese modifier guide: per-field semantics, interpolation, consumer mapping, code/API, vehicle speed, road widening, lane change and prefab scale examples.
+- Gizmo unit tests and Inspector regression checks; previous script UUIDs preserved.
+
 ## 0.9.6 — Physical-size mesh repeat and atlas-safe UV
 - SplineMeshDeform Repeat Layout adds SourceLength: derives tile count from source mesh longitudinal bounds, optional Tile Length override in world units, clips the final tile instead of stretching all tiles.
 - Partial source triangles interpolate authored UV0 and smooth normals, preserve UV islands under KeepOriginal; generated PBR tangents are recomputed.

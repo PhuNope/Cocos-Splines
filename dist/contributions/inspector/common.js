@@ -25,7 +25,7 @@ const style=`
 .spl-status{font-size:11px;min-height:14px;color:#8ad6bb}
 `;
 const configs={
-  modifiers:{title:'Spline Modifiers',note:'Keyframes theo normalized ARC progress. Empty Keys = no change. Speed/Offset/Roll ảnh hưởng Animate (nếu gán Modifiers); Width ảnh hưởng Road; Scale/Offset ảnh hưởng Object Controller.',groups:[{title:'Keyed spline modifiers',fields:['spline','interpolation','keys']}]},
+  modifiers:{title:'Spline Modifiers',note:'Keyframes theo normalized ARC progress. Empty Keys = no change. Speed/Offset/Roll ảnh hưởng Animate (nếu gán Modifiers); Width ảnh hưởng Road; Scale/Offset ảnh hưởng Object Controller.',groups:[{title:'Keyed spline modifiers',fields:['spline','interpolation','keys']},{title:'Scene gizmos (selected)',fields:['showGizmos','gizmoSamples','showOffsetGizmos','showWidthGizmos','gizmoBaseWidth','showKeyGizmos','showFrameGizmos']}]},
   objectController:{title:'Spline Object Controller',note:'Rải nhiều prefab theo Count/Distance, có random ổn định theo seed. Spawn / Respawn tạo clone ngay trong Hierarchy và có thể lưu vào Scene. Spawn On Start chỉ tạo khi chưa có object lưu sẵn. Rebuild On Change chỉ tác động lên bản spawn runtime.',groups:[{title:'Source',fields:['spline','prefabs','parentNode','modifiers']},{title:'Placement',fields:['method','count','spacing','startProgress','endProgress','includeEndPoint','alignToSpline','offset']},{title:'Variants & jitter',fields:['randomPosition','randomRotation','randomScale','scaleMultiplier','seed','spawnOnStart','rebuildOnChange']}]},
   junctionMesh:{title:'Spline Junction Mesh',note:'Bản 0.9: Surface patch trên mặt phẳng XZ, hỗ trợ 2-4 nhánh coplanar; không phải union/weld road meshes. Link từ Junction phải trùng world position, sử dụng chung Material asset với Roads. Có thể cần tắt Road cap để giảm overlap.',groups:[{title:'Junction',fields:['junction','material','showMeshGizmos','gizmoEdgeLimit']},{title:'Patch geometry',fields:['setback','defaultWidth','surfaceLift','uvMetersPerRepeat','tolerance','rebuildOnChange']}]},
   bender:{title:'Spline Object Bender',note:'Uốn tất cả readable single-submesh MeshRenderer của hierarchy, giữ Material và source Mesh. Root chứa Bender không được là parent của Spline source. Bật Preview in Editor, Apply rồi Restore; cần Allow Data Access cho từng mesh.',groups:[{title:'Source',fields:['spline','axis','layout','partGap']},{title:'Range',fields:['rangeMode','startProgress','endProgress','startDistance','endDistance']},{title:'Mesh & Preview',fields:['widthScale','heightScale','maxMeshes','previewInEditor','rebuildOnChange','showMeshGizmos','gizmoEdgeLimit']}]},
@@ -117,6 +117,10 @@ function makeInspector(type){
         if((type==='positioner')&&field==='progress'&&Number(v('positionMode'))===1)return false;
         if((type==='positioner')&&field==='distance'&&Number(v('positionMode'))!==1)return false;
         if(type==='projector'&&['alignToSpline','splineOffset'].includes(field)&&!v('snapToSpline'))return false;
+        if(type==='modifiers'){
+            if(['gizmoSamples','showOffsetGizmos','showWidthGizmos','gizmoBaseWidth','showKeyGizmos','showFrameGizmos'].includes(field)&&v('showGizmos')===false)return false;
+            if(field==='gizmoBaseWidth'&&v('showWidthGizmos')===false)return false;
+        }
         if(type==='knot'&&field==='editTangentHandles')return !!(v('tangentInHandle')||v('tangentOutHandle'));
         // Progress is backward-compatible normalized ARC length; 'Spline t' uses
         // the same 0..1 input but passes through the cubic arc lookup table.

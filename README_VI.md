@@ -42,3 +42,7 @@ Mở [`docs/index.html`](docs/index.html) để xem hướng dẫn Inspector, c�
 Với FBX có sẵn UV atlas như ray/tà vẹt: `SplineMeshDeform` → `Mode = Repeat` → **`Repeat Layout = Source Length`** → `Tile Length = 0` (tự đo từ Source Mesh) → **`UV Mode = KeepOriginal`**. Mesh được đặt theo kích thước nhập từ asset, các đoạn đầy đủ không bị kéo giãn; đoạn cuối cắt theo chiều dài còn lại, nội suy UV và normal.
 
 Nếu model import sai tỷ lệ, nhập `Tile Length` dương theo *world units*; không cần xác định số bản sao. Nếu sử dụng source `Tracks.FBX` mẫu, hình học FBX thô có trục X dài hơn Z: thử `Axis = X` nếu Cocos không hoán đổi trục khi import. `ContinuousRepeat` và `Distance` chỉ dành cho texture được unwrap để tile; chúng có thể phá hủy atlas UV nhiều vùng. Đối với builtin-standard, tắt thử Occlusion/Emissive Map khi kiểm tra lỗi albedo. Xem `docs/pages/deform.html`.
+
+### SplineModifiers Gizmos & examples
+
+Select SplineModifiers with Cocos-Gizmos installed to preview cyan Offset trajectories, green Width multipliers, key markers colored by Speed, and optional Scale/Roll axes. The gizmo guides do not alter a mesh or move knots. See [`docs/pages/length-modifiers.html`](docs/pages/length-modifiers.html) for Inspector, API and worked examples (vehicle slowdowns, road widening, lane changes and object scaling).
