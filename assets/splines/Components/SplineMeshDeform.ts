@@ -1,9 +1,10 @@
-import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, gfx, utils, Enum } from 'cc';
+import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, gfx, utils, Enum } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 import { deformMesh, MeshGeometry, Frame, MeshAxis, UVMode } from '../Core/SplineMeshDeformMath';
 import { readPositionTriples, readUVPairs, resolveAttributeFormatName, findStoredAttributeFormat, readNormalTriples, VertexFormat } from '../Core/SplineMeshRead';
+import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Cocos readAttribute() returns raw Uint16 bits for half-float formats. */
 export { decodeHalfFloat } from '../Core/SplineMeshRead';
@@ -38,7 +39,10 @@ export class SplineMeshDeform extends Component {
     @property({type:Enum(DeformUV),tooltip:'Keep original mesh UV, continuous source UV across repeat segments, or path distance in V.'}) uvMode:DeformUV=DeformUV.Distance;
     @property({min:0.001,tooltip:'UV V cycles per world unit (Distance mode only). Shader/material is external to this library.'}) uvTilesPerUnit=1;
     @property({tooltip:'Auto regenerate when curve or inspector properties change.'}) rebuildOnChange=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _generated:Mesh|null=null;
+    private _meshGizmo:MeshGizmoLines|null=null;
     private _revision='';
     private _failedSignature='';
     private _fallback:Material|null=null;
@@ -71,14 +75,19 @@ export class SplineMeshDeform extends Component {
     private signature():string{
         const s=this.source();
         const m=(a:any)=>a?[a.m00,a.m01,a.m02,a.m04,a.m05,a.m06,a.m08,a.m09,a.m10,a.m12,a.m13,a.m14]:[];
-        return JSON.stringify([s?.getRevision(),m(s?.node.worldMatrix),m(this.node.worldMatrix),this.sourceMesh?.uuid,this.sourceMesh?.data?.byteLength,this.axis,this.mode,this.repeatCount,this.flipFaces,this.widthScale,this.heightScale,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMode,this.uvTilesPerUnit]);
+        return JSON.stringify([s?.getRevision(),m(s?.node.worldMatrix),m(this.node.worldMatrix),this.sourceMesh?.uuid,this.sourceMesh?.data?.byteLength,this.axis,this.mode,this.repeatCount,this.flipFaces,this.widthScale,this.heightScale,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMode,this.uvTilesPerUnit,this.gizmoEdgeLimit]);
     }
     onEnable():void{this.rebuild();}
     update():void{
         this.syncMaterial(this.getComponent(MeshRenderer));
         if(this.rebuildOnChange&&this.signature()!==this._revision&&this.signature()!==this._failedSignature)this.rebuild();
     }
+    public onDrawGizmosSelected():void {
+        if(!this.showMeshGizmos)return;
+        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(102,225,152,255));
+    }
     private clear():void {
+        this._meshGizmo=null;
         const renderer=this.getComponent(MeshRenderer);
         if(renderer&&renderer.mesh===this._generated)renderer.mesh=null;
         this._generated?.destroy();this._generated=null;
@@ -163,6 +172,7 @@ export class SplineMeshDeform extends Component {
                 uvMode:this.uvMode as UVMode,uvTilesPerUnit:this.uvTilesPerUnit,length:worldLength,
                 flipFaces:this.flipFaces,
             });
+        this._meshGizmo=buildMeshGizmoLines(output.positions,output.indices,this.gizmoEdgeLimit);
             const next=utils.createMesh(output);
             const previous=this._generated;
             renderer.mesh=next;this._generated=next;

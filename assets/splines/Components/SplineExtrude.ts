@@ -1,8 +1,9 @@
-import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Quat, Mat4, utils, Enum } from 'cc';
+import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Quat, Mat4, Color, utils, Enum } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 Enum(SplinePositionMode);
+import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}= _decorator;
 /** Generate a UV-mapped tube. Renderer resides on THIS node, which may be distinct
  * from the SplineContainer. Generated meshes are transient, not serialized assets.
@@ -29,7 +30,10 @@ export class SplineExtrude extends Component {
     @property({type:Material,tooltip:'Optional override; otherwise uses a builtin unlit material'}) material:Material|null=null;
     @property({tooltip:'Rebuild on curve/parameter changes, including in Editor'}) rebuildOnChange=true;
     private _revision='';
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
+    private _meshGizmo:MeshGizmoLines|null=null;
     private _fallback:Material|null=null;
     // Assigned asset is shared. Never use getMaterialInstance() or renderer.material.
     // Track only explicit component bindings so users can also assign a Material
@@ -63,19 +67,19 @@ export class SplineExtrude extends Component {
         if(!this.rebuildOnChange||!this.source())return;
         const rev=this.signature();if(rev!==this._revision)this.rebuild();
     }
-    private signature():string{return JSON.stringify([this.source()?.getRevision(),this.source()?.node.worldMatrix.m00,this.source()?.node.worldMatrix.m01,this.source()?.node.worldMatrix.m04,this.source()?.node.worldMatrix.m05,this.source()?.node.worldMatrix.m08,this.source()?.node.worldMatrix.m09,this.source()?.node.worldMatrix.m12,this.source()?.node.worldMatrix.m13,this.source()?.node.worldMatrix.m14,this.node.worldMatrix.m00,this.node.worldMatrix.m05,this.node.worldMatrix.m10,this.node.worldMatrix.m12,this.node.worldMatrix.m13,this.node.worldMatrix.m14,this.radius,this.endRadius,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.sides,this.segmentsPerCurve,this.capEnds,this.flipNormals,this.uvTiling]);}
+    private signature():string{return JSON.stringify([this.source()?.getRevision(),this.source()?.node.worldMatrix.m00,this.source()?.node.worldMatrix.m01,this.source()?.node.worldMatrix.m04,this.source()?.node.worldMatrix.m05,this.source()?.node.worldMatrix.m08,this.source()?.node.worldMatrix.m09,this.source()?.node.worldMatrix.m12,this.source()?.node.worldMatrix.m13,this.source()?.node.worldMatrix.m14,this.node.worldMatrix.m00,this.node.worldMatrix.m05,this.node.worldMatrix.m10,this.node.worldMatrix.m12,this.node.worldMatrix.m13,this.node.worldMatrix.m14,this.radius,this.endRadius,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.sides,this.segmentsPerCurve,this.capEnds,this.flipNormals,this.uvTiling,this.gizmoEdgeLimit]);}
     public rebuild():void{
         const source=this.source(),renderer=this.getComponent(MeshRenderer);
         this.syncMaterial(renderer);
         if(!renderer||!source||source.count<2){
             if(renderer&&this._mesh&&renderer.mesh===this._mesh)renderer.mesh=null;
-            this._mesh?.destroy();this._mesh=null;this._revision='';return;
+            this._mesh?.destroy();this._mesh=null;this._meshGizmo=null;this._revision='';return;
         }
         const [start,end]=toNormalizedRange(source,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         const span=end-start;
         if(span<1e-6){
             if(this._mesh&&renderer.mesh===this._mesh)renderer.mesh=null;
-            this._mesh?.destroy();this._mesh=null;this._revision=this.signature();return;
+            this._mesh?.destroy();this._mesh=null;this._meshGizmo=null;this._revision=this.signature();return;
         }
         const rings=Math.max(1,Math.ceil(span*source.segmentCount*Math.min(128,Math.max(3,Math.floor(this.segmentsPerCurve)))));
         const sides=Math.max(3,Math.min(64,Math.floor(this.sides)));
@@ -133,6 +137,7 @@ export class SplineExtrude extends Component {
                 }
             }
         }
+        this._meshGizmo=buildMeshGizmoLines(positions,indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({positions,normals,uvs,indices});
         renderer.mesh=mesh;
         if(this._mesh&&this._mesh!==mesh)this._mesh.destroy();
@@ -140,7 +145,13 @@ export class SplineExtrude extends Component {
         this.syncMaterial(renderer);
         this._revision=this.signature();
     }
+    public onDrawGizmosSelected():void {
+        if(!this.showMeshGizmos)return;
+        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(255,163,75,255));
+    }
     onDestroy():void{
+        this._meshGizmo=null;
+        this._meshGizmo=null;
         if(this._mesh){const renderer=this.getComponent(MeshRenderer);if(renderer?.mesh===this._mesh)renderer.mesh=null;this._mesh.destroy();this._mesh=null;}
         const renderer=this.getComponent(MeshRenderer);
         if(renderer && this._fallback && renderer.getSharedMaterial(0)===this._fallback)renderer.setSharedMaterial(null,0);

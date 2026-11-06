@@ -1,4 +1,4 @@
-import { _decorator, Component, MeshRenderer, Mesh, Vec3, Mat4, Quat, gfx, utils, Enum } from 'cc';
+import { _decorator, Component, MeshRenderer, Mesh, Vec3, Mat4, Quat, Color, gfx, utils, Enum } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
@@ -6,6 +6,7 @@ import { DeformAxis } from './SplineMeshDeform';
 import { findStoredAttributeFormat, resolveAttributeFormatName, readPositionTriples, readUVPairs, VertexFormat } from '../Core/SplineMeshRead';
 import { recomputeNormals, computeTangents } from '../Core/SplineMeshDeformMath';
 import { bendHierarchyPositions, BendFrame } from '../Core/SplineHierarchyBendMath';
+import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode}=_decorator;
 Enum(SplinePositionMode);
 interface Original {renderer:MeshRenderer; mesh:Mesh;positions:number[];indices:number[];uvs:number[];rootPositions:number[];generated:Mesh|null}
@@ -30,6 +31,14 @@ export class SplineObjectBender extends Component {
     @property({min:1,max:256,step:1,tooltip:'Limits work on large hierarchies.'}) maxMeshes=64;
     @property({tooltip:'Editor preview is opt-in and restored when disabled.'}) previewInEditor=false;
     @property({tooltip:'Automatically rebuild when spline/parameters change.'}) rebuildOnChange=false;
+    @property({tooltip:'Show sampled wireframes for all generated child meshes when selected (requires Cocos-Gizmos).'}) showMeshGizmos=true;
+    @property({min:24,max:1200,step:1,tooltip:'Total edge budget shared between bent meshes.'}) gizmoEdgeLimit=360;
+    private _meshGizmos:Array<{node:import('cc').Node;geometry:MeshGizmoLines}>=[];
+    public onDrawGizmosSelected():void {
+        if(!this.showMeshGizmos)return;
+        const color=new Color(255,137,213,255);
+        for(const sample of this._meshGizmos)drawMeshGizmoLines(this.node,sample.node,sample.geometry,color);
+    }
     private originals:Original[]=[];
     private signature='';
     private _applied=false;
@@ -67,7 +76,7 @@ export class SplineObjectBender extends Component {
         }
     }
     private key():string {return JSON.stringify([this.spline?.getRevision(),this.spline?.node.worldMatrix,this.node.worldMatrix,
-        this.axis,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance,this.widthScale,this.heightScale,this.originals.length]);}
+        this.axis,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance,this.widthScale,this.heightScale,this.originals.length,this.gizmoEdgeLimit]);}
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW||this.previewInEditor)this.rebuild();}
     update():void{
         if(EDITOR_NOT_IN_PREVIEW&&!this.previewInEditor){if(this._applied)this.restore();this.holdRestore=false;return;}
@@ -80,7 +89,7 @@ export class SplineObjectBender extends Component {
             if(item.renderer.node.isValid&&item.renderer.mesh===item.generated)item.renderer.mesh=item.mesh;
             item.generated?.destroy();item.generated=null;
         }
-        this.originals=[];this._applied=false;this.signature='';this.holdRestore=true;
+        this._meshGizmos=[];this.originals=[];this._applied=false;this.signature='';this.holdRestore=true;
     }
     public rebuild():void{
         this.holdRestore=false;
@@ -97,6 +106,7 @@ export class SplineObjectBender extends Component {
         if(max-min<1e-7){console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
         const [start,end]=toNormalizedRange(spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         if(end<=start)return;
+        this._meshGizmos=[];
         for(const item of this.originals){
             const childInverse=Mat4.invert(new Mat4(),item.renderer.node.worldMatrix);
             const localFrame2=(t:number):BendFrame=>{
@@ -118,6 +128,8 @@ export class SplineObjectBender extends Component {
             const uvs=item.uvs.length===bent.length/3*2?item.uvs:new Array(bent.length/3*2).fill(0);
             const normals=recomputeNormals(bent,indices);
             const tangents=computeTangents(bent,normals,uvs,indices);
+            const budget=Math.max(24,Math.floor(this.gizmoEdgeLimit/this.originals.length));
+            this._meshGizmos.push({node:item.renderer.node,geometry:buildMeshGizmoLines(bent,indices,budget)});
             const mesh=utils.createMesh({positions:bent,indices,uvs,normals,tangents});
             const old=item.generated;item.renderer.mesh=mesh;item.generated=mesh;if(old&&old!==mesh)old.destroy();
         }

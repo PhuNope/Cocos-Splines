@@ -4,6 +4,7 @@ import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { buildRoadGeometry, RoadFrame } from '../Core/SplineRoadMath';
 import { SplineModifiers } from './SplineModifiers';
 Enum(SplinePositionMode);
+import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Live editable roadway, inspired by a road surface generator. Generates transient Mesh,
  * not a serialized Mesh asset. Geometry is created in this node's local space,
@@ -38,7 +39,10 @@ export class SplineRoad extends Component {
     @property({type:Color,tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
     @property({tooltip:'Close the start/end edges for open road slabs.'}) capEnds=true;
     @property({tooltip:'Recreate visual mesh on knot edits or changes to the properties, even in Scene Editor.'}) rebuildOnChange=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
+    private _meshGizmo:MeshGizmoLines|null=null;
     private _fallback:Material|null=null;
     // Assigned asset is shared. Never use getMaterialInstance() or renderer.material.
     // Track only explicit component bindings so users can also assign a Material
@@ -92,9 +96,14 @@ export class SplineRoad extends Component {
         const matrix=(m:Mat4|undefined)=>m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:[];
         return JSON.stringify([s?.getRevision(),matrix(a),matrix(b),this.width,this.endWidth,this.shoulderWidth,this.shoulderDrop,
             this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.startProgress,
-            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.capEnds]);
+            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.capEnds,this.gizmoEdgeLimit]);
+    }
+    public onDrawGizmosSelected():void {
+        if(!this.showMeshGizmos)return;
+        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(68,190,255,255));
     }
     private clearMesh():void{
+        this._meshGizmo=null;
         const renderer=this.getComponent(MeshRenderer);
         if(renderer&&this._mesh&&renderer.mesh===this._mesh)renderer.mesh=null;
         if(this._mesh){this._mesh.destroy();this._mesh=null;}
@@ -151,6 +160,7 @@ export class SplineRoad extends Component {
             capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end
         },source.closed&&begin===0&&end===1);
         if(!geometry.indices.length){this.clearMesh();this._revision=this.signature();return;}
+        this._meshGizmo=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({positions:geometry.positions,normals:geometry.normals,uvs:geometry.uvs,indices:geometry.indices});
         const old=this._mesh;
         renderer.mesh=mesh;this._mesh=mesh;

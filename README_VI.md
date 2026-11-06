@@ -26,3 +26,9 @@ Mở [`docs/index.html`](docs/index.html) để xem hướng dẫn Inspector, c�
 ## Giới hạn
 
 `package.json` khai báo hỗ trợ Editor từ **3.8.2**; các bài kiểm thử hiện chạy với TypeScript/mock runtime, chưa xác nhận trực tiếp mọi phiên bản 3.8.x. ObjectBender chỉ uốn static mesh đọc được, Junction Mesh là patch XZ chứ chưa hàn road thành mesh kín. Collider và Particle để phát triển sau.
+
+### Gizmos của mesh &amp; Morph Space
+
+- Chọn `SplineRoad`, `SplineExtrude`, `SplineMeshDeform`, `SplineJunctionMesh` hoặc `SplineObjectBender` để xem wireframe khi cài thêm Cocos-Gizmos. Dùng `Show Mesh Gizmos` và `Gizmo Edge Limit` trong Inspector.
+- `SplineMorph.space` hỗ trợ `World` (mặc định, giữ tương thích) và `Local` (trộn knot/tangent local không cộng transform của source).
+- `Junction Offset Blend Distance > 1` là quãng đường chuyển tiếp theo units, không phải tỷ lệ.

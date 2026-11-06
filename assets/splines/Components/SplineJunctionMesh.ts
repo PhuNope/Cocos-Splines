@@ -2,6 +2,7 @@ import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color,
 import { SplineJunction } from './SplineJunction';
 import { SplineRoad } from './SplineRoad';
 import { buildJunctionPatch } from '../Core/SplineJunctionPatchMath';
+import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
 /** Road junction XZ patch for approximately coincident connection points.
@@ -21,12 +22,15 @@ export class SplineJunctionMesh extends Component {
     @property({min:0.001,tooltip:'World units per texture repeat.'}) uvMetersPerRepeat=5;
     @property({min:0.01,tooltip:'All connection points must lie close to same location.'}) tolerance=0.5;
     @property rebuildOnChange=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private generated:Mesh|null=null;
+    private _meshGizmo:MeshGizmoLines|null=null;
     private fallback:Material|null=null;
     private bound:Material|null=null;
     private signature='';
     private currentKey():string {return JSON.stringify([(this.junction||this.node.parent?.getComponent(SplineJunction))?.connections.map(c=>[c.spline?.getRevision(),c.spline?.node.worldMatrix,c.positionMode,c.progress,c.distance]),
-        this.setback,this.defaultWidth,this.surfaceLift,this.uvMetersPerRepeat,this.tolerance]);}
+        this.setback,this.defaultWidth,this.surfaceLift,this.uvMetersPerRepeat,this.tolerance,this.gizmoEdgeLimit]);}
     private roadOf(spline:import('../Core/SplineContainer').SplineContainer):SplineRoad|null {
         const own=spline.node.getComponent(SplineRoad);if(own)return own;
         for(const child of spline.node.children){const found=child.getComponent(SplineRoad);if(found)return found;}
@@ -45,7 +49,12 @@ export class SplineJunctionMesh extends Component {
         }
         if(!selected)this.bound=null;
     }
+    public onDrawGizmosSelected():void {
+        if(!this.showMeshGizmos)return;
+        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(190,132,255,255));
+    }
     public clear():void {
+        this._meshGizmo=null;
         const r=this.getComponent(MeshRenderer);
         if(r&&r.mesh===this.generated)r.mesh=null;
         this.generated?.destroy();this.generated=null;
@@ -84,6 +93,7 @@ export class SplineJunctionMesh extends Component {
         for(let i=0;i<positions.length;i+=3){const a=Vec3.transformMat4(new Vec3(),new Vec3(world.positions[i],world.positions[i+1]+1,world.positions[i+2]),inverse);
             const n=Vec3.subtract(new Vec3(),a,new Vec3(positions[i],positions[i+1],positions[i+2]));
             Vec3.normalize(n,n);normals.push(n.x,n.y,n.z);}
+        this._meshGizmo=buildMeshGizmoLines(positions,world.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({positions,normals,uvs:world.uvs,indices:world.indices});
         const previous=this.generated;renderer.mesh=mesh;this.generated=mesh;
         if(previous&&previous!==mesh)previous.destroy();

@@ -1,13 +1,15 @@
-import { _decorator, Component, Vec3, Mat4 } from 'cc';
+import { _decorator, Component, Vec3, Mat4, Enum } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineKnot, TangentMode } from '../Core/SplineKnot';
 import { morphPoint } from '../Core/SplineMorphMath';
+export enum MorphSpace { World=0, Local=1 }
+Enum(MorphSpace);
 const {ccclass,property,menu,executeInEditMode}=_decorator;
 interface KnotState{knot:SplineKnot;position:Vec3;input:Vec3;output:Vec3;mode:TangentMode;local:boolean}
 
 /** Blend two source shapes into OUTPUT spline without modifying either source.
- * Same knot count: exact per-knot Bezier blend in output local space.
+ * Same knot count: exact per-knot Bezier blend in selected coordinate space.
  * Different knot counts: resampled approximation (output knot density limits fidelity).
  * Output spline needs existing knots with no tangent handle Nodes.
  */
@@ -19,6 +21,8 @@ export class SplineMorph extends Component {
     @property({type:SplineContainer}) sourceB:SplineContainer|null=null;
     @property({type:SplineContainer}) outputSpline:SplineContainer|null=null;
     @property({range:[0,1,0.001],slide:true}) blend=0.5;
+    @property({type:Enum(MorphSpace),tooltip:'World: blend source knots in world coordinates, then convert to output local (legacy). Local: blend each source spline local coordinates directly into output local; ignore source node transforms.'})
+    space:MorphSpace=MorphSpace.World;
     @property({tooltip:'On Editor, output knot transforms are edited temporarily and restored when Preview is off.'}) previewInEditor=false;
     @property({tooltip:'Update output when sources or Blend change.'}) updateOnChange=true;
     private _snapshot:KnotState[]=[];
@@ -27,7 +31,7 @@ export class SplineMorph extends Component {
     private holdRestore=false;
     private _restoreKey='';
     private key():string{return JSON.stringify([this.sourceA?.getRevision(),this.sourceB?.getRevision(),
-        this.sourceA?.node.worldMatrix,this.sourceB?.node.worldMatrix,this.outputSpline?.node.worldMatrix,this.blend]);}
+        this.sourceA?.node.worldMatrix,this.sourceB?.node.worldMatrix,this.outputSpline?.node.worldMatrix,this.blend,this.space]);}
     private sample():boolean {
         const a=this.sourceA,b=this.sourceB,c=this.outputSpline;
         if(!a||!b||!c||a===b||a===c||b===c||a.count<2||b.count<2||c.count<2)return false;
@@ -40,17 +44,18 @@ export class SplineMorph extends Component {
         }
         if(!this._snapshot.length)this._snapshot=target.map(k=>({knot:k,position:k.node.position.clone(),
             input:k.tangentIn.clone(),output:k.tangentOut.clone(),mode:k.mode,local:k.tangentsInKnotSpace}));
-        const inverse=Mat4.invert(new Mat4(),c.node.worldMatrix);
+        const useWorld=this.space===MorphSpace.World;
+        const inverse=useWorld?Mat4.invert(new Mat4(),c.node.worldMatrix):null;
         const tWeight=Math.max(0,Math.min(1,this.blend));
         const count=target.length;
         const exact=a.count===count&&b.count===count&&a.reversed===false&&b.reversed===false&&c.reversed===false;
         const ak=a.getNaturalResolvedKnots(),bk=b.getNaturalResolvedKnots();
-        const samplePosition=(s:SplineContainer,t:number)=>s.evaluateWorldPositionAtT(t);
+        const samplePosition=(s:SplineContainer,t:number)=>useWorld?s.evaluateWorldPositionAtT(t):s.evaluatePosition(t,false);
         const src=(s:SplineContainer,list:typeof ak,i:number,which:'position'|'tangentIn'|'tangentOut')=>{
             const knot=list[i];const position=knot.position;
             const offset=which==='position'?{x:0,y:0,z:0}:knot[which];
             const p=new Vec3(position.x+offset.x,position.y+offset.y,position.z+offset.z);
-            return Vec3.transformMat4(p,p,s.node.worldMatrix);
+            return useWorld?Vec3.transformMat4(p,p,s.node.worldMatrix):p;
         };
         const out=[] as Array<{position:Vec3;input:Vec3;output:Vec3}>;
         for(let i=0;i<count;i++){
@@ -71,7 +76,8 @@ export class SplineMorph extends Component {
                     }
                 }
                 const merged=morphPoint(ap,bp,tWeight);
-                return Vec3.transformMat4(new Vec3(merged.x,merged.y,merged.z),new Vec3(merged.x,merged.y,merged.z),inverse);
+                const blended=new Vec3(merged.x,merged.y,merged.z);
+                return inverse?Vec3.transformMat4(blended,blended,inverse):blended;
             };
             const position=point('position');
             const input=Vec3.subtract(new Vec3(),point('tangentIn'),position);

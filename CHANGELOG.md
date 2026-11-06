@@ -1,8 +1,15 @@
+## 0.9.4 — Mesh Gizmos and Morph Space
+
+- Optional selected wireframe gizmos for SplineRoad, SplineExtrude, SplineMeshDeform, SplineJunctionMesh, and SplineObjectBender. Bounded edge sampling and no new renderer/material instances.
+- SplineMorph.space = World (default, compatible) / Local (source-local control points, independent of source Node world transforms).
+- Updated Inspector, HTML docs and regression tests.
+- Junction Offset Blend Distance accepts values above 1 (world distance along destination), with a warning in docs for short destination spans.
+
 ## 0.9.3
-- Sửa Inspector: hiển thị Junction Offset Blend Distance.
-- Bổ sung SplineUpMode.TargetLocal và Up Reference để định hướng object.
-- Bổ sung tài liệu Junction Exit Direction, Morph world-space và Up Mode.
-- Giữ UUID và Cocos Creator >= 3.8.2.
+- Sửa Inspector của SplineAnimate: hiện `Junction Offset Blend Distance` đã có trong runtime.
+- Bổ sung `SplineUpMode.TargetLocal` và `upReference` tùy chọn để điều khiển hướng Up theo local object hoặc Node tham chiếu.
+- Mở rộng tài liệu HTML: ý nghĩa Junction Preserve/Forward/Backward, Morph world-space position/shape, Up Mode Target Local.
+- Giữ tương thích khai báo Cocos Creator >= 3.8.2 và giữ UUID script.
 
 # Changelog
 
