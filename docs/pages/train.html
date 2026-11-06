@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="Đầu máy kéo nhiều toa theo arc distance; hướng dẫn một spline và tuyến nhiều spline qua ngã rẽ." name="description"/><title>Example: Đoàn tàu nhiều toa | Cocos Splines Docs</title><link href="../assets/style.css" rel="stylesheet"/></head><body><div class="app"><aside class="sidebar"><a class="brand" href="../index.html"><span class="logo">S</span>Cocos Splines</a><div class="version">HƯỚNG DẪN &amp; API · Cocos Creator ≥ 3.8.2</div><input aria-label="Tìm trang" class="search" id="nav-search" placeholder="Tìm trang... ( / )"/><nav><div class="group-label">Bắt đầu</div><a class="navlink" href="../index.html">Tổng quan</a><a class="navlink" href="install.html">Cài đặt &amp; cấu trúc</a><a class="navlink" href="core.html">Spline Container &amp; Knot</a><a class="navlink" href="coordinates.html">t, Distance, Progress</a><div class="group-label">Di chuyển &amp; events</div><a class="navlink" href="animate.html">Spline Animate</a><a class="navlink" href="junction.html">Junction / Routing</a><a class="navlink" href="events.html">Trigger &amp; Events</a><a class="navlink" href="positioner.html">Positioner / Projector</a><a class="navlink" href="length-modifiers.html">Length Monitor / Modifiers</a><div class="group-label">Hình học &amp; bố trí</div><a class="navlink" href="road.html">Road &amp; Extrude</a><a class="navlink" href="deform.html">Mesh Deform</a><a class="navlink" href="objects.html">Instantiate / Object Controller</a><a class="navlink" href="bender.html">Object Bender</a><a class="navlink" href="morph.html">Spline Morph</a><a class="navlink" href="junction-mesh.html">Junction Mesh</a><a class="navlink" href="2d-gizmos.html">Spline 2D / Gizmos</a><div class="group-label">Tham khảo</div><a class="navlink" href="api.html">API Reference</a><a class="navlink" href="examples.html">Ví dụ TypeScript</a><a class="navlink active" href="train.html">Example: Đoàn tàu nhiều toa</a><a class="navlink" href="troubleshooting.html">Xử lý lỗi</a></nav><div class="bottom">Cocos Splines · Hướng dẫn sử dụng</div></aside><div class="wrap"><div class="topbar"><span>DOCS / <b>Example: Đoàn tàu nhiều toa</b></span><span class="pill">API</span></div><main class="article"><div class="eyebrow">Cocos Creator ≥ 3.8.2 · Hướng dẫn &amp; API</div><h1>Example: Đoàn tàu nhiều toa</h1><p class="lead">Đầu máy kéo nhiều toa theo arc distance; hướng dẫn một spline và tuyến nhiều spline qua ngã rẽ.</p><div class="callout good"><strong>Mục tiêu:</strong> đầu máy đi trước, các toa giữ khoảng cách theo chiều dài đường ray, xoay theo tangent tại vị trí riêng. Các toa không cần tự chạy đồng hồ Animate.</div>
+<h2>Nguyên lý giống ví dụ tàu của Dreamteck</h2>
+<p>Không lấy vị trí world của đầu máy rồi trừ một vector cố định: ở khúc cua, toa sẽ lệch khỏi ray. Thay vào đó, tất cả đầu máy/toa lấy mẫu <strong>cùng một tọa độ quãng đường trên tuyến</strong>:</p>
+<pre><code>headDistance = 32 units
+spacing = 5 units
+Đầu máy:  distance = 32
+Toa 1:    distance = 27
+Toa 2:    distance = 22
+Toa 3:    distance = 17</code></pre>
+<p>Khoảng cách ở đây là khoảng cách <em>dọc ray</em> (arc length), không phải khoảng cách Euclid giữa tâm toa. Đầu máy ở đoạn cong, mỗi toa dùng tangent tại vị trí của nó để quay theo đường.</p>
+<div class="callout warn">Ví dụ <strong>không sử dụng ObjectBender</strong> để nối toa. ObjectBender dùng để uốn hình học từng model; đoàn tàu cần nhiều node độc lập bám ray. Đây là cách triển khai mẫu cho Cocos Splines, không phải bản sao trực tiếp của script Dreamteck.</div>
+<h2>Example A — Một spline: SplineAnimate + SplinePositioner</h2>
+<h3>Hierarchy</h3>
+<pre><code>Scene
+├─ RailPath                 [SplineContainer] (+ các Knot)
+├─ Locomotive              [SplineAnimate, Target = Locomotive]
+├─ Wagon_01                [SplinePositioner]
+├─ Wagon_02                [SplinePositioner]
+├─ Wagon_03                [SplinePositioner]
+└─ TrainManager            [TrainSingleSpline]</code></pre>
+<h3>Thiết lập Inspector</h3>
+<table><thead><tr><th>Node / Component</th><th>Thiết lập</th></tr></thead><tbody><tr><td>Locomotive / SplineAnimate</td><td>Spline = RailPath; Method = Speed; Easing = Linear; LoopMode = Once (đường mở); JunctionMode = Off; Align To Spline = ON; Start Position Mode = Distance.</td></tr><tr><td>Wagon / SplinePositioner</td><td>Spline = RailPath; Target để trống (di chuyển chính node); Position Mode = Distance; Align To Spline = ON; Follow On Update = OFF.</td></tr><tr><td>TrainManager / TrainSingleSpline</td><td>Locomotive = SplineAnimate; Wagons = 3 Positioner theo đúng thứ tự từ đầu tới đuôi; Center Spacing = khoảng cách tâm toa.</td></tr><tr><td>Khoảng Start</td><td>Start Distance của Animate phải >= số toa × Center Spacing nếu muốn toàn bộ đoàn tàu nằm sẵn trên ray.</td></tr></tbody></table>
+<p>Tạo file script <code>TrainSingleSpline.ts</code> trong <code>assets/</code> của project, dán code dưới đây; hoặc <a href="../examples/TrainSingleSpline.ts">xem bản TypeScript đầy đủ</a>.</p>
+<pre><code>import { _decorator, Component } from 'cc';
+import { SplineAnimate } from 'db://cocos-splines/splines/Components/SplineAnimate';
+import { SplinePositioner } from 'db://cocos-splines/splines/Components/SplinePositioner';
+import { SplinePositionMode } from 'db://cocos-splines/splines/Core/SplinePosition';
+
+const { ccclass, property } = _decorator;
+
+/** One spline only. The locomotive owns playback; wagons have Positioners. */
+@ccclass('TrainSingleSpline')
+export class TrainSingleSpline extends Component {
+    @property({ type: SplineAnimate }) locomotive: SplineAnimate | null = null;
+    @property({ type: [SplinePositioner] }) wagons: SplinePositioner[] = [];
+    @property({ min: 0.01 }) centerSpacing = 3;
+    @property() wrapClosed = false;
+
+    start(): void {
+        for (const wagon of this.wagons) {
+            wagon.followOnUpdate = false; // This controller is the sole writer.
+            wagon.followTarget = null;
+            wagon.positionMode = SplinePositionMode.Distance;
+        }
+    }
+
+    lateUpdate(): void {
+        const engine = this.locomotive;
+        const spline = engine?.currentSpline;
+        if (!engine || !spline || spline.length &lt;= 0) return;
+        const headDistance = engine.currentDistance;
+        this.wagons.forEach((wagon, index) =&gt; {
+            if (!wagon) return;
+            let d = headDistance - (index + 1) * this.centerSpacing;
+            if (this.wrapClosed &amp;&amp; spline.closed) {
+                d = ((d % spline.length) + spline.length) % spline.length;
+            } else if (d &lt; 0) {
+                return; // Engine must start far enough ahead to fit the train.
+            } else {
+                d = Math.min(spline.length, d);
+            }
+            wagon.spline = spline;
+            wagon.distance = d;
+            wagon.applyPosition();
+        });
+    }
+}
+</code></pre>
+<h3>Chạy thử</h3>
+<ol><li>Tạo ray dài tối thiểu 30 units; dùng ba toa spacing 5 units, đặt Engine Start Distance = 16.</li><li>Trong Inspector gắn từng <code>SplinePositioner</code> vào mảng Wagons theo thứ tự đầu → cuối.</li><li>Nhấn Play: đầu máy tiến, từng toa giữ quãng đường lệch 5/10/15 units dọc cùng spline.</li><li>Với đường vòng kín, bật <code>wrapClosed=true</code> đồng thời bảo đảm SplineContainer.closed = ON; không bật trên đường hở.</li></ol>
+<div class="callout warn"><strong>Giới hạn của Example A:</strong> khi Animate tự đổi spline ở Junction, <code>currentDistance</code> tính trên spline đích; chỉ cập nhật <code>wagon.spline</code> sang spline mới sẽ khiến tất cả toa nhảy tuyến trước khi tới Junction. Vì vậy Example A chỉ dành cho <strong>một spline</strong> hoặc một loop kín, không dùng để đi qua Junction giữa nhiều spline.</div>
+<h2>Example B — Nhiều spline, đoàn tàu qua Junction không nhảy toa</h2>
+<p>Với nhiều spline, một đầu máy có thể đã sang Spline B trong khi toa cuối vẫn nằm trên Spline A. Để giữ tuyến tàu, cần dùng <strong>route có thứ tự</strong> và lấy mẫu theo <em>quãng đường toàn tuyến</em> thay vì dùng <code>currentDistance</code> riêng của từng spline.</p>
+<h3>Sơ đồ route</h3>
+<pre><code>Spline A (0 → 1) ──Junction──&gt; Spline B (0 → 1)
+      [   Engine →      ]    [ Toa 2 ][ Toa 3 ]
+
+Route legs = [A forward, B forward]
+TrainRouteConsist.cars = [Locomotive, Wagon_01, Wagon_02, Wagon_03]
+
+Đến ngã ba: chọn route [A, C] thay [A, B] trong Inspector.
+Các toa vẫn vào đúng nhánh đã chọn khi đến lượt.</code></pre>
+<h3>Cấu hình</h3>
+<table><thead><tr><th>Thuộc tính</th><th>Ví dụ / Ý nghĩa</th></tr></thead><tbody><tr><td>Legs</td><td>Danh sách SplineContainer theo thứ tự đường đi; chọn Backwards cho đoạn chạy từ progress 1 về 0.</td></tr><tr><td>Cars</td><td>[Engine, Wagon_01, Wagon_02, ...] đúng thứ tự. Không gắn thêm SplineAnimate hoặc Positioner đang auto update cho các Node này.</td></tr><tr><td>Center Spacing</td><td>Khoảng cách tâm-to-tâm dọc tuyến, ví dụ 5 units.</td></tr><tr><td>Start Distance</td><td>Ít nhất <code>(Cars.length - 1) × Center Spacing</code> trên đường mở.</td></tr><tr><td>Speed / Loop Route</td><td>Tốc độ theo route (units/giây); Loop Route chỉ bật nếu cuối leg cuối nối về đầu leg đầu.</td></tr><tr><td>Scale</td><td>Đặt spline Node scale = (1,1,1) để 1 local length = 1 world unit. Non-uniform scale cần LUT độ dài world riêng, sample này chưa xử lý.</td></tr></tbody></table>
+<p>Tạo file <code>TrainRouteConsist.ts</code> trong <code>assets/</code> của project, gắn lên <code>TrainManager</code>, điền Legs/Cars trong Inspector. <a href="../examples/TrainRouteConsist.ts">Xem file TypeScript đầy đủ</a>.</p>
+<pre><code>import { _decorator, Component, Node, Quat } from 'cc';
+import { SplineContainer } from 'db://cocos-splines/splines/Core/SplineContainer';
+
+const { ccclass, property } = _decorator;
+
+/** One leg of a preplanned, continuous train route. */
+@ccclass('TrainRouteLeg')
+export class TrainRouteLeg {
+    @property({ type: SplineContainer }) spline: SplineContainer | null = null;
+    @property() backwards = false;
+}
+
+/** Route spans several splines: every wagon samples the same route history. */
+@ccclass('TrainRouteConsist')
+export class TrainRouteConsist extends Component {
+    @property({ type: [TrainRouteLeg] }) legs: TrainRouteLeg[] = [];
+    @property({ type: [Node] }) cars: Node[] = []; // [locomotive, wagon 1, ...]
+    @property({ min: 0.01 }) centerSpacing = 3;
+    @property({ min: 0 }) speed = 4;
+    @property({ min: 0 }) startDistance = 12;
+    @property() loopRoute = false;
+    @property() playOnStart = true;
+
+    private headDistance = 0;
+    private playing = false;
+    private readonly turnAround = Quat.fromEuler(new Quat(), 0, 180, 0);
+
+    start(): void {
+        this.headDistance = this.startDistance;
+        this.playing = this.playOnStart;
+        this.placeCars();
+    }
+
+    update(dt: number): void {
+        if (this.playing &amp;&amp; Number.isFinite(dt) &amp;&amp; dt &gt; 0) {
+            this.headDistance += this.speed * dt;
+        }
+        this.placeCars();
+    }
+
+    public play(): void { this.playing = true; }
+    public pause(): void { this.playing = false; }
+    public seekRouteDistance(distance: number): void {
+        this.headDistance = Math.max(0, distance);
+        this.placeCars();
+    }
+
+    private placeCars(): void {
+        const usable = this.legs.filter(
+            (leg) =&gt; !!leg &amp;&amp; !!leg.spline &amp;&amp; leg.spline.count &gt;= 2 &amp;&amp; leg.spline.length &gt; 0,
+        );
+        const total = usable.reduce((sum, leg) =&gt; sum + leg.spline!.length, 0);
+        if (total &lt;= 0) return;
+
+        this.cars.forEach((car, index) =&gt; {
+            if (!car || !car.isValid) return;
+            let routeDistance = this.headDistance - index * this.centerSpacing;
+            if (this.loopRoute) {
+                routeDistance = ((routeDistance % total) + total) % total;
+            } else {
+                // Avoid stacking wagons at route start: choose startDistance
+                // &gt;= (cars.length - 1) * centerSpacing in the Inspector.
+                if (routeDistance &lt; 0) return;
+                routeDistance = Math.min(routeDistance, total);
+            }
+
+            for (let i = 0; i &lt; usable.length; i++) {
+                const leg = usable[i];
+                const spline = leg.spline!;
+                const length = spline.length;
+                const last = i === usable.length - 1;
+                if (routeDistance &gt; length &amp;&amp; !last) {
+                    routeDistance -= length;
+                    continue;
+                }
+                const localDistance = Math.max(0, Math.min(length, routeDistance));
+                const splineDistance = leg.backwards ? length - localDistance : localDistance;
+                const progress = splineDistance / length;
+                car.setWorldPosition(spline.evaluateWorldPositionAtDistance(splineDistance));
+                const rot = Quat.multiply(
+                    new Quat(), spline.node.worldRotation, spline.evaluateRotation(progress),
+                );
+                if (leg.backwards) Quat.multiply(rot, rot, this.turnAround);
+                car.setWorldRotation(rot);
+                break;
+            }
+        });
+    }
+}
+</code></pre>
+<h3>Lưu ý khi các toa qua Junction</h3>
+<ul><li>Các endpoint của hai leg phải <strong>trùng nhau trong world space</strong>, và tangent/up nối hợp lý; nếu khác nhau, tại đúng biên leg toa có thể đổi hướng đột ngột.</li><li>Hướng <code>backwards</code> nằm trong mỗi leg; nó không phải là <code>JunctionExitDirection</code> của <code>SplineAnimate</code>. Script này tự chạy theo route, không gọi <code>JunctionMode</code>.</li><li>Chuyển nhánh động theo sự kiện <code>On Reach</code> của đầu máy sẽ cần ghi lại <strong>lịch sử các leg thực sự đi qua</strong> rồi cho từng toa đọc lịch sử đó. Example B mới là <em>route cố định</em>, không tự ghi lịch sử rẽ nhánh runtime.</li><li>Khoảng cách theo ray không bảo đảm coupling cơ khí khi cua gắt: cần điều chỉnh spacing, pivot và bogie (bánh trước/sau) tùy độ dài model.</li></ul>
+<h2>Checklist xử lý lỗi</h2>
+<table><thead><tr><th>Hiện tượng</th><th>Kiểm tra</th></tr></thead><tbody><tr><td>Toa tụ vào đầu spline</td><td>Start Distance chưa đủ lớn, hoặc số toa × Center Spacing vượt quá chiều dài phần route đầu.</td></tr><tr><td>Toa rời khỏi ray khi cua</td><td>Không dùng offset world cố định; dùng distance trên spline và align rotation. Kiểm tra pivot +Z của từng toa.</td></tr><tr><td>Toa nhảy lên Spline B sớm</td><td>Đang dùng Example A để đi qua Junction; đổi sang Example B để có route nhiều spline.</td></tr><tr><td>Toa quay ngược đầu</td><td>Kiểm tra Backwards của từng leg và trục +Z của model. Nếu model hướng +X, đặt mesh dưới node pivot và xoay mesh child.</td></tr><tr><td>Khoảng cách sai khi scale spline</td><td>Sample dùng spline.length (local units). Đưa spline Node về scale 1 hoặc nâng cấp bộ đo world distance.</td></tr></tbody></table>
+<h2>API tham khảo</h2>
+<ul><li><a href="animate.html"><code>SplineAnimate.currentDistance</code>, <code>currentSpline</code></a> — dùng cho đầu máy trên một spline.</li><li><a href="positioner.html"><code>SplinePositioner.distance</code>, <code>applyPosition()</code></a> — đặt các toa không dùng clock.</li><li><a href="core.html"><code>SplineContainer.evaluateWorldPositionAtDistance()</code>, <code>evaluateRotation()</code>, <code>length</code></a> — lấy mẫu toàn tuyến.</li><li><a href="junction.html">Junction / Routing</a> — so sánh giới hạn route cố định và rẽ nhánh runtime.</li><li><a href="bender.html">Object Bender</a> — uốn mesh nhiều phần; không phải cơ chế giữ khoảng cách toa.</li></ul>
+</main><footer class="page-footer"><span>← <a href="examples.html">Ví dụ TypeScript</a><a class="navlink active" href="train.html">Example: Đoàn tàu nhiều toa</a></span><span><a href="troubleshooting.html">Xử lý lỗi</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>

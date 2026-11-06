@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="Event độ dài đường cong và hệ keyframe điều chỉnh speed, offset, width, scale, roll." name="description"/><title>Length Monitor / Modifiers | Cocos Splines Docs</title><link href="../assets/style.css" rel="stylesheet"/></head><body><div class="app"><aside class="sidebar"><a class="brand" href="../index.html"><span class="logo">S</span>Cocos Splines</a><div class="version">HƯỚNG DẪN &amp; API · Cocos Creator ≥ 3.8.2</div><input aria-label="Tìm trang" class="search" id="nav-search" placeholder="Tìm trang... ( / )"/><nav><div class="group-label">Bắt đầu</div><a class="navlink" href="../index.html">Tổng quan</a><a class="navlink" href="install.html">Cài đặt &amp; cấu trúc</a><a class="navlink" href="core.html">Spline Container &amp; Knot</a><a class="navlink" href="coordinates.html">t, Distance, Progress</a><div class="group-label">Di chuyển &amp; events</div><a class="navlink" href="animate.html">Spline Animate</a><a class="navlink" href="junction.html">Junction / Routing</a><a class="navlink" href="events.html">Trigger &amp; Events</a><a class="navlink" href="positioner.html">Positioner / Projector</a><a class="navlink active" href="length-modifiers.html">Length Monitor / Modifiers</a><div class="group-label">Hình học &amp; bố trí</div><a class="navlink" href="road.html">Road &amp; Extrude</a><a class="navlink" href="deform.html">Mesh Deform</a><a class="navlink" href="objects.html">Instantiate / Object Controller</a><a class="navlink" href="bender.html">Object Bender</a><a class="navlink" href="morph.html">Spline Morph</a><a class="navlink" href="junction-mesh.html">Junction Mesh</a><a class="navlink" href="2d-gizmos.html">Spline 2D / Gizmos</a><div class="group-label">Tham khảo</div><a class="navlink" href="api.html">API Reference</a><a class="navlink" href="examples.html">Ví dụ TypeScript</a><a class="navlink" href="train.html">Example: Đoàn tàu nhiều toa</a><a class="navlink" href="troubleshooting.html">Xử lý lỗi</a></nav><div class="bottom">Cocos Splines · Hướng dẫn sử dụng</div></aside><div class="wrap"><div class="topbar"><span>DOCS / <b>Length Monitor / Modifiers</b></span><span class="pill">API</span></div><main class="article">
+<div class="eyebrow">Cocos Creator ≥ 3.8.2 · Hướng dẫn &amp; API</div>
+<h1>Spline Length Monitor &amp; Spline Modifiers</h1>
+<p class="lead">Modifiers là <strong>đường cong giá trị theo vị trí dọc spline</strong>. Thay vì mọi vị trí đều có tốc độ, độ rộng, độ lệch và tỷ lệ giống nhau, bạn đặt các <em>keyframe</em> ở những vị trí cụ thể. Component sử dụng Modifiers sẽ đọc các giá trị nội suy tương ứng.</p>
+<h2>1. Khác gì với việc sửa Knot?</h2>
+<p><code>SplineContainer</code> và <code>SplineKnot</code> định nghĩa <strong>hình dạng đường cong</strong>. <code>SplineModifiers</code> không dịch chuyển knot, không thay đổi spline gốc và không tự sửa mesh. Nó chỉ cung cấp các giá trị phụ theo <code>progress</code>; <code>SplineAnimate</code>, <code>SplineRoad</code> và <code>SplineObjectController</code> phải tham chiếu tới component này để các giá trị có tác dụng.</p>
+<div class="callout good">Ví dụ: Spline dài 100 units, một key tại <code>progress=0.25</code> nằm ở khoảng 25 units tính theo <strong>chiều dài cung</strong>, không phải Bezier t. Nếu thay đổi hình dạng hoặc chiều dài spline, cùng progress vẫn tương ứng 25% chiều dài mới.</div>
+<h2>2. Các kênh Modifier</h2>
+<table><thead><tr><th>Trường trong key</th><th>Giá trị trung tính</th><th>Tác dụng chính xác</th></tr></thead><tbody>
+<tr><td><code>progress</code></td><td>0–1</td><td>Vị trí keyframe theo normalized arc distance. Các key có thể khai báo không đúng thứ tự; hàm sample tự sắp xếp.</td></tr>
+<tr><td><code>offset: Vec3</code></td><td>(0,0,0)</td><td>Dịch vị trí tương đối với frame spline: X = Right, Y = Up, Z = Forward. <strong>Đơn vị vị trí</strong>, cộng với offset riêng của Animate hoặc ObjectController.</td></tr>
+<tr><td><code>scale: Vec3</code></td><td>(1,1,1)</td><td>Nhân tỉ lệ object trong <code>SplineObjectController</code>. Không dùng để scale mesh Road hoặc Animate.</td></tr>
+<tr><td><code>width: number</code></td><td>1</td><td>Nhân độ rộng <code>SplineRoad</code>. Ví dụ Road width = 6, modifier width = 1.5 thì mặt đường tham chiếu rộng khoảng 9 units tại vị trí đó.</td></tr>
+<tr><td><code>speed: number</code></td><td>1</td><td>Hệ số tốc độ của <code>SplineAnimate</code>: 0.5 = một nửa; 2 = gấp đôi. Bị giới hạn tối thiểu 0.01, không phải lệnh dừng hẳn.</td></tr>
+<tr><td><code>roll: number</code></td><td>0°</td><td>Góc quay bổ sung quanh trục <strong>Forward (+Z)</strong> của spline. Được dùng bởi Animate khi Align To Spline và ObjectController khi Align To Spline.</td></tr>
+</tbody></table>
+<p>Khi <strong>không có keyframe</strong>, <code>sample()</code> luôn trả về các giá trị trung tính. Khi có keyframe, giá trị trước key đầu tiên và sau key cuối cùng được <strong>giữ nguyên theo key biên</strong>, không tự về trung tính.</p>
+<h2>3. Linear và SmoothStep</h2>
+<p>Với hai key A và B, <code>Linear</code> nội suy tuyến tính theo khoảng progress giữa hai key. <code>SmoothStep</code> dùng hàm <code>u²(3−2u)</code>, tốc độ thay đổi của giá trị tiến về 0 khi gần mỗi key. Đây là <strong>cách nội suy Modifier</strong>, khác với trường Easing của <code>SplineAnimate</code>.</p>
+<p>Ví dụ: Speed tại progress 0.2 = 1; tại 0.4 = 0.4. Ở chính giữa (progress 0.3), cả Linear và SmoothStep đều cho 0.7; khác biệt thể hiện rõ hơn ở vị trí gần đầu/cuối đoạn, nơi SmoothStep đổi giá trị mềm hơn.</p>
+<h2>4. Cách tạo trong Inspector</h2>
+<ol><li>Tạo một <code>SplineContainer</code> có ít nhất hai knot.</li>
+<li>Thêm <code>SplineModifiers</code> vào cùng Node hoặc Node con của Spline; gán ô <strong>Spline</strong> nếu không tìm được bằng parent.</li>
+<li>Trong <strong>Keys</strong>, thêm các <code>SplineModifierKey</code> và nhập progress cùng các giá trị muốn thay đổi. Với kênh không dùng tới, để giá trị trung tính.</li>
+<li>Chọn <strong>Interpolation = SmoothStep</strong> khi cần đoạn chuyển mềm, hoặc Linear khi cần tăng đều.</li>
+<li>Ở component sử dụng như <code>SplineAnimate</code>, <code>SplineRoad</code> hoặc <code>SplineObjectController</code>, kéo <code>SplineModifiers</code> vào trường <strong>Modifiers</strong>.</li>
+<li>Chọn Node chứa SplineModifiers trong Scene để xem Gizmos, kiểm tra lại vị trí Key và giá trị.</li></ol>
+<h2>5. Gizmos của Modifier</h2>
+<p>Gizmos chỉ hiển thị khi <strong>chọn component/Node chứa SplineModifiers</strong> và đã cài Cocos-Gizmos. Không cần chạy Play. Bản xem trước được tính trực tiếp từ các key, không tạo mesh mới và không thay đổi Knot.</p>
+<table><thead><tr><th>Màu</th><th>Ý nghĩa</th></tr></thead><tbody>
+<tr><td><span class="tag">Cyan</span></td><td>Đường chạy sau khi cộng <code>Offset</code> vào spline frame tại từng điểm mẫu.</td></tr>
+<tr><td><span class="tag">Green</span></td><td>Hai đường biên <code>Width</code>, bằng <code>gizmoBaseWidth × width multiplier</code>. Đây chỉ là thước xem trước, <strong>không phải mesh Road thật</strong>.</td></tr>
+<tr><td><span class="tag">Blue sphere</span></td><td>Key có <code>Speed &lt; 1</code> (giảm tốc).</td></tr>
+<tr><td><span class="tag">Yellow sphere</span></td><td>Key có <code>Speed ≈ 1</code> (trung tính).</td></tr>
+<tr><td><span class="tag">Orange sphere</span></td><td>Key có <code>Speed &gt; 1</code> (tăng tốc).</td></tr>
+<tr><td><span class="tag">Green / Purple / White axes</span></td><td>Khi bật Show Frame Gizmos: local X / Y / Z tại mỗi key; độ dài mỗi trục tỉ lệ theo <code>Scale</code>, và X/Y xoay theo <code>Roll</code>. Đây là hướng tham chiếu, không phải hình học vật thể.</td></tr></tbody></table>
+<p>Thuộc tính hiển thị gồm <code>showGizmos</code>, <code>gizmoSamples</code> (8–96), <code>showOffsetGizmos</code>, <code>showWidthGizmos</code>, <code>gizmoBaseWidth</code>, <code>showKeyGizmos</code> và <code>showFrameGizmos</code>. Trên spline dài, tăng Gizmo Samples để đường preview mượt hơn; giảm nếu Editor giật. Số marker keyframe được giới hạn 64 mỗi lần vẽ.</p>
+<div class="callout warn">Gizmos Width chỉ hiển thị hệ số Width trên thước có Base Width tùy chọn. Muốn Road thật rộng theo key phải gán Modifiers vào <code>SplineRoad.modifiers</code>. Tương tự, đường Offset xanh không tự di chuyển MeshDeform hay Extrude.</div>
+<h2>6. Ví dụ A — Xe giảm tốc ở cua</h2>
+<p>Giả sử Spline dài 100 units, cua gấp nằm ở khoảng 40–60 units. Tạo 5 key sau, những trường khác giữ mặc định:</p>
+<table><thead><tr><th>Progress</th><th>Speed</th><th>Ý nghĩa</th></tr></thead><tbody>
+<tr><td>0.00</td><td>1.00</td><td>Chạy bình thường</td></tr>
+<tr><td>0.30</td><td>1.00</td><td>Bắt đầu vùng giảm tốc</td></tr>
+<tr><td>0.45</td><td>0.35</td><td>Qua cua chậm 35% tốc độ cơ bản</td></tr>
+<tr><td>0.60</td><td>0.35</td><td>Giữ tốc độ chậm qua cua</td></tr>
+<tr><td>0.75</td><td>1.00</td><td>Tăng lại về tốc độ thường</td></tr>
+</tbody></table>
+<p>Trong <code>SplineAnimate</code>: chọn <code>Method=Speed</code>, <code>Speed=10</code>, <code>Easing=Linear</code>, gán Modifiers. Tại key 0.45, tốc độ danh định bằng khoảng <code>10 × 0.35 = 3.5 units/s</code>. Easing Linear <strong>không vô hiệu hóa</strong> Speed Modifier. Nếu dùng Offset đồng thời, bật <code>Constant Speed With Offset</code> để hạn chế dao động tốc độ do hình học lệch đường.</p>
+<h2>7. Ví dụ B — Mở rộng đường tại trạm xe</h2>
+<p><code>SplineRoad.width=6</code>. Thêm các key Width:</p>
+<table><thead><tr><th>Progress</th><th>Width multiplier</th><th>Độ rộng tham chiếu</th></tr></thead><tbody>
+<tr><td>0.00</td><td>1.0</td><td>6 units</td></tr><tr><td>0.35</td><td>1.0</td><td>6 units</td></tr>
+<tr><td>0.50</td><td>1.5</td><td>9 units</td></tr><tr><td>0.70</td><td>1.5</td><td>9 units</td></tr><tr><td>0.85</td><td>1.0</td><td>6 units</td></tr></tbody></table>
+<p>Gán Modifiers vào trường <strong>Modifiers</strong> của Road, bật <code>Rebuild On Change</code>. Chỉnh <strong>Gizmo Base Width = 6</strong> để hai đường xanh biểu diễn độ rộng tham chiếu tương ứng. Nếu Road còn dùng <code>End Width</code>, giá trị này kết hợp với quy luật rộng dần của Road; hãy xem mesh thật để xác nhận.</p>
+<h2>8. Ví dụ C — Chuyển làn nhẹ nhàng</h2>
+<p>Đặt <code>Offset.X</code> theo các key: 0.00 → 0; 0.30 → 0; 0.50 → 1.5; 0.70 → 1.5; 0.90 → 0. Chọn <code>SmoothStep</code>, sau đó gán Modifiers cho Animate. Object sẽ từ đường tâm chuyển sang phải 1.5 units theo hệ của spline rồi quay lại tâm. Đường preview Cyan cho thấy quỹ đạo này ngay trong Scene.</p>
+<div class="callout warn">Offset X là hướng <strong>Right của spline</strong>, không phải trục X thế giới. Trên cua hoặc tại Junction, Right có thể đổi hướng. <code>Junction Offset Blend Distance</code> của Animate xử lý phần chuyển tiếp Offset qua điểm nối hai spline.</div>
+<h2>9. Ví dụ D — Rải cây với kích thước thay đổi</h2>
+<p>Đặt Scale=(1,1,1) tại progress 0, Scale=(0.65,0.65,0.65) tại 0.5 và Scale=(1.4,1.4,1.4) tại 1. Gán Modifiers cho <code>SplineObjectController</code>; sau <strong>Respawn</strong>, các prefab cây sẽ có tỷ lệ khác nhau tùy vị trí. <code>Offset.X</code> cũng có thể đẩy chúng ra bên đường. Trường <code>Roll</code> của ObjectController chỉ có tác dụng nếu bật <code>Align To Spline</code>. </p>
+<h2>10. API TypeScript</h2>
+<pre><code>import { SplineModifiers, SplineModifierKey, ModifierInterpolation }
+    from 'db://cocos-splines/splines/Components/SplineModifiers';
+
+const modifiers = this.node.getComponent(SplineModifiers);
+if (modifiers) {
+    // Đọc giá trị ở 50% chiều dài cung.
+    const midpoint = modifiers.sample(0.5);
+    console.log(midpoint.speed, midpoint.width, midpoint.offset);
+
+    // Đọc giá trị ở quãng đường 20 units (spline-local distance).
+    const at20 = modifiers.sampleDistance(20);
+    console.log(at20.scale, at20.roll);
+
+    // Thêm key; chỉ consumer nào nhận Modifiers mới áp dụng thay đổi.
+    const key = new SplineModifierKey();
+    key.progress = 0.75;
+    key.speed = 0.5;
+    modifiers.keys.push(key);
+    modifiers.interpolation = ModifierInterpolation.SmoothStep;
+}</code></pre>
+<table><thead><tr><th>API</th><th>Kiểu trả về</th><th>Công dụng</th></tr></thead><tbody>
+<tr><td><code>sample(progress: number)</code></td><td><code>ModifierValues</code></td><td>Đọc Offset, Scale, Width, Speed, Roll tại normalized arc progress (clamp 0–1).</td></tr>
+<tr><td><code>sampleDistance(distance: number)</code></td><td><code>ModifierValues</code></td><td>Chia distance cho <code>spline.length</code>, rồi gọi sample. Nếu không có spline hợp lệ thì dùng progress 0.</td></tr>
+<tr><td><code>getRevision()</code></td><td><code>string</code></td><td>Chữ ký chứa interpolation/keys, giúp consumer phát hiện thay đổi cấu hình.</td></tr>
+<tr><td><code>getSpline()</code></td><td><code>SplineContainer | null</code></td><td>Lấy spline được gán, hoặc tìm trên Node hiện tại và parent.</td></tr>
+</tbody></table>
+<h2>11. Component nào thực sự sử dụng các giá trị?</h2>
+<table><thead><tr><th>Component nhận Modifiers</th><th>Trường đã dùng</th><th>Không dùng</th></tr></thead><tbody>
+<tr><td><code>SplineAnimate</code></td><td>Offset, Speed, Roll (Roll khi Align To Spline)</td><td>Width, Scale</td></tr>
+<tr><td><code>SplineRoad</code></td><td>Width</td><td>Offset, Speed, Scale, Roll</td></tr>
+<tr><td><code>SplineObjectController</code></td><td>Offset, Scale, Roll (khi Align To Spline)</td><td>Width, Speed</td></tr>
+</tbody></table>
+<p><code>SplineLengthMonitor</code> là component khác: theo dõi chiều dài spline và phát sự kiện, không tự đọc key của Modifier. API của Monitor gồm <code>currentLength</code>, <code>checkNow()</code>, <code>reset()</code> và callback <code>AddOnChangedEvent</code>, <code>AddOnCrossAboveEvent</code>, <code>AddOnCrossBelowEvent</code> cùng các hàm <code>RemoveOn...Event</code>.</p>
+</main><footer class="page-footer"><span>← <a href="positioner.html">Positioner / Projector</a></span><span><a href="road.html">Road &amp; Extrude</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>
