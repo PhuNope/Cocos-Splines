@@ -1,0 +1,338 @@
+{
+  "name": "cocos-splines",
+  "version": "0.9.0",
+  "package_version": 2,
+  "description": "Cocos Creator 3.8.8 spline extension with object controllers, modifiers, morphing, hierarchy bending and XZ junction patches.",
+  "editor": ">=3.8.8",
+  "main": "./dist/main.js",
+  "contributions": {
+    "scene": {
+      "script": "./dist/scene.js"
+    },
+    "asset-db": {
+      "mount": {
+        "path": "./assets",
+        "readonly": true
+      }
+    },
+    "menu": [
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Create Spline",
+        "message": "create-spline"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Create Road Spline",
+        "message": "create-road-spline"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Create 2D Spline",
+        "message": "create-2d-spline"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline 2D Path",
+        "message": "create-2d-path"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Mesh Deformer",
+        "message": "create-mesh-deform"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline Positioner",
+        "message": "create-positioner"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline Projector",
+        "message": "create-projector"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline Length Monitor",
+        "message": "create-length-monitor"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline Modifiers",
+        "message": "create-modifiers"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Object Controller",
+        "message": "create-object-controller"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Spline Morph",
+        "message": "create-morph"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Object Bender",
+        "message": "create-object-bender"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Junction Mesh Patch",
+        "message": "create-junction-mesh"
+      }
+    ],
+    "messages": {
+      "create-spline": {
+        "methods": [
+          "createSpline"
+        ]
+      },
+      "get-spline": {
+        "methods": [
+          "getSpline"
+        ]
+      },
+      "add-knot": {
+        "methods": [
+          "addKnot"
+        ]
+      },
+      "delete-knot-id": {
+        "methods": [
+          "deleteKnotId"
+        ]
+      },
+      "set-knot-field": {
+        "methods": [
+          "setKnotField"
+        ]
+      },
+      "select-knot-id": {
+        "methods": [
+          "selectKnotId"
+        ]
+      },
+      "select-container": {
+        "methods": [
+          "selectContainer"
+        ]
+      },
+      "refresh-preview": {
+        "methods": [
+          "refreshPreview"
+        ]
+      },
+      "import-json": {
+        "methods": [
+          "importJSON"
+        ]
+      },
+      "preview-animate": {
+        "methods": [
+          "previewAnimate"
+        ]
+      },
+      "stop-preview-animate": {
+        "methods": [
+          "stopPreviewAnimate"
+        ]
+      },
+      "split-after-knot": {
+        "methods": [
+          "splitAfterKnot"
+        ]
+      },
+      "move-knot-id": {
+        "methods": [
+          "moveKnotId"
+        ]
+      },
+      "reverse-direction": {
+        "methods": [
+          "reverseDirection"
+        ]
+      },
+      "create-road": {
+        "methods": [
+          "createRoad"
+        ]
+      },
+      "create-trigger": {
+        "methods": [
+          "createTrigger"
+        ]
+      },
+      "create-junction": {
+        "methods": [
+          "createJunction"
+        ]
+      },
+      "rebuild-road": {
+        "methods": [
+          "rebuildRoad"
+        ]
+      },
+      "create-road-spline": {
+        "methods": [
+          "createRoadSpline"
+        ]
+      },
+      "create-2d-spline": {
+        "methods": [
+          "create2DSpline"
+        ]
+      },
+      "create-2d-path": {
+        "methods": [
+          "create2DPath"
+        ]
+      },
+      "create-mesh-deform": {
+        "methods": [
+          "createMeshDeform"
+        ]
+      },
+      "rebuild-mesh-deform": {
+        "methods": [
+          "rebuildMeshDeform"
+        ]
+      },
+      "rebuild-2d-path": {
+        "methods": [
+          "rebuild2DPath"
+        ]
+      },
+      "create-tangent-handles": {
+        "methods": [
+          "createTangentHandles"
+        ]
+      },
+      "select-tangent-handle": {
+        "methods": [
+          "selectTangentHandle"
+        ]
+      },
+      "create-positioner": {
+        "methods": [
+          "createPositioner"
+        ]
+      },
+      "create-projector": {
+        "methods": [
+          "createProjector"
+        ]
+      },
+      "create-length-monitor": {
+        "methods": [
+          "createLengthMonitor"
+        ]
+      },
+      "apply-positioner": {
+        "methods": [
+          "applyPositioner"
+        ]
+      },
+      "restore-positioner": {
+        "methods": [
+          "restorePositioner"
+        ]
+      },
+      "project-now": {
+        "methods": [
+          "projectNow"
+        ]
+      },
+      "measure-length": {
+        "methods": [
+          "measureLength"
+        ]
+      },
+      "create-modifiers": {
+        "methods": [
+          "createModifiers"
+        ]
+      },
+      "create-object-controller": {
+        "methods": [
+          "createObjectController"
+        ]
+      },
+      "create-morph": {
+        "methods": [
+          "createMorph"
+        ]
+      },
+      "create-object-bender": {
+        "methods": [
+          "createObjectBender"
+        ]
+      },
+      "create-junction-mesh": {
+        "methods": [
+          "createJunctionMesh"
+        ]
+      },
+      "rebuild-junction-patch": {
+        "methods": [
+          "rebuildJunctionPatch"
+        ]
+      },
+      "apply-bender": {
+        "methods": [
+          "applyBender"
+        ]
+      },
+      "restore-bender": {
+        "methods": [
+          "restoreBender"
+        ]
+      },
+      "apply-morph": {
+        "methods": [
+          "applyMorph"
+        ]
+      },
+      "restore-morph": {
+        "methods": [
+          "restoreMorph"
+        ]
+      }
+    },
+    "inspector": {
+      "section": {
+        "node": {
+          "Splines.SplineContainer": "./dist/contributions/inspector/Container.js",
+          "Splines.SplineKnot": "./dist/contributions/inspector/Knot.js",
+          "Splines.SplineAnimate": "./dist/contributions/inspector/Animate.js",
+          "Splines.SplineExtrude": "./dist/contributions/inspector/Extrude.js",
+          "Splines.SplineInstantiate": "./dist/contributions/inspector/Instantiate.js",
+          "Splines.SplineRoad": "./dist/contributions/inspector/Road.js",
+          "Splines.SplineTrigger": "./dist/contributions/inspector/Trigger.js",
+          "Splines.SplineJunction": "./dist/contributions/inspector/Junction.js",
+          "Splines.Spline2DPath": "./dist/contributions/inspector/Path2D.js",
+          "Splines.SplineMeshDeform": "./dist/contributions/inspector/MeshDeform.js",
+          "Splines.SplinePositioner": "./dist/contributions/inspector/Positioner.js",
+          "Splines.SplineProjector": "./dist/contributions/inspector/Projector.js",
+          "Splines.SplineLengthMonitor": "./dist/contributions/inspector/LengthMonitor.js",
+          "Splines.SplineModifiers": "./dist/contributions/inspector/Modifiers.js",
+          "Splines.SplineObjectController": "./dist/contributions/inspector/ObjectController.js",
+          "Splines.SplineObjectBender": "./dist/contributions/inspector/Bender.js",
+          "Splines.SplineMorph": "./dist/contributions/inspector/Morph.js",
+          "Splines.SplineJunctionMesh": "./dist/contributions/inspector/JunctionMesh.js"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "verify": "node scripts/verify.cjs",
+    "test": "node tests/run.cjs && node tests/editor.test.cjs && node tests/inspector.test.cjs && node tests/animate-runtime.test.cjs && node tests/instantiate-runtime.test.cjs && node tests/deprecation.test.cjs && node tests/road-math.test.cjs && node tests/road-component.test.cjs && node tests/mesh-deform.test.cjs && node tests/mesh-winding.test.cjs && node tests/features-v05.test.cjs && node tests/position-modes.test.cjs && node tests/features-v07.test.cjs && node tests/mesh-shading.test.cjs && node tests/material-sharing.test.cjs && node tests/dreamteck-v08.test.cjs && node tests/event-subscriptions.test.cjs && node tests/advanced-v09.test.cjs",
+    "package": "npm run build && npm run verify && npm test && npm run check:runtime && node scripts/release.cjs",
+    "check:runtime": "tsc -p tsconfig.runtime.json"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

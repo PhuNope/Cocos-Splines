@@ -1,0 +1,90 @@
+name: Cocos Splines — build, test and release
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Verify, typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install TypeScript compiler
+        run: npm install --no-save --no-package-lock --ignore-scripts typescript@5.9.3
+      - name: Validate runtime types
+        run: npm run check:runtime
+      - name: Generate editor extension files
+        run: npm run build
+      - name: Verify Cocos extension structure
+        run: npm run verify
+      - name: Run regression tests
+        run: npm test
+
+  release:
+    name: Build ZIP and publish GitHub Release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: cocos-splines-release-main
+      cancel-in-progress: false
+    steps:
+      - name: Checkout approved main commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install TypeScript compiler
+        run: npm install --no-save --no-package-lock --ignore-scripts typescript@5.9.3
+      - name: Package extension
+        run: npm run package
+      - name: Determine release version and ZIP
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "zip=$(realpath "../cocos-splines-${VERSION}.zip")" >> "$GITHUB_OUTPUT"
+      - name: Ensure version has not been released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::${RELEASE_TAG} is already released. Bump package.json version on dev before merging again."
+            exit 1
+          fi
+          if git rev-parse --verify "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::error::Git tag ${RELEASE_TAG} already exists. Bump version before merging."
+            exit 1
+          fi
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          ZIP: ${{ steps.version.outputs.zip }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" "$ZIP" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Cocos Splines $RELEASE_TAG" \
+            --generate-notes
