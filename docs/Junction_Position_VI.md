@@ -1,6 +1,6 @@
 # Cocos Splines v0.6.0 — Junction, Trigger và tọa độ t / Distance
 
-Dành cho **Cocos Creator 3.8.8**. Chỉnh tất cả trong **Inspector**, không dùng panel ngoài.
+Dành cho **Cocos Creator >=3.8.2**. Chỉnh tất cả trong **Inspector**, không dùng panel ngoài.
 
 ## 1. Hiểu 3 kiểu tọa độ
 

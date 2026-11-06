@@ -1,4 +1,4 @@
-# Cocos Splines v0.9.0 — Dreamteck-inspired tools (Cocos Creator 3.8.8)
+# Các công cụ spline nâng cao (Cocos Creator >=3.8.2)
 
 > Các thành phần dưới đây được triển khai bằng TypeScript theo ý tưởng workflow từ Dreamteck, không sao chép mã nguồn của họ. Không có panel riêng: cấu hình trong Inspector. `Collider Generator` và `Particle Controller` **chưa** được thực hiện.
 
@@ -54,6 +54,6 @@ Khi cùng số knot, phép blend position và tangent handles được tính ri�
 
 ## 6. Ghi chú về Events và tương thích
 
-API event v0.8.1 (`AddOnReachEvent(cb,target)`, `RemoveOnReachEvent(cb,target)`, các API trigger/animate/projector...) được giữ nguyên. Các UUID đã có trước v0.9.0 giữ nguyên; chỉ có các file TypeScript mới sử dụng UUID mới. `SplineAnimate`, `SplineRoad` được thêm trường Modifiers mặc định `null`; các scene cũ không cần sửa.
+Các API event (`AddOnReachEvent(cb,target)`, `RemoveOnReachEvent(cb,target)`, các API trigger/animate/projector...) vẫn khả dụng. Các UUID của script cũ được giữ nguyên; chỉ có các file TypeScript mới sử dụng UUID mới. `SplineAnimate`, `SplineRoad` được thêm trường Modifiers mặc định `null`; các scene cũ không cần sửa.
 
-**Kiểm thử:** có TypeScript typecheck, unit tests và mock runtime. Chưa có Cocos Creator 3.8.8 GUI / native build / render integration test thực tế. Xem `tests/advanced-v09.test.cjs` để biết những hành vi được kiểm tra tự động.
+**Kiểm thử:** có TypeScript typecheck, unit tests và mock runtime. Chưa có Cocos Creator >=3.8.2 GUI / native build / render integration test thực tế. Kiểm thử Editor và Preview thực tế trên Cocos Creator vẫn được khuyến nghị.

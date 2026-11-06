@@ -1,3 +1,13 @@
+# Changelog
+
+## 0.9.2
+
+- Smooth `SplineAnimate.splineOffset` when changing splines at a Junction. `junctionOffsetBlendDistance` controls transition length (default 1 unit; 0 for immediate change). Blended path participates in world-distance constant-speed sampling when enabled.
+- Keep manual `setCurrentSpline()` and explicit `seek()` immediate; preserve JunctionMode Off behavior and backwards routing.
+- Simplify the multi-page HTML docs: remove Git / release workflow, offline/Internet wording and version-specific fix history. Document the Junction offset blend.
+- Declare Cocos Creator Editor compatibility `>=3.8.2` in the extension manifest; automated tests do not guarantee live compatibility on every older editor version.
+- Add Junction offset regression tests for both travel directions and disabled smoothing.
+
 # v0.9.1 — Offset travel speed, Morph Preview and HTML documentation
 
 - **SplineAnimate:** Added `constantSpeedWithOffset` (defaults `true`). With nonzero Spline Offset or keyed Modifier Offset, a cached world-space arc-length lookup maps eased elapsed time to the actual follower trajectory. Linear Easing now keeps approximately constant physical speed on bends; Speed mode measures units/second on the offset path, Time mode still takes the requested duration.
@@ -67,7 +77,6 @@
 - No runtime TypeScript or `.meta` UUID changes; no serialization migration.
 - Manual calls to `setCurrentSpline()` from *other scripts* can still change spline regardless of Junction Mode, by design.
 
-# Changelog
 
 ## v0.7.0 — Knot edit mode, MeshDeform packed-position support, XY2D tangents
 

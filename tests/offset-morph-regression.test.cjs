@@ -35,7 +35,8 @@ try {
   const original=Module._load;
   Module._load=function(n,parent,isMain){if(n==='cc')return cc;if(n==='cc/env')return env;return original.call(this,n,parent,isMain);};
   try {
-    const {SplineAnimate,AnimateMethod,LoopMode,Easing}=require(path.join(tmp,'Components/SplineAnimate.js'));
+    const {SplineAnimate,AnimateMethod,LoopMode,Easing,JunctionMode}=require(path.join(tmp,'Components/SplineAnimate.js'));
+    const {SplineJunction,JunctionExitDirection}=require(path.join(tmp,'Components/SplineJunction.js'));
     const {buildOffsetArcLUT,offsetDistanceFractionToProgress,offsetProgressToDistanceFraction}=require(path.join(tmp,'Core/SplineTraversal.js'));
     const a=buildOffsetArcLUT(p=>({x:5*Math.cos(p*Math.PI/2),y:0,z:5*Math.sin(p*Math.PI/2)}),512);
     assert(Math.abs(a.length-5*Math.PI/2)<.00002);
@@ -78,6 +79,56 @@ try {
     f.seekDistance(total*.6);assert(Math.abs(f.currentProgress-.6)<.0001);
     f.setCurrentSpline(spline,.8);assert(Math.abs(f.currentProgress-.8)<.0001);
 
+    // Two connected centerlines with different local right directions.
+    // Previously a +X splineOffset teleported at their shared junction.
+    const makeBranch=(name,positionAt,heading)=>({node:new Node(name),count:2,segmentCount:1,length:10,dimension:0,
+      evaluateWorldPosition:positionAt,evaluateRotation:()=>{const q=new Quat();q.heading=heading;return q;},
+      getRevision:()=>name,tAtProgress:p=>p});
+    const branchA=makeBranch('inbound',p=>new Vec3(p*10,0,0),0);
+    const branchB=makeBranch('outbound',p=>new Vec3(10,0,p*10),Math.PI/2);
+    const branchC=makeBranch('reverse-out',p=>new Vec3(0,0,(p-1)*10),Math.PI/2);
+    const distance=(p,q)=>Math.hypot(p.x-q.x,p.y-q.y,p.z-q.z);
+    const frameOffset=(sp,p)=>{const q=sp.evaluateRotation(p);return Vec3.add(new Vec3(),sp.evaluateWorldPosition(p),Vec3.transformQuat(new Vec3(),new Vec3(1,0,0),q));};
+    function useJunction(startSpline,startProgress,direction,exitSpline,exitProgress,exitDirection,blendDistance){
+      const follower=new SplineAnimate();follower.node=new Node('follower');follower.target=new Node('offset-model');
+      follower.spline=startSpline;follower.alignToSpline=false;follower.splineOffset=new Vec3(1,0,0);
+      follower.constantSpeedWithOffset=true;follower.junctionOffsetBlendDistance=blendDistance;
+      follower.loopMode=LoopMode.Once;follower.junctionMode=JunctionMode.FirstOther;
+      follower.method=AnimateMethod.Speed;follower.speed=2;
+      const initialLink={spline:startSpline,getProgress:()=>startProgress};
+      const finalLink={spline:exitSpline,getProgress:()=>exitProgress,exitDirection};
+      const junction={enabled:true,entries:()=>[{index:0,link:initialLink}],
+        reaches:()=>{},pick:()=>({index:1,link:finalLink}),switched:()=>{}};
+      SplineJunction.active.add(junction);
+      follower.onEnable();follower.setCurrentSpline(startSpline,startProgress+(direction===1?-.1:.1),direction);
+      const before=frameOffset(startSpline,startProgress);
+      follower.update(.5); // travel exactly 1 world unit to the marker
+      assert.equal(follower.currentSpline,exitSpline,'Must route to new spline');
+      const after=follower.target.worldPosition.clone();
+      SplineJunction.active.delete(junction);
+      return {follower,before,after};
+    }
+    const forward=useJunction(branchA,1,1,branchB,0,JunctionExitDirection.Forward,2);
+    assert(distance(forward.before,forward.after)<1e-5,'Offset transition must preserve world point at Junction');
+    assert(distance(forward.after,frameOffset(branchB,0))>.5,'Destination local offset differs in world space');
+    let last=forward.after.clone();
+    for(let i=0;i<70;i++){
+      forward.follower.update(.05);
+      const next=forward.follower.target.worldPosition.clone();
+      assert(distance(last,next)<.3,'No frame may teleport during offset blend');
+      last=next;
+    }
+    assert(distance(last,frameOffset(branchB,forward.follower.currentProgress))<.002,
+      'After blend distance, world position should match destination local offset');
+    const backward=useJunction(branchA,0,-1,branchC,1,JunctionExitDirection.Backward,2);
+    assert(distance(backward.before,backward.after)<1e-5,'Backward switch must preserve world position');
+    const instant=useJunction(branchA,1,1,branchB,0,JunctionExitDirection.Forward,0);
+    assert(distance(instant.before,instant.after)>.5,'Blend Distance=0 retains immediate local-frame offset');
+    assert(distance(instant.after,frameOffset(branchB,0))<1e-5);
+    // Explicit manual spline change intentionally bypasses junction smoothing.
+    forward.follower.setCurrentSpline(branchA,.5);
+    assert(distance(forward.follower.target.worldPosition,frameOffset(branchA,.5))<1e-5);
+
     const {SplineMorph}=require(path.join(tmp,'Components/SplineMorph.js'));
     const {SplineKnot}=require(path.join(tmp,'Core/SplineKnot.js'));
     const shape=shift=>({count:2,reversed:false,node:new Node('source'+shift),getRevision:()=>String(shift),
@@ -95,6 +146,6 @@ try {
     morph.blend=.7;morph.update();assert(Math.abs(knots[0].node.position.x-7)<1e-8,'Blend must reapply after Restore');
     morph.blend=.3;morph.update();assert(Math.abs(knots[0].node.position.x-3)<1e-8);
     morph.previewInEditor=false;morph.update();assert.equal(knots[0].node.position.x,0,'Preview off restores original');
-    console.log('OFFSET + MORPH REGRESSION PASS: world-distance uniformity (Speed/Time), legacy comparison, LUT inverse, seek, Restore -> Blend -> Preview off.');
+    console.log('OFFSET + MORPH REGRESSION PASS: world-distance uniformity (Speed/Time), legacy comparison, LUT inverse, seek, Junction offset continuity forward/backward & zero-blend, Restore -> Blend -> Preview off.');
   }finally{Module._load=original;}
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

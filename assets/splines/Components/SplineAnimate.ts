@@ -55,6 +55,8 @@ export class SplineAnimate extends Component {
     @property({type:Vec3}) worldOffset=new Vec3();
     @property({type:Vec3,tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units). Applied after deformation; World Offset remains world-axis-aligned.'}) splineOffset=new Vec3();
     @property({tooltip:'Compensate for the longer/shorter offset trajectory at bends. Linear easing then means uniform movement in world space, not just along the centerline. Uses a cached arc-length lookup.'}) constantSpeedWithOffset=true;
+    @property({min:0,tooltip:'World units traveled on the destination spline to smoothly settle into its local Spline Offset after a Junction switch. 0 = immediate offset switch.'})
+    junctionOffsetBlendDistance=1;
     @property({tooltip:'Temporary preview in the Scene Editor; turn off to restore original transform.'}) previewInEditor=false;
     @property({type:Enum(SplinePositionMode),tooltip:'Choose editor preview coordinate: normalized distance, absolute distance or geometric t.'})
     previewPositionMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
@@ -85,6 +87,10 @@ export class SplineAnimate extends Component {
     private _previewRotation:Quat|null=null;
     private _previewKey='';
     private _offsetArcCache:{spline:SplineContainer;key:string;lut:OffsetArcLUT}|null=null;
+    /** Positional correction is held at the entry then fades over the destination curve.
+     * It prevents an instantaneous world-space jump when right/up/forward frames differ. */
+    private _junctionOffsetBlend:{spline:SplineContainer;entryProgress:number;direction:Direction;distance:number;correction:Vec3}|null=null;
+    private _junctionArcCache:{blend:NonNullable<SplineAnimate['_junctionOffsetBlend']>;base:OffsetArcLUT|null;lut:OffsetArcLUT}|null=null;
 
     public get currentSpline():SplineContainer|null { return this.source(); }
     public get currentProgress():number {return this.progressAtRaw(this._raw,this.source());}
@@ -130,12 +136,51 @@ export class SplineAnimate extends Component {
         this._offsetArcCache={spline,key,lut};
         return lut;
     }
+    /** World-space distance from the start of the destination along its unblended path. */
+    private baseDistanceAt(spline:SplineContainer,progress:number,base:OffsetArcLUT|null):number {
+        return base ? offsetProgressToDistanceFraction(base,progress)*base.length : clamp01(progress)*spline.length;
+    }
+    private blendWeight(spline:SplineContainer,progress:number,base:OffsetArcLUT|null):number {
+        const blend=this._junctionOffsetBlend;
+        if(!blend||blend.spline!==spline||blend.distance<=0)return 0;
+        const entry=this.baseDistanceAt(spline,blend.entryProgress,base);
+        const here=this.baseDistanceAt(spline,progress,base);
+        const traveled=Math.max(0,blend.direction*(here-entry));
+        // SmootherStep makes both the displacement and its first derivative
+        // continuous at the start/end of the transition.
+        return 1-easing(clamp01(traveled/blend.distance),Easing.SmootherStep);
+    }
+    private blendedWorldPosition(spline:SplineContainer,progress:number,base?:OffsetArcLUT|null):Vec3 {
+        const result=this.pathWorldPosition(spline,progress);
+        const blend=this._junctionOffsetBlend;
+        if(!blend||blend.spline!==spline)return result;
+        const weight=this.blendWeight(spline,progress,base===undefined?this.offsetArc(spline):base);
+        if(weight>0){result.x+=blend.correction.x*weight;result.y+=blend.correction.y*weight;result.z+=blend.correction.z*weight;}
+        return result;
+    }
+    /** Keep constant-speed sampling on the *blended* path too, not just its
+     * local-frame offset; otherwise the junction transition can accelerate. */
+    private activeArc(spline:SplineContainer|null):OffsetArcLUT|null {
+        const base=this.offsetArc(spline);
+        const blend=this._junctionOffsetBlend;
+        if(!spline||!blend||blend.spline!==spline||!this.constantSpeedWithOffset)return base;
+        const cached=this._junctionArcCache;
+        if(cached&&cached.blend===blend&&cached.base===base)return cached.lut;
+        const steps=Math.min(4096,Math.max(512,Math.floor((spline.segmentCount||1)*128)));
+        const lut=buildOffsetArcLUT(p=>this.blendedWorldPosition(spline,p,base),steps);
+        this._junctionArcCache={blend,base,lut};
+        return lut;
+    }
+    private resetJunctionBlend():void {
+        this._junctionOffsetBlend=null;
+        this._junctionArcCache=null;
+    }
     private progressAtRaw(raw:number,spline:SplineContainer|null):number {
-        const fraction=easing(raw,this.easing),lut=this.offsetArc(spline);
+        const fraction=easing(raw,this.easing),lut=this.activeArc(spline);
         return lut?offsetDistanceFractionToProgress(lut,fraction):fraction;
     }
     private rawAtProgress(progress:number,spline:SplineContainer|null):number {
-        const lut=this.offsetArc(spline);
+        const lut=this.activeArc(spline);
         const fraction=lut?offsetProgressToDistanceFraction(lut,progress):clamp01(progress);
         return inverseEasing(fraction,this.easing);
     }
@@ -145,7 +190,7 @@ export class SplineAnimate extends Component {
     }
     private getDuration():number {
         const spline=this.source();
-        const distance=spline?(this.offsetArc(spline)?.length??spline.length):0;
+        const distance=spline?(this.activeArc(spline)?.length??spline.length):0;
         return this.method===AnimateMethod.Speed
             ? Math.max(0.001,distance/Math.max(0.001,this.speed))
             : Math.max(0.001,this.duration);
@@ -155,7 +200,7 @@ export class SplineAnimate extends Component {
             if(this.previewInEditor)this.previewAt(this.coordinateRaw(this.source(),this.previewPositionMode,this.previewProgress,this.previewDistance));
             return;
         }
-        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;
+        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this.resetJunctionBlend();
         this._raw=this.coordinateRaw(this.source(),this.startPositionMode,this.startProgress,this.startDistance);
         this.elapsed=this._raw*this.getDuration();
         this.playing=this.playOnStart;
@@ -166,7 +211,7 @@ export class SplineAnimate extends Component {
     public play():void {this.playing=true;}
     public pause():void {this.playing=false;}
     public restart():void {
-        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;
+        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
     }
     public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;}
@@ -176,7 +221,7 @@ export class SplineAnimate extends Component {
     }
     /** Switch to a source manually, without firing triggers or traveling. */
     public setCurrentSpline(spline:SplineContainer,progress=0,direction:Direction=1):void{
-        this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
+        this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);
     }
@@ -197,6 +242,8 @@ export class SplineAnimate extends Component {
     /** Seek does not dispatch triggers unless explicitly requested. */
     public seek(t:number,fireEvents=false):void {
         const previous=this.currentProgress;
+        // An explicit seek intentionally cancels any in-progress junction interpolation.
+        this.resetJunctionBlend();
         this._raw=clamp01(t);
         this.elapsed=this._raw*this.getDuration();
         const next=this.currentProgress;
@@ -310,7 +357,7 @@ export class SplineAnimate extends Component {
                 this.reachedBoundary(dir);
                 if(this.loopMode===LoopMode.Once){this.playing=false;break;}
                 if(this.loopMode===LoopMode.PingPong)this._travelDirection=dir===1?-1:1;
-                else this._raw=dir===1?0:1;
+                else {this.resetJunctionBlend();this._raw=dir===1?0:1;}
                 continue;
             }
             const step=Math.min(toBoundary,remaining/duration);
@@ -348,10 +395,26 @@ export class SplineAnimate extends Component {
                 const rawAtMarker=this.rawAtProgress(hit.progress,spline);
                 const elapsed=Math.min(remaining,Math.max(0,Math.abs(rawAtMarker-this._raw)*duration));
                 remaining=Math.max(0,remaining-elapsed);
-                this._activeSpline=destination.link.spline;
-                this._raw=this.rawAtProgress(destination.link.getProgress(),this._activeSpline);
+                const entryWorld=this.blendedWorldPosition(spline,hit.progress);
+                const nextSpline=destination.link.spline;
+                const nextProgress=destination.link.getProgress();
+                const nextWorld=this.pathWorldPosition(nextSpline,nextProgress);
+                const difference=new Vec3(entryWorld.x-nextWorld.x,entryWorld.y-nextWorld.y,entryWorld.z-nextWorld.z);
                 const newDir=destination.link.exitDirection;
-                this._travelDirection=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
+                const exitDir:Direction=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
+                this._activeSpline=nextSpline;
+                this.resetJunctionBlend();
+                // Junction offset frames are independently oriented on each spline.
+                // Preserve the entry world point, then settle into the new frame.
+                const hasSplineOffset=!!(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z)||
+                    !!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
+                if(hasSplineOffset&&this.junctionOffsetBlendDistance>0&&
+                    Math.hypot(difference.x,difference.y,difference.z)>1e-6){
+                    this._junctionOffsetBlend={spline:nextSpline,entryProgress:nextProgress,
+                        direction:exitDir,distance:this.junctionOffsetBlendDistance,correction:difference};
+                }
+                this._travelDirection=exitDir;
+                this._raw=this.rawAtProgress(nextProgress,nextSpline);
                 this.elapsed=this._raw*this.getDuration();
                 junction.switched(this,e.entry,destination.index,dir);
                 jumped=true;
@@ -364,7 +427,7 @@ export class SplineAnimate extends Component {
                 this.reachedBoundary(dir);
                 if(this.loopMode===LoopMode.Once){this.playing=false;break;}
                 if(this.loopMode===LoopMode.PingPong)this._travelDirection=dir===1?-1:1;
-                else this._raw=dir===1?0:1;
+                else {this.resetJunctionBlend();this._raw=dir===1?0:1;}
             }
         }
         this.apply(this._raw);
@@ -414,7 +477,7 @@ export class SplineAnimate extends Component {
         const p=this.progressAtRaw(t,spline);
         const target=this.target||this.node;
         if(target===spline.node)return;
-        const position=this.pathWorldPosition(spline,p);
+        const position=this.blendedWorldPosition(spline,p);
         const modifier=this.modifiers?.sample(p);
         target.setWorldPosition(position);
         if(this.alignToSpline){

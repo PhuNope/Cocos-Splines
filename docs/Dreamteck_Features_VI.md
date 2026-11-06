@@ -1,6 +1,6 @@
 # Cocos Splines v0.8.0 — các tính năng học từ Dreamteck Splines
 
-Đây là **triển khai TypeScript độc lập** cho Cocos Creator 3.8.8, tham khảo cách phân tách chức năng của Dreamteck (`SplinePositioner`, `SplineProjector`, `LengthCalculator`, spline sample offsets). Không sao chép các file C# hoặc tài sản của Dreamteck.
+Đây là **triển khai TypeScript độc lập** cho Cocos Creator >=3.8.2, tham khảo cách phân tách chức năng của Dreamteck (`SplinePositioner`, `SplineProjector`, `LengthCalculator`, spline sample offsets). Không sao chép các file C# hoặc tài sản của Dreamteck.
 
 ## Các chức năng mới
 
@@ -93,4 +93,4 @@ export class SplineToolsExample extends Component {
 
 ## Kiểm thử và giới hạn
 
-Đã chạy kiểm thử hình học và runtime mock, giữ UUID các script cũ. **Chưa xác nhận bằng Cocos Creator 3.8.8 thực tế** (Undo/Redo khi preview, Editor scene updates, build Web/native, Cocos-Gizmos). Các sample API được viết mới, không phụ thuộc Dreamteck runtime.
+Đã chạy kiểm thử hình học và runtime mock, giữ UUID các script cũ. **Chưa xác nhận bằng Cocos Creator >=3.8.2 thực tế** (Undo/Redo khi preview, Editor scene updates, build Web/native, Cocos-Gizmos). Các sample API được viết mới, không phụ thuộc Dreamteck runtime.

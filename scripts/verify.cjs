@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
 const pkg=require(path.join(root,'package.json'));
-assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.8');
+assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);if(pkg.panels)throw new Error('No standalone spline panel should ship');
 checkRel(pkg.contributions['asset-db'].mount.path);
