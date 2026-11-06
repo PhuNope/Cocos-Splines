@@ -9,6 +9,10 @@ export interface Frame { position:V3; right:V3; up:V3; forward:V3; }
 export interface MeshGeometry {positions:number[];indices:number[];uvs?:number[];normals?:number[];}
 export interface DeformOptions {
     axis:MeshAxis;repeats:number;start:number;end:number;
+    /** 0: legacy repeat count (sections stretched), 1: physical source length (last tile cropped). */
+    repeatLayout?:0|1;
+    /** World-space length of one repeat. Defaults to the source mesh axis bounds. */
+    tileLength?:number;
     crossScale:number;depthScale:number;
     uvMode:UVMode;uvTilesPerUnit:number;length:number;
     /** User override to invert both triangle winding and recomputed normals. */
@@ -80,55 +84,127 @@ export function computeTangents(positions:number[],normals:number[],uvs:number[]
 }
 
 /**
- * Deform a mesh with its +axis along the path. Repeat mode duplicates ORIGINAL geometry
- * in successive sections; the mesh should have open ends for seam-free ropes.
- * UV mode 2 writes physical spline distance to V. This is independent of shader choice.
+ * Clip source triangles at a longitudinal fraction without squeezing texture UVs.
+ * Reuses vertices at cut edges, interpolating source UV0 and authored normals.
+ * This is intentionally a geometry operation: changing vertex V to "distance"
+ * destroys UV atlases such as the multiple islands used by imported rail meshes.
+ */
+export function clipMeshAtFraction(input:MeshGeometry,axis:MeshAxis,fraction:number):MeshGeometry {
+    if(![0,1,2].includes(axis))throw Error('Invalid axis');
+    const {positions,indices}=input;
+    if(positions.length%3!==0||indices.length%3!==0)throw Error('Invalid mesh geometry');
+    const count=positions.length/3;
+    const uv=input.uvs?.length===count*2?input.uvs:undefined;
+    const normals=input.normals?.length===positions.length?input.normals:undefined;
+    let lo=Infinity,hi=-Infinity;
+    for(let i=axis;i<positions.length;i+=3){lo=Math.min(lo,positions[i]);hi=Math.max(hi,positions[i]);}
+    if(!(hi-lo>1e-7))throw Error('Source mesh is flat on longitudinal axis.');
+    const threshold=lo+(hi-lo)*clamp(fraction);
+    const out:MeshGeometry={positions:[],indices:[]};
+    if(uv)out.uvs=[];
+    if(normals)out.normals=[];
+    const originals=new Map<number,number>();
+    const cuts=new Map<string,number>();
+    const orig=(i:number):number=>{
+        const found=originals.get(i);if(found!==undefined)return found;
+        const index=out.positions.length/3;
+        out.positions.push(...positions.slice(i*3,i*3+3));
+        if(uv)out.uvs!.push(...uv.slice(i*2,i*2+2));
+        if(normals)out.normals!.push(...normals.slice(i*3,i*3+3));
+        originals.set(i,index);return index;
+    };
+    const intersect=(a:number,b:number):number=>{
+        const key=Math.min(a,b)+':'+Math.max(a,b);
+        const cached=cuts.get(key);if(cached!==undefined)return cached;
+        const va=positions[a*3+axis],vb=positions[b*3+axis];
+        const t=Math.max(0,Math.min(1,(threshold-va)/(vb-va)));
+        const index=out.positions.length/3;
+        for(let c=0;c<3;c++)out.positions.push(positions[a*3+c]+(positions[b*3+c]-positions[a*3+c])*t);
+        if(uv)for(let c=0;c<2;c++)out.uvs!.push(uv[a*2+c]+(uv[b*2+c]-uv[a*2+c])*t);
+        if(normals){
+            let x=normals[a*3]+(normals[b*3]-normals[a*3])*t;
+            let y=normals[a*3+1]+(normals[b*3+1]-normals[a*3+1])*t;
+            let z=normals[a*3+2]+(normals[b*3+2]-normals[a*3+2])*t;
+            const length=Math.hypot(x,y,z)||1;out.normals!.push(x/length,y/length,z/length);
+        }
+        cuts.set(key,index);return index;
+    };
+    const inside=(i:number)=>positions[i*3+axis]<=threshold+1e-8;
+    for(let j=0;j+2<indices.length;j+=3){
+        const poly:number[]=[];
+        const tri=[indices[j],indices[j+1],indices[j+2]];
+        for(let k=0;k<3;k++){
+            const a=tri[(k+2)%3],b=tri[k];
+            if(a<0||a>=count||b<0||b>=count)throw Error('Invalid source index');
+            const ia=inside(a),ib=inside(b);
+            if(ia!==ib)poly.push(intersect(a,b));
+            if(ib)poly.push(orig(b));
+        }
+        for(let k=1;k+1<poly.length;k++){
+            const a=poly[0],b=poly[k],c=poly[k+1];
+            if(a!==b&&a!==c&&b!==c)out.indices.push(a,b,c);
+        }
+    }
+    return out;
+}
+
+/**
+ * Repeat mode can follow either a manual repeat count (legacy behavior) or a
+ * fixed physical source length. In fixed-length mode only the final section is
+ * geometrically clipped, preserving original UV islands and source proportions.
  */
 export function deformMesh(input:MeshGeometry,frameAt:(progress:number)=>Frame,o:DeformOptions):DeformResult {
-    const positions=input.positions||[],uvs=input.uvs||[],indices=input.indices||[];
-    const originalNormals=input.normals&&input.normals.length===positions.length?input.normals:null;
+    const positions=input.positions||[],indices=input.indices||[];
+    const initialCount=positions.length/3;
     if(positions.length<9||positions.length%3!==0)throw Error('Input mesh needs valid triangle positions.');
     if(indices.length<3||indices.length%3!==0)throw Error('Input mesh needs triangle indices.');
     if(![0,1,2].includes(o.axis))throw Error('Invalid axis');
-    if(!Number.isFinite(o.length)||o.length<0)throw Error('Invalid spline length');
-    const count=positions.length/3,repeat=Math.min(256,Math.max(1,Math.floor(o.repeats)));
+    if(!Number.isFinite(o.length)||o.length<=0)throw Error('Invalid spline length');
     const start=clamp(o.start),end=clamp(o.end);
     if(end-start<1e-6)throw Error('Start must be smaller than End.');
     const idx=[o.axis,(o.axis+1)%3,(o.axis+2)%3];
     const axisValue=(i:number)=>positions[3*i+idx[0]];
     let min=Infinity,max=-Infinity;
-    for(let i=0;i<count;i++){const a=axisValue(i);if(!Number.isFinite(a))throw Error('Non-finite source vertex');min=Math.min(min,a);max=Math.max(max,a);}
-    if(max-min<1e-7)throw Error('Source mesh is flat on longitudinal axis.');
+    for(let i=0;i<initialCount;i++){const a=axisValue(i);if(!Number.isFinite(a))throw Error('Non-finite source vertex');min=Math.min(min,a);max=Math.max(max,a);}
+    const sourceLength=max-min;
+    if(sourceLength<1e-7)throw Error('Source mesh is flat on longitudinal axis.');
+    const physical=o.repeatLayout===1;
+    const routeLength=(end-start)*o.length;
+    const tileLength=physical?(o.tileLength&&o.tileLength>1e-6?o.tileLength:sourceLength):0;
+    if(physical&&(!Number.isFinite(tileLength)||tileLength<=1e-6))throw Error('Invalid mesh tile length.');
+    const repeat=physical?Math.max(1,Math.ceil(routeLength/tileLength-1e-9)):Math.min(256,Math.max(1,Math.floor(o.repeats)));
+    if(repeat>512)throw Error('Too many natural-length repeats ('+repeat+'). Increase Tile Length or shorten the range.');
     const out:DeformResult={positions:[],normals:[],uvs:[],tangents:[],indices:[]};
-    // The source-axis mapping is a reflection for X and Y:
-    //   X source -> [forward, up, right] (det < 0)
-    //   Y source -> [right, forward, up] (det < 0)
-    //   Z source -> [right, up, forward] (det > 0)
-    // This changes triangle front faces if original indices are copied verbatim.
-    // Correct the index winding *before* recomputing normals; changing only
-    // normals cannot fix back-face culling. flipFaces allows an explicit user
-    // override for unusual imported meshes, without altering vertex positions.
+    // X/Y longitudinal conversions reverse handedness, unless explicitly flipped.
     const reverseWinding=(o.axis!==2)!==!!o.flipFaces;
     const frameCache=new Map<number,Frame>();
+    let hasAuthoredNormals=!!(input.normals&&input.normals.length===positions.length);
     for(let section=0;section<repeat;section++){
-        for(let i=0;i<count;i++){
+        const remaining=physical?routeLength-section*tileLength:routeLength;
+        const portion=physical?Math.max(0,Math.min(1,remaining/tileLength)):1;
+        if(physical&&portion<=1e-10)continue;
+        // A partial final section has newly triangulated vertices at the physical
+        // cut plane. UV/normal interpolation ensures the remaining piece is not
+        // stretched and its albedo atlas retains the same coordinates.
+        const mesh=physical&&portion<1-1e-8?clipMeshAtFraction(input,o.axis,portion):input;
+        const meshCount=mesh.positions.length/3;
+        const authored=mesh.normals&&mesh.normals.length===mesh.positions.length?mesh.normals:null;
+        if(!authored)hasAuthoredNormals=false;
+        const base=out.positions.length/3;
+        for(let i=0;i<meshCount;i++){
             const k=i*3;
-            const f=clamp((axisValue(i)-min)/(max-min));
-            const u=(section+f)/repeat;
+            const f=clamp((mesh.positions[k+o.axis]-min)/sourceLength);
+            const distance=physical?Math.min(routeLength,(section+f)*tileLength):(section+f)*routeLength/repeat;
+            const u=routeLength>0?distance/routeLength:0;
             const t=start+(end-start)*u;
             let frame=frameCache.get(t);
             if(!frame){frame=frameAt(t);frameCache.set(t,frame);}
-            // Axis semantics: Z longitudinal: X=right,Y=up. X longitudinal:
-            // Z=right,Y=up. Y longitudinal: X=right,Z=up.
-            const sideways=o.axis===0?positions[k+2]:positions[k];
-            const upwards=o.axis===1?positions[k+2]:positions[k+1];
+            const sideways=o.axis===0?mesh.positions[k+2]:mesh.positions[k];
+            const upwards=o.axis===1?mesh.positions[k+2]:mesh.positions[k+1];
             const p=add(frame.position,add(mul(frame.right,sideways*o.crossScale),mul(frame.up,upwards*o.depthScale)));
             out.positions.push(p.x,p.y,p.z);
-            if(originalNormals){
-                // Source shading normals retain authored smoothness and UV seam
-                // smoothing. Face-normal accumulation would make a capsule appear
-                // faceted/dark at imported UV seams. Transform by inverse scale.
-                const sn=v(originalNormals[k],originalNormals[k+1],originalNormals[k+2]);
+            if(authored){
+                const sn=v(authored[k],authored[k+1],authored[k+2]);
                 const forward=norm(frame.forward);
                 const a=o.axis===0?forward:frame.right;
                 const b=o.axis===1?forward:frame.up;
@@ -140,21 +216,21 @@ export function deformMesh(input:MeshGeometry,frameAt:(progress:number)=>Frame,o
                 if(o.flipFaces)n=mul(n,-1);
                 out.normals.push(n.x,n.y,n.z);
             }
-            const oldU=uvs.length===count*2?uvs[i*2]:sideways;
-            const oldV=uvs.length===count*2?uvs[i*2+1]:f;
-            const uvV=o.uvMode===2 ? (t-start)*o.length*o.uvTilesPerUnit : o.uvMode===1 ? oldV+section : oldV;
+            const originalUVs=mesh.uvs;
+            const oldU=originalUVs?.length===meshCount*2?originalUVs[i*2]:sideways;
+            const oldV=originalUVs?.length===meshCount*2?originalUVs[i*2+1]:f;
+            // uvMode=0 repeats the original UV atlas unchanged per tile. This
+            // is recommended for FBX track/sleeper meshes with authored atlas.
+            const uvV=o.uvMode===2?distance*o.uvTilesPerUnit:o.uvMode===1?oldV+section:oldV;
             out.uvs.push(oldU,uvV);
         }
-        for(let n=0;n<indices.length;n+=3){
-            const a=indices[n],b=indices[n+1],c=indices[n+2];
-            for(const index of [a,b,c]){
-                if(index<0||index>=count||!Number.isInteger(index))throw Error('Invalid source index');
-            }
-            const base=section*count;
+        for(let n=0;n<mesh.indices.length;n+=3){
+            const a=mesh.indices[n],b=mesh.indices[n+1],c=mesh.indices[n+2];
+            for(const index of [a,b,c])if(index<0||index>=meshCount||!Number.isInteger(index))throw Error('Invalid source index');
             out.indices.push(base+a,base+(reverseWinding?c:b),base+(reverseWinding?b:c));
         }
     }
-    if(!originalNormals)out.normals=recomputeNormals(out.positions,out.indices);
+    if(!hasAuthoredNormals)out.normals=recomputeNormals(out.positions,out.indices);
     out.tangents=computeTangents(out.positions,out.normals,out.uvs,out.indices);
     return out;
 }

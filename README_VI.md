@@ -36,3 +36,9 @@ Mở [`docs/index.html`](docs/index.html) để xem hướng dẫn Inspector, c�
 
 ### Spawn prefab trong Scene (0.9.5)
 `SplineInstantiate` và `SplineObjectController` có nút **Spawn**, **Respawn**, **Clear Spawned**, cùng **Spawn On Start**. Prefab đã Spawn và lưu trong Scene không bị spawn trùng khi Play. ObjectBender có **KeepHierarchy** hoặc **SequentialMeshes** với **Part Gap**. Xem `docs/pages/objects.html` và `docs/pages/bender.html`.
+
+### Đường ray lặp theo chiều dài mesh (0.9.6)
+
+Với FBX có sẵn UV atlas như ray/tà vẹt: `SplineMeshDeform` → `Mode = Repeat` → **`Repeat Layout = Source Length`** → `Tile Length = 0` (tự đo từ Source Mesh) → **`UV Mode = KeepOriginal`**. Mesh được đặt theo kích thước nhập từ asset, các đoạn đầy đủ không bị kéo giãn; đoạn cuối cắt theo chiều dài còn lại, nội suy UV và normal.
+
+Nếu model import sai tỷ lệ, nhập `Tile Length` dương theo *world units*; không cần xác định số bản sao. Nếu sử dụng source `Tracks.FBX` mẫu, hình học FBX thô có trục X dài hơn Z: thử `Axis = X` nếu Cocos không hoán đổi trục khi import. `ContinuousRepeat` và `Distance` chỉ dành cho texture được unwrap để tile; chúng có thể phá hủy atlas UV nhiều vùng. Đối với builtin-standard, tắt thử Occlusion/Emissive Map khi kiểm tra lỗi albedo. Xem `docs/pages/deform.html`.

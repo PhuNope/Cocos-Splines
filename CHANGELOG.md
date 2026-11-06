@@ -1,3 +1,10 @@
+## 0.9.6 — Physical-size mesh repeat and atlas-safe UV
+- SplineMeshDeform Repeat Layout adds SourceLength: derives tile count from source mesh longitudinal bounds, optional Tile Length override in world units, clips the final tile instead of stretching all tiles.
+- Partial source triangles interpolate authored UV0 and smooth normals, preserve UV islands under KeepOriginal; generated PBR tangents are recomputed.
+- Count mode remains the default to preserve existing serialized scenes and has unchanged behavior.
+- Improved world-length sampling accuracy for curved source splines.
+- Updated Inspector and HTML manual with FBX railway guidance, and added non-integer fit/UV atlas regression tests.
+
 ## 0.9.5
 - Added Inspector Spawn/Respawn/Clear Spawned for SplineInstantiate and SplineObjectController, with serialized generated-root ownership and spawnOnStart duplicate prevention.
 - Preserved the legacy rebuild() API as an alias for respawn(). Manual instances are not destroyed on Play/disable.

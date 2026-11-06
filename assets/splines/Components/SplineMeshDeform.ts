@@ -11,7 +11,8 @@ export { decodeHalfFloat } from '../Core/SplineMeshRead';
 export enum DeformAxis { X=0,Y=1,Z=2 }
 export enum DeformMode { Stretch=0,Repeat=1 }
 export enum DeformUV { KeepOriginal=0,ContinuousRepeat=1,Distance=2 }
-Enum(DeformAxis);Enum(DeformMode);Enum(DeformUV);
+export enum DeformRepeatLayout { Count=0, SourceLength=1 }
+Enum(DeformAxis);Enum(DeformMode);Enum(DeformUV);Enum(DeformRepeatLayout);
 /** Deforms a READABLE imported mesh along a spline. Does not edit source mesh.
  * Designed for ropes, pipes, chains, vines and strips (non-skinned single submesh).
  * Mesh must have sufficient longitudinal subdivisions for curved bends.
@@ -26,7 +27,11 @@ export class SplineMeshDeform extends Component {
     @property({type:Material,tooltip:'Optional material; use tiled rope texture material here.'}) material:Material|null=null;
     @property({type:Enum(DeformAxis),tooltip:'Longitudinal axis of the source mesh; Z is default.'}) axis:DeformAxis=DeformAxis.Z;
     @property({type:Enum(DeformMode),tooltip:'Stretch deforms one source mesh; Repeat duplicates the source mesh along the curve.'}) mode:DeformMode=DeformMode.Stretch;
-    @property({min:1,max:256,step:1,tooltip:'Copies used in Repeat mode (1 to 256); each segment mesh is stretched to its route section.'}) repeatCount=8;
+    @property({type:Enum(DeformRepeatLayout),tooltip:'Count: legacy stretched sections. Source Length: auto repeat at imported mesh dimensions and clip only the last tile.'})
+    repeatLayout:DeformRepeatLayout=DeformRepeatLayout.Count;
+    @property({min:1,max:256,step:1,tooltip:'Legacy Count mode: number of sections, each stretched to its route portion.'}) repeatCount=8;
+    @property({min:0,tooltip:'Source Length mode: world length per tile. 0 uses the source mesh longitudinal bounds (imported units). Set a positive override if mesh import units differ from spline units.'})
+    tileLength=0;
     @property({tooltip:'Reverse triangle front faces AND normals for meshes with opposite winding. X/Y axes are already corrected automatically; normally leave OFF.'}) flipFaces=false;
     @property({min:0.001,tooltip:'Cross-sectional width multiplier.'}) widthScale=1;
     @property({min:0.001,tooltip:'Cross-sectional height multiplier.'}) heightScale=1;
@@ -75,7 +80,7 @@ export class SplineMeshDeform extends Component {
     private signature():string{
         const s=this.source();
         const m=(a:any)=>a?[a.m00,a.m01,a.m02,a.m04,a.m05,a.m06,a.m08,a.m09,a.m10,a.m12,a.m13,a.m14]:[];
-        return JSON.stringify([s?.getRevision(),m(s?.node.worldMatrix),m(this.node.worldMatrix),this.sourceMesh?.uuid,this.sourceMesh?.data?.byteLength,this.axis,this.mode,this.repeatCount,this.flipFaces,this.widthScale,this.heightScale,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMode,this.uvTilesPerUnit,this.gizmoEdgeLimit]);
+        return JSON.stringify([s?.getRevision(),m(s?.node.worldMatrix),m(this.node.worldMatrix),this.sourceMesh?.uuid,this.sourceMesh?.data?.byteLength,this.axis,this.mode,this.repeatLayout,this.repeatCount,this.tileLength,this.flipFaces,this.widthScale,this.heightScale,this.startProgress,this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMode,this.uvTilesPerUnit,this.gizmoEdgeLimit]);
     }
     onEnable():void{this.rebuild();}
     update():void{
@@ -157,10 +162,12 @@ export class SplineMeshDeform extends Component {
                 Vec3.normalize(localForward,localForward);
                 return {position:to(center),right:to(localRight),up:to(localUp),forward:to(localForward)};
             };
-            // Approximate world-space length; accounts for scale applied to source transform.
+            // World-space arc length, sampled densely enough for curved physical tile fitting.
+            // We intentionally never use source spline local length here (scene scaling matters).
             let worldLength=0,prev=source.evaluateWorldPosition(0);
-            for(let i=1;i<=64;i++){
-                const next=source.evaluateWorldPosition(i/64);
+            const worldLengthSteps=Math.min(2048,Math.max(192,(Number.isFinite(source.segmentCount)?source.segmentCount:4)*48));
+            for(let i=1;i<=worldLengthSteps;i++){
+                const next=source.evaluateWorldPosition(i/worldLengthSteps);
                 worldLength+=Vec3.subtract(new Vec3(),next,prev).length();
                 prev=next;
             }
@@ -168,6 +175,8 @@ export class SplineMeshDeform extends Component {
             if(end<=start)throw Error('Range End must be greater than Start.');
             const output=deformMesh(data,frameAt,{
                 axis:this.axis as MeshAxis,repeats:this.mode===DeformMode.Repeat?this.repeatCount:1,
+                repeatLayout:this.mode===DeformMode.Repeat&&this.repeatLayout===DeformRepeatLayout.SourceLength?1:0,
+                tileLength:this.tileLength>0?this.tileLength:undefined,
                 start,end,crossScale:this.widthScale,depthScale:this.heightScale,
                 uvMode:this.uvMode as UVMode,uvTilesPerUnit:this.uvTilesPerUnit,length:worldLength,
                 flipFaces:this.flipFaces,
