@@ -17,7 +17,9 @@ const morph=fs.readFileSync(path.join(docs,'pages/morph.html'),'utf8');assert(mo
 const junction=fs.readFileSync(path.join(docs,'pages/junction.html'),'utf8');for(const name of ['Preserve','Forward','Backward','PingPong'])assert(junction.includes(name));
 const api=fs.readFileSync(path.join(docs,'pages/api.html'),'utf8');assert(api.includes('AddOnReachEvent'));
 const bender=fs.readFileSync(path.join(docs,'pages/bender.html'),'utf8');
-for(const apiName of ['rebuild(): void','restore(): void','maxMeshes','rebuildOnChange','previewInEditor','showMeshGizmos','rangeMode'])assert(bender.includes(apiName),`Bender API missing: ${apiName}`);
+for(const apiName of ['layout','SequentialMeshes','partGap','rebuild(): void','restore(): void','maxMeshes','rebuildOnChange','previewInEditor','showMeshGizmos','rangeMode'])assert(bender.includes(apiName),`Bender API missing: ${apiName}`);
+const objects=fs.readFileSync(path.join(docs,'pages/objects.html'),'utf8');
+for(const k of ['Spawn','Respawn','Clear Spawned','spawnOnStart','spawnedRoot','spawn(): number','respawn(): number'])assert(objects.includes(k),`Spawner docs missing ${k}`);
 const train=fs.readFileSync(path.join(docs,'pages/train.html'),'utf8');
 for(const apiName of ['TrainSingleSpline','TrainRouteConsist','SplinePositioner','SplineAnimate','currentDistance','evaluateWorldPositionAtDistance','Junction'])assert(train.includes(apiName),`Train guide missing: ${apiName}`);
 for(const script of ['TrainSingleSpline.ts','TrainRouteConsist.ts'])assert(fs.existsSync(path.join(docs,'examples',script)),`Missing train sample: ${script}`);

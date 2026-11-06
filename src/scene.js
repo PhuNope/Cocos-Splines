@@ -207,5 +207,21 @@ function executeTool(uuid,kind,action){
     }
     return {ok:false,error:'Unknown tool action'};
 }
-exports.methods={executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+function spawnPrefabs(uuid,kind,action){
+    const node=resolve(uuid);
+    if(!node)return {ok:false,error:'Node not found.'};
+    const className=kind==='instantiate'?'Splines.SplineInstantiate':kind==='objectController'?'Splines.SplineObjectController':null;
+    if(!className||!['spawn','respawn','clear'].includes(action))return {ok:false,error:'Unsupported spawn action.'};
+    const comp=node.components.find(c=>classOf(c)===className);
+    if(!comp)return {ok:false,error:'Missing '+className};
+    try{
+        const before=comp.spawnedRoot?.isValid?comp.spawnedRoot.children.length:0;
+        const count=action==='clear'?(comp.clear(),0):comp[action]();
+        const after=comp.spawnedRoot?.isValid?comp.spawnedRoot.children.length:0;
+        return {ok:true,count:after,changed:action==='respawn'||before!==after,message:action==='clear'?'Cleared spawned nodes.':
+            action==='spawn'&&before>0?'Scene instances already exist; no duplicates created.':
+            'Spawned '+after+' prefab instances in Scene Hierarchy.'};
+    }catch(error){return {ok:false,error:String(error)};}
+}
+exports.methods={spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

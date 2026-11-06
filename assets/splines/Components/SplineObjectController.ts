@@ -30,6 +30,9 @@ export class SplineObjectController extends Component {
     @property alignToSpline=true;
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
+    @property({tooltip:'Spawn at Play only when the scene has no manually spawned instances.'}) spawnOnStart=true;
+    @property({type:Node,visible:false}) spawnedRoot:Node|null=null;
+    private _runtimeSpawned=false;
     private _generated:Node[]=[];
     private _signature='';
     private rand(index:number,channel:number):number{
@@ -43,16 +46,21 @@ export class SplineObjectController extends Component {
             this.modifiers?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
             this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,this.alignToSpline,this.includeEndPoint]);
     }
-    onEnable():void{if(!EDITOR_NOT_IN_PREVIEW)this.rebuild();}
-    update():void{if(!EDITOR_NOT_IN_PREVIEW&&this.rebuildOnChange&&this.signature()!==this._signature)this.rebuild();}
-    public clear():void{for(const n of this._generated){if(n.isValid)n.destroy();}this._generated=[];}
-    public rebuild():void{
+    onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
+    update():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned&&this.rebuildOnChange&&this.signature()!==this._signature)this.respawn();}
+    /** Spawn only if the serialized/generated root has no children. */
+    public spawn():number{
+        if(this.spawnedRoot?.isValid&&this.spawnedRoot.children.length){this._signature=this.signature();return 0;}
+        return this.respawn();
+    }
+    /** Replace only the instances owned by this component. */
+    public respawn():number{
         this.clear();
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         const variants=this.prefabs.filter((p):p is Prefab=>!!p);
-        if(!spline||spline.count<2||!variants.length){this._signature=this.signature();return;}
+        if(!spline||spline.count<2||!variants.length){this._signature=this.signature();return 0;}
         const start=Math.max(0,Math.min(1,this.startProgress)),end=Math.max(0,Math.min(1,this.endProgress));
-        if(end<start){this._signature=this.signature();return;}
+        if(end<start){this._signature=this.signature();return 0;}
         const range=end-start;
         const closedLoop=spline.closed&&range>=1-1e-6;
         const span=spline.length*range;
@@ -68,7 +76,7 @@ export class SplineObjectController extends Component {
             const modifier=this.modifiers?.sample(progress);
             const template=variants[Math.min(variants.length-1,Math.floor(this.rand(i,0)*variants.length))];
             const node=instantiate(template);node.name=`Spline Object ${String(i).padStart(3,'0')}`;
-            node.setParent(this.parentNode||this.node);
+            node.setParent(this.ensureSpawnRoot('Spline Objects'));
             const frame=new Quat();Quat.multiply(frame,spline.node.worldRotation,spline.evaluateRotation(progress));
             const jitter=(axis:number,range:number)=>(this.rand(i,axis)*2-1)*range;
             const delta=new Vec3(this.offset.x+(modifier?.offset.x||0)+jitter(1,this.randomPosition.x),
@@ -87,7 +95,22 @@ export class SplineObjectController extends Component {
             this._generated.push(node);
         }
         this._signature=this.signature();
+        this._runtimeSpawned=!EDITOR_NOT_IN_PREVIEW;
+        return this._generated.length;
     }
-    onDisable():void{this.clear();}
-    onDestroy():void{this.clear();}
+    /** Backwards-compatible explicit rebuild. */
+    public rebuild():void{this.respawn();}
+    private ensureSpawnRoot(name:string):Node{
+        if(this.spawnedRoot?.isValid)return this.spawnedRoot;
+        const root=new Node(name+' (Generated)');root.setParent(this.parentNode||this.node);
+        this.spawnedRoot=root;return root;
+    }
+    public clear():void{
+        if(this.spawnedRoot?.isValid){
+            for(const n of [...this.spawnedRoot.children]){n.removeFromParent();n.destroy();}
+        }
+        this._generated=[];this._runtimeSpawned=false;
+    }
+    onDisable():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
+    onDestroy():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
 }

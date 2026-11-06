@@ -442,6 +442,14 @@ const methods={
             return {ok:true};
         }catch(e){return alertError('set-knot-field',e);}
     },
+    async spawnPrefabs(kind,action){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Chọn Node chứa component spawn prefab trong Inspector.');
+            const result=await invokeScene('spawnPrefabs',uuid,kind,action);
+            if(result?.ok&&result.changed)await snapshot();
+            return result;
+        }catch(e){return alertError('spawn-prefabs',e);}
+    },
     async previewAnimate(){
         try {
             const node=selected()[0];if(!node)throw Error('Chọn Node chứa SplineAnimate.');

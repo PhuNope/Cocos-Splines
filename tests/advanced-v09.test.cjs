@@ -16,7 +16,9 @@ try {
  near(evaluateModifier(keys,-3).scale.y,1);
  near(evaluateModifier(keys,3).speed,3);
  near(evaluateModifier(keys,0.25,'smooth').offset.x,1.5625);
- const {bendHierarchyPositions}=require(path.join(tmp,'Core','SplineHierarchyBendMath.js'));
+ const {bendHierarchyPositions,layoutSequentialMeshParts}=require(path.join(tmp,'Core','SplineHierarchyBendMath.js'));
+ assert.deepEqual(layoutSequentialMeshParts([[0,0,0,0,0,5],[0,0,0,0,0,5]],2,2),[[0,0,0,0,0,5],[0,0,7,0,0,12]]);
+ assert.deepEqual(layoutSequentialMeshParts([[0,0,0],[0,0,0]],2,0),[[0,0,0],[0,0,0]],'Zero-length part cannot be laid out using just its origin');
  const frame=t=>({position:{x:10*t,y:0,z:0},right:{x:0,y:0,z:1},up:{x:0,y:1,z:0}});
  const bend=bendHierarchyPositions([2,0,0,2,0,5],frame,{axis:2,min:0,max:5,start:0,end:1,widthScale:2,heightScale:3});
  assert.deepEqual(bend,[0,0,4,10,0,4]);
@@ -61,7 +63,8 @@ try {
  class Node{
    constructor(name){this.name=name;this.uuid=name;this.isValid=true;this.parent=null;this.children=[];this.components=[];this.position=new Vec3();this.scale=new Vec3(1,1,1);this.rotation=new Quat();this.worldRotation=new Quat();this.worldPosition=new Vec3();this.worldMatrix=new Mat4();}
    getComponent(type){return this.components.find(x=>x instanceof type)||null;}
-   setParent(parent){this.parent=parent;parent.children.push(this);}
+   setParent(parent){this.removeFromParent();this.parent=parent;if(parent)parent.children.push(this);}
+   removeFromParent(){if(this.parent){const i=this.parent.children.indexOf(this);if(i>=0)this.parent.children.splice(i,1);this.parent=null;}}
    setScale(v){this.scale=v.clone();}setWorldPosition(v){this.worldPosition=v.clone();}
    setPosition(v){this.position=v.clone();}setWorldRotation(v){this.worldRotation=v.clone();}
    destroy(){this.isValid=false;}emit(){}
@@ -91,9 +94,12 @@ try {
   ctrl.spline={count:3,length:12,closed:false,revision:'1',node:new Node('spline'),
        getRevision(){return '1'},evaluateWorldPosition:t=>new Vec3(12*t,0,0),evaluateRotation:()=>new Quat()};
   ctrl.prefabs=[{uuid:'a',name:'A'},{uuid:'b',name:'B'}];ctrl.count=5;ctrl.modifiers=mods;
-  ctrl.rebuild();assert.equal(made.length,5);near(made[4].worldPosition.x,16); // +4 offset at progress 1
+  ctrl.rebuild();assert.equal(made.length,5);assert.equal(ctrl.spawnedRoot.children.length,5);near(made[4].worldPosition.x,16); // +4 offset at progress 1
   const identities=made.map(n=>n.name);ctrl.rebuild();assert.deepEqual(made.slice(5).map(n=>n.name),identities);
-  assert(made.slice(0,5).every(n=>!n.isValid));ctrl.onDisable();assert(made.slice(5).every(n=>!n.isValid));
+  assert(made.slice(0,5).every(n=>!n.isValid));
+  assert.equal(ctrl.spawn(),0,'Existing manually saved children should prevent duplicate spawn');
+  ctrl.spawnOnStart=false;ctrl.onEnable();assert.equal(ctrl.spawnedRoot.children.length,5);
+  ctrl.onDisable();assert(made.slice(5).every(n=>!n.isValid));
 
   const {SplineMorph}=require(path.join(tmp,'Components','SplineMorph.js'));
   const {SplineKnot,TangentMode}=require(path.join(tmp,'Core','SplineKnot.js'));
@@ -113,7 +119,21 @@ try {
   const sourceMesh=new Mesh({POSITION:new Float32Array([1,0,0,-1,0,0,-1,0,5,1,0,5]),TEXCOORD:new Float32Array([0,0,1,0,1,1,0,1])});
   renderer.mesh=sourceMesh;bender.spline={count:2,getRevision:()=>1,node:new Node('bender-spline'),evaluateWorldPosition:t=>new Vec3(10*t,0,0),evaluateRotation:()=>new Quat(),length:10};
   assert.doesNotThrow(()=>bender.rebuild());assert.notStrictEqual(renderer.mesh,sourceMesh);
-  assert(renderer.mesh.geometry.indices.length===6);bender.restore();assert.strictEqual(renderer.mesh,sourceMesh);
+  assert(renderer.mesh.geometry.indices.length===6);
+  // Three children referencing the SAME source mesh remain separate renderer meshes.
+  const child2=new Node('capsule-2'),child3=new Node('capsule-3');child2.setParent(bender.node);child3.setParent(bender.node);
+  const r2=new MeshRenderer(),r3=new MeshRenderer();r2.node=child2;r3.node=child3;r2.mesh=sourceMesh;r3.mesh=sourceMesh;
+  child2.components.push(r2);child3.components.push(r3);
+  bender.restore();bender.rebuild();
+  assert.notStrictEqual(renderer.mesh,r2.mesh);assert.notStrictEqual(r2.mesh,r3.mesh);
+  const positionsKeep=[renderer.mesh,r2.mesh,r3.mesh].map(x=>x.geometry.positions);
+  assert.deepEqual(positionsKeep[0],positionsKeep[1],'Coincident source meshes overlap in KeepHierarchy mode');
+  const {BenderLayout}=require(path.join(tmp,'Components','SplineObjectBender.js'));
+  bender.layout=BenderLayout.SequentialMeshes;bender.partGap=1;bender.rebuild();
+  const positionsSequential=[renderer.mesh,r2.mesh,r3.mesh].map(x=>x.geometry.positions);
+  assert.notDeepEqual(positionsSequential[0],positionsSequential[1],'Sequential mode must lay out overlapping parts');
+  assert.notDeepEqual(positionsSequential[1],positionsSequential[2]);
+  bender.restore();assert.strictEqual(renderer.mesh,sourceMesh);assert.strictEqual(r2.mesh,sourceMesh);assert.strictEqual(r3.mesh,sourceMesh);
 
   const {SplineJunctionMesh}=require(path.join(tmp,'Components','SplineJunctionMesh.js'));
   const patchNode=new Node('patch');const patchRenderer=new MeshRenderer();patchRenderer.node=patchNode;patchNode.components.push(patchRenderer);

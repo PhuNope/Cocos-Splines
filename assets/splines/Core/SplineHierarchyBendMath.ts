@@ -22,3 +22,23 @@ export function bendHierarchyPositions(positions:ReadonlyArray<number>,frameAt:(
     }
     return out;
 }
+
+/** Non-destructive sequential layout for meshes that share an origin/mesh asset.
+ * Child part ordering is DFS MeshRenderer order; original mesh vertices and child
+ * transforms remain unchanged. All coordinates are root-local.
+ */
+export function layoutSequentialMeshParts(parts:ReadonlyArray<ReadonlyArray<number>>,axis:0|1|2,gap=0):number[][]{
+    const output:number[][]=[];
+    let cursor=0;
+    for(const original of parts){
+        if(original.length%3)throw Error('Positions must be XYZ triples.');
+        let min=Infinity,max=-Infinity;
+        for(let i=axis;i<original.length;i+=3){min=Math.min(min,original[i]);max=Math.max(max,original[i]);}
+        if(!Number.isFinite(min)){output.push([]);continue;}
+        const offset=cursor-min,coordinates=Array.from(original);
+        for(let i=axis;i<coordinates.length;i+=3)coordinates[i]+=offset;
+        output.push(coordinates);
+        cursor+=Math.max(0,max-min)+Math.max(0,gap);
+    }
+    return output;
+}

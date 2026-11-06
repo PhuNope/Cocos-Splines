@@ -1,3 +1,9 @@
+## 0.9.5
+- Added Inspector Spawn/Respawn/Clear Spawned for SplineInstantiate and SplineObjectController, with serialized generated-root ownership and spawnOnStart duplicate prevention.
+- Preserved the legacy rebuild() API as an alias for respawn(). Manual instances are not destroyed on Play/disable.
+- Added ObjectBender layout modes KeepHierarchy (default) and SequentialMeshes with Part Gap to arrange coincident mesh parts.
+- Expanded HTML docs for spawner lifecycle and overlapping MeshRenderers.
+
 ## 0.9.4 — Mesh Gizmos and Morph Space
 
 - Optional selected wireframe gizmos for SplineRoad, SplineExtrude, SplineMeshDeform, SplineJunctionMesh, and SplineObjectBender. Bounded edge sampling and no new renderer/material instances.

@@ -31,6 +31,7 @@ global.Editor={
           case 'queryAnimate':return {found:true,componentIndex:2,previewInEditor:false};
           case 'previewAnimate':return {ok:true};
           case 'restoreAnimate':return {ok:true};
+          case 'spawnPrefabs':return {ok:true,changed:true,count:3,message:'Spawned 3 prefabs'};
         }
       }
     }
@@ -72,6 +73,13 @@ const ext=require(path.resolve(__dirname,'../dist/main.js')).methods;
   r=await ext.previewAnimate();assert(r.ok,r.error);
   assert(calls.some(c=>c[1]==='set-property'&&c[2]?.path==='__comps__.2.previewInEditor'&&c[2]?.dump.value===true));
   r=await ext.stopPreviewAnimate();assert(r.ok,r.error);
+  current=['spawner-node'];
+  const oldSnapshots=calls.filter(x=>x[1]==='snapshot').length;
+  r=await ext.spawnPrefabs('instantiate','spawn');assert(r.ok,r.error);
+  r=await ext.spawnPrefabs('objectController','respawn');assert(r.ok,r.error);
+  assert.equal(calls.filter(x=>x[1]==='snapshot').length,oldSnapshots+2,'Scene mutations require undo/snapshot');
+  assert(calls.some(x=>x[1]==='execute-scene-script'&&x[2].method==='spawnPrefabs'&&x[2].args[1]==='objectController'));
+  assert.equal(require(path.resolve(__dirname,'../package.json')).contributions.messages['spawn-prefabs'].methods[0],'spawnPrefabs');
   const payload=JSON.stringify({closed:true,knots:[
     {position:[0,0,0],tangentIn:[-1,0,0],tangentOut:[1,0,0],mode:4},
     {position:[4,0,0],tangentIn:[-1,0,0],tangentOut:[1,0,0],mode:4}

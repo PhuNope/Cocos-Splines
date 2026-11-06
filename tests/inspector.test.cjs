@@ -16,8 +16,8 @@ assert(container.template.includes('spl-json'));
 assert(container.template.includes('spl-reverse'));
 assert(container.toString().includes('')); // Inspector exports stable template/handlers.
 assert(animate.template.includes('type="dump"'));
-assert(animate.template.includes('spl-field-junctionOffsetBlendDistance'));
-assert(animate.template.includes('spl-field-upReference'));
+assert(animate.template.includes('spl-field-junctionOffsetBlendDistance'),'Blend Distance must be visible in custom Animate Inspector');
+assert(animate.template.includes('spl-field-upReference'),'TargetLocal Up Reference must be visible in custom Animate Inspector');
 const selectors={};const rendered=[];
 for(const [name] of Object.entries(animate.$)){selectors[name]={render:(d)=>rendered.push(d),textContent:'',addEventListener(){}};}
 const panel={$:selectors,_previewState:'false|undefined'};
@@ -49,4 +49,10 @@ for(const [name,fields] of Object.entries({
   assert.equal(rows.r_startProgress.hidden,true);assert.equal(rows.r_startDistance.hidden,false);
  }
 }
+for(const kind of ['Instantiate','ObjectController']){
+ const panel=require(root+'/dist/contributions/inspector/'+kind+'.js');
+ for(const k of ['spawnOnStart','spl-spawn','spl-respawn','spl-clear-spawned'])assert(panel.template.includes(k),`${kind} missing ${k}`);
+}
+const benderPanel=require(root+'/dist/contributions/inspector/Bender.js');
+for(const k of ['spl-field-layout','spl-field-partGap'])assert(benderPanel.template.includes(k),`Bender missing ${k}`);
 console.log('INSPECTOR PASS: no dockable panel; stable native ui-prop rendering; inline spline controls + T/Distance.');

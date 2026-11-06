@@ -5,10 +5,12 @@ import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { DeformAxis } from './SplineMeshDeform';
 import { findStoredAttributeFormat, resolveAttributeFormatName, readPositionTriples, readUVPairs, VertexFormat } from '../Core/SplineMeshRead';
 import { recomputeNormals, computeTangents } from '../Core/SplineMeshDeformMath';
-import { bendHierarchyPositions, BendFrame } from '../Core/SplineHierarchyBendMath';
+import { bendHierarchyPositions, layoutSequentialMeshParts, BendFrame } from '../Core/SplineHierarchyBendMath';
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode}=_decorator;
 Enum(SplinePositionMode);
+export enum BenderLayout { KeepHierarchy=0, SequentialMeshes=1 }
+Enum(BenderLayout);
 interface Original {renderer:MeshRenderer; mesh:Mesh;positions:number[];indices:number[];uvs:number[];rootPositions:number[];generated:Mesh|null}
 
 /** Bend all readable mesh renderers in a hierarchy, preserving individual materials.
@@ -20,6 +22,8 @@ interface Original {renderer:MeshRenderer; mesh:Mesh;positions:number[];indices:
 @executeInEditMode(true)
 export class SplineObjectBender extends Component {
     @property({type:SplineContainer}) spline:SplineContainer|null=null;
+    @property({type:Enum(BenderLayout),tooltip:'Keep Hierarchy uses each child transform; Sequential Meshes lays mesh parts end-to-end along Axis, without changing child Nodes.'}) layout:BenderLayout=BenderLayout.KeepHierarchy;
+    @property({min:0,tooltip:'Distance between consecutive mesh parts when Sequential Meshes layout is selected.'}) partGap=0;
     @property({type:Enum(DeformAxis),tooltip:'Longitudinal axis of the original object hierarchy.'}) axis:DeformAxis=DeformAxis.Z;
     @property({type:Enum(SplinePositionMode)}) rangeMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({range:[0,1,0.001],slide:true}) startProgress=0;
@@ -76,7 +80,7 @@ export class SplineObjectBender extends Component {
         }
     }
     private key():string {return JSON.stringify([this.spline?.getRevision(),this.spline?.node.worldMatrix,this.node.worldMatrix,
-        this.axis,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance,this.widthScale,this.heightScale,this.originals.length,this.gizmoEdgeLimit]);}
+        this.axis,this.layout,this.partGap,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance,this.widthScale,this.heightScale,this.originals.length,this.gizmoEdgeLimit]);}
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW||this.previewInEditor)this.rebuild();}
     update():void{
         if(EDITOR_NOT_IN_PREVIEW&&!this.previewInEditor){if(this._applied)this.restore();this.holdRestore=false;return;}
@@ -100,14 +104,18 @@ export class SplineObjectBender extends Component {
         }
         this.capture();if(!this.originals.length)return;
         const axis=this.axis;
+        const partPositions=this.layout===BenderLayout.SequentialMeshes
+            ?layoutSequentialMeshParts(this.originals.map(item=>item.rootPositions),axis,this.partGap)
+            :this.originals.map(item=>item.rootPositions);
         let min=Infinity,max=-Infinity;
-        for(const item of this.originals){const verts=item.rootPositions;
+        for(const verts of partPositions){
             for(let i=axis;i<verts.length;i+=3){min=Math.min(min,verts[i]);max=Math.max(max,verts[i]);}}
         if(max-min<1e-7){console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
         const [start,end]=toNormalizedRange(spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         if(end<=start)return;
         this._meshGizmos=[];
-        for(const item of this.originals){
+        for(let itemIndex=0;itemIndex<this.originals.length;itemIndex++){
+            const item=this.originals[itemIndex];
             const childInverse=Mat4.invert(new Mat4(),item.renderer.node.worldMatrix);
             const localFrame2=(t:number):BendFrame=>{
                 const world=spline.evaluateWorldPosition(t);
@@ -121,7 +129,7 @@ export class SplineObjectBender extends Component {
                 Vec3.subtract(x,x,p);Vec3.subtract(y,y,p);
                 return {position:p,right:x,up:y};
             };
-            const rootCoordinates=item.rootPositions;
+            const rootCoordinates=partPositions[itemIndex];
             const bent=bendHierarchyPositions(rootCoordinates,localFrame2,{axis,min,max,start,end,widthScale:this.widthScale,heightScale:this.heightScale});
             const indices=item.indices.slice();
             if(axis!==DeformAxis.Z){for(let i=0;i+2<indices.length;i+=3){const tmp=indices[i+1];indices[i+1]=indices[i+2];indices[i+2]=tmp;}}

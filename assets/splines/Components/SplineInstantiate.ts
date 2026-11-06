@@ -1,4 +1,5 @@
 import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
@@ -32,10 +33,13 @@ export class SplineInstantiate extends Component {
     @property alignToSpline=true;
     @property({tooltip:'Automatically regenerate when the spline changes during gameplay'}) rebuildOnChange=false;
     @property({tooltip:'Closed curves do not duplicate the endpoint'}) includeEndPoint=true;
+    @property({tooltip:'Spawn on Play only if there are no scene-spawned instances. Uncheck to use manual Spawn exclusively.'}) spawnOnStart=true;
+    @property({type:Node,visible:false}) spawnedRoot:Node|null=null;
+    private _runtimeSpawned=false;
     private _generated:Node[]=[];
     private _signature='';
-    onEnable():void{this.rebuild();}
-    update():void{if(this.rebuildOnChange&&this.signature()!==this._signature)this.rebuild();}
+    onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
+    update():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned&&this.rebuildOnChange&&this.signature()!==this._signature)this.respawn();}
     private signature():string{
         const matrix=this.spline?.node.worldMatrix;
         return JSON.stringify([this.spline?.getRevision(),matrix&&[matrix.m00,matrix.m01,matrix.m02,matrix.m04,matrix.m05,matrix.m06,matrix.m08,matrix.m09,matrix.m10,matrix.m12,matrix.m13,matrix.m14],
@@ -48,14 +52,20 @@ export class SplineInstantiate extends Component {
         x=Math.imul(x^(x>>>16),0x7feb352d);x=Math.imul(x^(x>>>15),0x846ca68b);x=(x^(x>>>16))>>>0;
         return x/4294967295*2-1;
     }
-    public rebuild():void{
+    /** Spawn only when no instances are already present (safe for manually saved scene instances). */
+    public spawn():number{
+        if(this.spawnedRoot?.isValid&&this.spawnedRoot.children.length){this._signature=this.signature();return 0;}
+        return this.respawn();
+    }
+    /** Replace ONLY the nodes owned by this component, keeping other Hierarchy children intact. */
+    public respawn():number{
         this.clear();
-        if(!this.prefab||!this.spline||this.spline.count<2){this._signature=this.signature();return;}
+        if(!this.prefab||!this.spline||this.spline.count<2){this._signature=this.signature();return 0;}
         const [start,end]=toNormalizedRange(this.spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
-        if(end<start){this._signature=this.signature();return;}
+        if(end<start){this._signature=this.signature();return 0;}
         const span=end-start,fullClosed=this.spline.closed&&span>=1-1e-6;
         const length=this.spline.length;
-        const parent=this.parentNode||this.node;
+        const parent=this.ensureSpawnRoot('Spline Instances');
         const count=Math.max(1,Math.min(2048,Math.floor(this.count)));
         const step=Math.max(0.001,this.spacing);
         // For Distance mode, do not create overlapping endpoints of full closed loops.
@@ -85,8 +95,23 @@ export class SplineInstantiate extends Component {
             this._generated.push(n);
         }
         this._signature=this.signature();
+        this._runtimeSpawned=!EDITOR_NOT_IN_PREVIEW;
+        return this._generated.length;
     }
-    public clear():void{for(const n of this._generated)if(n.isValid)n.destroy();this._generated=[];}
-    onDisable():void{this.clear();}
-    onDestroy():void{this.clear();}
+    /** Backwards-compatible explicit rebuild. */
+    public rebuild():void{this.respawn();}
+    private ensureSpawnRoot(name:string):Node{
+        if(this.spawnedRoot?.isValid)return this.spawnedRoot;
+        const root=new Node(name+' (Generated)');root.setParent(this.parentNode||this.node);
+        this.spawnedRoot=root;return root;
+    }
+    /** Clear component-owned spawned nodes, without touching user-authored siblings. */
+    public clear():void{
+        if(this.spawnedRoot?.isValid){
+            for(const n of [...this.spawnedRoot.children]){n.removeFromParent();n.destroy();}
+        }
+        this._generated=[];this._runtimeSpawned=false;
+    }
+    onDisable():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
+    onDestroy():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
 }

@@ -32,3 +32,7 @@ Mở [`docs/index.html`](docs/index.html) để xem hướng dẫn Inspector, c�
 - Chọn `SplineRoad`, `SplineExtrude`, `SplineMeshDeform`, `SplineJunctionMesh` hoặc `SplineObjectBender` để xem wireframe khi cài thêm Cocos-Gizmos. Dùng `Show Mesh Gizmos` và `Gizmo Edge Limit` trong Inspector.
 - `SplineMorph.space` hỗ trợ `World` (mặc định, giữ tương thích) và `Local` (trộn knot/tangent local không cộng transform của source).
 - `Junction Offset Blend Distance > 1` là quãng đường chuyển tiếp theo units, không phải tỷ lệ.
+
+
+### Spawn prefab trong Scene (0.9.5)
+`SplineInstantiate` và `SplineObjectController` có nút **Spawn**, **Respawn**, **Clear Spawned**, cùng **Spawn On Start**. Prefab đã Spawn và lưu trong Scene không bị spawn trùng khi Play. ObjectBender có **KeepHierarchy** hoặc **SequentialMeshes** với **Part Gap**. Xem `docs/pages/objects.html` và `docs/pages/bender.html`.

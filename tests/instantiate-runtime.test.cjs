@@ -17,11 +17,12 @@ try{
   }
   class Node {
     constructor(name='node'){
-      this.uuid=name;this.name=name;this.isValid=true;this.parent=null;this.scale=new Vec3(1,1,1);
+      this.uuid=name;this.name=name;this.isValid=true;this.parent=null;this.children=[];this.scale=new Vec3(1,1,1);
       this.worldPosition=new Vec3();this.worldRotation=new Quat();
       this.worldMatrix={m00:1,m01:0,m02:0,m04:0,m05:1,m06:0,m08:0,m09:0,m10:1,m12:0,m13:0,m14:0};
     }
-    setParent(parent){this.parent=parent;}
+    setParent(parent){this.removeFromParent();this.parent=parent;if(parent)parent.children.push(this);}
+    removeFromParent(){if(this.parent){const i=this.parent.children.indexOf(this);if(i>=0)this.parent.children.splice(i,1);this.parent=null;}}
     setWorldPosition(position){this.worldPosition=position.clone();}
     setWorldRotation(rotation){this.worldRotation=rotation;}
     setScale(scale){this.scale=scale.clone();}
@@ -34,7 +35,7 @@ try{
     Enum:o=>o,Vec3,Quat,Node,Component:class Component{getComponent(){return null;}},Prefab:class Prefab{},
     instantiate:()=>new Node('instance')};
   const original=Module._load;
-  Module._load=function(req,parent,isMain){if(req==='cc')return cc;return original.call(this,req,parent,isMain);};
+  Module._load=function(req,parent,isMain){if(req==='cc')return cc;if(req==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};return original.call(this,req,parent,isMain);};
   try{
     const {SplineInstantiate,InstantiateMethod}=require(path.join(out,'Components','SplineInstantiate.js'));
     const pathNode=new Node('spline');
@@ -62,7 +63,15 @@ try{
     inst.rebuild();assert.deepEqual(inst._generated.map(n=>n.worldPosition.x),[1,3.5,6]);
     inst.rangeMode=SplinePositionMode.SplineT;inst.startProgress=.5;inst.endProgress=1;
     inst.rebuild();assert.deepEqual(inst._generated.map(n=>n.worldPosition.x),[2.5,6.25,10]);
-    inst.clear();assert.equal(inst._generated.length,0);
+    assert.equal(inst.spawn(),0,'Existing generated scene nodes prevent duplicates');
+    const existing=inst.spawnedRoot.children.slice();
+    inst._runtimeSpawned=false;inst.onEnable();
+    assert.deepEqual(inst.spawnedRoot.children,existing,'Play must not duplicate manual scene instances');
+    assert.equal(inst._generated.length,3);
+    inst.clear();assert.equal(inst._generated.length,0);assert.equal(inst.spawnedRoot.children.length,0);
+    assert.equal(inst.spawn(),3,'Spawn should work after clearing');
+    const clones=inst.spawnedRoot.children.slice();inst.onDisable();
+    assert(clones.every(n=>!n.isValid),'Runtime owned clones are cleared on disable');
     console.log('INSTANTIATE MOCK PASS: Count/Distance, ranges, closed endpoint, deterministic offsets, scale and lifecycle.');
   }finally{Module._load=original;}
 }finally{fs.rmSync(out,{recursive:true,force:true});}
