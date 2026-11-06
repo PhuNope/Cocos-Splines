@@ -7,7 +7,7 @@ assert.equal(pkg.panels,undefined,'No standalone panel');
 assert(!Object.keys(pkg.contributions.messages).includes('open-panel'));
 const animate=require(root+'/dist/contributions/inspector/Animate.js');
 const container=require(root+'/dist/contributions/inspector/Container.js');
-for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
+for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }
 for(const f of ['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','gizmoSteps','gizmoColor'])assert(container.template.includes('spl-field-'+f));
@@ -16,13 +16,15 @@ assert(container.template.includes('spl-json'));
 assert(container.template.includes('spl-reverse'));
 assert(container.toString().includes('')); // Inspector exports stable template/handlers.
 assert(animate.template.includes('type="dump"'));
+assert(animate.template.includes('spl-field-junctionOffsetBlendDistance'));
+assert(animate.template.includes('spl-field-upReference'));
 const selectors={};const rendered=[];
 for(const [name] of Object.entries(animate.$)){selectors[name]={render:(d)=>rendered.push(d),textContent:'',addEventListener(){}};}
 const panel={$:selectors,_previewState:'false|undefined'};
 const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.Object'},previewInEditor:{value:false},previewProgress:{value:0.2}}};
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
-assert.equal(animate.template.match(/<ui-prop /g)?.length,28);
+assert.equal(animate.template.match(/<ui-prop /g)?.length,30);
 for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){
  const inspector=require(root+'/dist/contributions/inspector/'+type+'.js');
  for(const name of names)assert(inspector.template.includes('spl-field-'+name),type+' missing '+name);

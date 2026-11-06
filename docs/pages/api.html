@@ -17,4 +17,13 @@ monitor.AddOnGrowingEvent(cb, target);
 monitor.AddOnShrinkingEvent(cb, target);
 monitor.AddOnCrossAboveEvent(cb, target);
 monitor.AddOnCrossBelowEvent(cb, target);
-// Mỗi Add có RemoveOn...Event tương ứng.</code></pre><div class="callout good">Tham chiếu phương thức TypeScript thật trong assets/splines/Components và assets/splines/Core; tài liệu ưu tiên mô tả API public, không dùng private method.</div></main><footer class="page-footer"><span>← <a href="2d-gizmos.html">Spline 2D / Gizmos</a></span><span><a href="examples.html">Ví dụ TypeScript</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>
+// Mỗi Add có RemoveOn...Event tương ứng.</code></pre><h3>Animate Up Mode và Junction Exit Direction</h3>
+<pre><code>import { SplineUpMode } from 'db://cocos-splines/splines/Components/SplineAnimate';
+import { JunctionExitDirection } from 'db://cocos-splines/splines/Components/SplineJunction';
+animate.upMode = SplineUpMode.TargetLocal;
+animate.upReference = upGuideNode;
+animate.junctionOffsetBlendDistance = 2;
+link.exitDirection = JunctionExitDirection.Forward; // tăng Progress
+link.exitDirection = JunctionExitDirection.Backward; // giảm Progress
+link.exitDirection = JunctionExitDirection.Preserve; // giữ chiều trước Junction
+</code></pre><div class="callout good">Tham chiếu phương thức TypeScript thật trong assets/splines/Components và assets/splines/Core; tài liệu ưu tiên mô tả API public, không dùng private method.</div></main><footer class="page-footer"><span>← <a href="2d-gizmos.html">Spline 2D / Gizmos</a></span><span><a href="examples.html">Ví dụ TypeScript</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>

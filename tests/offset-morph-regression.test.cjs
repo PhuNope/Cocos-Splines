@@ -13,7 +13,13 @@ try {
     static add(o,a,b){return o.set(a.x+b.x,a.y+b.y,a.z+b.z);}
     static subtract(o,a,b){return o.set(a.x-b.x,a.y-b.y,a.z-b.z);}
     static multiplyScalar(o,a,n){return o.set(a.x*n,a.y*n,a.z*n);}
-    static transformQuat(o,a,q){const t=q?.heading||0;return o.set(a.x*Math.sin(t)+a.z*Math.cos(t),a.y,-a.x*Math.cos(t)+a.z*Math.sin(t));}
+    static transformQuat(o,a,q){
+      const t=q?.heading||0,tilt=q?.tilt||0;
+      const x=a.x*Math.sin(t)+a.z*Math.cos(t),z=-a.x*Math.cos(t)+a.z*Math.sin(t);
+      return o.set(x,a.y*Math.cos(tilt)-z*Math.sin(tilt),a.y*Math.sin(tilt)+z*Math.cos(tilt));
+    }
+    static normalize(o,a){const d=Math.hypot(a.x,a.y,a.z)||1;return o.set(a.x/d,a.y/d,a.z/d);}
+    static cross(o,a,b){return o.set(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);}
     static transformMat4(o,a,m){return o.set(a.x+(m?.m12||0),a.y+(m?.m13||0),a.z+(m?.m14||0));}
   }
   class Quat {
@@ -21,6 +27,7 @@ try {
     clone(){const q=new Quat();q.heading=this.heading;return q;}
     static multiply(o,a,b){o.heading=(a?.heading||0)+(b?.heading||0);return o;}
     static fromEuler(o){return o;}
+    static fromAxes(o,right,up,forward){o.up=up.clone();o.forward=forward.clone();return o;}
   }
   class Mat4 {constructor(){Object.assign(this,{m00:1,m05:1,m10:1,m12:0,m13:0,m14:0});}static invert(out,inMat){return Object.assign(out,inMat);}}
   class Node {
@@ -35,7 +42,7 @@ try {
   const original=Module._load;
   Module._load=function(n,parent,isMain){if(n==='cc')return cc;if(n==='cc/env')return env;return original.call(this,n,parent,isMain);};
   try {
-    const {SplineAnimate,AnimateMethod,LoopMode,Easing,JunctionMode}=require(path.join(tmp,'Components/SplineAnimate.js'));
+    const {SplineAnimate,AnimateMethod,LoopMode,Easing,JunctionMode,SplineUpMode}=require(path.join(tmp,'Components/SplineAnimate.js'));
     const {SplineJunction,JunctionExitDirection}=require(path.join(tmp,'Components/SplineJunction.js'));
     const {buildOffsetArcLUT,offsetDistanceFractionToProgress,offsetProgressToDistanceFraction}=require(path.join(tmp,'Core/SplineTraversal.js'));
     const a=buildOffsetArcLUT(p=>({x:5*Math.cos(p*Math.PI/2),y:0,z:5*Math.sin(p*Math.PI/2)}),512);
@@ -43,6 +50,24 @@ try {
     for(const p of [.05,.2,.48,.76,.97]){
       assert(Math.abs(offsetDistanceFractionToProgress(a,offsetProgressToDistanceFraction(a,p))-p)<1e-8);
     }
+    // Target Local Up preserves initial Target local +Y; independent guide updates live.
+    const orientSpline={node:new Node('up-path'),evaluateRotation:()=>new Quat(),
+      evaluateTangent:()=>new Vec3(0,0,1),evaluateUp:()=>new Vec3(0,1,0)};
+    const upFollower=new SplineAnimate();upFollower.node=new Node('up-follower');upFollower.target=new Node('up-target');
+    upFollower.upMode=SplineUpMode.TargetLocal;upFollower.target.worldRotation.tilt=Math.PI/4;
+    const firstRotation=upFollower.alignRotation(orientSpline,.2);
+    assert(Math.abs(firstRotation.up.y-Math.SQRT1_2)<1e-8);
+    assert(Math.abs(firstRotation.up.z-Math.SQRT1_2)<1e-8);
+    upFollower.target.worldRotation.tilt=0;
+    assert(Math.abs(upFollower.alignRotation(orientSpline,.3).up.z-firstRotation.up.z)<1e-8);
+    const upGuide=new Node('up-reference');upGuide.worldRotation.tilt=Math.PI/6;upFollower.upReference=upGuide;
+    assert(Math.abs(upFollower.alignRotation(orientSpline,.2).up.z-.5)<1e-8);
+    upGuide.worldRotation.tilt=Math.PI/3;
+    assert(Math.abs(upFollower.alignRotation(orientSpline,.2).up.z-Math.sqrt(3)/2)<1e-8);
+    upFollower.upReference=upFollower.target;
+    assert(Math.abs(upFollower.alignRotation(orientSpline,.2).up.z-Math.SQRT1_2)<1e-8);
+    upFollower.upMode=SplineUpMode.World;
+    assert(Math.abs(upFollower.alignRotation(orientSpline,.2).up.y-1)<1e-8);
     const radius=5,straight=10,arc=radius*Math.PI/2,total=straight+arc;
     const worldAt=(p)=>{
       const distance=p*total;

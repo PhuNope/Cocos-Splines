@@ -21,7 +21,7 @@ export class SplineJunctionLink {
     @property({range:[0,1,0.001],slide:true,tooltip:'0..1 coordinate for Normalized Distance or Spline t mode.'}) progress=0;
     @property({min:0,tooltip:'Absolute distance from beginning; applies only in Distance mode.'}) distance=0;
     public getProgress():number{return this.spline?toNormalizedDistance(this.spline,this.positionMode,this.progress,this.distance):0;}
-    @property({type:Enum(JunctionExitDirection)}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
+    @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination. Preserve: keep incoming travel direction; Forward: increase destination progress (0 toward 1); Backward: decrease destination progress (1 toward 0). It does not choose a branch.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
 }
 
 export interface JunctionEvent {

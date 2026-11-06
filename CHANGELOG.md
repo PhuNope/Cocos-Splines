@@ -1,3 +1,9 @@
+## 0.9.3
+- Sửa Inspector: hiển thị Junction Offset Blend Distance.
+- Bổ sung SplineUpMode.TargetLocal và Up Reference để định hướng object.
+- Bổ sung tài liệu Junction Exit Direction, Morph world-space và Up Mode.
+- Giữ UUID và Cocos Creator >= 3.8.2.
+
 # Changelog
 
 ## 0.9.2

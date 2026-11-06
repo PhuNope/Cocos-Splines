@@ -14,7 +14,7 @@ export interface SplineBoundaryEvent {
 export enum AnimateMethod { Time=0, Speed=1 }
 export enum LoopMode { Once=0, Loop=1, PingPong=2 }
 export enum Easing { Linear=0, EaseInOut=1, EaseIn=2, EaseOut=3, SmootherStep=4 }
-export enum SplineUpMode { Spline=0, World=1 }
+export enum SplineUpMode { Spline=0, World=1, TargetLocal=2 }
 export enum ForwardAxis { PositiveZ=0, NegativeZ=1, PositiveX=2, NegativeX=3, PositiveY=4, NegativeY=5 }
 export enum JunctionMode { Off=0, FirstOther=1, RoundRobin=2, Manual=3 }
 Enum(AnimateMethod);Enum(LoopMode);Enum(Easing);Enum(SplineUpMode);Enum(ForwardAxis);Enum(JunctionMode);Enum(SplinePositionMode);
@@ -37,8 +37,10 @@ export class SplineAnimate extends Component {
     @property({type:Enum(LoopMode)}) loopMode:LoopMode=LoopMode.Loop;
     @property({type:Enum(Easing)}) easing:Easing=Easing.Linear;
     @property({tooltip:'Orient target local +Z along the spline tangent.'}) alignToSpline=true;
-    @property({type:Enum(SplineUpMode),tooltip:'Spline: interpolate knot Up vectors. World: keep vertical alignment relative to world +Y.'})
+    @property({type:Enum(SplineUpMode),tooltip:'Spline: knot Up; World: world +Y; TargetLocal: initial local +Y of Target or current +Y of Up Reference.'})
     upMode:SplineUpMode=SplineUpMode.Spline;
+    @property({type:Node,tooltip:'Optional independent Up reference used in TargetLocal mode. Its local +Y becomes world Up. Leave blank to use the Target initial local +Y (captured before Animate moves it). Never assign the animated Target itself as Up Reference.'})
+    upReference:Node|null=null;
     @property({type:Enum(ForwardAxis),tooltip:'Which local axis of the target should point in the spline travel direction.'})
     forwardAxis:ForwardAxis=ForwardAxis.PositiveZ;
     @property({type:Vec3,tooltip:'Additional Euler rotation (degrees) when alignment is enabled.'})
@@ -76,6 +78,10 @@ export class SplineAnimate extends Component {
     public RemoveOnEndReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._endReachedCallbacks.remove(cb,target);}
     public AddOnBeginningReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._beginningReachedCallbacks.add(cb,target);}
     public RemoveOnBeginningReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._beginningReachedCallbacks.remove(cb,target);}
+    /** Captured before the first playback/editor-preview rotation to prevent the
+     * animated Target from feeding its own output rotation back into Up. */
+    private _initialTargetWorldUp:Vec3|null=null;
+    private _initialUpTarget:Node|null=null;
     private _raw=0;
     private _travelDirection:Direction=1;
     private _activeSpline:SplineContainer|null=null;
@@ -196,6 +202,7 @@ export class SplineAnimate extends Component {
             : Math.max(0.001,this.duration);
     }
     onEnable():void {
+        if(this.upMode===SplineUpMode.TargetLocal)this.captureTargetLocalUp();
         if(EDITOR_NOT_IN_PREVIEW){
             if(this.previewInEditor)this.previewAt(this.coordinateRaw(this.source(),this.previewPositionMode,this.previewProgress,this.previewDistance));
             return;
@@ -258,7 +265,8 @@ export class SplineAnimate extends Component {
         const m=spline?.node.worldMatrix;
         return JSON.stringify([spline?.getRevision(),m?.m00,m?.m01,m?.m02,m?.m04,m?.m05,m?.m06,
             m?.m08,m?.m09,m?.m10,m?.m12,m?.m13,m?.m14,this.target?.uuid,
-            this.previewProgress,this.previewPositionMode,this.previewDistance,this.alignToSpline,this.orient2D,this.orient2DAngleOffset,this.upMode,this.forwardAxis,this.rotationOffset,this.worldOffset,this.splineOffset,
+            this.previewProgress,this.previewPositionMode,this.previewDistance,this.alignToSpline,this.orient2D,this.orient2DAngleOffset,this.upMode,this.upReference?.uuid,
+            this.upReference?.worldRotation,this.forwardAxis,this.rotationOffset,this.worldOffset,this.splineOffset,
             this.constantSpeedWithOffset,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
     }
     update(dt:number):void {
@@ -432,6 +440,23 @@ export class SplineAnimate extends Component {
         }
         this.apply(this._raw);
     }
+    private captureTargetLocalUp():void {
+        const target=this.target||this.node;
+        this._initialUpTarget=target;
+        this._initialTargetWorldUp=Vec3.normalize(new Vec3(),
+            Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),target.worldRotation));
+    }
+    /** A stable target initial local up, or the live +Y of an independent Node.
+     * An Up Reference pointing at the driven Target is ignored to prevent feedback. */
+    private worldUpForAlignment():Vec3 {
+        const target=this.target||this.node;
+        const reference=this.upReference;
+        if(reference&&reference!==target&&reference.isValid){
+            return Vec3.normalize(new Vec3(),Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),reference.worldRotation));
+        }
+        if(!this._initialTargetWorldUp||this._initialUpTarget!==target)this.captureTargetLocalUp();
+        return this._initialTargetWorldUp!.clone();
+    }
     /** Local correction aligns the selected object-forward axis with +Z. */
     private correction(out:Quat):Quat {
         switch(this.forwardAxis){
@@ -447,14 +472,17 @@ export class SplineAnimate extends Component {
         const rotation=spline.evaluateRotation(t);
         let worldRot=new Quat();
         Quat.multiply(worldRot,spline.node.worldRotation,rotation);
-        if(this.upMode===SplineUpMode.World){
+        if(this.upMode===SplineUpMode.World||this.upMode===SplineUpMode.TargetLocal){
             const tangent=spline.evaluateTangent(t);
             Vec3.transformQuat(tangent,tangent,spline.node.worldRotation);
             Vec3.normalize(tangent,tangent);
-            let up=new Vec3(0,1,0);
-            if(Math.abs(tangent.y)>0.999){
+            let up=this.upMode===SplineUpMode.TargetLocal?this.worldUpForAlignment():new Vec3(0,1,0);
+            const dot=up.x*tangent.x+up.y*tangent.y+up.z*tangent.z;
+            // Avoid near-zero cross products for nearly parallel Up/Forward.
+            if(Math.abs(dot)>0.999){
                 up=spline.evaluateUp(t);
                 Vec3.transformQuat(up,up,spline.node.worldRotation);
+                Vec3.normalize(up,up);
             }
             const right=Vec3.cross(new Vec3(),up,tangent);
             Vec3.normalize(right,right);
