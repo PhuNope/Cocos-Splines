@@ -1,7 +1,7 @@
-const assert=require('node:assert/strict');const fs=require('node:fs'),path=require('node:path');
+const assert=require('node:assert/strict');const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const root=path.resolve(__dirname,'..'),docs=path.join(root,'docs');
 const files=fs.readdirSync(path.join(docs,'pages')).filter(f=>f.endsWith('.html'));
-assert.equal(files.length,19,'19 topic pages + docs/index.html');
+assert.equal(files.length,20,'20 topic pages + docs/index.html');
 for(const file of [path.join(docs,'index.html'),...files.map(f=>path.join(docs,'pages',f))]){
  const html=fs.readFileSync(file,'utf8');assert(html.startsWith('<!doctype html>'));
  for(const match of html.matchAll(/href="([^"]+)"/g)){
@@ -26,4 +26,20 @@ const train=fs.readFileSync(path.join(docs,'pages/train.html'),'utf8');
 for(const apiName of ['TrainSingleSpline','TrainRouteConsist','SplinePositioner','SplineAnimate','currentDistance','evaluateWorldPositionAtDistance','Junction'])assert(train.includes(apiName),`Train guide missing: ${apiName}`);
 for(const script of ['TrainSingleSpline.ts','TrainRouteConsist.ts'])assert(fs.existsSync(path.join(docs,'examples',script)),`Missing train sample: ${script}`);
 for(const page of [path.join(docs,'index.html'),...files.map(f=>path.join(docs,'pages',f))])assert(fs.readFileSync(page,'utf8').includes('train.html'),`Train navigation missing: ${page}`);
-console.log('HTML DOCS PASS: 20 pages, train examples, Bender API, relative navigation.');
+
+// Dedicated Road / Extrude guides must mirror runtime property names, avoid false profile promises,
+// include full reference tables, copyable examples and correct source lookup behavior.
+const detailedRoad=fs.readFileSync(path.join(docs,'pages/road.html'),'utf8');
+for(const key of ['Spline Road — Tạo đường theo spline','endWidth','shoulderWidth','curbWidth','thickness','uvMetersPerRepeat','LengthAlongU','LengthAlongV','roadMaterial','modifiers','capEnds','getSpline()','RoadUvSetup.ts','Wrap U = Repeat','Junction','rebuild()'])
+  assert(detailedRoad.includes(key),'Road detailed doc missing '+key);
+const detailedExtrude=fs.readFileSync(path.join(docs,'pages/extrude.html'),'utf8');
+for(const key of ['Spline Extrude — Ống tròn dọc spline','endRadius','sides','segmentsPerCurve','flipNormals','uvTiling','capEnds','rangeMode','startDistance','material','rebuild()','ExtrudeTubeSetup.ts','Wrap V = Repeat','Node con'])
+  assert(detailedExtrude.includes(key),'Extrude detailed doc missing '+key);
+for(const script of ['RoadUvSetup.ts','ExtrudeTubeSetup.ts'])assert(fs.existsSync(path.join(docs,'examples',script)),`Missing mesh generator sample: ${script}`);
+for(const page of [path.join(docs,'index.html'),...files.map(f=>path.join(docs,'pages',f))]) {
+  const txt=fs.readFileSync(page,'utf8');
+  assert(txt.includes('extrude.html'),'Extrude nav missing: '+page);
+  assert(txt.includes('road.html'),'Road nav missing: '+page);
+}
+cp.execFileSync('tsc',['-p',path.join(root,'tests/tsconfig.docs-examples.json')],{stdio:'pipe'});
+console.log('HTML DOCS PASS: 21 pages, Road + Extrude API, typed examples, relative navigation.');
