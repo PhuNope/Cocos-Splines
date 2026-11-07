@@ -46,3 +46,7 @@ Nếu model import sai tỷ lệ, nhập `Tile Length` dương theo *world units
 ### SplineModifiers Gizmos & examples
 
 Select SplineModifiers with Cocos-Gizmos installed to preview cyan Offset trajectories, green Width multipliers, key markers colored by Speed, and optional Scale/Roll axes. The gizmo guides do not alter a mesh or move knots. See [`docs/pages/length-modifiers.html`](docs/pages/length-modifiers.html) for Inspector, API and worked examples (vehicle slowdowns, road widening, lane changes and object scaling).
+
+### Road UV cho texture đường nằm ngang (0.9.8)
+
+Trong `SplineRoad` chọn **UV Direction = Length Along U** nếu ảnh đường chạy ngang, hoặc **Length Along V** (mặc định) nếu ảnh chạy dọc. `UV Meters Per Repeat` điều khiển số units trên một lần lặp theo chiều dài spline; `UV Width Tiles` điều khiển số tile theo ngang đường. Có thể lật chiều và chỉnh `UV Offset U/V`. Texture nên đặt **Wrap Repeat** theo trục lặp. Xem `docs/pages/road.html`.

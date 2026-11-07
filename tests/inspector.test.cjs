@@ -25,7 +25,7 @@ const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
 assert.equal(animate.template.match(/<ui-prop /g)?.length,30);
-for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){
+for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial','uvDirection','uvWidthTiles','uvReverseAcross','uvReverseLength','uvOffsetU','uvOffsetV']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){
  const inspector=require(root+'/dist/contributions/inspector/'+type+'.js');
  for(const name of names)assert(inspector.template.includes('spl-field-'+name),type+' missing '+name);
 }

@@ -1,3 +1,9 @@
+## 0.9.8 — Road UV orientation
+- SplineRoad supports Length Along U (horizontal source textures) or Length Along V (legacy/vertical) with continuous world-distance tiling.
+- Added width UV tiling, flip across/along, and UV U/V offsets. All defaults preserve existing road texture orientation and appearance.
+- Road Inspector, HTML docs, UV math and mock component regression tests updated.
+- No changes to existing script UUIDs; development branch only.
+
 ## 0.9.7
 - Visualize SplineModifiers with selected-only Gizmos: offset trajectory, configurable width guides, speed-colored key markers, optional roll/scale key axes.
 - Full Vietnamese modifier guide: per-field semantics, interpolation, consumer mapping, code/API, vehicle speed, road widening, lane change and prefab scale examples.

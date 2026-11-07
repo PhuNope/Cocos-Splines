@@ -1,6 +1,6 @@
 {
   "name": "cocos-splines",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "package_version": 2,
   "description": "Cocos Creator >=3.8.2 spline extension with spline followers, junction routing, object controllers, modifiers, morphing and mesh deformation.",
   "editor": ">=3.8.2",

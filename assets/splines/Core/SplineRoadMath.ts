@@ -5,10 +5,21 @@
  */
 export interface V3 {x:number;y:number;z:number}
 export interface RoadFrame {position:V3;forward:V3;right:V3;up:V3;distance:number}
+/** Which UV channel receives distance traveled along the spline.
+ *  Old scenes keep LengthAlongV; LengthAlongU supports horizontal road textures.
+ */
+export enum RoadUvDirection {LengthAlongV=0,LengthAlongU=1}
 export interface RoadSettings {
     width:number;endWidth:number;shoulderWidth:number;shoulderDrop:number;
     curbWidth:number;curbHeight:number;thickness:number;capEnds:boolean;
     uvLength:number;startProgress:number;endProgress:number;
+    /** Optional UV controls; omitted fields retain the original mapping. */
+    uvDirection?:RoadUvDirection;
+    uvWidthTiles?:number;
+    uvReverseAcross?:boolean;
+    uvReverseLength?:boolean;
+    uvOffsetU?:number;
+    uvOffsetV?:number;
     /** Optional width multiplier sampled per frame. */
     widthAt?:(index:number,total:number)=>number;
 }
@@ -79,6 +90,19 @@ export function capTriangles(polygon:CrossPoint[]):number[][]{
     }
     return result;
 }
+/** Maps cross-road 0..1 and longitudinal tile distance onto the source texture axes.
+ *  The longitudinal coordinate remains continuous across spline curves.
+ */
+export function roadUV(across:number,lengthTiles:number,settings:RoadSettings):[number,number] {
+    const widthTiles=Math.max(.001,finite(settings.uvWidthTiles??1,1));
+    let acrossUV=across*widthTiles;
+    let lengthUV=lengthTiles;
+    if(settings.uvReverseAcross)acrossUV=widthTiles-acrossUV;
+    if(settings.uvReverseLength)lengthUV=-lengthUV;
+    const offsetU=finite(settings.uvOffsetU??0,0),offsetV=finite(settings.uvOffsetV??0,0);
+    if(settings.uvDirection===RoadUvDirection.LengthAlongU)return [lengthUV+offsetU,acrossUV+offsetV];
+    return [acrossUV+offsetU,lengthUV+offsetV];
+}
 export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,closed=false):RoadGeometry {
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const out:RoadGeometry={positions,normals,uvs,indices,bands:0,ringCount:frames.length};
@@ -106,7 +130,8 @@ export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,close
             const overallHalf=widths[i]/2+positive(settings.shoulderWidth,0)+positive(settings.curbWidth,0);
             const ua=(a.x+overallHalf)/(2*overallHalf),ub=(b.x+overallHalf)/(2*overallHalf);
             const v=frame.distance/length;
-            push(pa,n,ua,v);push(pb,n,ub,v);
+            const uvA=roadUV(ua,v,settings),uvB=roadUV(ub,v,settings);
+            push(pa,n,uvA[0],uvA[1]);push(pb,n,uvB[0],uvB[1]);
         }
         for(let i=0;i<frames.length-1;i++){
             const a=first+i*2,b=a+2;
@@ -121,7 +146,10 @@ export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,close
             // At start (local travel points forward), outside normal is -forward.
             const n=norm(mul(f.forward,side===0?-1:1));
             const extent=widths[side===0?0:widths.length-1]/2+positive(settings.shoulderWidth,0)+positive(settings.curbWidth,0);
-            for(const p of profile)push(at(f,p),n,(p.x+extent)/(2*extent),p.y);
+            for(const p of profile){
+                const uv=roadUV((p.x+extent)/(2*extent),p.y,settings);
+                push(at(f,p),n,uv[0],uv[1]);
+            }
             // 2-D profile is clockwise when viewed along +Z. +Z travel means
             // desired end cap is +Z and start cap -Z.
             const profileCCW=signedArea(profile)>0;

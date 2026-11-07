@@ -1,9 +1,10 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils, Enum } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
-import { buildRoadGeometry, RoadFrame } from '../Core/SplineRoadMath';
+import { buildRoadGeometry, RoadFrame, RoadUvDirection } from '../Core/SplineRoadMath';
 import { SplineModifiers } from './SplineModifiers';
 Enum(SplinePositionMode);
+Enum(RoadUvDirection);
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Live editable roadway, inspired by a road surface generator. Generates transient Mesh,
@@ -34,7 +35,15 @@ export class SplineRoad extends Component {
     rangeMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({min:0,tooltip:'Start distance when Range Mode = Distance.'}) startDistance=0;
     @property({min:0,tooltip:'End distance when Range Mode = Distance. The interval is clamped to current spline length.'}) endDistance=10;
-    @property({min:.001,tooltip:'Meters of path per one repeat of road texture V coordinate.'}) uvMetersPerRepeat=5;
+    @property({min:.001,tooltip:'World-space road distance per texture repetition along the selected Length UV axis (U or V).'}) uvMetersPerRepeat=5;
+    @property({type:Enum(RoadUvDirection),tooltip:'Length Along V: texture is vertical (legacy); Length Along U: texture is horizontal. UV axis for spline direction.'})
+    uvDirection:RoadUvDirection=RoadUvDirection.LengthAlongV;
+    @property({min:.001,tooltip:'Number of texture repeats across the complete road width (default 1). Does not affect longitudinal repeat distance.'})
+    uvWidthTiles=1;
+    @property({tooltip:'Reverse texture direction across the width of the road.'}) uvReverseAcross=false;
+    @property({tooltip:'Reverse texture direction along the spline. Requires Repeat wrapping for negative UV values.'}) uvReverseLength=false;
+    @property({tooltip:'Offset the final texture U coordinate.'}) uvOffsetU=0;
+    @property({tooltip:'Offset the final texture V coordinate.'}) uvOffsetV=0;
     @property({type:Material,tooltip:'Assign asphalt / road material with tiled texture. Uses default dark asphalt color when empty.'}) roadMaterial:Material|null=null;
     @property({type:Color,tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
     @property({tooltip:'Close the start/end edges for open road slabs.'}) capEnds=true;
@@ -96,7 +105,8 @@ export class SplineRoad extends Component {
         const matrix=(m:Mat4|undefined)=>m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:[];
         return JSON.stringify([s?.getRevision(),matrix(a),matrix(b),this.width,this.endWidth,this.shoulderWidth,this.shoulderDrop,
             this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.startProgress,
-            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.capEnds,this.gizmoEdgeLimit]);
+            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.uvDirection,
+            this.uvWidthTiles,this.uvReverseAcross,this.uvReverseLength,this.uvOffsetU,this.uvOffsetV,this.capEnds,this.gizmoEdgeLimit]);
     }
     public onDrawGizmosSelected():void {
         if(!this.showMeshGizmos)return;
@@ -157,7 +167,9 @@ export class SplineRoad extends Component {
             width:this.width,endWidth:this.endWidth,shoulderWidth:this.shoulderWidth,shoulderDrop:this.shoulderDrop,
             curbWidth:this.curbWidth,curbHeight:this.curbHeight,thickness:this.thickness,
             widthAt:this.modifiers?(i,n)=>this.modifiers!.sample(begin+(end-begin)*(n<=1?0:i/(n-1))).width:undefined,
-            capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end
+            capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end,
+            uvDirection:this.uvDirection,uvWidthTiles:this.uvWidthTiles,uvReverseAcross:this.uvReverseAcross,
+            uvReverseLength:this.uvReverseLength,uvOffsetU:this.uvOffsetU,uvOffsetV:this.uvOffsetV
         },source.closed&&begin===0&&end===1);
         if(!geometry.indices.length){this.clearMesh();this._revision=this.signature();return;}
         this._meshGizmo=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);

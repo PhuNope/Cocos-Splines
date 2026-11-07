@@ -52,6 +52,16 @@ try{
   assert.notEqual(renderer.mesh,previous);assert.equal(meshCalls.length,2);
   road.roadMaterial=new Material();road.update();assert.equal(renderer.shared,road.roadMaterial,'custom material assigned');
   const {SplinePositionMode}=require(path.join(out,'Core','SplinePosition.js'));
+  // Inspector UV controls rebuild the mesh with a new orientation without changing geometry.
+  const geometryBeforeUV=meshCalls.at(-1);
+  road.uvDirection=1;road.update();
+  const geometryAfterUV=meshCalls.at(-1);
+  assert.notEqual(geometryAfterUV,geometryBeforeUV,'changing orientation rebuilds mesh');
+  assert.deepEqual(geometryAfterUV.positions,geometryBeforeUV.positions,'UV orientation does not change world geometry');
+  assert.equal(geometryAfterUV.uvs[16*4],2,'10 meters at 5 meters per repeat maps longitudinal coordinate to U=2');
+  assert.equal(geometryBeforeUV.uvs[16*4+1],2,'legacy longitudinal coordinate uses V');
+  road.uvWidthTiles=2;road.uvReverseAcross=true;road.uvOffsetV=.3;road.update();
+  assert.notEqual(meshCalls.at(-1),geometryAfterUV,'texture tiling / flips trigger rebuild');
   road.rangeMode=SplinePositionMode.Distance;road.startDistance=2;road.endDistance=6;
   road.rebuild();const distanceGeometry=meshCalls.at(-1);
   const distanceZ=distanceGeometry.positions.filter((_,i)=>i%3===2);
