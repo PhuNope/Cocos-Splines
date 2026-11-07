@@ -69,7 +69,42 @@ try{
   road.rangeMode=SplinePositionMode.SplineT;road.startProgress=.5;road.endProgress=1;
   road.rebuild();const tZ=meshCalls.at(-1).positions.filter((_,i)=>i%3===2);
   assert(Math.min(...tZ)>2.49&&Math.max(...tZ)<10.01,'Road crop by cubic t converted through arc distance');
+  // Regression: a steep road passes through an almost vertical tangent.
+  // Previously per-ring `up x tangent` changed sign and flipped the surface.
+  const steep={...source,getRevision:()=>'steep-grade',length:10,
+   evaluatePosition:t=>new Vec3(2*Math.sin(Math.PI*t),2*(1-Math.cos(Math.PI*t)),0),
+   evaluateWorldPosition:t=>new Vec3(2*Math.sin(Math.PI*t),2*(1-Math.cos(Math.PI*t)),0),
+   evaluateTangent:t=>new Vec3(Math.cos(Math.PI*t),Math.sin(Math.PI*t),0),
+   evaluateUp:t=>new Vec3(0,1,0)};
+  road.spline=steep;road.rangeMode=SplinePositionMode.NormalizedDistance;
+  road.startProgress=0;road.endProgress=1;road.width=.8;road.thickness=0;
+  road.shoulderWidth=0;road.curbWidth=0;road.samplesPerCurve=100;
+  road.rebuild();
+  const steepMesh=renderer.mesh.data,steepCount=101;
+  const sectionDirection=i=>new Vec3(
+   steepMesh.positions[(i*2+1)*3]-steepMesh.positions[i*2*3],
+   steepMesh.positions[(i*2+1)*3+1]-steepMesh.positions[i*2*3+1],
+   steepMesh.positions[(i*2+1)*3+2]-steepMesh.positions[i*2*3+2]);
+  for(let i=1;i<steepCount;i++){
+   const a=sectionDirection(i-1),b=sectionDirection(i);
+   assert(Vec3.dot(a,b)>0,'Road cross sections remain consistently oriented over vertical grade');
+  }
   road.onDestroy();assert.equal(renderer.mesh,null,'renderer cleared after destruction');
+  // Extrude shares the same continuous frame field (no ring twist on the slope).
+  const {SplineExtrude}=require(path.join(out,'Components','SplineExtrude.js'));
+  const extrude=new SplineExtrude();extrude.node=roadNode;extrude.spline=steep;
+  extrude.capEnds=false;extrude.segmentsPerCurve=100;extrude.sides=8;extrude.radius=.2;
+  extrude.rebuild();
+  const tube=renderer.mesh.data, stride=extrude.sides+1;
+  for(let i=1;i<=100;i++){
+   const ringCenter=steep.evaluateWorldPosition(i/100),priorCenter=steep.evaluateWorldPosition((i-1)/100);
+   const p=i*stride*3,q=(i-1)*stride*3;
+   const a=new Vec3(tube.positions[p]-ringCenter.x,tube.positions[p+1]-ringCenter.y,tube.positions[p+2]-ringCenter.z);
+   const b=new Vec3(tube.positions[q]-priorCenter.x,tube.positions[q+1]-priorCenter.y,tube.positions[q+2]-priorCenter.z);
+   assert(Vec3.dot(a,b)>0,'Extrude tube rings do not reverse near vertical tangent');
+  }
+  extrude.onDestroy();
+
   console.log('ROAD COMPONENT MOCK PASS: create mesh in lifecycle, rebuild on width, cleanup old GPU mesh and material binding.');
  }finally{Module._load=original;}
 }finally{fs.rmSync(out,{recursive:true,force:true});}

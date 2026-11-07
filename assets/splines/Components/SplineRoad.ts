@@ -3,6 +3,8 @@ import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { buildRoadGeometry, RoadFrame, RoadUvDirection } from '../Core/SplineRoadMath';
 import { SplineModifiers } from './SplineModifiers';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
+import { estimateMinimumBendRadius } from '../Core/SplineStableFrames';
 Enum(SplinePositionMode);
 Enum(RoadUvDirection);
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
@@ -133,34 +135,25 @@ export class SplineRoad extends Component {
             const offset=Vec3.add(new Vec3(),origin,vec);
             Vec3.transformMat4(offset,offset,inv);return Vec3.subtract(new Vec3(),offset,local);
         };
+        const worldFrames=createWorldFrameField(source,begin,end,count);
+        const minRadius=estimateMinimumBendRadius(worldFrames.frames);
+        const maxWidthMultiplier=this.modifiers?Math.max(1,...worldFrames.frames.map(f=>
+            Math.max(.01,this.modifiers!.sample(f.t).width))):1;
+        const halfExtent=Math.max(.05,this.width,this.endWidth>0?this.endWidth:0)*maxWidthMultiplier*.5
+            +Math.max(0,this.shoulderWidth)+Math.max(0,this.curbWidth);
+        if(minRadius<halfExtent){
+            console.warn('[SplineRoad] Very tight bend: road half-width (including shoulders) exceeds bend radius. '
+                +'Inner-edge geometry may overlap even with stable frames. Widen the bend, reduce width, or move spline knots.');
+        }
         let previousWorld:Vec3|null=null,worldDistance=0;
         for(let i=0;i<=count;i++){
-            const t=begin+(end-begin)*i/count;
-            const world=source.evaluateWorldPosition(t),local=Vec3.transformMat4(new Vec3(),world,inv);
+            const f=worldFrames.frames[i],world=new Vec3(f.position.x,f.position.y,f.position.z);
+            const local=Vec3.transformMat4(new Vec3(),world,inv);
             if(previousWorld)worldDistance+=Vec3.subtract(new Vec3(),world,previousWorld).length();
             previousWorld=world;
-            const sourcePos=source.evaluatePosition(t);
-            const tangent=source.evaluateTangent(t);
-            const sourceEnd=Vec3.add(new Vec3(),sourcePos,tangent);
-            const worldEnd=Vec3.transformMat4(new Vec3(),sourceEnd,source.node.worldMatrix);
-            Vec3.subtract(tangent,worldEnd,world);
-            if(tangent.lengthSqr()<1e-8)tangent.set(0,0,1);
-            Vec3.normalize(tangent,tangent);
-            const up=source.evaluateUp(t);
-            // Spline up is container-local; rotate it to world, then orthogonalize.
-            const upEnd=Vec3.add(new Vec3(),sourcePos,up);
-            Vec3.transformMat4(upEnd,upEnd,source.node.worldMatrix);
-            Vec3.subtract(up,upEnd,world);
-            if(up.lengthSqr()<1e-8)up.set(0,1,0);
-            const flat=Vec3.multiplyScalar(new Vec3(),tangent,Vec3.dot(tangent,up));
-            Vec3.subtract(up,up,flat);
-            if(up.lengthSqr()<1e-7){up.set(0,1,0);if(Math.abs(Vec3.dot(up,tangent))>.98)up.set(1,0,0);
-                Vec3.subtract(up,up,Vec3.multiplyScalar(new Vec3(),tangent,Vec3.dot(up,tangent)));}
-            Vec3.normalize(up,up);
-            const right=Vec3.cross(new Vec3(),up,tangent);
-            Vec3.normalize(right,right);
-            Vec3.cross(up,tangent,right);Vec3.normalize(up,up);
-            const forwardLocal=transformBasis(world,tangent,local),rightLocal=transformBasis(world,right,local),upLocal=transformBasis(world,up,local);
+            const forwardLocal=transformBasis(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local);
+            const rightLocal=transformBasis(world,new Vec3(f.right.x,f.right.y,f.right.z),local);
+            const upLocal=transformBasis(world,new Vec3(f.up.x,f.up.y,f.up.z),local);
             frames.push({position:local,forward:forwardLocal,right:rightLocal,up:upLocal,distance:worldDistance});
         }
         const geometry=buildRoadGeometry(frames,{

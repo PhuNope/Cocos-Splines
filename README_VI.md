@@ -50,3 +50,6 @@ Select SplineModifiers with Cocos-Gizmos installed to preview cyan Offset trajec
 ### Road UV cho texture đường nằm ngang (0.9.8)
 
 Trong `SplineRoad` chọn **UV Direction = Length Along U** nếu ảnh đường chạy ngang, hoặc **Length Along V** (mặc định) nếu ảnh chạy dọc. `UV Meters Per Repeat` điều khiển số units trên một lần lặp theo chiều dài spline; `UV Width Tiles` điều khiển số tile theo ngang đường. Có thể lật chiều và chỉnh `UV Offset U/V`. Texture nên đặt **Wrap Repeat** theo trục lặp. Xem `docs/pages/road.html`.
+
+### Đường cong dốc 3D (v0.9.9)
+Road, Extrude, MeshDeform và ObjectBender đã dùng frame liên tục để tránh xoắn/lật tiết diện tại tiếp tuyến gần thẳng đứng. Road sẽ cảnh báo nếu cua quá gắt gây chồng mép trong. JunctionMesh vẫn chỉ hỗ trợ patch XZ phẳng. Xem `docs/pages/road.html` và `docs/pages/extrude.html`.

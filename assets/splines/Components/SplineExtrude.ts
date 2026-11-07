@@ -1,5 +1,6 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Quat, Mat4, Color, utils, Enum } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 Enum(SplinePositionMode);
@@ -90,14 +91,12 @@ export class SplineExtrude extends Component {
         const append=(p:Vec3,n:Vec3,u:number,w:number):void=>{
             positions.push(p.x,p.y,p.z);normals.push(this.flipNormals?-n.x:n.x,this.flipNormals?-n.y:n.y,this.flipNormals?-n.z:n.z);uvs.push(u,w);
         };
+        const worldFrames=createWorldFrameField(source,start,end,rings);
         for(let i=0;i<ringCount;i++) {
-            const t=start+(i/rings)*span,worldPos=source.evaluateWorldPosition(t),tangent=source.evaluateTangent(t),up=source.evaluateUp(t);
+            const f=worldFrames.frames[i],worldPos=new Vec3(f.position.x,f.position.y,f.position.z);
+            const right=new Vec3(f.right.x,f.right.y,f.right.z),up=new Vec3(f.up.x,f.up.y,f.up.z);
+            const t=start+(i/rings)*span;
             const ringRadius=radius+(endRadius-radius)*(i/rings);
-            Vec3.transformQuat(tangent,tangent,source.node.worldRotation);
-            Vec3.transformQuat(up,up,source.node.worldRotation);
-            const right=Vec3.cross(new Vec3(),up,tangent);
-            if(right.lengthSqr()<1e-8)right.set(1,0,0);
-            Vec3.normalize(right,right);Vec3.cross(up,tangent,right);Vec3.normalize(up,up);
             for(let j=0;j<=sides;j++){
                 const angle=j/sides*Math.PI*2;
                 const normal=Vec3.add(new Vec3(),Vec3.multiplyScalar(new Vec3(),right,Math.cos(angle)),Vec3.multiplyScalar(new Vec3(),up,Math.sin(angle)));

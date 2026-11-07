@@ -1,6 +1,7 @@
 import { _decorator, Component, MeshRenderer, Mesh, Vec3, Mat4, Quat, Color, gfx, utils, Enum } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { DeformAxis } from './SplineMeshDeform';
 import { findStoredAttributeFormat, resolveAttributeFormatName, readPositionTriples, readUVPairs, VertexFormat } from '../Core/SplineMeshRead';
@@ -113,16 +114,26 @@ export class SplineObjectBender extends Component {
         if(max-min<1e-7){console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
         const [start,end]=toNormalizedRange(spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         if(end<=start)return;
+        const stableFrames=(typeof spline.evaluateUp==='function'&&typeof spline.evaluateTangent==='function'&&typeof spline.evaluatePosition==='function')
+            ?createWorldFrameField(spline,start,end,Math.min(1024,Math.max(128,spline.segmentCount*24))):null;
         this._meshGizmos=[];
         for(let itemIndex=0;itemIndex<this.originals.length;itemIndex++){
             const item=this.originals[itemIndex];
             const childInverse=Mat4.invert(new Mat4(),item.renderer.node.worldMatrix);
             const localFrame2=(t:number):BendFrame=>{
                 const world=spline.evaluateWorldPosition(t);
-                const quat=spline.evaluateRotation(t);
-                const composed=new Quat();Quat.multiply(composed,spline.node.worldRotation,quat);
-                const right=Vec3.transformQuat(new Vec3(),new Vec3(1,0,0),composed);
-                const up=Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),composed);
+                let right:Vec3,up:Vec3;
+                if(stableFrames){
+                    const frame=stableFrames.at(t);
+                    right=new Vec3(frame.right.x,frame.right.y,frame.right.z);
+                    up=new Vec3(frame.up.x,frame.up.y,frame.up.z);
+                }else{
+                    // Compatibility for minimal custom SplineContainer shims.
+                    const quat=spline.evaluateRotation(t);
+                    const composed=new Quat();Quat.multiply(composed,spline.node.worldRotation,quat);
+                    right=Vec3.transformQuat(new Vec3(),new Vec3(1,0,0),composed);
+                    up=Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),composed);
+                }
                 const p=Vec3.transformMat4(new Vec3(),world,childInverse);
                 const x=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),world,right),childInverse);
                 const y=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),world,up),childInverse);

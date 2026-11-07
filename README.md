@@ -44,3 +44,6 @@ Select SplineModifiers with Cocos-Gizmos installed to preview cyan Offset trajec
 ### Road UV orientation (v0.9.8)
 
 SplineRoad can map spline distance along **U** (horizontal road images) or **V** (vertical road images, legacy default). Set `uvDirection`, `uvMetersPerRepeat`, `uvWidthTiles`, optional reverse-axis toggles, and U/V offsets in the Inspector. Configure the texture sampler for Repeat wrapping on the longitudinal axis. No source image rotation needed. See `docs/pages/road.html`.
+
+### Steep 3D spline geometry (v0.9.9)
+Road, Extrude, MeshDeform and ObjectBender use continuous frames to avoid abrupt section flips near vertical tangents. Road warns when sharp bends can self-overlap; JunctionMesh remains a flat XZ patch. See `docs/pages/road.html`.

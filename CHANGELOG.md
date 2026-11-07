@@ -1,3 +1,10 @@
+## 0.9.9 — Stable world-space mesh frames for steep splines
+- A shared continuous (parallel-transport) spline frame field fixes 180-degree right/up flips when a 3D spline is steep, loops, or its up hint becomes nearly tangent to the path.
+- Used by SplineRoad, SplineExtrude, SplineMeshDeform and SplineObjectBender; improved support for rotated/non-uniformly scaled source nodes, and closed-loop seam continuity.
+- Added a warning for extremely tight Road bends: if road half-width exceeds bend radius, the inside edge may self-intersect independently of the frame problem.
+- SplineJunctionMesh remains a planar XZ junction overlay, not a grade-aware 3D mesh; Spline2DPath is Canvas Graphics rather than 3D mesh extrusion.
+- New steep-grade, banking, closed seam and Road/Extrude component tests; runtime UUIDs unchanged. Live Cocos Editor rendering still needs validation.
+
 ## 0.9.8 — Road UV orientation
 - SplineRoad supports Length Along U (horizontal source textures) or Length Along V (legacy/vertical) with continuous world-distance tiling.
 - Added width UV tiling, flip across/along, and UV U/V offsets. All defaults preserve existing road texture orientation and appearance.
