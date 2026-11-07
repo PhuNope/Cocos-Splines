@@ -1,12 +1,13 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils, Enum } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
-import { buildRoadGeometry, RoadFrame, RoadUvDirection } from '../Core/SplineRoadMath';
+import { buildRoadGeometry, RoadFrame, RoadUvDirection, RoadCornerMode } from '../Core/SplineRoadMath';
 import { SplineModifiers } from './SplineModifiers';
 import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { estimateMinimumBendRadius } from '../Core/SplineStableFrames';
 Enum(SplinePositionMode);
 Enum(RoadUvDirection);
+Enum(RoadCornerMode);
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Live editable roadway, inspired by a road surface generator. Generates transient Mesh,
@@ -31,6 +32,10 @@ export class SplineRoad extends Component {
     @property({min:0,tooltip:'Curb height above the road surface; 0 disables curbs.'}) curbHeight=0.15;
     @property({min:0,tooltip:'Road volume depth; 0 makes an open road surface.'}) thickness=0.25;
     @property({min:2,max:128,step:1,tooltip:'How many longitudinal mesh samples per Bezier segment.'}) samplesPerCurve=16;
+    @property({type:Enum(RoadCornerMode),tooltip:'Legacy: original ribbon mesh. Join And Trim: miter corners to close outside gaps, smoothly trim inner overlap when width exceeds bend radius. Not a full mesh Boolean for hairpins/crossings.'})
+    cornerMode:RoadCornerMode=RoadCornerMode.Legacy;
+    @property({range:[.5,.99,.01],slide:true,tooltip:'How close inner road edges may approach the center of a tight turn (0.5–0.99). Lower values trim more and reduce overlap; default 0.93.'})
+    cornerTrimSafety=.93;
     @property({range:[0,1,.001],slide:true}) startProgress=0;
     @property({range:[0,1,.001],slide:true}) endProgress=1;
     @property({type:Enum(SplinePositionMode),tooltip:'Normalized Distance (legacy), Distance in local units, or geometric Spline t.'})
@@ -106,7 +111,7 @@ export class SplineRoad extends Component {
         const s=this.getSpline(),a=s?.node.worldMatrix,b=this.node.worldMatrix;
         const matrix=(m:Mat4|undefined)=>m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:[];
         return JSON.stringify([s?.getRevision(),matrix(a),matrix(b),this.width,this.endWidth,this.shoulderWidth,this.shoulderDrop,
-            this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.startProgress,
+            this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.cornerMode,this.cornerTrimSafety,this.startProgress,
             this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.uvDirection,
             this.uvWidthTiles,this.uvReverseAcross,this.uvReverseLength,this.uvOffsetU,this.uvOffsetV,this.capEnds,this.gizmoEdgeLimit]);
     }
@@ -142,8 +147,10 @@ export class SplineRoad extends Component {
         const halfExtent=Math.max(.05,this.width,this.endWidth>0?this.endWidth:0)*maxWidthMultiplier*.5
             +Math.max(0,this.shoulderWidth)+Math.max(0,this.curbWidth);
         if(minRadius<halfExtent){
-            console.warn('[SplineRoad] Very tight bend: road half-width (including shoulders) exceeds bend radius. '
-                +'Inner-edge geometry may overlap even with stable frames. Widen the bend, reduce width, or move spline knots.');
+            console.warn('[SplineRoad] Very tight bend: road half-width exceeds the bend radius. '
+                +(this.cornerMode===RoadCornerMode.JoinAndTrim
+                    ? 'Join And Trim compresses the inner edge, but extreme hairpins or 3D self-intersections may still require a custom mesh.'
+                    : 'Enable Corner Mode = Join And Trim, widen the bend or reduce road width.'));
         }
         let previousWorld:Vec3|null=null,worldDistance=0;
         for(let i=0;i<=count;i++){
@@ -160,6 +167,7 @@ export class SplineRoad extends Component {
             width:this.width,endWidth:this.endWidth,shoulderWidth:this.shoulderWidth,shoulderDrop:this.shoulderDrop,
             curbWidth:this.curbWidth,curbHeight:this.curbHeight,thickness:this.thickness,
             widthAt:this.modifiers?(i,n)=>this.modifiers!.sample(begin+(end-begin)*(n<=1?0:i/(n-1))).width:undefined,
+            cornerMode:this.cornerMode,cornerTrimSafety:this.cornerTrimSafety,
             capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end,
             uvDirection:this.uvDirection,uvWidthTiles:this.uvWidthTiles,uvReverseAcross:this.uvReverseAcross,
             uvReverseLength:this.uvReverseLength,uvOffsetU:this.uvOffsetU,uvOffsetV:this.uvOffsetV

@@ -47,3 +47,7 @@ SplineRoad can map spline distance along **U** (horizontal road images) or **V**
 
 ### Steep 3D spline geometry (v0.9.9)
 Road, Extrude, MeshDeform and ObjectBender use continuous frames to avoid abrupt section flips near vertical tangents. Road warns when sharp bends can self-overlap; JunctionMesh remains a flat XZ patch. See `docs/pages/road.html`.
+
+### Sharp road corners (v0.9.10)
+
+`SplineRoad` → **Sharp Corners** → **Corner Mode = Join And Trim** joins outside edge offsets with miters and smoothly trims inner corners where road width exceeds bend radius. Existing scenes default to Legacy. Not a general 3D mesh Boolean union. See `docs/pages/road.html`.

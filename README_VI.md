@@ -53,3 +53,7 @@ Trong `SplineRoad` chọn **UV Direction = Length Along U** nếu ảnh đườn
 
 ### Đường cong dốc 3D (v0.9.9)
 Road, Extrude, MeshDeform và ObjectBender đã dùng frame liên tục để tránh xoắn/lật tiết diện tại tiếp tuyến gần thẳng đứng. Road sẽ cảnh báo nếu cua quá gắt gây chồng mép trong. JunctionMesh vẫn chỉ hỗ trợ patch XZ phẳng. Xem `docs/pages/road.html` và `docs/pages/extrude.html`.
+
+### Road cua gấp (v0.9.10)
+
+Trong `SplineRoad` → **Sharp Corners**, đặt `Corner Mode = Join And Trim` để nối miter ở mép ngoài và thu gọn mép trong khi cua quá hẹp. `Corner Trim Safety = 0.93` là điểm bắt đầu tốt. Khi OFF/Legacy, mesh giữ nguyên như bản cũ. Chế độ này không phải Boolean union: cua chữ U rất gắt và đường tự cắt vẫn nên chỉnh spline hoặc xây giao lộ riêng. Xem `docs/pages/road.html`.

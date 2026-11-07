@@ -1,3 +1,9 @@
+## 0.9.10 — Road sharp-bend corner join and inner-edge trim
+- Added SplineRoad Corner Mode: Legacy (default, unchanged scenes) / JoinAndTrim. Mitered section joins connect offset edge lines at local corners to reduce outside gaps. When the local bend radius is smaller than the road half-width, the inside profile is smoothly compressed to avoid folded/inverted inner-road triangles. Works with shoulder, curb, thickness, material, and U/V road UV orientation.
+- Corner Trim Safety (default 0.93, range 0.5–0.99) controls how much inner curvature clearance to retain. The method preserves source UVs and triangle indexing; compacting the inner width may compress the asphalt texture at extreme bends.
+- Tested right/left 90° joins, a radius-2 arc with width 6, flat and pitched sections, open endpoints, and loop seams. It is not a Boolean polygon union; near-180° hairpins, overlapping distant segments or 3D road intersections still require redesigned path/Junction geometry.
+- New settings are opt-in so existing scenes retain their geometry; runtime TS UUIDs preserved. No physical Editor validation yet.
+
 ## 0.9.9 — Stable world-space mesh frames for steep splines
 - A shared continuous (parallel-transport) spline frame field fixes 180-degree right/up flips when a 3D spline is steep, loops, or its up hint becomes nearly tangent to the path.
 - Used by SplineRoad, SplineExtrude, SplineMeshDeform and SplineObjectBender; improved support for rotated/non-uniformly scaled source nodes, and closed-loop seam continuity.

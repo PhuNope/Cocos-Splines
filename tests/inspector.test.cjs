@@ -56,3 +56,7 @@ for(const kind of ['Instantiate','ObjectController']){
 const benderPanel=require(root+'/dist/contributions/inspector/Bender.js');
 for(const k of ['spl-field-layout','spl-field-partGap'])assert(benderPanel.template.includes(k),`Bender missing ${k}`);
 console.log('INSPECTOR PASS: no dockable panel; stable native ui-prop rendering; inline spline controls + T/Distance.');
+
+// Road sharp-corner fix must be configurable in the custom Cocos Inspector.
+const roadInspectorSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../src/contributions/inspector/common.js'),'utf8');
+assert(roadInspectorSource.includes("title:'Sharp corners',fields:['cornerMode','cornerTrimSafety']"));

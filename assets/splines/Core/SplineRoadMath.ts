@@ -9,6 +9,10 @@ export interface RoadFrame {position:V3;forward:V3;right:V3;up:V3;distance:numbe
  *  Old scenes keep LengthAlongV; LengthAlongU supports horizontal road textures.
  */
 export enum RoadUvDirection {LengthAlongV=0,LengthAlongU=1}
+/** How the road handles corners. Legacy preserves existing scenes; JoinAndTrim
+ * miters the outside of the turn and compresses the inside before it folds.
+ * This is a local ribbon join, not a 3D Boolean union for intersecting roads. */
+export enum RoadCornerMode {Legacy=0,JoinAndTrim=1}
 export interface RoadSettings {
     width:number;endWidth:number;shoulderWidth:number;shoulderDrop:number;
     curbWidth:number;curbHeight:number;thickness:number;capEnds:boolean;
@@ -22,6 +26,10 @@ export interface RoadSettings {
     uvOffsetV?:number;
     /** Optional width multiplier sampled per frame. */
     widthAt?:(index:number,total:number)=>number;
+    /** Optional correction for tight bends, disabled by default for old scenes. */
+    cornerMode?:RoadCornerMode;
+    /** Fraction of local bend radius left clear of the trimmed inside edge. */
+    cornerTrimSafety?:number;
 }
 export interface RoadGeometry {positions:number[];normals:number[];uvs:number[];indices:number[];bands:number;ringCount:number}
 interface CrossPoint {x:number;y:number}
@@ -30,6 +38,8 @@ const sub=(a:V3,b:V3):V3=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const mul=(a:V3,n:number):V3=>({x:a.x*n,y:a.y*n,z:a.z*n});
 const cross=(a:V3,b:V3):V3=>({x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
 const len=(a:V3):number=>Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+const dot=(a:V3,b:V3):number=>a.x*b.x+a.y*b.y+a.z*b.z;
+const clamp=(v:number,lo:number,hi:number):number=>Math.min(hi,Math.max(lo,v));
 const norm=(v:V3):V3=>{const l=len(v);return l>1e-10?mul(v,1/l):{x:0,y:1,z:0};};
 const finite=(v:number,def:number):number=>Number.isFinite(v)?v:def;
 const positive=(v:number,def:number):number=>Math.max(0,finite(v,def));
@@ -58,8 +68,73 @@ export function crossSection(width:number,settings:RoadSettings):CrossPoint[]{
     }
     return profile;
 }
-function at(frame:RoadFrame,point:CrossPoint):V3 {
-    return add(frame.position,add(mul(frame.right,point.x),mul(frame.up,point.y)));
+interface CornerFrame {right:V3;insideSign:number;insideLimit:number}
+/** Prepare local polyline joins for ribbon-shaped roads, without touching the
+ * frame input. Using the actual adjacent chord directions makes a miter at a
+ * sharp corner (filling the outside and cutting the inside). On a bend whose
+ * radius is smaller than the road half-width, a smooth monotone saturation of
+ * inner X prevents the offset curve from reversing and overlapping itself.
+ * Across/longitudinal UVs remain tied to the untrimmed source profile.
+ */
+export function buildRoadCornerFrames(frames:RoadFrame[],settings:RoadSettings,closed=false):CornerFrame[] {
+    const result:CornerFrame[]=frames.map(frame=>({right:frame.right,insideSign:0,insideLimit:Infinity}));
+    if(settings.cornerMode!==RoadCornerMode.JoinAndTrim || frames.length<3)return result;
+    const last=frames.length-1;
+    const loop=closed&&len(sub(frames[0].position,frames[last].position))<1e-4;
+    const safety=clamp(finite(settings.cornerTrimSafety??.93,.93),.5,.99);
+    for(let i=loop?0:1;i<(loop?last:last);i++){
+        const prev=frames[i===0?last-1:i-1],here=frames[i],next=frames[i+1];
+        // Project the path chords into the road plane. A pitch-only change
+        // should not create a spurious lateral miter or trim.
+        const up=norm(here.up);
+        const a=sub(here.position,prev.position),b=sub(next.position,here.position);
+        const project=(v:V3):V3=>sub(v,mul(up,dot(v,up)));
+        const pa=project(a),pb=project(b),la=len(pa),lb=len(pb);
+        if(la<1e-7||lb<1e-7)continue;
+        const ta=mul(pa,1/la),tb=mul(pb,1/lb);
+        const cosa=clamp(dot(ta,tb),-1,1),angle=Math.acos(cosa);
+        if(angle<1e-5||angle>Math.PI-.1)continue;
+        const ra=norm(cross(up,ta)),rb=norm(cross(up,tb));
+        if(dot(ra,here.right)<=0||dot(rb,here.right)<=0)continue;
+        const bisector=add(ra,rb),bisectorLength=len(bisector);
+        if(bisectorLength<1e-5)continue;
+        const miterUnit=mul(bisector,1/bisectorLength);
+        const divisor=dot(miterUnit,ra);
+        if(divisor<.05)continue;
+        // Limiting extraordinary spikes is essential on near-hairpin turns.
+        // In that case the join is an approximation; the road cannot be made
+        // collision-free without a true planar/volumetric Boolean cut.
+        const miterLength=Math.min(3,1/divisor);
+        const miterRight=mul(miterUnit,miterLength*len(here.right));
+        const signedBend=dot(cross(ta,tb),up);
+        const bendRadius=(la+lb)*.25/Math.max(1e-7,Math.sin(angle*.5));
+        const maxInner=bendRadius*safety/(len(miterRight)||1);
+        result[i]={right:miterRight,insideSign:Math.abs(signedBend)>1e-8?(signedBend>0?1:-1):0,
+            insideLimit:Math.max(1e-5,maxInner)};
+    }
+    if(loop)result[last]=result[0];
+    else if(last>=2){
+        // A curved path may start/end inside a tight bend. Without endpoint
+        // trimming, the first/last triangle can still fold over even though
+        // all middle samples were corrected.
+        result[0]={...result[1],right:frames[0].right};
+        result[last]={...result[last-1],right:frames[last].right};
+    }
+    return result;
+}
+/** Clamp only the inside of a turn, without collapsing adjacent profile bands
+ * onto the same vertex. The exponential tail is C1 continuous at 70% of the
+ * radius and strictly increasing, so the surface remains triangulatable. */
+export function cornerProfileX(x:number,corner:CornerFrame):number {
+    if(!corner.insideSign || x*corner.insideSign<=0 || !Number.isFinite(corner.insideLimit))return x;
+    const value=Math.abs(x),max=corner.insideLimit,threshold=max*.7;
+    if(value<=threshold)return x;
+    const tail=max-threshold;
+    return corner.insideSign*(threshold+tail*(1-Math.exp(-(value-threshold)/tail)));
+}
+function at(frame:RoadFrame,point:CrossPoint,corner?:CornerFrame):V3 {
+    const x=corner?cornerProfileX(point.x,corner):point.x;
+    return add(frame.position,add(mul(corner?.right||frame.right,x),mul(frame.up,point.y)));
 }
 function signedArea(points:CrossPoint[]):number {
     let area=0;for(let i=0;i<points.length;i++){
@@ -115,6 +190,7 @@ export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,close
     const widths=frames.map((_,i)=>Math.max(.05,(finite(settings.width,6)+(tapered?settings.endWidth-settings.width:0)*i/(frames.length-1))*
         Math.max(.01,finite(settings.widthAt?.(i,frames.length)??1,1))));
     const sections=widths.map(w=>crossSection(w,settings));
+    const corners=buildRoadCornerFrames(frames,settings,closed);
     const bands=sections[0].length-(settings.thickness>0?0:1);
     out.bands=bands;
     const push=(p:V3,n:V3,u:number,v:number):void=>{positions.push(p.x,p.y,p.z);normals.push(n.x,n.y,n.z);uvs.push(u,v);};
@@ -123,7 +199,7 @@ export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,close
         for(let i=0;i<frames.length;i++){
             const frame=frames[i],profile=sections[i];
             const a=profile[band],b=profile[(band+1)%profile.length];
-            const pa=at(frame,a),pb=at(frame,b);
+            const pa=at(frame,a,corners[i]),pb=at(frame,b,corners[i]);
             const across=sub(pb,pa);
             // For local +Z travel, forward x across (+X) is +Y (top-facing).
             const n=norm(cross(frame.forward,across));
@@ -148,7 +224,7 @@ export function buildRoadGeometry(frames:RoadFrame[],settings:RoadSettings,close
             const extent=widths[side===0?0:widths.length-1]/2+positive(settings.shoulderWidth,0)+positive(settings.curbWidth,0);
             for(const p of profile){
                 const uv=roadUV((p.x+extent)/(2*extent),p.y,settings);
-                push(at(f,p),n,uv[0],uv[1]);
+                push(at(f,p,corners[side===0?0:corners.length-1]),n,uv[0],uv[1]);
             }
             // 2-D profile is clockwise when viewed along +Z. +Z travel means
             // desired end cap is +Z and start cap -Z.
