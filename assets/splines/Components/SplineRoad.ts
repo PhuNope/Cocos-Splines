@@ -1,9 +1,14 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils, Enum } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
-import { buildRoadGeometry, RoadFrame } from '../Core/SplineRoadMath';
+import { buildRoadGeometry, RoadFrame, RoadUvDirection, RoadCornerMode } from '../Core/SplineRoadMath';
 import { SplineModifiers } from './SplineModifiers';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
+import { estimateMinimumBendRadius } from '../Core/SplineStableFrames';
 Enum(SplinePositionMode);
+Enum(RoadUvDirection);
+Enum(RoadCornerMode);
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Live editable roadway, inspired by a road surface generator. Generates transient Mesh,
@@ -28,13 +33,25 @@ export class SplineRoad extends Component {
     @property({min:0,tooltip:'Curb height above the road surface; 0 disables curbs.'}) curbHeight=0.15;
     @property({min:0,tooltip:'Road volume depth; 0 makes an open road surface.'}) thickness=0.25;
     @property({min:2,max:128,step:1,tooltip:'How many longitudinal mesh samples per Bezier segment.'}) samplesPerCurve=16;
+    @property({type:Enum(RoadCornerMode),tooltip:'Legacy: original ribbon mesh. Join And Trim: miter corners to close outside gaps, smoothly trim inner overlap when width exceeds bend radius. Not a full mesh Boolean for hairpins/crossings.'})
+    cornerMode:RoadCornerMode=RoadCornerMode.Legacy;
+    @property({range:[.5,.99,.01],slide:true,tooltip:'How close inner road edges may approach the center of a tight turn (0.5–0.99). Lower values trim more and reduce overlap; default 0.93.'})
+    cornerTrimSafety=.93;
     @property({range:[0,1,.001],slide:true}) startProgress=0;
     @property({range:[0,1,.001],slide:true}) endProgress=1;
     @property({type:Enum(SplinePositionMode),tooltip:'Normalized Distance (legacy), Distance in local units, or geometric Spline t.'})
     rangeMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({min:0,tooltip:'Start distance when Range Mode = Distance.'}) startDistance=0;
     @property({min:0,tooltip:'End distance when Range Mode = Distance. The interval is clamped to current spline length.'}) endDistance=10;
-    @property({min:.001,tooltip:'Meters of path per one repeat of road texture V coordinate.'}) uvMetersPerRepeat=5;
+    @property({min:.001,tooltip:'World-space road distance per texture repetition along the selected Length UV axis (U or V).'}) uvMetersPerRepeat=5;
+    @property({type:Enum(RoadUvDirection),tooltip:'Length Along V: texture is vertical (legacy); Length Along U: texture is horizontal. UV axis for spline direction.'})
+    uvDirection:RoadUvDirection=RoadUvDirection.LengthAlongV;
+    @property({min:.001,tooltip:'Number of texture repeats across the complete road width (default 1). Does not affect longitudinal repeat distance.'})
+    uvWidthTiles=1;
+    @property({tooltip:'Reverse texture direction across the width of the road.'}) uvReverseAcross=false;
+    @property({tooltip:'Reverse texture direction along the spline. Requires Repeat wrapping for negative UV values.'}) uvReverseLength=false;
+    @property({tooltip:'Offset the final texture U coordinate.'}) uvOffsetU=0;
+    @property({tooltip:'Offset the final texture V coordinate.'}) uvOffsetV=0;
     @property({type:Material,tooltip:'Assign asphalt / road material with tiled texture. Uses default dark asphalt color when empty.'}) roadMaterial:Material|null=null;
     @property({type:Color,tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
     @property({tooltip:'Close the start/end edges for open road slabs.'}) capEnds=true;
@@ -75,7 +92,56 @@ export class SplineRoad extends Component {
             this._boundMaterial=null;
         }
     }
+    /** Top-asphalt ring vertices from the ACTUAL generated Road mesh. Junction
+     * UV matching reads these instead of approximating a new projection. */
+    private _junctionRings: Array<{
+        distance:number;
+        left:Vec3;right:Vec3;
+        leftUV:[number,number];rightUV:[number,number];
+    }> = [];
     private _revision='';
+    /** Detect UV, width, transform and spline changes from JunctionMesh without
+     * exposing the private Road mesh or mutating its Material. */
+    public getJunctionUVRevision():string{return this.signature();}
+    /** Returns two actual Road cross-sections: one at the patch edge, and one
+     * nearer its center. UV and positions match the rendered asphalt strip,
+     * including width modifiers, corner trim, nonuniform scale and UV flips.
+     * When the Road range excludes the requested endpoint, no match exists. */
+    public sampleJunctionUV(atStart:boolean,setback:number,blendStart:number):{
+        outer:{left:{position:Vec3;uv:[number,number]};right:{position:Vec3;uv:[number,number]}};
+        inner:{left:{position:Vec3;uv:[number,number]};right:{position:Vec3;uv:[number,number]}};
+    }|null {
+        const source=this.getSpline();
+        if(!source||source.count<2)return null;
+        const [begin,end]=toNormalizedRange(source,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
+        if(atStart?begin>1e-5:end<1-1e-5)return null;
+        if(this._revision!==this.signature())this.rebuild();
+        const rings=this._junctionRings,n=rings.length;
+        if(n<3)return null;
+        const total=rings[n-1].distance;
+        if(total<1e-6)return null;
+        const dist=(i:number)=>atStart?rings[i].distance:total-rings[i].distance;
+        // Leave at least one sampled Road ring beyond the outer boundary.
+        const target=Math.min(Math.max(0.01,setback),total*.85);
+        let outerIndex=1,best=Infinity;
+        for(let i=1;i<n-1;i++){
+            const error=Math.abs(dist(i)-target);
+            if(error<best){best=error;outerIndex=i;}
+        }
+        const innerTarget=dist(outerIndex)*Math.max(.05,Math.min(.9,blendStart));
+        let innerIndex=atStart?0:n-1;best=Infinity;
+        for(let i=0;i<n;i++){
+            if(dist(i)>=dist(outerIndex)-1e-6)continue;
+            const error=Math.abs(dist(i)-innerTarget);
+            if(error<best){best=error;innerIndex=i;}
+        }
+        const toEdge=(i:number)=>{
+            const ring=rings[i],world=(v:Vec3)=>Vec3.transformMat4(new Vec3(),v,this.node.worldMatrix);
+            return {left:{position:world(ring.left),uv:[...ring.leftUV] as [number,number]},
+                right:{position:world(ring.right),uv:[...ring.rightUV] as [number,number]}};
+        };
+        return {outer:toEdge(outerIndex),inner:toEdge(innerIndex)};
+    }
 
     public getSpline():SplineContainer|null{
         if(this.spline)return this.spline;
@@ -95,8 +161,9 @@ export class SplineRoad extends Component {
         const s=this.getSpline(),a=s?.node.worldMatrix,b=this.node.worldMatrix;
         const matrix=(m:Mat4|undefined)=>m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:[];
         return JSON.stringify([s?.getRevision(),matrix(a),matrix(b),this.width,this.endWidth,this.shoulderWidth,this.shoulderDrop,
-            this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.startProgress,
-            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.capEnds,this.gizmoEdgeLimit]);
+            this.curbWidth,this.curbHeight,this.thickness,this.modifiers?.getRevision(),this.samplesPerCurve,this.cornerMode,this.cornerTrimSafety,this.startProgress,
+            this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.uvDirection,
+            this.uvWidthTiles,this.uvReverseAcross,this.uvReverseLength,this.uvOffsetU,this.uvOffsetV,this.capEnds,this.gizmoEdgeLimit]);
     }
     public onDrawGizmosSelected():void {
         if(!this.showMeshGizmos)return;
@@ -104,6 +171,7 @@ export class SplineRoad extends Component {
     }
     private clearMesh():void{
         this._meshGizmo=null;
+        this._junctionRings=[];
         const renderer=this.getComponent(MeshRenderer);
         if(renderer&&this._mesh&&renderer.mesh===this._mesh)renderer.mesh=null;
         if(this._mesh){this._mesh.destroy();this._mesh=null;}
@@ -123,43 +191,52 @@ export class SplineRoad extends Component {
             const offset=Vec3.add(new Vec3(),origin,vec);
             Vec3.transformMat4(offset,offset,inv);return Vec3.subtract(new Vec3(),offset,local);
         };
+        const worldFrames=createWorldFrameField(source,begin,end,count);
+        const minRadius=estimateMinimumBendRadius(worldFrames.frames);
+        const maxWidthMultiplier=this.modifiers?Math.max(1,...worldFrames.frames.map(f=>
+            Math.max(.01,this.modifiers!.sample(f.t).width))):1;
+        const halfExtent=Math.max(.05,this.width,this.endWidth>0?this.endWidth:0)*maxWidthMultiplier*.5
+            +Math.max(0,this.shoulderWidth)+Math.max(0,this.curbWidth);
+        if(EDITOR_NOT_IN_PREVIEW && minRadius<halfExtent){
+            console.warn('[SplineRoad] Very tight bend: road half-width exceeds the bend radius. '
+                +(this.cornerMode===RoadCornerMode.JoinAndTrim
+                    ? 'Join And Trim compresses the inner edge, but extreme hairpins or 3D self-intersections may still require a custom mesh.'
+                    : 'Enable Corner Mode = Join And Trim, widen the bend or reduce road width.'));
+        }
         let previousWorld:Vec3|null=null,worldDistance=0;
         for(let i=0;i<=count;i++){
-            const t=begin+(end-begin)*i/count;
-            const world=source.evaluateWorldPosition(t),local=Vec3.transformMat4(new Vec3(),world,inv);
+            const f=worldFrames.frames[i],world=new Vec3(f.position.x,f.position.y,f.position.z);
+            const local=Vec3.transformMat4(new Vec3(),world,inv);
             if(previousWorld)worldDistance+=Vec3.subtract(new Vec3(),world,previousWorld).length();
             previousWorld=world;
-            const sourcePos=source.evaluatePosition(t);
-            const tangent=source.evaluateTangent(t);
-            const sourceEnd=Vec3.add(new Vec3(),sourcePos,tangent);
-            const worldEnd=Vec3.transformMat4(new Vec3(),sourceEnd,source.node.worldMatrix);
-            Vec3.subtract(tangent,worldEnd,world);
-            if(tangent.lengthSqr()<1e-8)tangent.set(0,0,1);
-            Vec3.normalize(tangent,tangent);
-            const up=source.evaluateUp(t);
-            // Spline up is container-local; rotate it to world, then orthogonalize.
-            const upEnd=Vec3.add(new Vec3(),sourcePos,up);
-            Vec3.transformMat4(upEnd,upEnd,source.node.worldMatrix);
-            Vec3.subtract(up,upEnd,world);
-            if(up.lengthSqr()<1e-8)up.set(0,1,0);
-            const flat=Vec3.multiplyScalar(new Vec3(),tangent,Vec3.dot(tangent,up));
-            Vec3.subtract(up,up,flat);
-            if(up.lengthSqr()<1e-7){up.set(0,1,0);if(Math.abs(Vec3.dot(up,tangent))>.98)up.set(1,0,0);
-                Vec3.subtract(up,up,Vec3.multiplyScalar(new Vec3(),tangent,Vec3.dot(up,tangent)));}
-            Vec3.normalize(up,up);
-            const right=Vec3.cross(new Vec3(),up,tangent);
-            Vec3.normalize(right,right);
-            Vec3.cross(up,tangent,right);Vec3.normalize(up,up);
-            const forwardLocal=transformBasis(world,tangent,local),rightLocal=transformBasis(world,right,local),upLocal=transformBasis(world,up,local);
+            const forwardLocal=transformBasis(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local);
+            const rightLocal=transformBasis(world,new Vec3(f.right.x,f.right.y,f.right.z),local);
+            const upLocal=transformBasis(world,new Vec3(f.up.x,f.up.y,f.up.z),local);
             frames.push({position:local,forward:forwardLocal,right:rightLocal,up:upLocal,distance:worldDistance});
         }
         const geometry=buildRoadGeometry(frames,{
             width:this.width,endWidth:this.endWidth,shoulderWidth:this.shoulderWidth,shoulderDrop:this.shoulderDrop,
             curbWidth:this.curbWidth,curbHeight:this.curbHeight,thickness:this.thickness,
             widthAt:this.modifiers?(i,n)=>this.modifiers!.sample(begin+(end-begin)*(n<=1?0:i/(n-1))).width:undefined,
-            capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end
+            cornerMode:this.cornerMode,cornerTrimSafety:this.cornerTrimSafety,
+            capEnds:this.capEnds,uvLength:this.uvMetersPerRepeat,startProgress:begin,endProgress:end,
+            uvDirection:this.uvDirection,uvWidthTiles:this.uvWidthTiles,uvReverseAcross:this.uvReverseAcross,
+            uvReverseLength:this.uvReverseLength,uvOffsetU:this.uvOffsetU,uvOffsetV:this.uvOffsetV
         },source.closed&&begin===0&&end===1);
         if(!geometry.indices.length){this.clearMesh();this._revision=this.signature();return;}
+        // Extract the actual top-asphalt band (two vertices per Road ring).
+        // The number of preceding profile bands is deterministic for the road
+        // shoulder/curb settings; using generated positions preserves mitering.
+        const asphaltBand=(this.shoulderWidth>0?1:0)+(this.curbWidth>1e-6&&this.curbHeight>1e-6?2:0);
+        const stride=frames.length*2,asphaltBase=asphaltBand*stride;
+        this._junctionRings=frames.map((f,i)=>{
+            const offset=(asphaltBase+i*2)*3,uvOffset=(asphaltBase+i*2)*2;
+            return {distance:f.distance,
+                left:new Vec3(geometry.positions[offset],geometry.positions[offset+1],geometry.positions[offset+2]),
+                right:new Vec3(geometry.positions[offset+3],geometry.positions[offset+4],geometry.positions[offset+5]),
+                leftUV:[geometry.uvs[uvOffset],geometry.uvs[uvOffset+1]] as [number,number],
+                rightUV:[geometry.uvs[uvOffset+2],geometry.uvs[uvOffset+3]] as [number,number]};
+        });
         this._meshGizmo=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({positions:geometry.positions,normals:geometry.normals,uvs:geometry.uvs,indices:geometry.indices});
         const old=this._mesh;

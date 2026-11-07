@@ -1,5 +1,7 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, gfx, utils, Enum } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 import { deformMesh, MeshGeometry, Frame, MeshAxis, UVMode } from '../Core/SplineMeshDeformMath';
@@ -141,17 +143,15 @@ export class SplineMeshDeform extends Component {
                 normals:smoothNormals&&smoothNormals.length===pos.length?smoothNormals:undefined};
             if(data.uvs&&data.uvs.length!==data.positions.length/3*2)throw Error('Source UV0 must be 2-component FLOAT32; disable compressed UVs.');
             const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
+            // A continuously transported frame prevents cross-section flips
+            // near vertical tangents or on rolling / looping splines.
+            const frameField=createWorldFrameField(source,0,1,
+                Math.min(1024,Math.max(128,(Number.isFinite(source.segmentCount)?source.segmentCount:4)*24)));
             const frameAt=(t:number):Frame=>{
-                const position=source.evaluateWorldPosition(t);
-                const before=source.evaluateWorldPosition(Math.max(0,t-0.0003));
-                const after=source.evaluateWorldPosition(Math.min(1,t+0.0003));
-                const tangent=Vec3.subtract(new Vec3(),after,before);
-                if(tangent.lengthSqr()<1e-8)Vec3.transformQuat(tangent,source.evaluateTangent(t),source.node.worldRotation);
-                Vec3.normalize(tangent,tangent);
-                let up=source.evaluateUp(t);Vec3.transformQuat(up,up,source.node.worldRotation);
-                let right=Vec3.cross(new Vec3(),up,tangent);
-                if(right.lengthSqr()<1e-8)right.set(1,0,0);
-                Vec3.normalize(right,right);Vec3.cross(up,tangent,right);Vec3.normalize(up,up);
+                const f=frameField.at(t);
+                const position=new Vec3(f.position.x,f.position.y,f.position.z);
+                const right=new Vec3(f.right.x,f.right.y,f.right.z);
+                const up=new Vec3(f.up.x,f.up.y,f.up.z);
                 const center=Vec3.transformMat4(new Vec3(),position,inverse);
                 const side=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),position,right),inverse);
                 const height=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),position,up),inverse);
@@ -193,7 +193,7 @@ export class SplineMeshDeform extends Component {
             this._revision=signature;this._failedSignature='';
         }catch(error){
             this._failedSignature=signature;
-            console.warn('[SplineMeshDeform] '+this.node.name+': '+String(error));
+            if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineMeshDeform] '+this.node.name+': '+String(error));
         }
     }
     onDestroy():void{

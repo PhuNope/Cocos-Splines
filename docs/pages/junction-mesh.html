@@ -1,3 +1,141 @@
 <!doctype html>
-<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="Vá bề mặt XZ ở đường giao nhau, giới hạn hiện tại và thông số dựng patch." name="description"/><title>Junction Mesh | Cocos Splines Docs</title><link href="../assets/style.css" rel="stylesheet"/></head><body><div class="app"><aside class="sidebar"><a class="brand" href="../index.html"><span class="logo">S</span>Cocos Splines</a><div class="version">HƯỚNG DẪN &amp; API · Cocos Creator ≥ 3.8.2</div><input aria-label="Tìm trang" class="search" id="nav-search" placeholder="Tìm trang... ( / )"/><nav><div class="group-label">Bắt đầu</div><a class="navlink" href="../index.html">Tổng quan</a><a class="navlink" href="install.html">Cài đặt &amp; cấu trúc</a><a class="navlink" href="core.html">Spline Container &amp; Knot</a><a class="navlink" href="coordinates.html">t, Distance, Progress</a><div class="group-label">Di chuyển &amp; events</div><a class="navlink" href="animate.html">Spline Animate</a><a class="navlink" href="junction.html">Junction / Routing</a><a class="navlink" href="events.html">Trigger &amp; Events</a><a class="navlink" href="positioner.html">Positioner / Projector</a><a class="navlink" href="length-modifiers.html">Length Monitor / Modifiers</a><div class="group-label">Hình học &amp; bố trí</div><a class="navlink" href="road.html">Road &amp; Extrude</a><a class="navlink" href="deform.html">Mesh Deform</a><a class="navlink" href="objects.html">Instantiate / Object Controller</a><a class="navlink" href="bender.html">Object Bender</a><a class="navlink" href="morph.html">Spline Morph</a><a class="navlink active" href="junction-mesh.html">Junction Mesh</a><a class="navlink" href="2d-gizmos.html">Spline 2D / Gizmos</a><div class="group-label">Tham khảo</div><a class="navlink" href="api.html">API Reference</a><a class="navlink" href="examples.html">Ví dụ TypeScript</a><a class="navlink" href="train.html">Example: Đoàn tàu nhiều toa</a><a class="navlink" href="troubleshooting.html">Xử lý lỗi</a></nav><div class="bottom">Cocos Splines · Hướng dẫn sử dụng</div></aside><div class="wrap"><div class="topbar"><span>DOCS / <b>Junction Mesh</b></span><span class="pill">API</span></div><main class="article"><div class="eyebrow">Cocos Creator ≥ 3.8.2 · Hướng dẫn &amp; API</div><h1>Junction Mesh</h1><p class="lead">Vá bề mặt XZ ở đường giao nhau, giới hạn hiện tại và thông số dựng patch.</p><h2>Junction Mesh patch</h2><p>Tạo một bề mặt vá nối các hướng Road gặp nhau ở Junction trên mặt phẳng XZ. Phù hợp 2–4 nhánh tương đối phẳng, không phải boolean union/weld thực sự.</p><table><thead><tr><th>Thuộc tính</th><th>Ý nghĩa</th></tr></thead><tbody><tr><td>junction</td><td>Junction chứa các connection</td></tr><tr><td>material</td><td>Material dùng chung với Road</td></tr><tr><td>setback</td><td>Khoảng lùi từ tâm giao lộ</td></tr><tr><td>defaultWidth</td><td>Bề rộng fallback cho đường nhánh</td></tr><tr><td>surfaceLift</td><td>Nâng patch để tránh z-fighting</td></tr><tr><td>tolerance</td><td>Sai số vị trí connection được coi đồng vị trí</td></tr></tbody></table><pre><code>junctionMesh.rebuild();
-junctionMesh.clear();</code></pre><div class="callout warn">Nếu nhánh không giao nhau tại world position giống nhau, hoặc junction là đường 3D phân tầng, thuật toán patch có thể không phù hợp.</div><h2>Khung lưới Gizmos</h2><p>Chọn Node chứa Junction Mesh để xem wireframe của mesh đã tạo trong Scene Editor (cần Cocos-Gizmos). Bật <code>Show Mesh Gizmos</code> và tùy chỉnh <code>Gizmo Edge Limit</code> trong Inspector. Hình gizmos chỉ là trợ giúp biên tập; không sinh thêm MeshRenderer hay Material.</p></main><footer class="page-footer"><span>← <a href="morph.html">Spline Morph</a></span><span><a href="2d-gizmos.html">Spline 2D / Gizmos</a> →</span></footer></div></div><script src="../assets/search.js"></script></body></html>
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="Ngã ba/ngã tư Road, Road-Matched UV liên tục, ví dụ asphalt với cùng Material, và giới hạn mesh giao lộ." name="description"/><title>Junction Mesh | Cocos Splines Docs</title><link href="../assets/style.css" rel="stylesheet"/></head><body><div class="app"><aside class="sidebar"><a class="brand" href="../index.html"><span class="logo">S</span>Cocos Splines</a><div class="version">HƯỚNG DẪN &amp; API · Cocos Creator ≥ 3.8.2</div><input aria-label="Tìm trang" class="search" id="nav-search" placeholder="Tìm trang... ( / )"/><nav><div class="group-label">Bắt đầu</div><a class="navlink" href="../index.html">Tổng quan</a><a class="navlink" href="install.html">Cài đặt &amp; cấu trúc</a><a class="navlink" href="core.html">Spline Container &amp; Knot</a><a class="navlink" href="coordinates.html">t, Distance, Progress</a><div class="group-label">Di chuyển &amp; events</div><a class="navlink" href="animate.html">Spline Animate</a><a class="navlink" href="junction.html">Junction / Routing</a><a class="navlink" href="events.html">Trigger &amp; Events</a><a class="navlink" href="positioner.html">Positioner / Projector</a><a class="navlink" href="length-modifiers.html">Length Monitor / Modifiers</a><div class="group-label">Hình học &amp; bố trí</div><a class="navlink" href="road.html">Spline Road</a><a class="navlink" href="extrude.html">Spline Extrude</a><a class="navlink" href="deform.html">Mesh Deform</a><a class="navlink" href="objects.html">Instantiate / Object Controller</a><a class="navlink" href="bender.html">Object Bender</a><a class="navlink" href="morph.html">Spline Morph</a><a class="navlink active" href="junction-mesh.html">Junction Mesh</a><a class="navlink" href="2d-gizmos.html">Spline 2D / Gizmos</a><div class="group-label">Tham khảo</div><a class="navlink" href="api.html">API Reference</a><a class="navlink" href="examples.html">Ví dụ TypeScript</a><a class="navlink" href="train.html">Example: Đoàn tàu nhiều toa</a><a class="navlink" href="troubleshooting.html">Xử lý lỗi</a></nav><div class="bottom">Cocos Splines · Hướng dẫn sử dụng</div></aside><div class="wrap"><div class="topbar"><span>DOCS / <b>Junction Mesh</b></span><span class="pill">API</span></div>
+<main class="article">
+<div class="eyebrow">Cocos Splines · Hướng dẫn &amp; API</div>
+<h1>Spline Junction Mesh — Giao lộ Road</h1>
+<p class="lead">Tạo một <strong>miếng mặt đường vá (surface patch)</strong> tại nơi nhiều Road gặp nhau. Trang này có sơ đồ ngã ba/ngã tư, demo thay đổi tham số trực tiếp, hướng dẫn dựng scene và API thực tế.</p>
+<div class="callout good"><strong>Có dùng với SplineRoad được không?</strong> <strong>Có.</strong> <code>UV Mode = Road Matched</code> (mới) lấy đúng vertex/UV của dải asphalt từ Road đã build để nối texture vào giao lộ. <code>World Projected</code> giữ nguyên hành vi cũ cho scene hiện tại. <strong>Vẫn không Boolean/weld, không tự cắt Road hoặc xử lý vạch làn tự động.</strong></div>
+<h2 id="junction-diagram">1. Hình dung giao lộ Road + Junction Mesh</h2>
+<figure class="junction-figure">
+<svg viewBox="0 0 780 330" role="img" aria-label="Sơ đồ ngã ba: ba Road màu xám gặp nhau; polygon tím ở tâm là Junction Mesh patch; mỗi Road vẫn là mesh riêng" xmlns="http://www.w3.org/2000/svg">
+<defs><pattern id="asphaltJ" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="#334856"/><path d="M0 14 L14 0" stroke="#5b6f77" stroke-opacity=".15" stroke-width="1"/></pattern><marker id="junctionArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="#9ee7ca" stroke-width="2"/></marker></defs>
+<!-- T-shaped 3-road junction viewed from above -->
+<g transform="translate(385 166)">
+<path d="M-290 0 H290" fill="none" stroke="url(#asphaltJ)" stroke-width="76" stroke-linecap="butt"/>
+<path d="M0 146 V0" fill="none" stroke="url(#asphaltJ)" stroke-width="76"/>
+<path d="M-290 0 H-97 M97 0 H290 M0 146 V95" stroke="#cad5cd" stroke-width="2.7" stroke-dasharray="16 12" fill="none"/>
+<path d="M-104 -38 L104 -38 L38 92 L-38 92 Z" stroke="#b49aff" stroke-width="3" fill="#a385ff" fill-opacity=".55"/>
+<path d="M-104 -38 L104 -38 L38 92 L-38 92 Z" stroke="#dfcfff" stroke-width="1" stroke-dasharray="5 4" fill="none"/>
+<circle cx="0" cy="0" r="7" fill="#fff3b3" stroke="#251e48" stroke-width="2"/>
+<path d="M-220 -65 L-140 -65" stroke="#9ee7ca" stroke-width="2" marker-end="url(#junctionArrow)"/>
+<path d="M130 -65 L210 -65" stroke="#9ee7ca" stroke-width="2" marker-end="url(#junctionArrow)"/>
+<path d="M65 120 L65 75" stroke="#9ee7ca" stroke-width="2" marker-end="url(#junctionArrow)"/>
+</g>
+<g fill="#e6f5ff" font-family="Arial, sans-serif" font-size="14" font-weight="bold"><text x="99" y="120">Road A</text><text x="623" y="120">Road B</text><text x="435" y="293">Road C</text></g>
+<path d="M495 49 L436 105" stroke="#e4d3ff" stroke-width="1.5"/><rect x="494" y="21" width="215" height="31" rx="7" fill="#1e2947" stroke="#a98bff"/><text x="506" y="42" font-size="13" fill="#edddff" font-family="Arial, sans-serif">Junction Mesh (màu tím)</text>
+<path d="M285 238 L381 176" stroke="#ffe29b" stroke-width="1.5"/><text x="110" y="251" fill="#ffe29b" font-size="13" font-family="Arial, sans-serif">Tâm các connection trùng nhau</text>
+</svg>
+<figcaption>Hình nhìn từ trên xuống, minh họa ngã ba đường phẳng XZ. Các Road vẫn là những mesh riêng; vùng tím là một mesh phủ lên tâm giao lộ.</figcaption>
+</figure>
+<div class="info-grid"><div class="item"><strong><span class="tag">SplineJunction</span> Routing</strong><span>Quản lý connection, hướng rẽ, sự kiện follower. <strong>Không</strong> tạo mặt đường.</span></div><div class="item"><strong><span class="tag">SplineJunctionMesh</span> Geometry</strong><span>Sinh bề mặt patch độc lập. <strong>Không</strong> quyết định nhánh follower chạy.</span></div><div class="item"><strong><span class="tag">SplineRoad</span> Branch</strong><span>Từng tuyến đường có mesh/Material/UV riêng. Patch chỉ che vùng nối giữa các tuyến.</span></div></div>
+<h2 id="junction-live-demo">2. Demo trực quan: ngã ba hoặc ngã tư</h2>
+<p>Thay đổi số nhánh, <code>setback</code> và bề rộng để xem <strong>đường biên polygon của patch</strong>. Demo là <em>sơ đồ 2D XZ mô phỏng nguyên lý từ <code>buildJunctionPatch()</code></em>; không phải renderer 3D của Cocos và không thực hiện cắt mesh Road.</p>
+<div class="junction-demo" id="junction-demo">
+<div class="junction-controls"><label>Loại giao lộ <select id="junction-demo-branches"><option value="3">Ngã ba (3 nhánh)</option><option value="4">Ngã tư (4 nhánh)</option></select></label>
+<label>Setback: <output id="junction-demo-setback-value">3</output> units<input id="junction-demo-setback" type="range" min="1" max="7" step="0.5" value="3"/></label>
+<label>Độ rộng mỗi nhánh: <output id="junction-demo-width-value">6</output> units<input id="junction-demo-width" type="range" min="3" max="10" step="0.5" value="6"/></label></div>
+<svg id="junction-demo-svg" viewBox="-250 -170 500 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bản vẽ mô phỏng patch Junction Mesh trên các Road"><text x="0" y="0" fill="#e2ebf2" text-anchor="middle">Sơ đồ giao lộ</text></svg>
+<p id="junction-demo-caption" class="junction-demo-summary" aria-live="polite">3 nhánh — polygon patch phủ ở tâm, Road giữ nguyên mesh.</p>
+<div class="junction-demo-legend"><span><i style="background:#4a6576"></i> Road</span><span><i style="background:#ae93f7"></i> Junction patch</span><span><i style="background:#f5d88a"></i> Tâm connection</span></div>
+</div>
+<h2 id="junction-setup">3. Ví dụ A — Tạo ngã ba Road phẳng</h2>
+<p>Giả sử 3 spline giao ở tọa độ thế giới <code>(0, 0, 0)</code>. Các đường nhánh <strong>không</strong> bắt buộc có cùng Node cha, nhưng 3 link trong Junction phải trỏ đúng spline.</p>
+<pre><code>Road_A (SplineContainer)
+└── Road_A_Mesh (SplineRoad + MeshRenderer)
+Road_B (SplineContainer)
+└── Road_B_Mesh (SplineRoad + MeshRenderer)
+Road_C (SplineContainer)
+└── Road_C_Mesh (SplineRoad + MeshRenderer)
+Junction_T (SplineJunction)
+└── Junction_Patch (SplineJunctionMesh + MeshRenderer)</code></pre>
+<ol>
+<li>Đặt <strong>knot cuối của Road_A</strong> tại <code>(0,0,0)</code>. Đặt <strong>knot đầu của Road_B/C</strong> cũng tại tọa độ này (world space); tiếp tuyến đi <em>ra khỏi</em> tâm của B/C.</li>
+<li>Thêm <code>SplineJunction</code> lên <code>Junction_T</code>. Trong <strong>Connections</strong>, đặt 3 link: <code>A → 1</code>, <code>B → 0</code>, <code>C → 0</code>, với <strong>Position Mode = Normalized Distance</strong>. <em>0 là đầu spline, 1 là cuối spline.</em></li>
+<li>Đặt <code>SplineRoad</code> với <code>Width = 6</code> ở các Node Road con trực tiếp của từng Container. Có thể dùng chung một <code>Material</code> asphalt.</li>
+<li>Thêm Node con <code>Junction_Patch</code> dưới <code>Junction_T</code>; gắn <code>SplineJunctionMesh</code> và <code>MeshRenderer</code>, kéo field <code>Junction</code> về <code>Junction_T</code> (có thể tự tìm ở cha).</li>
+<li>Đặt <code>Setback = 3</code>, <code>Default Width = 6</code>, <code>Surface Lift = 0.015</code>, <code>Tolerance = 0.15</code>. Để có UV khớp Road, chọn <code>UV Mode = Road Matched</code>, <code>UV Blend Start = 0.55</code>, gán <strong>đúng cùng Material asphalt</strong> như từng Road (Texture Wrap Repeat).</li>
+<li>Nhấn <strong>Rebuild</strong> tại component Junction Mesh. Bật <code>Show Mesh Gizmos</code> để xem viền tam giác. Dùng <code>Rebuild On Change</code> để cập nhật khi thay knot.</li>
+</ol>
+<div class="callout warn"><strong>Chú ý về mép nối:</strong> patch <strong>đè lên</strong> các đoạn đầu/cuối Road, chứ không tự cắt ngắn Road. Road Matched làm khớp UV tại biên khi dùng cùng texture Repeat, nhưng không thể khiến vạch kẻ của ba hướng chạy thẳng xuyên qua một vùng UV duy nhất. Với vạch phân làn phức tạp, vẫn nên dùng decal, mask hoặc Material giao lộ riêng.</div>
+<h2 id="junction-crossroads">4. Ví dụ B — Ngã tư, chữ Y và khi nào không nên dùng</h2>
+<table><thead><tr><th>Tình huống</th><th>Cách thiết lập</th><th>Kết quả mong đợi</th></tr></thead><tbody>
+<tr><td><strong>Ngã tư phẳng</strong></td><td>4 Connections, mỗi link ở một endpoint chung, có Road cùng bề rộng gần nhau.</td><td>Patch phủ tâm giao; bốn Road vẫn độc lập. Có thể dùng một Material asphalt không có vạch làn.</td></tr>
+<tr><td><strong>Ngã ba chữ Y</strong></td><td>3 endpoints cùng vị trí; hai nhánh tách ra ở góc đủ rộng, <code>setback</code> vừa phải.</td><td>Patch có thể che khe giữa các nhánh. Góc Y quá nhọn dễ gây tam giác dài hoặc UV kéo dãn.</td></tr>
+<tr><td><strong>Cầu vượt / giao lộ trên dốc lớn</strong></td><td>Các đường có cao độ khác nhau, có banking hoặc nằm chồng tầng.</td><td><strong>Không phù hợp.</strong> World Projected dựng patch XZ; Road Matched bám các biên Road ở vùng gần giao nhưng vẫn dùng đa giác XZ và fan tại tâm. Không nối hai tầng/đường cuộn 3D.</td></tr>
+<tr><td><strong>Junction giữa spline</strong></td><td>Connection progress nằm trong khoảng 0.05 đến 0.95.</td><td><strong>Không dùng để sinh patch:</strong> component chỉ xử lý connection ở gần đầu/cuối spline.</td></tr>
+<tr><td><strong>Đường rộng/curb khác nhau</strong></td><td><code>SplineRoad.width</code> thay đổi theo <code>endWidth</code> hoặc <code>Modifiers</code>; có shoulder/curb.</td><td><code>World Projected</code> chỉ dùng <code>road.width</code>. <code>Road Matched</code> lấy đúng hai vertex asphalt từ mesh đã dựng, kể cả đoạn taper, width modifier, Join And Trim; <strong>không</strong> hàn shoulder/curb.</td></tr>
+</tbody></table>
+<figure class="junction-figure"><svg viewBox="0 0 760 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ví dụ đường giao nhau tại hai độ cao khác nhau, không thể được hàn với patch phẳng XZ">
+<g transform="translate(22 22)"><rect width="340" height="180" rx="10" fill="#122d3d" stroke="#325267"/><text x="17" y="24" fill="#b7f1de" font-size="14" font-weight="bold">Phù hợp: các nhánh cùng cao độ</text><path d="M24 115 H316" stroke="#5a7485" stroke-width="50"/><path d="M170 158 V49" stroke="#5a7485" stroke-width="50"/><polygon points="129,91 211,91 195,140 145,140" fill="#ab89fa" stroke="#e0ceff" stroke-width="2"/><path d="M24 115 H112 M228 115 H316 M170 155 V143" stroke="#ebebe4" stroke-width="2" stroke-dasharray="11 8"/><text x="180" y="84" fill="#f7e9ff" font-size="12">Patch XZ</text></g>
+<g transform="translate(390 22)"><rect width="346" height="180" rx="10" fill="#122d3d" stroke="#325267"/><text x="17" y="24" fill="#ffc6ad" font-size="14" font-weight="bold">Không phù hợp: đường chồng tầng</text><path d="M25 132 L310 132" stroke="#61717b" stroke-width="41"/><path d="M190 52 L190 170" stroke="#659cc5" stroke-width="47" opacity=".9"/><path d="M166 93 L214 93" stroke="#ffc5a9" stroke-width="3" stroke-dasharray="5 5"/><path d="M222 78 L250 52" stroke="#ff9986" stroke-width="2.5"/><text x="252" y="51" fill="#ffb8a0" font-size="12">Khác Y</text><text x="35" y="165" fill="#cedee8" font-size="11">Đừng tạo patch nối 2 tầng!</text></g>
+</svg><figcaption>Sơ đồ minh họa. Đường chồng tầng hoặc cuộn 3D cần mesh giao riêng; Junction Mesh không giải quyết độ cao/độ xoắn.</figcaption></figure>
+<h2 id="junction-uv-matched">5. Road-Matched UV — nối texture Road tại giao lộ</h2>
+<p><strong>Vấn đề cũ:</strong> Road lấy UV theo <em>distance dọc spline + across bề rộng</em>, trong khi Junction Mesh chiếu X/Z. Cùng một Material nhưng hai cách chiếu khác nhau tạo đường nối texture rõ rệt, nhất là texture có vân hướng hoặc vạch sơn. <strong>Giải pháp mới:</strong> đặt <code>UV Mode = Road Matched</code> để đọc UV thực từ mesh Road.</p>
+<figure class="junction-figure"><svg viewBox="0 0 760 270" role="img" aria-label="UV Junction Mesh: cạnh ngoài khớp Road, dải màu xanh lá giữ UV Road, vùng tâm màu tím nội suy hướng UV giữa các nhánh" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="760" height="270" rx="12" fill="#122b3a"/><g transform="translate(379 130)">
+<path d="M-315 0 H315" stroke="#546f7e" stroke-width="82"/><path d="M0 132 V0" stroke="#546f7e" stroke-width="82"/>
+<path d="M-310 0 H-110 M110 0 H310 M0 132 V100" stroke="#cededc" stroke-dasharray="14 10" stroke-width="2.5"/>
+<polygon points="-112,-41 112,-41 41,104 -41,104" fill="#52b99b" fill-opacity=".58" stroke="#c7f7e4" stroke-width="2.4"/>
+<polygon points="-55,-21 55,-21 21,47 -21,47" fill="#ab85ec" fill-opacity=".87" stroke="#f0dcff" stroke-width="2.2"/>
+<path d="M-112 -41 L-55 -21 L-41 104 L-21 47 M112 -41 L55 -21 L41 104 L21 47" stroke="#f7f0dc" stroke-width="1" stroke-dasharray="5 5" fill="none"/>
+<g fill="#ffffff" font-size="11" font-family="Arial"><text x="-255" y="-53">Road A UV</text><text x="135" y="-53">Road B UV</text><text x="48" y="115">Road C UV</text><text x="0" y="11" text-anchor="middle" font-weight="bold">Blend</text></g></g>
+<rect x="16" y="233" width="15" height="12" fill="#52b99b"/><text x="38" y="244" fill="#ccefe5" font-size="12">Vành ngoài: sample đúng UV của Road</text>
+<rect x="374" y="233" width="15" height="12" fill="#ab85ec"/><text x="396" y="244" fill="#eadcff" font-size="12">Tâm: nội suy UV các nhánh</text></svg>
+<figcaption>Sơ đồ nguyên lý (không phải render engine). Đường biên xanh lá lấy đúng vị trí và UV ở asphalt Road. Vùng tím nối các hướng UV không đồng nhất bằng nội suy.</figcaption></figure>
+<ol>
+<li>Đặt <code>SplineRoad</code> trên Node của spline hoặc con trực tiếp. Mỗi Road cần có ít nhất hai Knot và <strong>phủ tới endpoint</strong> được nối (Progress chính xác <code>0</code> hoặc <code>1</code>). Không cắt Range trước endpoint.</li>
+<li>Cho các Road cùng dùng <strong>một Material asset</strong> có texture asphalt. Đặt <code>Wrap U = Repeat</code> và <code>Wrap V = Repeat</code> cho texture; đảm bảo Material sử dụng đúng channel UV0. Không dùng texture clamp.</li>
+<li>Trên mỗi Road tùy chỉnh độc lập <code>Length Along U</code> hoặc <code>Length Along V</code>, <code>UV Meters Per Repeat</code>, <code>UV Width Tiles</code>, <code>UV Reverse Across / Length</code>, <code>UV Offset U/V</code>. Junction tự lấy UV <em>sau khi áp dụng các thuộc tính này</em>; không cần xoay texture.</li>
+<li>Trên Junction Mesh, gán <strong>cùng Material</strong>; chọn <code>UV Mode = Road Matched</code>; đặt <code>Setback = 3–5</code> (đủ chỗ để tạo hai vòng Road), <code>UV Blend Start = 0.55</code>, <code>Surface Lift = 0.015</code>; nhấn <strong>Rebuild</strong>.</li>
+<li>Nếu giữa giao lộ bị kéo vân, điều chỉnh <code>UV Blend Start</code>: <code>0.35</code> cho vùng blend nhỏ hơn, <code>0.7</code> cho vùng blend lớn hơn. Tăng <code>Setback</code> một chút nếu đường quá rộng so với vùng patch.</li>
+</ol>
+<table><thead><tr><th>Chế độ</th><th>Mép nối Road</th><th>Tâm giao lộ</th><th>Khi dùng</th></tr></thead><tbody>
+<tr><td><code>World Projected</code> (mặc định)</td><td>UV XZ độc lập, dễ thấy seam</td><td>UV XZ đều</td><td>Giữ scene cũ hoặc patch có Material riêng</td></tr>
+<tr><td><code>Road Matched</code></td><td>Vị trí và UV lấy từ <strong>mesh asphalt thật</strong> (U/V, offset, reverse, width modifiers)</td><td>Dải ngoài nối UV Road; dải tâm pha UV có tính wrap</td><td>Asphalt dùng chung Material, cần liền texture tại các nhánh</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Giới hạn thực tế:</strong> seamless tại <em>biên patch–Road</em> nếu cùng Material + texture Repeat và các đoạn Road gần giao lộ đủ phẳng. Texture có vạch chia làn/chữ/họa tiết định hướng vẫn có thể méo ở <strong>tâm</strong>; không thể làm 3–4 hướng vạch kẻ trở thành một UV phẳng hoàn hảo. Patch vẫn phủ lên Road, không cắt/weld hoặc thêm decals. Nếu không tìm được Road, Road thiếu mesh/không phủ endpoint, chế độ này sẽ tự fallback sang <code>World Projected</code> và chỉ cảnh báo trong Scene Editor.</div>
+<h3 id="junction-script-example">Ví dụ TypeScript — cấu hình nhanh 3 nhánh</h3>
+<p>Nếu muốn tạo <code>connections</code> từ script, xem <a href="../examples/JunctionRoadPatchSetup.ts"><code>docs/examples/JunctionRoadPatchSetup.ts</code></a>. Script này nhận sẵn 3 spline, Junction, Patch và Material từ Inspector; method <code>configure()</code> tạo link A tại progress 1, B/C tại progress 0, rồi gọi <code>patch.rebuild()</code>. Nó <strong>không tự di chuyển knot</strong> và không sửa asset Mesh của các Road.</p>
+<pre><code>const entry = new SplineJunctionLink();
+entry.spline = incomingSpline;
+entry.positionMode = SplinePositionMode.NormalizedDistance;
+entry.progress = 1; // cuối Road A
+junction.connections = [entry, /* link Road B/C tại 0 */];
+patch.junction = junction;
+patch.setback = 3;
+patch.uvMode = JunctionUVMode.RoadMatched; // import từ SplineJunctionMesh
+patch.uvBlendStart = 0.55;
+patch.rebuild();</code></pre>
+<h2 id="junction-properties">6. API và Inspector — đầy đủ thuộc tính</h2>
+<table><thead><tr><th>Thuộc tính</th><th>Mặc định</th><th>Ý nghĩa / lưu ý</th></tr></thead><tbody>
+<tr><td><code>junction: SplineJunction | null</code></td><td><code>null</code></td><td>Đọc từ field này hoặc <code>SplineJunction</code> trên Node cha trực tiếp.</td></tr>
+<tr><td><code>material: Material | null</code></td><td><code>null</code></td><td>Material dùng cho patch. Để trống: fallback unlit; không tự sao chép Material của Road.</td></tr>
+<tr><td><code>setback: number</code></td><td><code>3</code></td><td>Chiều dài vươn ra từ mỗi connection theo hướng nhánh, world units.</td></tr>
+<tr><td><code>defaultWidth: number</code></td><td><code>6</code></td><td>Bề rộng dự phòng nếu không tìm được SplineRoad cùng Container hoặc child trực tiếp.</td></tr>
+<tr><td><code>surfaceLift: number</code></td><td><code>0.015</code></td><td>Nâng mesh theo world Y để hạn chế z-fighting. Quá cao sẽ thấy patch nổi.</td></tr>
+<tr><td><code>uvMode: JunctionUVMode</code></td><td><code>WorldProjected</code></td><td><code>WorldProjected</code> là chế độ cũ; <code>RoadMatched</code> dùng UV của các SplineRoad nối vào.</td></tr>
+<tr><td><code>uvBlendStart: number</code></td><td><code>0.55</code></td><td>Bán kính vùng ring trong khi blend, tỉ lệ theo outer ring. 0.1–0.9. Chỉ dùng trong RoadMatched.</td></tr>
+<tr><td><code>uvMetersPerRepeat: number</code></td><td><code>5</code></td><td>Chu kỳ UV XZ của <code>WorldProjected</code>; bị bỏ qua trong <code>RoadMatched</code> vì lấy UV trực tiếp từ Road.</td></tr>
+<tr><td><code>tolerance: number</code></td><td><code>0.5</code></td><td>Sai số tối đa giữa connection center và center đầu tiên; quá sai → mesh bị xóa.</td></tr>
+<tr><td><code>rebuildOnChange: boolean</code></td><td><code>true</code></td><td>Tự rebuild khi connection/transform/thuộc tính hình học thay đổi.</td></tr>
+<tr><td><code>showMeshGizmos: boolean</code></td><td><code>true</code></td><td>Hiện wireframe nếu có Cocos-Gizmos.</td></tr>
+<tr><td><code>gizmoEdgeLimit: number</code></td><td><code>240</code></td><td>Giới hạn số cạnh Gizmos hiển thị.</td></tr>
+</tbody></table>
+<pre><code>// Có thể gọi từ component của project:
+const patch: SplineJunctionMesh = /* tham chiếu tới component */;
+patch.rebuild(); // Tạo/cập nhật mesh riêng của giao lộ
+patch.clear();   // Xóa mesh đã sinh; không xóa Road của các nhánh
+</code></pre>
+<h2 id="junction-troubleshoot">7. Nếu patch không hiển thị hoặc không đẹp</h2>
+<table><thead><tr><th>Triệu chứng</th><th>Cách xử lý</th></tr></thead><tbody>
+<tr><td>Không tạo mesh</td><td>Đảm bảo ít nhất 2 connection hợp lệ, spline có &gt; 1 knot, nằm tại endpoint (progress ≈ 0 hoặc 1), cùng world position trong <code>tolerance</code>, và có MeshRenderer.</td></tr>
+<tr><td>Không lấy đúng chiều rộng Road</td><td>Chọn <code>RoadMatched</code> để khớp vertex asphalt của Road, kể cả endWidth/Modifiers. Trong <code>WorldProjected</code> chỉ dùng width cơ bản. Road phải ở Container hoặc con trực tiếp.</td></tr>
+<tr><td>Texture bị lệch tại biên / đổi hướng</td><td>Gán <strong>cùng shared Material asset</strong>, bật <code>UV Mode = Road Matched</code>, texture <code>Wrap U/V = Repeat</code>, Road phủ đến endpoint, <code>Setback</code> phù hợp. UV được lấy trực tiếp từ Road thay vì XZ.</td></tr>
+<tr><td>Vạch chia làn méo ở tâm</td><td>Điều chỉnh <code>UV Blend Start</code> hoặc dùng decal/texture giao lộ không có vạch kẻ; nội suy UV không thể giữ đồng thời ba hướng vạch thẳng.</td></tr>
+<tr><td>Nhấp nháy ở tâm</td><td>Tăng <code>surfaceLift</code> chút ít (vd. 0.015–0.03); hoặc cắt thủ công đầu Road cho khỏi chồng. Nâng patch quá cao gây cảm giác nổi.</td></tr>
+<tr><td>Patch có góc cạnh / tam giác kéo dài</td><td>Giảm <code>setback</code>, kiểm tra góc các nhánh, đặt các endpoint trùng nhau, tránh nhánh gần chồng hướng.</td></tr>
+<tr><td>Road lên dốc, giao lộ nghiêng</td><td>WorldProjected dùng XZ; RoadMatched lấy mép Road 3D nhưng vẫn dựa trên polygon XZ nối tâm. Với giao lộ dốc lớn, bank, xoắn hoặc hai tầng cần custom mesh.</td></tr>
+<tr><td>Xe không rẽ nhánh</td><td>Đây là vấn đề <a href="junction.html">Junction / Routing</a> và <code>SplineAnimate.Junction Mode</code>, không phải JunctionMesh.</td></tr>
+</tbody></table>
+<div class="callout"><strong>Liên quan:</strong> <a href="road.html">SplineRoad (UV, Join And Trim, helix)</a> · <a href="junction.html">Junction / Routing</a> · <a href="2d-gizmos.html">Gizmos</a>.</div>
+</main><footer class="page-footer"><span>← <a href="morph.html">Spline Morph</a></span><span><a href="2d-gizmos.html">Spline 2D / Gizmos</a> →</span></footer></div></div><script src="../assets/search.js"></script><script defer src="../assets/junction-mesh-demo.js"></script></body></html>

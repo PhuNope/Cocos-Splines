@@ -1,6 +1,7 @@
 import { _decorator, Component, MeshRenderer, Mesh, Vec3, Mat4, Quat, Color, gfx, utils, Enum } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
+import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { DeformAxis } from './SplineMeshDeform';
 import { findStoredAttributeFormat, resolveAttributeFormatName, readPositionTriples, readUVPairs, VertexFormat } from '../Core/SplineMeshRead';
@@ -67,10 +68,10 @@ export class SplineObjectBender extends Component {
             if(!data||!indices)continue;
             const fmt=resolveAttributeFormatName(mesh.readAttributeFormat(0,attr),gfx.Format as any,findStoredAttributeFormat(mesh,0,attr)) as VertexFormat;
             let positions:number[],uvs:number[]=[];
-            try{positions=readPositionTriples(data,fmt);}catch(error){console.warn('[SplineObjectBender] unsupported mesh',renderer.node.name,error);continue;}
+            try{positions=readPositionTriples(data,fmt);}catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] unsupported mesh',renderer.node.name,error);continue;}
             const texName=gfx.AttributeName.ATTR_TEX_COORD,tex=mesh.readAttribute(0,texName);
             if(tex){const tf=resolveAttributeFormatName(mesh.readAttributeFormat(0,texName),gfx.Format as any,findStoredAttributeFormat(mesh,0,texName)) as VertexFormat;
-                try{uvs=readUVPairs(tex,tf);}catch(error){console.warn('[SplineObjectBender] unsupported UV; using 0',error);}}
+                try{uvs=readUVPairs(tex,tf);}catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] unsupported UV; using 0',error);}}
             const mat=renderer.node.worldMatrix,rootPositions:number[]=[];
             for(let i=0;i<positions.length;i+=3){
                 const world=Vec3.transformMat4(new Vec3(),new Vec3(positions[i],positions[i+1],positions[i+2]),mat);
@@ -100,7 +101,7 @@ export class SplineObjectBender extends Component {
         const spline=this.spline;
         if(!spline||spline.count<2)return;
         for(let n:import('cc').Node|null=spline.node;n;n=n.parent){
-            if(n===this.node){console.warn('[SplineObjectBender] The source spline must be outside the model hierarchy.');return;}
+            if(n===this.node){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] The source spline must be outside the model hierarchy.');return;}
         }
         this.capture();if(!this.originals.length)return;
         const axis=this.axis;
@@ -110,19 +111,29 @@ export class SplineObjectBender extends Component {
         let min=Infinity,max=-Infinity;
         for(const verts of partPositions){
             for(let i=axis;i<verts.length;i+=3){min=Math.min(min,verts[i]);max=Math.max(max,verts[i]);}}
-        if(max-min<1e-7){console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
+        if(max-min<1e-7){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
         const [start,end]=toNormalizedRange(spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         if(end<=start)return;
+        const stableFrames=(typeof spline.evaluateUp==='function'&&typeof spline.evaluateTangent==='function'&&typeof spline.evaluatePosition==='function')
+            ?createWorldFrameField(spline,start,end,Math.min(1024,Math.max(128,spline.segmentCount*24))):null;
         this._meshGizmos=[];
         for(let itemIndex=0;itemIndex<this.originals.length;itemIndex++){
             const item=this.originals[itemIndex];
             const childInverse=Mat4.invert(new Mat4(),item.renderer.node.worldMatrix);
             const localFrame2=(t:number):BendFrame=>{
                 const world=spline.evaluateWorldPosition(t);
-                const quat=spline.evaluateRotation(t);
-                const composed=new Quat();Quat.multiply(composed,spline.node.worldRotation,quat);
-                const right=Vec3.transformQuat(new Vec3(),new Vec3(1,0,0),composed);
-                const up=Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),composed);
+                let right:Vec3,up:Vec3;
+                if(stableFrames){
+                    const frame=stableFrames.at(t);
+                    right=new Vec3(frame.right.x,frame.right.y,frame.right.z);
+                    up=new Vec3(frame.up.x,frame.up.y,frame.up.z);
+                }else{
+                    // Compatibility for minimal custom SplineContainer shims.
+                    const quat=spline.evaluateRotation(t);
+                    const composed=new Quat();Quat.multiply(composed,spline.node.worldRotation,quat);
+                    right=Vec3.transformQuat(new Vec3(),new Vec3(1,0,0),composed);
+                    up=Vec3.transformQuat(new Vec3(),new Vec3(0,1,0),composed);
+                }
                 const p=Vec3.transformMat4(new Vec3(),world,childInverse);
                 const x=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),world,right),childInverse);
                 const y=Vec3.transformMat4(new Vec3(),Vec3.add(new Vec3(),world,up),childInverse);

@@ -20,7 +20,7 @@ try {
  const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls,requireComponent:()=>cls=>cls},Enum:x=>x,
   Component,MeshRenderer,Mesh,Material,Vec3,Quat,Mat4,Color,gfx:{},utils:{}};
  const loader=Module._load;
- Module._load=function(name,parent,isMain){if(name==='cc')return cc;return loader.call(this,name,parent,isMain);};
+ Module._load=function(name,parent,isMain){if(name==='cc')return cc;if(name==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};return loader.call(this,name,parent,isMain);};
  try {
   const cases=[['SplineRoad','roadMaterial'],['SplineExtrude','material'],['SplineMeshDeform','material']];
   for(const [name,key] of cases){

@@ -72,7 +72,7 @@ try{
  const noop=()=>{};const decorator=(...args)=>args.length>1?undefined:noop;
  const cc={_decorator:{ccclass:name=>cls=>{cls.__cocosName=name;return cls;},property:decorator,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls,requireComponent:()=>cls=>cls},Enum:x=>x,Node,Component,Vec3,Quat,Color,Mat4,Mesh,MeshRenderer,Material,gfx,utils:{createMesh:output=>{const mesh={output,destroy(){}};generated.push(mesh);return mesh;}}};
  const orig=Module._load;
- Module._load=function(name,parent,isMain){if(name==='cc')return cc;return orig.call(this,name,parent,isMain);};
+ Module._load=function(name,parent,isMain){if(name==='cc')return cc;if(name==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};return orig.call(this,name,parent,isMain);};
  try{
   const {SplineContainer,SplineDimension}=require(path.join(dir,'Core','SplineContainer.js'));
   const {SplineKnot,TangentMode}=require(path.join(dir,'Core','SplineKnot.js'));

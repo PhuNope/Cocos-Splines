@@ -37,10 +37,10 @@ export class SplineMorph extends Component {
         if(!a||!b||!c||a===b||a===c||b===c||a.count<2||b.count<2||c.count<2)return false;
         const target=c.knots;
         if(this._snapshot.length&&(target.length!==this._snapshot.length||target.some((k,i)=>k!==this._snapshot[i].knot))){
-            console.warn('[SplineMorph] Output knot structure changed during preview; restore first.');return false;
+            if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineMorph] Output knot structure changed during preview; restore first.');return false;
         }
         if(target.some(k=>k.hasTangentHandles)){
-            console.warn('[SplineMorph] Output knots must not use Tangent Handle Nodes.');return false;
+            if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineMorph] Output knots must not use Tangent Handle Nodes.');return false;
         }
         if(!this._snapshot.length)this._snapshot=target.map(k=>({knot:k,position:k.node.position.clone(),
             input:k.tangentIn.clone(),output:k.tangentOut.clone(),mode:k.mode,local:k.tangentsInKnotSpace}));

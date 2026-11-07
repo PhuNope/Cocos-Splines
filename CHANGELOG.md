@@ -1,3 +1,37 @@
+# 0.9.12 — Junction Mesh Road-Matched UV
+
+- Added opt-in `SplineJunctionMesh.uvMode = RoadMatched` and `uvBlendStart` Inspector controls. `WorldProjected` stays the default for existing scenes.
+- Junction patch uses **actual asphalt edge positions and UVs** from each linked `SplineRoad` mesh at outer and inner rings. Matches `Length Along U/V`, UV flips, offsets, width tiles, Road width modifiers and corner trim, with integer phase unwrapping for Repeat textures.
+- An inner fan blends the incompatible orientations of multiple Road branches without internal UV cuts. UV edge continuity needs the same shared Material + Repeat wrapping, with straight/smooth roads near connection endpoints.
+- Added fallback to legacy projected UV if any Road cannot be matched. Diagnostics only in Scene Editor.
+- Known limitation: different lane markings from three or more Road branches can still warp near the center; not a Boolean road union or automatic marking remover.
+- Added geometry, runtime component, editor and documentation regression tests.
+
+# 0.9.11 — Editor-only warnings
+
+- Component diagnostic `console.warn` messages are emitted only in the Cocos Scene Editor (`EDITOR_NOT_IN_PREVIEW`), never in Play/Preview or runtime builds.
+- Keep `console.error` for actual callback failures.
+- Added regression test for Editor-only Road tight-bend warning and a scan to keep future component warnings Editor-only.
+
+## 0.9.10 — Road sharp-bend corner join and inner-edge trim
+- Added SplineRoad Corner Mode: Legacy (default, unchanged scenes) / JoinAndTrim. Mitered section joins connect offset edge lines at local corners to reduce outside gaps. When the local bend radius is smaller than the road half-width, the inside profile is smoothly compressed to avoid folded/inverted inner-road triangles. Works with shoulder, curb, thickness, material, and U/V road UV orientation.
+- Corner Trim Safety (default 0.93, range 0.5–0.99) controls how much inner curvature clearance to retain. The method preserves source UVs and triangle indexing; compacting the inner width may compress the asphalt texture at extreme bends.
+- Tested right/left 90° joins, a radius-2 arc with width 6, flat and pitched sections, open endpoints, and loop seams. It is not a Boolean polygon union; near-180° hairpins, overlapping distant segments or 3D road intersections still require redesigned path/Junction geometry.
+- New settings are opt-in so existing scenes retain their geometry; runtime TS UUIDs preserved. No physical Editor validation yet.
+
+## 0.9.9 — Stable world-space mesh frames for steep splines
+- A shared continuous (parallel-transport) spline frame field fixes 180-degree right/up flips when a 3D spline is steep, loops, or its up hint becomes nearly tangent to the path.
+- Used by SplineRoad, SplineExtrude, SplineMeshDeform and SplineObjectBender; improved support for rotated/non-uniformly scaled source nodes, and closed-loop seam continuity.
+- Added a warning for extremely tight Road bends: if road half-width exceeds bend radius, the inside edge may self-intersect independently of the frame problem.
+- SplineJunctionMesh remains a planar XZ junction overlay, not a grade-aware 3D mesh; Spline2DPath is Canvas Graphics rather than 3D mesh extrusion.
+- New steep-grade, banking, closed seam and Road/Extrude component tests; runtime UUIDs unchanged. Live Cocos Editor rendering still needs validation.
+
+## 0.9.8 — Road UV orientation
+- SplineRoad supports Length Along U (horizontal source textures) or Length Along V (legacy/vertical) with continuous world-distance tiling.
+- Added width UV tiling, flip across/along, and UV U/V offsets. All defaults preserve existing road texture orientation and appearance.
+- Road Inspector, HTML docs, UV math and mock component regression tests updated.
+- No changes to existing script UUIDs; development branch only.
+
 ## 0.9.7
 - Visualize SplineModifiers with selected-only Gizmos: offset trajectory, configurable width guides, speed-colored key markers, optional roll/scale key axes.
 - Full Vietnamese modifier guide: per-field semantics, interpolation, consumer mapping, code/API, vehicle speed, road widening, lane change and prefab scale examples.

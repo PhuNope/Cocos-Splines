@@ -31,8 +31,9 @@ try{
  const noOp=()=>{};const deco=(...args)=>args.length>1?undefined:noOp;
  const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls,requireComponent:()=>cls=>cls},
   Enum:x=>x,Component,Node,Vec3,Mat4,Color,Material,Mesh,MeshRenderer,utils:{createMesh:d=>{meshCalls.push(d);return new Mesh(d);}}};
+ const env={EDITOR_NOT_IN_PREVIEW:false};
  const original=Module._load;
- Module._load=function(name,parent,isMain){if(name==='cc')return cc;return original.call(this,name,parent,isMain);};
+ Module._load=function(name,parent,isMain){if(name==='cc')return cc;if(name==='cc/env')return env;return original.call(this,name,parent,isMain);};
  try{
   const {SplineContainer}=require(path.join(out,'Core','SplineContainer.js'));
   const {SplineRoad}=require(path.join(out,'Components','SplineRoad.js'));
@@ -52,14 +53,95 @@ try{
   assert.notEqual(renderer.mesh,previous);assert.equal(meshCalls.length,2);
   road.roadMaterial=new Material();road.update();assert.equal(renderer.shared,road.roadMaterial,'custom material assigned');
   const {SplinePositionMode}=require(path.join(out,'Core','SplinePosition.js'));
+  // Inspector UV controls rebuild the mesh with a new orientation without changing geometry.
+  const geometryBeforeUV=meshCalls.at(-1);
+  road.uvDirection=1;road.update();
+  const geometryAfterUV=meshCalls.at(-1);
+  assert.notEqual(geometryAfterUV,geometryBeforeUV,'changing orientation rebuilds mesh');
+  assert.deepEqual(geometryAfterUV.positions,geometryBeforeUV.positions,'UV orientation does not change world geometry');
+  assert.equal(geometryAfterUV.uvs[16*4],2,'10 meters at 5 meters per repeat maps longitudinal coordinate to U=2');
+  assert.equal(geometryBeforeUV.uvs[16*4+1],2,'legacy longitudinal coordinate uses V');
+  road.uvWidthTiles=2;road.uvReverseAcross=true;road.uvOffsetV=.3;road.update();
+  assert.notEqual(meshCalls.at(-1),geometryAfterUV,'texture tiling / flips trigger rebuild');
+  // Junction must read actual top asphalt vertices + UVs from the generated
+  // Road mesh, not recompute UV with a new XZ projection.
+  const join=road.sampleJunctionUV(true,3,.55),endJoin=road.sampleJunctionUV(false,3,.55);
+  assert(join&&endJoin,'Both Road endpoints expose asphalt UV rings');
+  const topBandIndex=3, ringSize=17;
+  const verifyVertex=(edge)=>{
+   const data=renderer.mesh.data;
+   let hit=false;
+   for(let k=0;k<ringSize;k++)for(let side=0;side<2;side++){
+    const idx=topBandIndex*ringSize*2+k*2+side;
+    const p=data.positions.slice(idx*3,idx*3+3),uv=data.uvs.slice(idx*2,idx*2+2);
+    if(Math.hypot(edge.position.x-p[0],edge.position.y-p[1],edge.position.z-p[2])<1e-6){
+     assert.deepEqual(edge.uv,uv,'Road-Matched patch UV must equal generated Road UV');hit=true;
+    }
+   }
+   assert(hit,'Matching Road edge vertex exists in generated asphalt surface');
+  };
+  for(const joinSample of [join,endJoin])for(const ring of [joinSample.outer,joinSample.inner]){
+   verifyVertex(ring.left);verifyVertex(ring.right);
+  }
+  const rev=road.getJunctionUVRevision();road.uvOffsetU=.7;
+  assert.notEqual(road.getJunctionUVRevision(),rev,'Junction detects Road UV property change');
+  const shifted=road.sampleJunctionUV(true,3,.55);
+  assert(shifted&&Math.abs(shifted.outer.left.uv[0]-join.outer.left.uv[0]-.7)<1e-6,
+   'UV offsets reach Road-Matched junction without manual road rebuild');
   road.rangeMode=SplinePositionMode.Distance;road.startDistance=2;road.endDistance=6;
-  road.rebuild();const distanceGeometry=meshCalls.at(-1);
+  road.rebuild();assert.equal(road.sampleJunctionUV(true,3,.55),null,'Road crop excluding endpoint cannot be matched');
+  const distanceGeometry=meshCalls.at(-1);
   const distanceZ=distanceGeometry.positions.filter((_,i)=>i%3===2);
   assert(Math.min(...distanceZ)>1.99&&Math.max(...distanceZ)<6.01,'Road crop by distance controls generated geometry');
   road.rangeMode=SplinePositionMode.SplineT;road.startProgress=.5;road.endProgress=1;
   road.rebuild();const tZ=meshCalls.at(-1).positions.filter((_,i)=>i%3===2);
   assert(Math.min(...tZ)>2.49&&Math.max(...tZ)<10.01,'Road crop by cubic t converted through arc distance');
+  // Regression: a steep road passes through an almost vertical tangent.
+  // Previously per-ring `up x tangent` changed sign and flipped the surface.
+  const steep={...source,getRevision:()=>'steep-grade',length:10,
+   evaluatePosition:t=>new Vec3(2*Math.sin(Math.PI*t),2*(1-Math.cos(Math.PI*t)),0),
+   evaluateWorldPosition:t=>new Vec3(2*Math.sin(Math.PI*t),2*(1-Math.cos(Math.PI*t)),0),
+   evaluateTangent:t=>new Vec3(Math.cos(Math.PI*t),Math.sin(Math.PI*t),0),
+   evaluateUp:t=>new Vec3(0,1,0)};
+  road.spline=steep;road.rangeMode=SplinePositionMode.NormalizedDistance;
+  road.startProgress=0;road.endProgress=1;road.width=.8;road.thickness=0;
+  road.shoulderWidth=0;road.curbWidth=0;road.samplesPerCurve=100;
+  road.rebuild();
+  const steepMesh=renderer.mesh.data,steepCount=101;
+  const sectionDirection=i=>new Vec3(
+   steepMesh.positions[(i*2+1)*3]-steepMesh.positions[i*2*3],
+   steepMesh.positions[(i*2+1)*3+1]-steepMesh.positions[i*2*3+1],
+   steepMesh.positions[(i*2+1)*3+2]-steepMesh.positions[i*2*3+2]);
+  for(let i=1;i<steepCount;i++){
+   const a=sectionDirection(i-1),b=sectionDirection(i);
+   assert(Vec3.dot(a,b)>0,'Road cross sections remain consistently oriented over vertical grade');
+  }
+  // Runtime Play: no diagnostic warning even if the road crosses a tight bend.
+  // Scene Editor: diagnostic warning is visible for the exact same geometry.
+  const originalWarn=console.warn, warnings=[];
+  console.warn=(...args)=>warnings.push(args.map(String).join(' '));
+  try{
+   road.width=6;env.EDITOR_NOT_IN_PREVIEW=false;road.rebuild();
+   assert.equal(warnings.length,0,'runtime Play does not print spline road warnings');
+   env.EDITOR_NOT_IN_PREVIEW=true;road.rebuild();
+   assert(warnings.some(w=>w.includes('[SplineRoad] Very tight bend')),'Scene Editor displays tight-road warning');
+  }finally{console.warn=originalWarn;env.EDITOR_NOT_IN_PREVIEW=false;}
   road.onDestroy();assert.equal(renderer.mesh,null,'renderer cleared after destruction');
+  // Extrude shares the same continuous frame field (no ring twist on the slope).
+  const {SplineExtrude}=require(path.join(out,'Components','SplineExtrude.js'));
+  const extrude=new SplineExtrude();extrude.node=roadNode;extrude.spline=steep;
+  extrude.capEnds=false;extrude.segmentsPerCurve=100;extrude.sides=8;extrude.radius=.2;
+  extrude.rebuild();
+  const tube=renderer.mesh.data, stride=extrude.sides+1;
+  for(let i=1;i<=100;i++){
+   const ringCenter=steep.evaluateWorldPosition(i/100),priorCenter=steep.evaluateWorldPosition((i-1)/100);
+   const p=i*stride*3,q=(i-1)*stride*3;
+   const a=new Vec3(tube.positions[p]-ringCenter.x,tube.positions[p+1]-ringCenter.y,tube.positions[p+2]-ringCenter.z);
+   const b=new Vec3(tube.positions[q]-priorCenter.x,tube.positions[q+1]-priorCenter.y,tube.positions[q+2]-priorCenter.z);
+   assert(Vec3.dot(a,b)>0,'Extrude tube rings do not reverse near vertical tangent');
+  }
+  extrude.onDestroy();
+
   console.log('ROAD COMPONENT MOCK PASS: create mesh in lifecycle, rebuild on width, cleanup old GPU mesh and material binding.');
  }finally{Module._load=original;}
 }finally{fs.rmSync(out,{recursive:true,force:true});}

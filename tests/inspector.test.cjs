@@ -25,7 +25,7 @@ const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
 assert.equal(animate.template.match(/<ui-prop /g)?.length,30);
-for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){
+for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial','uvDirection','uvWidthTiles','uvReverseAcross','uvReverseLength','uvOffsetU','uvOffsetV']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){
  const inspector=require(root+'/dist/contributions/inspector/'+type+'.js');
  for(const name of names)assert(inspector.template.includes('spl-field-'+name),type+' missing '+name);
 }
@@ -56,3 +56,7 @@ for(const kind of ['Instantiate','ObjectController']){
 const benderPanel=require(root+'/dist/contributions/inspector/Bender.js');
 for(const k of ['spl-field-layout','spl-field-partGap'])assert(benderPanel.template.includes(k),`Bender missing ${k}`);
 console.log('INSPECTOR PASS: no dockable panel; stable native ui-prop rendering; inline spline controls + T/Distance.');
+
+// Road sharp-corner fix must be configurable in the custom Cocos Inspector.
+const roadInspectorSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../src/contributions/inspector/common.js'),'utf8');
+assert(roadInspectorSource.includes("title:'Sharp corners',fields:['cornerMode','cornerTrimSafety']"));

@@ -46,3 +46,18 @@ Nếu model import sai tỷ lệ, nhập `Tile Length` dương theo *world units
 ### SplineModifiers Gizmos & examples
 
 Select SplineModifiers with Cocos-Gizmos installed to preview cyan Offset trajectories, green Width multipliers, key markers colored by Speed, and optional Scale/Roll axes. The gizmo guides do not alter a mesh or move knots. See [`docs/pages/length-modifiers.html`](docs/pages/length-modifiers.html) for Inspector, API and worked examples (vehicle slowdowns, road widening, lane changes and object scaling).
+
+### Road UV cho texture đường nằm ngang (0.9.8)
+
+Trong `SplineRoad` chọn **UV Direction = Length Along U** nếu ảnh đường chạy ngang, hoặc **Length Along V** (mặc định) nếu ảnh chạy dọc. `UV Meters Per Repeat` điều khiển số units trên một lần lặp theo chiều dài spline; `UV Width Tiles` điều khiển số tile theo ngang đường. Có thể lật chiều và chỉnh `UV Offset U/V`. Texture nên đặt **Wrap Repeat** theo trục lặp. Xem `docs/pages/road.html`.
+
+### Đường cong dốc 3D (v0.9.9)
+Road, Extrude, MeshDeform và ObjectBender đã dùng frame liên tục để tránh xoắn/lật tiết diện tại tiếp tuyến gần thẳng đứng. Road sẽ cảnh báo nếu cua quá gắt gây chồng mép trong. JunctionMesh vẫn là surface patch cho các nhánh gần đồng phẳng, không hàn các mesh 3D. Xem `docs/pages/road.html` và `docs/pages/extrude.html`.
+
+### Road cua gấp (v0.9.10)
+
+Trong `SplineRoad` → **Sharp Corners**, đặt `Corner Mode = Join And Trim` để nối miter ở mép ngoài và thu gọn mép trong khi cua quá hẹp. `Corner Trim Safety = 0.93` là điểm bắt đầu tốt. Khi OFF/Legacy, mesh giữ nguyên như bản cũ. Chế độ này không phải Boolean union: cua chữ U rất gắt và đường tự cắt vẫn nên chỉnh spline hoặc xây giao lộ riêng. Xem `docs/pages/road.html`.
+
+### Junction Mesh nối UV của Road (v0.9.12)
+
+Trong `SplineJunctionMesh` chọn **UV Mode = Road Matched**, đặt **UV Blend Start = 0.55**, gán **cùng một Material** cho tất cả `SplineRoad` và Junction Mesh. Texture cần **Wrap U/V = Repeat**. Mesh patch lấy đúng vị trí và UV0 ở biên asphalt Road đã dựng, hỗ trợ UV Length Along U/V, đảo chiều, offset, Width Tiles và Width Modifiers. Tâm giao lộ dùng nội suy UV, nên các vạch kẻ làn phức tạp vẫn có thể bị méo ở khu vực này. `World Projected` là mặc định cũ. Xem `docs/pages/junction-mesh.html`.

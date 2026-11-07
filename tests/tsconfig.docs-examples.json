@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.runtime.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "db://cocos-splines/splines/*": ["assets/splines/*"]
+    }
+  },
+  "include": [
+    "../assets/splines/**/*.ts",
+    "../docs/examples/RoadUvSetup.ts",
+    "../docs/examples/ExtrudeTubeSetup.ts",
+    "../docs/examples/JunctionRoadPatchSetup.ts",
+    "types/cc.d.ts"
+  ]
+}
