@@ -41,5 +41,21 @@ for(const page of [path.join(docs,'index.html'),...files.map(f=>path.join(docs,'
   assert(txt.includes('extrude.html'),'Extrude nav missing: '+page);
   assert(txt.includes('road.html'),'Road nav missing: '+page);
 }
+
+// Junction Mesh guide includes source-grounded, genuinely visual examples
+// plus a local, interactive illustration and typed Inspector setup sample.
+const junctionMesh=fs.readFileSync(path.join(docs,'pages/junction-mesh.html'),'utf8');
+for(const marker of ['junction-diagram','junction-live-demo','junction-demo-svg',
+ 'junction-demo-branches','junction-demo-setback','junction-demo-width',
+ 'JunctionRoadPatchSetup.ts','Surface Lift','surfaceLift','setback',
+ 'tolerance','road.width','SplineRoad','Sơ đồ','junction-mesh-demo.js'])
+ assert(junctionMesh.includes(marker),'JunctionMesh docs missing: '+marker);
+assert((junctionMesh.match(/<svg\b/g)||[]).length>=2,'Junction Mesh needs two actual SVG illustrations');
+assert(fs.existsSync(path.join(docs,'assets','junction-mesh-demo.js')),'Missing interactive junction preview JS');
+const roadHelix=fs.readFileSync(path.join(docs,'pages/road.html'),'utf8');
+for(const marker of ['id="helix"','parallel transport','bán kính','SplineExtrude','Join And Trim'])
+ assert(roadHelix.includes(marker),'Road helix docs missing: '+marker);
+assert(fs.existsSync(path.join(docs,'examples','JunctionRoadPatchSetup.ts')),'Missing typed Junction Mesh example');
+cp.execFileSync('node',['--check',path.join(docs,'assets','junction-mesh-demo.js')]);
 cp.execFileSync('tsc',['-p',path.join(root,'tests/tsconfig.docs-examples.json')],{stdio:'pipe'});
 console.log('HTML DOCS PASS: 21 pages, Road + Extrude API, typed examples, relative navigation.');
