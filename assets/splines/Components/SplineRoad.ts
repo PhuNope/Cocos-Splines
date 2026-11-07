@@ -92,7 +92,56 @@ export class SplineRoad extends Component {
             this._boundMaterial=null;
         }
     }
+    /** Top-asphalt ring vertices from the ACTUAL generated Road mesh. Junction
+     * UV matching reads these instead of approximating a new projection. */
+    private _junctionRings: Array<{
+        distance:number;
+        left:Vec3;right:Vec3;
+        leftUV:[number,number];rightUV:[number,number];
+    }> = [];
     private _revision='';
+    /** Detect UV, width, transform and spline changes from JunctionMesh without
+     * exposing the private Road mesh or mutating its Material. */
+    public getJunctionUVRevision():string{return this.signature();}
+    /** Returns two actual Road cross-sections: one at the patch edge, and one
+     * nearer its center. UV and positions match the rendered asphalt strip,
+     * including width modifiers, corner trim, nonuniform scale and UV flips.
+     * When the Road range excludes the requested endpoint, no match exists. */
+    public sampleJunctionUV(atStart:boolean,setback:number,blendStart:number):{
+        outer:{left:{position:Vec3;uv:[number,number]};right:{position:Vec3;uv:[number,number]}};
+        inner:{left:{position:Vec3;uv:[number,number]};right:{position:Vec3;uv:[number,number]}};
+    }|null {
+        const source=this.getSpline();
+        if(!source||source.count<2)return null;
+        const [begin,end]=toNormalizedRange(source,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
+        if(atStart?begin>1e-5:end<1-1e-5)return null;
+        if(this._revision!==this.signature())this.rebuild();
+        const rings=this._junctionRings,n=rings.length;
+        if(n<3)return null;
+        const total=rings[n-1].distance;
+        if(total<1e-6)return null;
+        const dist=(i:number)=>atStart?rings[i].distance:total-rings[i].distance;
+        // Leave at least one sampled Road ring beyond the outer boundary.
+        const target=Math.min(Math.max(0.01,setback),total*.85);
+        let outerIndex=1,best=Infinity;
+        for(let i=1;i<n-1;i++){
+            const error=Math.abs(dist(i)-target);
+            if(error<best){best=error;outerIndex=i;}
+        }
+        const innerTarget=dist(outerIndex)*Math.max(.05,Math.min(.9,blendStart));
+        let innerIndex=atStart?0:n-1;best=Infinity;
+        for(let i=0;i<n;i++){
+            if(dist(i)>=dist(outerIndex)-1e-6)continue;
+            const error=Math.abs(dist(i)-innerTarget);
+            if(error<best){best=error;innerIndex=i;}
+        }
+        const toEdge=(i:number)=>{
+            const ring=rings[i],world=(v:Vec3)=>Vec3.transformMat4(new Vec3(),v,this.node.worldMatrix);
+            return {left:{position:world(ring.left),uv:[...ring.leftUV] as [number,number]},
+                right:{position:world(ring.right),uv:[...ring.rightUV] as [number,number]}};
+        };
+        return {outer:toEdge(outerIndex),inner:toEdge(innerIndex)};
+    }
 
     public getSpline():SplineContainer|null{
         if(this.spline)return this.spline;
@@ -122,6 +171,7 @@ export class SplineRoad extends Component {
     }
     private clearMesh():void{
         this._meshGizmo=null;
+        this._junctionRings=[];
         const renderer=this.getComponent(MeshRenderer);
         if(renderer&&this._mesh&&renderer.mesh===this._mesh)renderer.mesh=null;
         if(this._mesh){this._mesh.destroy();this._mesh=null;}
@@ -174,6 +224,19 @@ export class SplineRoad extends Component {
             uvReverseLength:this.uvReverseLength,uvOffsetU:this.uvOffsetU,uvOffsetV:this.uvOffsetV
         },source.closed&&begin===0&&end===1);
         if(!geometry.indices.length){this.clearMesh();this._revision=this.signature();return;}
+        // Extract the actual top-asphalt band (two vertices per Road ring).
+        // The number of preceding profile bands is deterministic for the road
+        // shoulder/curb settings; using generated positions preserves mitering.
+        const asphaltBand=(this.shoulderWidth>0?1:0)+(this.curbWidth>1e-6&&this.curbHeight>1e-6?2:0);
+        const stride=frames.length*2,asphaltBase=asphaltBand*stride;
+        this._junctionRings=frames.map((f,i)=>{
+            const offset=(asphaltBase+i*2)*3,uvOffset=(asphaltBase+i*2)*2;
+            return {distance:f.distance,
+                left:new Vec3(geometry.positions[offset],geometry.positions[offset+1],geometry.positions[offset+2]),
+                right:new Vec3(geometry.positions[offset+3],geometry.positions[offset+4],geometry.positions[offset+5]),
+                leftUV:[geometry.uvs[uvOffset],geometry.uvs[uvOffset+1]] as [number,number],
+                rightUV:[geometry.uvs[uvOffset+2],geometry.uvs[uvOffset+3]] as [number,number]};
+        });
         this._meshGizmo=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({positions:geometry.positions,normals:geometry.normals,uvs:geometry.uvs,indices:geometry.indices});
         const old=this._mesh;

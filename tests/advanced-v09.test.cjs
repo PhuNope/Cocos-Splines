@@ -142,7 +142,39 @@ try {
   jmesh.junction={entries:()=>branches.map((b,i)=>({link:{spline:{count:2,node:new Node('s'+i),getRevision:()=>1,
       evaluateWorldPosition:(t)=>new Vec3(b.center.x+b.outward.x*t,b.center.y,b.center.z+b.outward.z*t)},getProgress:()=>0}})),connections:[]};
   assert.doesNotThrow(()=>jmesh.rebuild());assert(patchRenderer.mesh.geometry.indices.length>=12);
-  assert.strictEqual(patchRenderer.material,jmesh.material);jmesh.onDestroy();
+  assert.strictEqual(patchRenderer.material,jmesh.material);
+  const {JunctionUVMode}=require(path.join(tmp,'Components','SplineJunctionMesh.js'));
+  const {SplineRoad}=require(path.join(tmp,'Components','SplineRoad.js'));
+  const matching=branches.map((b,i)=>{
+    const splineNode=new Node('road-spline-'+i),roadNode=new Node('asphalt-'+i);
+    roadNode.setParent(splineNode);
+    const branchRoad=new SplineRoad();branchRoad.node=roadNode;roadNode.components.push(branchRoad);
+    const lengthTiles=i===0?22.4:0.4;
+    const edge=(distance,tiles)=>{
+      const x=b.center.x+b.outward.x*distance,z=b.center.z+b.outward.z*distance;
+      const right={x:b.outward.z,z:-b.outward.x};
+      return {
+        left:{position:new Vec3(x-right.x*2,b.center.y,z-right.z*2),uv:[0,tiles]},
+        right:{position:new Vec3(x+right.x*2,b.center.y,z+right.z*2),uv:[1,tiles]}
+      };
+    };
+    branchRoad.sampleJunctionUV=()=>({outer:edge(4,lengthTiles),inner:edge(2,lengthTiles-.4)});
+    branchRoad.getJunctionUVRevision=()=>'road-revision-'+i;
+    const spline={count:2,node:splineNode,getRevision:()=>1,
+      evaluateWorldPosition:t=>new Vec3(b.center.x+b.outward.x*t,b.center.y,b.center.z+b.outward.z*t)};
+    return {road:branchRoad,spline};
+  });
+  jmesh.junction={entries:()=>matching.map(x=>({link:{spline:x.spline,getProgress:()=>0}})),
+    connections:matching.map(x=>({spline:x.spline,positionMode:0,progress:0,distance:0}))};
+  jmesh.uvMode=JunctionUVMode.RoadMatched;jmesh.uvBlendStart=.55;
+  jmesh.rebuild();
+  assert.equal(patchRenderer.mesh.geometry.positions.length/3,13,'RoadMatched patch creates two surface UV rings');
+  assert.equal(patchRenderer.mesh.geometry.indices.length,54,'RoadMatched mesh uses continuous central UV fan');
+  // Missing Road must safely return to the legacy projected patch geometry.
+  matching[2].road.node.components=[];
+  jmesh.rebuild();
+  assert.equal(patchRenderer.mesh.geometry.positions.length/3,7,'Fallback when one Road cannot supply matched UVs');
+  jmesh.onDestroy();
 
   const cfg=require(path.join(root,'package.json'));
   for(const [name,ui] of [['SplineModifiers','Modifiers'],['SplineObjectController','ObjectController'],['SplineObjectBender','Bender'],['SplineMorph','Morph'],['SplineJunctionMesh','JunctionMesh']]){

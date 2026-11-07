@@ -1,3 +1,12 @@
+# 0.9.12 — Junction Mesh Road-Matched UV
+
+- Added opt-in `SplineJunctionMesh.uvMode = RoadMatched` and `uvBlendStart` Inspector controls. `WorldProjected` stays the default for existing scenes.
+- Junction patch uses **actual asphalt edge positions and UVs** from each linked `SplineRoad` mesh at outer and inner rings. Matches `Length Along U/V`, UV flips, offsets, width tiles, Road width modifiers and corner trim, with integer phase unwrapping for Repeat textures.
+- An inner fan blends the incompatible orientations of multiple Road branches without internal UV cuts. UV edge continuity needs the same shared Material + Repeat wrapping, with straight/smooth roads near connection endpoints.
+- Added fallback to legacy projected UV if any Road cannot be matched. Diagnostics only in Scene Editor.
+- Known limitation: different lane markings from three or more Road branches can still warp near the center; not a Boolean road union or automatic marking remover.
+- Added geometry, runtime component, editor and documentation regression tests.
+
 # 0.9.11 — Editor-only warnings
 
 - Component diagnostic `console.warn` messages are emitted only in the Cocos Scene Editor (`EDITOR_NOT_IN_PREVIEW`), never in Play/Preview or runtime builds.

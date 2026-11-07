@@ -50,6 +50,8 @@ for(const marker of ['junction-diagram','junction-live-demo','junction-demo-svg'
  'JunctionRoadPatchSetup.ts','Surface Lift','surfaceLift','setback',
  'tolerance','road.width','SplineRoad','Sơ đồ','junction-mesh-demo.js'])
  assert(junctionMesh.includes(marker),'JunctionMesh docs missing: '+marker);
+for(const marker of ['junction-uv-matched','Road Matched','World Projected','uvMode','uvBlendStart','Wrap U = Repeat','UV Blend Start','JunctionUVMode'])
+ assert(junctionMesh.includes(marker),'Junction Road UV docs missing '+marker);
 assert((junctionMesh.match(/<svg\b/g)||[]).length>=2,'Junction Mesh needs two actual SVG illustrations');
 assert(fs.existsSync(path.join(docs,'assets','junction-mesh-demo.js')),'Missing interactive junction preview JS');
 const roadHelix=fs.readFileSync(path.join(docs,'pages/road.html'),'utf8');

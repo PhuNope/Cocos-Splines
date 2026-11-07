@@ -63,8 +63,34 @@ try{
   assert.equal(geometryBeforeUV.uvs[16*4+1],2,'legacy longitudinal coordinate uses V');
   road.uvWidthTiles=2;road.uvReverseAcross=true;road.uvOffsetV=.3;road.update();
   assert.notEqual(meshCalls.at(-1),geometryAfterUV,'texture tiling / flips trigger rebuild');
+  // Junction must read actual top asphalt vertices + UVs from the generated
+  // Road mesh, not recompute UV with a new XZ projection.
+  const join=road.sampleJunctionUV(true,3,.55),endJoin=road.sampleJunctionUV(false,3,.55);
+  assert(join&&endJoin,'Both Road endpoints expose asphalt UV rings');
+  const topBandIndex=3, ringSize=17;
+  const verifyVertex=(edge)=>{
+   const data=renderer.mesh.data;
+   let hit=false;
+   for(let k=0;k<ringSize;k++)for(let side=0;side<2;side++){
+    const idx=topBandIndex*ringSize*2+k*2+side;
+    const p=data.positions.slice(idx*3,idx*3+3),uv=data.uvs.slice(idx*2,idx*2+2);
+    if(Math.hypot(edge.position.x-p[0],edge.position.y-p[1],edge.position.z-p[2])<1e-6){
+     assert.deepEqual(edge.uv,uv,'Road-Matched patch UV must equal generated Road UV');hit=true;
+    }
+   }
+   assert(hit,'Matching Road edge vertex exists in generated asphalt surface');
+  };
+  for(const joinSample of [join,endJoin])for(const ring of [joinSample.outer,joinSample.inner]){
+   verifyVertex(ring.left);verifyVertex(ring.right);
+  }
+  const rev=road.getJunctionUVRevision();road.uvOffsetU=.7;
+  assert.notEqual(road.getJunctionUVRevision(),rev,'Junction detects Road UV property change');
+  const shifted=road.sampleJunctionUV(true,3,.55);
+  assert(shifted&&Math.abs(shifted.outer.left.uv[0]-join.outer.left.uv[0]-.7)<1e-6,
+   'UV offsets reach Road-Matched junction without manual road rebuild');
   road.rangeMode=SplinePositionMode.Distance;road.startDistance=2;road.endDistance=6;
-  road.rebuild();const distanceGeometry=meshCalls.at(-1);
+  road.rebuild();assert.equal(road.sampleJunctionUV(true,3,.55),null,'Road crop excluding endpoint cannot be matched');
+  const distanceGeometry=meshCalls.at(-1);
   const distanceZ=distanceGeometry.positions.filter((_,i)=>i%3===2);
   assert(Math.min(...distanceZ)>1.99&&Math.max(...distanceZ)<6.01,'Road crop by distance controls generated geometry');
   road.rangeMode=SplinePositionMode.SplineT;road.startProgress=.5;road.endProgress=1;

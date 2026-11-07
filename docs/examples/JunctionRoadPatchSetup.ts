@@ -1,6 +1,7 @@
 import { _decorator, Component, Material } from 'cc';
 import { SplineJunction, SplineJunctionLink } from 'db://cocos-splines/splines/Components/SplineJunction';
-import { SplineJunctionMesh } from 'db://cocos-splines/splines/Components/SplineJunctionMesh';
+import { SplineJunctionMesh, JunctionUVMode } from 'db://cocos-splines/splines/Components/SplineJunctionMesh';
+import { SplineRoad } from 'db://cocos-splines/splines/Components/SplineRoad';
 import { SplineContainer } from 'db://cocos-splines/splines/Core/SplineContainer';
 import { SplinePositionMode } from 'db://cocos-splines/splines/Core/SplinePosition';
 
@@ -36,7 +37,19 @@ export class JunctionRoadPatchSetup extends Component {
             link(this.outgoingRight, 0),
         ];
         this.patch.junction = this.junction;
+        // Matching requires the SAME Material asset and the Road UV mesh to
+        // reach endpoint 0/1. Leave each Road's own UV U/V setup unchanged.
+        for (const spline of [this.incoming, this.outgoingLeft, this.outgoingRight]) {
+            const road = spline.node.getComponent(SplineRoad)
+                || spline.node.children.map(child => child.getComponent(SplineRoad)).find(Boolean);
+            if (road && this.asphalt) {
+                road.roadMaterial = this.asphalt;
+                road.rebuild();
+            }
+        }
         this.patch.material = this.asphalt;
+        this.patch.uvMode = JunctionUVMode.RoadMatched;
+        this.patch.uvBlendStart = 0.55;
         this.patch.setback = 3;
         this.patch.defaultWidth = 6;
         this.patch.surfaceLift = 0.015;

@@ -1,10 +1,14 @@
-import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils } from 'cc';
+import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils, Enum } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineJunction } from './SplineJunction';
 import { SplineRoad } from './SplineRoad';
-import { buildJunctionPatch } from '../Core/SplineJunctionPatchMath';
+import { buildJunctionPatch, buildRoadMatchedJunctionPatch, MatchedRoadPatchBranch } from '../Core/SplineJunctionPatchMath';
 import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
+/** Legacy preserves the old XZ projected UVs. RoadMatched uses actual Road
+ * mesh edge vertices and UVs with a shared blended center. */
+export enum JunctionUVMode {WorldProjected=0,RoadMatched=1}
+Enum(JunctionUVMode);
 
 /** Road junction XZ patch for approximately coincident connection points.
  * Creates a surface overlay, NOT a watertight union. It does not trim Road mesh ends.
@@ -20,7 +24,11 @@ export class SplineJunctionMesh extends Component {
     @property({min:0.01,tooltip:'Extent of patch along each outbound road.'}) setback=3;
     @property({min:0.05,tooltip:'Fallback when no SplineRoad is found under branch container.'}) defaultWidth=6;
     @property({min:0.0001,tooltip:'Lift patch slightly to avoid z-fighting with road ends.'}) surfaceLift=0.015;
-    @property({min:0.001,tooltip:'World units per texture repeat.'}) uvMetersPerRepeat=5;
+    @property({min:0.001,tooltip:'World units per texture repeat (World Projected mode only).'}) uvMetersPerRepeat=5;
+    @property({type:Enum(JunctionUVMode),tooltip:'World Projected: original XZ UV; Road Matched: copy UV from actual Road asphalt vertices at both patch rings and blend only near the junction center.'})
+    uvMode:JunctionUVMode=JunctionUVMode.WorldProjected;
+    @property({range:[.1,.9,.05],slide:true,tooltip:'Road Matched: fraction of patch radius with Road UV preserved at the inner ring. Lower value means a smaller central blending region.'})
+    uvBlendStart=.55;
     @property({min:0.01,tooltip:'All connection points must lie close to same location.'}) tolerance=0.5;
     @property rebuildOnChange=true;
     @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
@@ -30,8 +38,10 @@ export class SplineJunctionMesh extends Component {
     private fallback:Material|null=null;
     private bound:Material|null=null;
     private signature='';
-    private currentKey():string {return JSON.stringify([(this.junction||this.node.parent?.getComponent(SplineJunction))?.connections.map(c=>[c.spline?.getRevision(),c.spline?.node.worldMatrix,c.positionMode,c.progress,c.distance]),
-        this.setback,this.defaultWidth,this.surfaceLift,this.uvMetersPerRepeat,this.tolerance,this.gizmoEdgeLimit]);}
+    private currentKey():string {return JSON.stringify([(this.junction||this.node.parent?.getComponent(SplineJunction))?.connections.map(c=>[
+        c.spline?.getRevision(),c.spline?.node.worldMatrix,c.positionMode,c.progress,c.distance,
+        c.spline?this.roadOf(c.spline)?.getJunctionUVRevision():null]),
+        this.setback,this.defaultWidth,this.surfaceLift,this.uvMetersPerRepeat,this.uvMode,this.uvBlendStart,this.tolerance,this.gizmoEdgeLimit]);}
     private roadOf(spline:import('../Core/SplineContainer').SplineContainer):SplineRoad|null {
         const own=spline.node.getComponent(SplineRoad);if(own)return own;
         for(const child of spline.node.children){const found=child.getComponent(SplineRoad);if(found)return found;}
@@ -66,6 +76,8 @@ export class SplineJunctionMesh extends Component {
         if(!j||!renderer){this.clear();return;}
         const links=j.entries();if(links.length<2){this.clear();return;}
         const entries: {center:Vec3;outward:Vec3;width:number}[]=[];
+        const matches:MatchedRoadPatchBranch[]=[];
+        let canMatch=true;
         for(const {link} of links){
             const spline=link.spline;if(!spline)continue;
             const p=link.getProgress();
@@ -77,6 +89,13 @@ export class SplineJunctionMesh extends Component {
             dir.y=0;if(dir.lengthSqr()<1e-7)continue;Vec3.normalize(dir,dir);
             const road=this.roadOf(spline);
             entries.push({center:at,outward:dir,width:road?.width||this.defaultWidth});
+            if(this.uvMode===JunctionUVMode.RoadMatched){
+                // Only strict endpoints can match the Road's exact mesh edge.
+                const atStart=p<=1e-4,atEnd=p>=1-1e-4;
+                const sample=(atStart||atEnd)?road?.sampleJunctionUV(atStart,this.setback,this.uvBlendStart):null;
+                if(!sample)canMatch=false;
+                else matches.push({center:at,outer:sample.outer,inner:sample.inner});
+            }
         }
         if(entries.length<2){this.clear();return;}
         const first=entries[0].center;
@@ -84,14 +103,20 @@ export class SplineJunctionMesh extends Component {
             if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineJunctionMesh] Connection points are not co-located within tolerance.');
             this.clear();this.signature=this.currentKey();return;
         }
-        const world=buildJunctionPatch(entries,this.setback,this.surfaceLift,this.uvMetersPerRepeat);
+        const matched=this.uvMode===JunctionUVMode.RoadMatched&&canMatch&&matches.length===entries.length;
+        if(EDITOR_NOT_IN_PREVIEW&&this.uvMode===JunctionUVMode.RoadMatched&&!matched){
+            console.warn('[SplineJunctionMesh] Road Matched UV needs a SplineRoad covering each endpoint and a valid Road mesh. Falling back to World Projected UV.');
+        }
+        const world=matched?buildRoadMatchedJunctionPatch(matches,this.surfaceLift,this.uvBlendStart)
+            :buildJunctionPatch(entries,this.setback,this.surfaceLift,this.uvMetersPerRepeat);
         if(!world.indices.length){this.clear();this.signature=this.currentKey();return;}
         const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix),positions:number[]=[];
         for(let i=0;i<world.positions.length;i+=3){const p=Vec3.transformMat4(new Vec3(),new Vec3(world.positions[i],world.positions[i+1],world.positions[i+2]),inverse);
             positions.push(p.x,p.y,p.z);}
         // Compute local normals from local positions; supports parent transforms.
         const normals:number[]=[];
-        for(let i=0;i<positions.length;i+=3){const a=Vec3.transformMat4(new Vec3(),new Vec3(world.positions[i],world.positions[i+1]+1,world.positions[i+2]),inverse);
+        for(let i=0;i<positions.length;i+=3){const a=Vec3.transformMat4(new Vec3(),new Vec3(
+            world.positions[i]+world.normals[i],world.positions[i+1]+world.normals[i+1],world.positions[i+2]+world.normals[i+2]),inverse);
             const n=Vec3.subtract(new Vec3(),a,new Vec3(positions[i],positions[i+1],positions[i+2]));
             Vec3.normalize(n,n);normals.push(n.x,n.y,n.z);}
         this._meshGizmo=buildMeshGizmoLines(positions,world.indices,this.gizmoEdgeLimit);
