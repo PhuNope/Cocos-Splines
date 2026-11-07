@@ -1,4 +1,5 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, gfx, utils, Enum } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
@@ -192,7 +193,7 @@ export class SplineMeshDeform extends Component {
             this._revision=signature;this._failedSignature='';
         }catch(error){
             this._failedSignature=signature;
-            console.warn('[SplineMeshDeform] '+this.node.name+': '+String(error));
+            if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineMeshDeform] '+this.node.name+': '+String(error));
         }
     }
     onDestroy():void{

@@ -31,8 +31,9 @@ try{
  const noOp=()=>{};const deco=(...args)=>args.length>1?undefined:noOp;
  const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls,requireComponent:()=>cls=>cls},
   Enum:x=>x,Component,Node,Vec3,Mat4,Color,Material,Mesh,MeshRenderer,utils:{createMesh:d=>{meshCalls.push(d);return new Mesh(d);}}};
+ const env={EDITOR_NOT_IN_PREVIEW:false};
  const original=Module._load;
- Module._load=function(name,parent,isMain){if(name==='cc')return cc;return original.call(this,name,parent,isMain);};
+ Module._load=function(name,parent,isMain){if(name==='cc')return cc;if(name==='cc/env')return env;return original.call(this,name,parent,isMain);};
  try{
   const {SplineContainer}=require(path.join(out,'Core','SplineContainer.js'));
   const {SplineRoad}=require(path.join(out,'Components','SplineRoad.js'));
@@ -89,6 +90,16 @@ try{
    const a=sectionDirection(i-1),b=sectionDirection(i);
    assert(Vec3.dot(a,b)>0,'Road cross sections remain consistently oriented over vertical grade');
   }
+  // Runtime Play: no diagnostic warning even if the road crosses a tight bend.
+  // Scene Editor: diagnostic warning is visible for the exact same geometry.
+  const originalWarn=console.warn, warnings=[];
+  console.warn=(...args)=>warnings.push(args.map(String).join(' '));
+  try{
+   road.width=6;env.EDITOR_NOT_IN_PREVIEW=false;road.rebuild();
+   assert.equal(warnings.length,0,'runtime Play does not print spline road warnings');
+   env.EDITOR_NOT_IN_PREVIEW=true;road.rebuild();
+   assert(warnings.some(w=>w.includes('[SplineRoad] Very tight bend')),'Scene Editor displays tight-road warning');
+  }finally{console.warn=originalWarn;env.EDITOR_NOT_IN_PREVIEW=false;}
   road.onDestroy();assert.equal(renderer.mesh,null,'renderer cleared after destruction');
   // Extrude shares the same continuous frame field (no ring twist on the slope).
   const {SplineExtrude}=require(path.join(out,'Components','SplineExtrude.js'));

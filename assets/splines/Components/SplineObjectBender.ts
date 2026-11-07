@@ -68,10 +68,10 @@ export class SplineObjectBender extends Component {
             if(!data||!indices)continue;
             const fmt=resolveAttributeFormatName(mesh.readAttributeFormat(0,attr),gfx.Format as any,findStoredAttributeFormat(mesh,0,attr)) as VertexFormat;
             let positions:number[],uvs:number[]=[];
-            try{positions=readPositionTriples(data,fmt);}catch(error){console.warn('[SplineObjectBender] unsupported mesh',renderer.node.name,error);continue;}
+            try{positions=readPositionTriples(data,fmt);}catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] unsupported mesh',renderer.node.name,error);continue;}
             const texName=gfx.AttributeName.ATTR_TEX_COORD,tex=mesh.readAttribute(0,texName);
             if(tex){const tf=resolveAttributeFormatName(mesh.readAttributeFormat(0,texName),gfx.Format as any,findStoredAttributeFormat(mesh,0,texName)) as VertexFormat;
-                try{uvs=readUVPairs(tex,tf);}catch(error){console.warn('[SplineObjectBender] unsupported UV; using 0',error);}}
+                try{uvs=readUVPairs(tex,tf);}catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] unsupported UV; using 0',error);}}
             const mat=renderer.node.worldMatrix,rootPositions:number[]=[];
             for(let i=0;i<positions.length;i+=3){
                 const world=Vec3.transformMat4(new Vec3(),new Vec3(positions[i],positions[i+1],positions[i+2]),mat);
@@ -101,7 +101,7 @@ export class SplineObjectBender extends Component {
         const spline=this.spline;
         if(!spline||spline.count<2)return;
         for(let n:import('cc').Node|null=spline.node;n;n=n.parent){
-            if(n===this.node){console.warn('[SplineObjectBender] The source spline must be outside the model hierarchy.');return;}
+            if(n===this.node){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] The source spline must be outside the model hierarchy.');return;}
         }
         this.capture();if(!this.originals.length)return;
         const axis=this.axis;
@@ -111,7 +111,7 @@ export class SplineObjectBender extends Component {
         let min=Infinity,max=-Infinity;
         for(const verts of partPositions){
             for(let i=axis;i<verts.length;i+=3){min=Math.min(min,verts[i]);max=Math.max(max,verts[i]);}}
-        if(max-min<1e-7){console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
+        if(max-min<1e-7){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineObjectBender] Hierarchy has zero extent along selected axis.');return;}
         const [start,end]=toNormalizedRange(spline,this.rangeMode,this.startProgress,this.endProgress,this.startDistance,this.endDistance);
         if(end<=start)return;
         const stableFrames=(typeof spline.evaluateUp==='function'&&typeof spline.evaluateTangent==='function'&&typeof spline.evaluatePosition==='function')

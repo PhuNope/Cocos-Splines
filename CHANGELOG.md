@@ -1,3 +1,9 @@
+# 0.9.11 — Editor-only warnings
+
+- Component diagnostic `console.warn` messages are emitted only in the Cocos Scene Editor (`EDITOR_NOT_IN_PREVIEW`), never in Play/Preview or runtime builds.
+- Keep `console.error` for actual callback failures.
+- Added regression test for Editor-only Road tight-bend warning and a scan to keep future component warnings Editor-only.
+
 ## 0.9.10 — Road sharp-bend corner join and inner-edge trim
 - Added SplineRoad Corner Mode: Legacy (default, unchanged scenes) / JoinAndTrim. Mitered section joins connect offset edge lines at local corners to reduce outside gaps. When the local bend radius is smaller than the road half-width, the inside profile is smoothly compressed to avoid folded/inverted inner-road triangles. Works with shoulder, curb, thickness, material, and U/V road UV orientation.
 - Corner Trim Safety (default 0.93, range 0.5–0.99) controls how much inner curvature clearance to retain. The method preserves source UVs and triangle indexing; compacting the inner width may compress the asphalt texture at extreme bends.

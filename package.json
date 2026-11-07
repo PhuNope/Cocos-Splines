@@ -1,6 +1,6 @@
 {
   "name": "cocos-splines",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "package_version": 2,
   "description": "Cocos Creator >=3.8.2 spline extension with spline followers, junction routing, object controllers, modifiers, morphing and mesh deformation.",
   "editor": ">=3.8.2",
@@ -332,7 +332,7 @@
   "scripts": {
     "build": "node scripts/build.cjs",
     "verify": "node scripts/verify.cjs",
-    "test": "node tests/run.cjs && node tests/editor.test.cjs && node tests/inspector.test.cjs && node tests/animate-runtime.test.cjs && node tests/instantiate-runtime.test.cjs && node tests/deprecation.test.cjs && node tests/road-math.test.cjs && node tests/road-corners.test.cjs && node tests/road-component.test.cjs && node tests/steep-mesh-frames.test.cjs && node tests/mesh-deform.test.cjs && node tests/mesh-winding.test.cjs && node tests/features-v05.test.cjs && node tests/position-modes.test.cjs && node tests/features-v07.test.cjs && node tests/mesh-shading.test.cjs && node tests/material-sharing.test.cjs && node tests/dreamteck-v08.test.cjs && node tests/event-subscriptions.test.cjs && node tests/advanced-v09.test.cjs && node tests/offset-morph-regression.test.cjs && node tests/docs-html.test.cjs && node tests/morph-gizmos-v094.test.cjs && node tests/scene-spawn-v095.test.cjs && node tests/mesh-natural-repeat.test.cjs && node tests/modifier-gizmos-v097.test.cjs",
+    "test": "node tests/run.cjs && node tests/editor.test.cjs && node tests/inspector.test.cjs && node tests/animate-runtime.test.cjs && node tests/instantiate-runtime.test.cjs && node tests/deprecation.test.cjs && node tests/road-math.test.cjs && node tests/road-corners.test.cjs && node tests/road-component.test.cjs && node tests/editor-only-warnings.test.cjs && node tests/steep-mesh-frames.test.cjs && node tests/mesh-deform.test.cjs && node tests/mesh-winding.test.cjs && node tests/features-v05.test.cjs && node tests/position-modes.test.cjs && node tests/features-v07.test.cjs && node tests/mesh-shading.test.cjs && node tests/material-sharing.test.cjs && node tests/dreamteck-v08.test.cjs && node tests/event-subscriptions.test.cjs && node tests/advanced-v09.test.cjs && node tests/offset-morph-regression.test.cjs && node tests/docs-html.test.cjs && node tests/morph-gizmos-v094.test.cjs && node tests/scene-spawn-v095.test.cjs && node tests/mesh-natural-repeat.test.cjs && node tests/modifier-gizmos-v097.test.cjs",
     "package": "npm run build && npm run verify && npm test && npm run check:runtime && node scripts/release.cjs",
     "check:runtime": "tsc -p tsconfig.runtime.json"
   },

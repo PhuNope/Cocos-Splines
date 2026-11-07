@@ -1,4 +1,5 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils, Enum } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 import { buildRoadGeometry, RoadFrame, RoadUvDirection, RoadCornerMode } from '../Core/SplineRoadMath';
@@ -146,7 +147,7 @@ export class SplineRoad extends Component {
             Math.max(.01,this.modifiers!.sample(f.t).width))):1;
         const halfExtent=Math.max(.05,this.width,this.endWidth>0?this.endWidth:0)*maxWidthMultiplier*.5
             +Math.max(0,this.shoulderWidth)+Math.max(0,this.curbWidth);
-        if(minRadius<halfExtent){
+        if(EDITOR_NOT_IN_PREVIEW && minRadius<halfExtent){
             console.warn('[SplineRoad] Very tight bend: road half-width exceeds the bend radius. '
                 +(this.cornerMode===RoadCornerMode.JoinAndTrim
                     ? 'Join And Trim compresses the inner edge, but extreme hairpins or 3D self-intersections may still require a custom mesh.'

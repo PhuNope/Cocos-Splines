@@ -1,4 +1,5 @@
 import { _decorator, Component, MeshRenderer, Mesh, Material, Vec3, Mat4, Color, utils } from 'cc';
+import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineJunction } from './SplineJunction';
 import { SplineRoad } from './SplineRoad';
 import { buildJunctionPatch } from '../Core/SplineJunctionPatchMath';
@@ -68,7 +69,7 @@ export class SplineJunctionMesh extends Component {
         for(const {link} of links){
             const spline=link.spline;if(!spline)continue;
             const p=link.getProgress();
-            if(p>0.05&&p<0.95){console.warn('[SplineJunctionMesh] Patch supports links at spline endpoints only (0/1).');continue;}
+            if(p>0.05&&p<0.95){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineJunctionMesh] Patch supports links at spline endpoints only (0/1).');continue;}
             const at=spline.evaluateWorldPosition(p);
             const other=p<=0.5?Math.min(1,p+0.005):Math.max(0,p-0.005);
             const next=spline.evaluateWorldPosition(other);
@@ -80,7 +81,7 @@ export class SplineJunctionMesh extends Component {
         if(entries.length<2){this.clear();return;}
         const first=entries[0].center;
         if(entries.some(x=>Vec3.subtract(new Vec3(),x.center,first).length()>this.tolerance)){
-            console.warn('[SplineJunctionMesh] Connection points are not co-located within tolerance.');
+            if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineJunctionMesh] Connection points are not co-located within tolerance.');
             this.clear();this.signature=this.currentKey();return;
         }
         const world=buildJunctionPatch(entries,this.setback,this.surfaceLift,this.uvMetersPerRepeat);
