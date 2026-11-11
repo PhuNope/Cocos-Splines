@@ -6,6 +6,8 @@ export interface RoadStripOptionsV2 {
     readonly width:number;
     /** Longitudinal metres per UV repetition. */
     readonly uvMetersPerRepeat?:number;
+    /** UV0 coordinate that repeats along road; default v. */
+    readonly uvLongitudinalAxis?:'u'|'v';
     readonly step?:number;
     readonly materialSlot?:number;
 }
@@ -19,6 +21,8 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     if(!Number.isFinite(width)||width<=0)throw new Error('Road width must be positive');
     if(!Number.isFinite(uvMeters)||uvMeters<=0)throw new Error('uvMetersPerRepeat must be positive');
     if(!Number.isFinite(step)||step<=0)throw new Error('Road sampling step must be positive');
+    const axis=options.uvLongitudinalAxis??'v';
+    if(axis!=='u'&&axis!=='v')throw new Error('Road UV axis must be u or v');
     if(!Number.isSafeInteger(materialSlot)||materialSlot<0||materialSlot>0xffffffff)
         throw new Error('Road material slot is invalid');
     if(cache.length<=1e-9)throw new Error('Road requires positive spline length');
@@ -33,7 +37,8 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
             positions.push({x:f.position.x+f.right.x*half,
                 y:f.position.y+f.right.y*half,z:f.position.z+f.right.z*half});
             normals.push({...f.up});
-            uv0.push({x:(side+1)/2,y:f.distance/uvMeters});
+            const across=(side+1)/2,along=f.distance/uvMeters;
+            uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});
             uv2.push({x:(side+1)/2,y:f.distance/cache.length});
         }
     }

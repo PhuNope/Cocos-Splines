@@ -14,6 +14,8 @@ export interface ProfileSweepOptionsV2 {
     readonly flipFaces?:boolean;
     readonly step?:number;
     readonly uvMetersPerRepeat?:number;
+    /** UV0 coordinate that repeats longitudinally; default v. */
+    readonly uvLongitudinalAxis?:'u'|'v';
 }
 export interface RoadProfileOptionsV2 {
     readonly width:number;
@@ -22,6 +24,8 @@ export interface RoadProfileOptionsV2 {
     readonly curbHeight?:number;
     readonly step?:number;
     readonly uvMetersPerRepeat?:number;
+    /** UV0 coordinate that repeats longitudinally; default v. */
+    readonly uvLongitudinalAxis?:'u'|'v';
 }
 export interface TubeOptionsV2 {
     readonly radius:number;
@@ -30,6 +34,8 @@ export interface TubeOptionsV2 {
     readonly flipFaces?:boolean;
     readonly step?:number;
     readonly uvMetersPerRepeat?:number;
+    /** UV0 coordinate that repeats longitudinally; default v. */
+    readonly uvLongitudinalAxis?:'u'|'v';
 }
 const finite=(x:number)=>Number.isFinite(x)&&Number.isFinite(Math.fround(x));
 const vec=(p:SplineFrameV2,x:number,y:number):Vec3MeshV2=>({
@@ -59,6 +65,8 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
         throw new Error('Profile edgeMaterials must match edge count with valid slots');
     if(!pts.every(p=>finite(p.x)&&finite(p.y)))throw new Error('Invalid profile coordinates');
     if(!finite(step)||step<=0||!finite(uvRepeat)||uvRepeat<=0)throw new Error('Invalid profile sweep sampling');
+    const axis=options.uvLongitudinalAxis??'v';
+    if(axis!=='u'&&axis!=='v')throw new Error('Profile UV axis must be u or v');
     if(cache.length<=1e-9)throw new Error('Profile sweep needs a nonzero spline length');
     if(options.smoothNormals&&!closed)throw new Error('Smooth profile normals require a closed profile');
     if(options.capEnds&&!closed)throw new Error('Caps require a closed profile');
@@ -106,7 +114,8 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
         const id=positions.length;
         positions.push(vec(f,pt.x,pt.y));
         normals.push(normal(f,nx,ny,flipped));
-        uv0.push({x:u/total,y:f.distance/uvRepeat});
+        const across=u/total,along=f.distance/uvRepeat;
+        uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});
         uv2.push({x:u/total,y:f.distance/cache.length});
         return id;
     }
@@ -178,7 +187,8 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(shoulder>0)push(half+shoulder,0,1);
     if(height>0)push(half+shoulder,height,2);
     if(curb>0)push(half+shoulder+curb,height,2);
-    return buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat});
+    return buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
+        uvLongitudinalAxis:options.uvLongitudinalAxis});
 }
 export function buildTubeV2(cache:SplineCacheV2,options:TubeOptionsV2):MeshDataV2 {
     const sides=options.sides??12;
@@ -190,5 +200,6 @@ export function buildTubeV2(cache:SplineCacheV2,options:TubeOptionsV2):MeshDataV
     }));
     return buildProfileSweepV2(cache,{points:pts,edgeMaterials:Array(sides).fill(0),closedProfile:true,
         smoothNormals:true,capEnds:options.capEnds,flipFaces:options.flipFaces,
-        step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat});
+        step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
+        uvLongitudinalAxis:options.uvLongitudinalAxis});
 }

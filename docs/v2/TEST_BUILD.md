@@ -39,3 +39,10 @@
 ZIP chứa extension chạy được từ `package.json`, `dist/`, `assets/` và docs; nó cũng giữ component legacy để tiện đối chiếu nhưng không đòi giữ UUID v0.9.x. Không cần cài repository source hoặc chạy TypeScript test suite bên trong Cocos.
 
 Không có tag, Release hoặc npm publish từ quy trình đóng gói này.
+
+## Test: UV0 repeat axis for road textures
+
+- Select the v2 Road or Extrude component. Under its geometry settings, locate **UV Longitudinal Axis**.
+- If the texture's road direction is **along image X** (U), select **U**. When the texture's road direction is **along image Y** (V), select **V** (default).
+- Set `uvMetersPerRepeat` to `5` as a starting value. The texture wrap setting should be **Repeat U** or **Repeat V** as appropriate.
+- Click **Rebuild Preview**; if using Manual or Baked, **Bake glTF Asset** again. Test that shoulder, curb, and Extrude textures rotate their longitudinal mapping consistently. UV2 remains untouched.

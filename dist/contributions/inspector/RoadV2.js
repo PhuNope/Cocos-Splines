@@ -4,9 +4,9 @@ const {style,callEditor}=require('./common');
 function makeV2Inspector(kind='road'){
     const tube=kind==='extrude';
     const fields=tube?
-        [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat']],
+        [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
-        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','uvMetersPerRepeat']],
+        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]];
     const names=fields.flatMap(g=>g[1]);
     const selectors={status:'.spl-status',preview:'.spl-v2-preview',bake:'.spl-v2-bake',bind:'.spl-v2-bind',inspect:'.spl-v2-inspect'};
@@ -28,7 +28,7 @@ function makeV2Inspector(kind='road'){
             <button type="button" class="spl-btn spl-v2-bind">⌁ Bind Imported Mesh</button>
             <button type="button" class="spl-btn spl-v2-inspect">◎ Check Bake Status</button>
           </div>
-          <p class="spl-note">Bake creates a glTF under Project Assets and tries to link its unique cc.Mesh subasset automatically. If import is still pending, use Bind Imported Mesh later. Manual/Baked never generate geometry in Play. Road materials use slots 0=asphalt, 1=shoulder, 2=curb.</p>
+          <p class="spl-note">Bake creates a glTF under Project Assets and tries to link its unique cc.Mesh subasset automatically. If import is still pending, use Bind Imported Mesh later. Manual/Baked never generate geometry in Play. Select Longitudinal UV Axis: V repeats along texture Y (default); U repeats along texture X. Use Repeat wrap mode and Rebuild/Bake. Road materials use slots 0=asphalt, 1=shoulder, 2=curb.</p>
           <div class="spl-status" role="status"></div>
         </div>`,
         $:selectors,

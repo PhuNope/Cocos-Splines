@@ -1,7 +1,7 @@
 import {_decorator,Enum,MeshRenderer} from 'cc';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildTubeV2} from '../geometry/ProfileSweep';
-import {SplineRoadV2} from './SplineRoadV2';
+import {SplineRoadV2,SplineV2UVAxis} from './SplineRoadV2';
 const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
 /**
  * Tube from the same spline, frames, mesh allocator and Bake adapter as Road V2.
@@ -21,7 +21,8 @@ export class SplineExtrudeV2 extends SplineRoadV2 {
         const cache=buildSplineCacheV2(this.source());
         const geometry=buildTubeV2(cache,{
             radius:this.radius,sides:this.sides,capEnds:this.capEnds&&!this.closed,
-            flipFaces:this.flipFaces,step:this.sampleStep,uvMetersPerRepeat:this.uvMetersPerRepeat
+            flipFaces:this.flipFaces,step:this.sampleStep,uvMetersPerRepeat:this.uvMetersPerRepeat,
+            uvLongitudinalAxis:this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v'
         });
         return {geometry};
     }

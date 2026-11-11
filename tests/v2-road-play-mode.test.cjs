@@ -82,12 +82,15 @@ try{
  const baked=road.prepareBake();assert.equal(JSON.parse(baked.content).asset.version,'2.0');
  road.bakedSourceFingerprint=baked.fingerprint;
  assert.equal(road.inspectBake().stale,false);
+ road.uvLongitudinalAxis=1;assert.equal(road.inspectBake().stale,true,'Switching to U must invalidate baked UV0');
+ road.uvLongitudinalAxis=0;assert.equal(road.inspectBake().stale,false,'Restoring V keeps previous mapping');
  road.width=5;assert.equal(road.inspectBake().stale,true);
  road.onDisable();assert(generated[2].destroyed);
  assert.equal(saved.destroyed,false);
  const extrudeNode=new Node('ExtrudeV2'),extrudeRenderer=extrudeNode.addComponent(MeshRenderer);
  const extrude=extrudeNode.addComponent(SplineExtrudeV2);
  extrude.knots=[a,b];extrude.interpolation=0;extrude.sampleStep=1;extrude.radius=.75;
+ extrude.uvLongitudinalAxis=1;
  extrude.sides=8;extrude.capEnds=true;extrude.bakedMesh=saved;
  const countBefore=generated.length;
  env.EDITOR_NOT_IN_PREVIEW=false;extrude.meshMode=SplineV2MeshMode.Baked;extrude.onEnable();

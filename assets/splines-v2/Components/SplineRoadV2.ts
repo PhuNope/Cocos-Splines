@@ -12,6 +12,7 @@ const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
+export enum SplineV2UVAxis {V=0,U=1}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
  * gameplay and NEVER builds Manual/Baked geometry at runtime.
@@ -34,6 +35,8 @@ export class SplineRoadV2 extends Component {
     @property({min:0}) curbHeight=0;
     @property({min:0.01}) sampleStep=.5;
     @property({min:0.01}) uvMetersPerRepeat=5;
+    @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
+    uvLongitudinalAxis=SplineV2UVAxis.V;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
     materials:Material[]=[];
@@ -99,13 +102,15 @@ export class SplineRoadV2 extends Component {
     protected generate(){
         const curve=this.source();
         const cache=buildSplineCacheV2(curve);
+        const uvLongitudinalAxis=this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v';
         const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
-                curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep
+                curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
+                uvLongitudinalAxis
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
-                step:this.sampleStep,materialSlot:0
+                step:this.sampleStep,materialSlot:0,uvLongitudinalAxis
             });
         return {geometry};
     }

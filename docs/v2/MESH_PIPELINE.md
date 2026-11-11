@@ -79,3 +79,14 @@ Do not copy/paste a second material or create a separate Material instance for e
 - If the glTF import is still pending or has ambiguous Mesh subassets, the Inspector reports the pending asset and exposes **Bind Imported Mesh** retry. Existing linked Mesh and its fingerprint are left untouched until a verified binding succeeds.
 - Bake fingerprints and pending pointers are separate. Changes to spline/source while importing prohibit automatic binding of stale geometry. Previous glTF assets are never overwritten.
 - The scene reference is tested by a serializable dump mock and Play mode generator mocks. **Actual Creator 3.8.x import, serialization and scene reload must still be verified on an installed Editor.** Do not claim production-ready baking yet.
+
+## UV0 Longitudinal Axis: U / V
+
+Road V2 and Extrude V2 both expose `uvLongitudinalAxis` in the Inspector (native enum **V** / **U**), next to `uvMetersPerRepeat`.
+
+- **V (default, legacy v2 behavior):** UV0 U = across the road / cross-section (0..1), UV0 V = distance along spline ÷ `uvMetersPerRepeat`. Set texture wrap/address mode **Repeat V**.
+- **U:** UV0 U = distance along spline ÷ `uvMetersPerRepeat`, UV0 V = across the road / cross-section (0..1). Set **Repeat U** for road images designed to run horizontally (along texture X).
+- `uvMetersPerRepeat = 5` gives one repetition every five spline units regardless of selected axis. This is **texture UV0 only**, not a scene/world X/Y rotation.
+- UV2 is **unchanged** when switching between U and V. For the tube `capEnds` use independent planar UV0 mapping on end faces.
+- Switching the enum changes the generated geometry fingerprint. For Manual/Baked click **Bake glTF Asset** again; Dynamic rebuilds at next Play enable, and Editor can click **Rebuild Preview**. The material's texture sampler must be set to Repeat on the corresponding axis. A clamp sampler will not tile.
+- UV0 tangents and handedness are regenerated from the chosen mapping, including shoulder/curb material bands and tube surfaces.
