@@ -32,3 +32,10 @@
 
 - [x] Real 3-Knot curve regression: local curvature width limits, rounded conservative width envelope, UV0 centreline vertex, U/V and UV2 preservation (TypeScript test).
 - [ ] Confirm in real Cocos Creator 3.8.x Editor against the original asphalt material and screenshot.
+
+- [x] Fix plain Road component missing Continuous option propagation (Inspector/geometry mismatch).
+- [x] Angle + chord-error adaptive frame sampling for Road/Profiles; Cocos Inspector controls.
+- [x] Selectable physical-width UV0 compensation versus legacy authored cross UV, UV2 unchanged.
+- [x] Optional separated white center dashes and yellow edge-line geometry, multi-material glTF Bake, both plain and profile Roads.
+- [ ] Mesh-source deformation Road mode based on SplineArchitect, after Creator 3.8.x source-mesh readback integration testing.
+- [ ] Junction-aware dashed lanes, paint intersections and material auto-creation.

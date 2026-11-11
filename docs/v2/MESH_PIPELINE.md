@@ -158,3 +158,29 @@ The updated Continuous solver accepts per-ring `RoadCornerSectionV2` radius limi
 Continuous `RoadStrip` now writes **left, centre, right** vertices per sample, with UV0 across = 0, 0.5, 1. The centre UV is exactly on the spline centreline, not at the geometrically displaced midpoint of the asymmetric edges. RoadProfile also adds an asphalt centre vertex when Continuous is selected. This preserves centre dashed marking and outer painted lines without Boolean cuts. UV2 remains a distinct channel; both U/V axis modes and glTF Bake use identical coordinates. The existing programmatic/Inspector Clip mode remains unchanged, and Tube Extrude is not affected.
 
 **Limitation:** local width fitting is not topology-aware CSG for arbitrary splines, road networks or overlapping branches at different heights. It may temporarily narrow a two-lane road too much; in that case revise Knot positions or increase bend radius. The safety slope cap is intentional to prevent reintroducing stepped lane stripes.
+
+## Road v2 adaptive sampling, UV across compensation and optional separate markings
+
+A field-wiring error was found in `SplineRoadV2.generate()`: the **plain Road strip branch** passed `cornerMode` but omitted `surfaceMode`, `clearanceSafety`, `widthSlope` and the continuous report callback. Because `buildRoadStripV2()` defaults to `clip` for pure callers, an Inspector reading **Surface Mode = Continuous** could still generate the **old clipping pipeline**, which explains repeated UV breaks in the user's road screenshots. Both plain Road and RoadProfile now forward the same complete options.
+
+### Adaptive mesh subdivision
+
+Borrowing the *technique*, not code, from ToolBuddy/Curvy's angle-based sampling, `SplineFramesV2` adds **opt-in** `maxAngleDegrees` and `maxChordError`. It recursively bisects any sample interval whose tangent turn or midpoint-to-chord deviation is too large, while keeping original distance samples, orientation transport, closed-loop correction and a hard maxFrames cap. The Cocos v2 Road defaults to **Adaptive Sampling = on**, `Max Turn Angle Degrees = 6`, `Max Chord Error = 0.03`, with `Sample Step` still the maximum distance per base segment. Other users of SplineFrames retain their old behavior unless they opt in. RoadStrip and RoadProfile use the **same adaptive frame table** for geometry, inside-radius width fitting and UV0, preventing ring-count mismatches.
+
+### UV cross-width mode
+
+**UV Cross Mode** has two options. **Legacy** (default) keeps UV0 across the full texture range 0..1 so prepainted edge/center stripes remain attached to their existing material UV coordinates. **Physical** computes UV0 across from physical lateral width rather than stretching the whole texture into a narrowed bend. It maintains texel density but **can move or hide the painted stripes embedded in the asphalt texture**. Both modes preserve longitudinal U/V-axis selection, distance-based tiling, UV2 and glTF Bake.
+
+These choices solve *different problems*: texture stretch and line-marking placement. No UV projection can guarantee perfect constant-width markings on an impossibly tight turn without changing the road shape or adding separate geometry.
+
+### Road marking mesh (experimental, opt-in)
+
+**Generate Markings** creates asphalt-independent line geometry on the exact Continuous spline frames and fitted width. Solid edge strips (material slot **4**) and regularly spaced dashed center strips (slot **3**) follow the real spline; dashes are split at exact distance-based boundaries even between samples. `Marking Line Width`, `Marking Dash Length` and `Marking Dash Gap` are exposed in the Inspector. Marking geometry is raised a small amount to avoid Z-fighting and is appended as additional mesh submeshes, with UV0/UV2 and glTF Bake support. Disabled by default so existing asphalt textures containing road paint are not double-painted.
+
+For this mode, use a **plain asphalt Material in slot 0**, an opaque **white Material in slot 3**, and an opaque **yellow Material in slot 4**. Slots 1 and 2 remain Shoulder and Curb. If the asphalt texture already includes lane markings, disable Generate Markings or change it to an unpainted asphalt texture.
+
+**Limitations:** Markings are simple extruded ribbons and are not a junction/lane topology solver. They may converge or shrink on very narrow or extreme bends; raised paint is not a physics collider. UV2 remains deterministic, not lightmap-unwrapped. Generated mesh Play behavior follows Dynamic/Manual/Baked existing lifecycle; no additional log is emitted during Play. Mesh-source deformation mode (SplineArchitect-style) remains a separate future component until verified in actual Cocos Creator.
+
+### Regression and compatibility
+
+`tests/v2-road-play-mode.test.cjs` now explicitly verifies Inspector Continuous is forwarded to plain Road (3 ring vertices rather than 2 for the Clip mode). `tests/v2-adaptive-uv.test.cjs` covers adaptive tangent bounds and UV0/UV2 on exact knots K0(-1.701,0,-7.206), K1(-3.869,0,3.72), K2(5.82,0,4.347). `tests/v2-road-markings.test.cjs` checks dashed/solid material groups and glTF export. Real Cocos 3.8.x Scene visual validation remains required.

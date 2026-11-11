@@ -60,8 +60,22 @@ try{
   road.meshMode=mode;road.onEnable();
   assert.equal(renderer.mesh,saved);assert.equal(generated.length,0);
  }
- // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
+ // Regression for an Inspector UI bug: plain Road must forward Continuous
+ // to the geometry builder, not silently generate the Clip Overlaps mesh.
  road.generate=originalGenerate;
+ road.surfaceMode=0;
+ assert.equal(road.adaptiveSampling,true);
+ const continuous=road.generate().geometry;
+ road.surfaceMode=1;
+ const clipped=road.generate().geometry;
+ assert(continuous.vertexCount>clipped.vertexCount,
+   'Plain Road component must forward Continuous mode (3 versus 2 vertices per ring)');
+ road.surfaceMode=0;
+ road.generateMarkings=true;
+ const overlay=road.generate().geometry;
+ assert.deepEqual(overlay.submeshes.map(s=>s.materialSlot),[0,3,4]);
+ road.generateMarkings=false;
+ // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
  road.meshMode=SplineV2MeshMode.Dynamic;road.onEnable();
  assert.equal(generated.length,1);
  assert.equal(renderer.mesh,generated[0]);

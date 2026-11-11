@@ -2,7 +2,13 @@ import {evaluateSplineV2,type V3} from './SplineCurves';
 import {parameterAtCachedDistanceV2,type SplineCacheV2} from './SplineCache';
 export interface SplineFrameV2 {readonly distance:number;readonly parameter:number;readonly position:V3;readonly tangent:V3;readonly right:V3;readonly up:V3;}
 export interface SplineFramesV2 {readonly length:number;readonly frames:ReadonlyArray<SplineFrameV2>;readonly closed:boolean;}
-export interface SplineFramesOptionsV2 {readonly maxStep?:number;readonly maxFrames?:number;readonly up?:V3;}
+export interface SplineFramesOptionsV2 {
+    readonly maxStep?:number;readonly maxFrames?:number;readonly up?:V3;
+    /** Additional angular subdivision; opt-in to retain legacy behavior elsewhere. */
+    readonly maxAngleDegrees?:number;
+    /** Maximum midpoint-to-chord distance in local spline units; opt-in. */
+    readonly maxChordError?:number;
+}
 const v=(x:number,y:number,z:number):V3=>({x,y,z});
 const add=(a:V3,b:V3):V3=>v(a.x+b.x,a.y+b.y,a.z+b.z);
 const sub=(a:V3,b:V3):V3=>v(a.x-b.x,a.y-b.y,a.z-b.z);
@@ -46,10 +52,51 @@ export function buildSplineFramesV2(cache:SplineCacheV2,options:SplineFramesOpti
     if(options.up&&![options.up.x,options.up.y,options.up.z].every(Number.isFinite))throw new Error('Non-finite up hint');
     const count=total>1e-12?Math.max(1,Math.ceil(total/step)):1;
     if(count+1>limit)throw new Error('Frame count exceeds maxFrames; increase maxStep');
+    const maxAngle=options.maxAngleDegrees;
+    const maxError=options.maxChordError;
+    if(maxAngle!==undefined&&(!Number.isFinite(maxAngle)||maxAngle<1||maxAngle>175))
+        throw new Error('maxAngleDegrees must be between 1 and 175');
+    if(maxError!==undefined&&(!Number.isFinite(maxError)||maxError<=0))
+        throw new Error('maxChordError must be positive');
+    let distances:number[]=[];
+    if(maxAngle===undefined&&maxError===undefined){
+        distances=Array.from({length:count+1},(_,i)=>i===count?total:total*i/count);
+    }else{
+        const seen=new Map<number,{position:V3;tangent:V3}>();
+        const at=(d:number)=>{
+            let item=seen.get(d);
+            if(!item){
+                const parameter=parameterAtCachedDistanceV2(cache,d);
+                const sample=evaluateSplineV2(cache.spline,parameter);
+                item={position:sample.position,tangent:tangentAt(cache,parameter,v(0,0,1))};
+                seen.set(d,item);
+            }
+            return item;
+        };
+        const radians=maxAngle===undefined?Infinity:maxAngle*Math.PI/180;
+        const error=maxError??Infinity;
+        const angle=(a:V3,b:V3)=>Math.acos(clamp(dot(a,b),-1,1));
+        distances=[0];
+        const split=(a:number,b:number,depth:number):void=>{
+            const mid=(a+b)*.5,first=at(a),last=at(b),centre=at(mid);
+            const tangentTurn=Math.max(angle(first.tangent,last.tangent),
+                2*angle(first.tangent,centre.tangent),2*angle(centre.tangent,last.tangent));
+            const chordMid=mul(add(first.position,last.position),.5);
+            const deviation=length(sub(centre.position,chordMid));
+            if((tangentTurn>radians||deviation>error)&&depth<12&&b-a>1e-7){
+                split(a,mid,depth+1);
+                split(mid,b,depth+1);
+            }else{
+                distances.push(b);
+                if(distances.length>limit)throw new Error('Adaptive frame count exceeds maxFrames; increase sampling tolerances');
+            }
+        };
+        for(let i=0;i<count;i++)split(i===0?0:total*i/count,i===count-1?total:total*(i+1)/count,0);
+    }
     const frames:SplineFrameV2[]=[];
     let t0=v(0,0,1),right=v(1,0,0),up=v(0,1,0);
-    for(let i=0;i<=count;i++){
-        const distance=i===count?total:total*i/count;
+    for(let i=0;i<distances.length;i++){
+        const distance=distances[i];
         const parameter=parameterAtCachedDistanceV2(cache,distance);
         const sample=evaluateSplineV2(cache.spline,parameter);
         const tangent=tangentAt(cache,parameter,t0);

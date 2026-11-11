@@ -99,3 +99,15 @@ Node Road local knots: K0 (-1.701,0,-7.206), K1 (-3.869,0,3.720), K2 (5.820,0,4.
 6. Khi hinh hoc on, click `Bake glTF Asset` lai neu su dung Baked. Scene o Manual/Baked co the dang hien thi Mesh asset cu neu chua Rebuild/Show Baked Mesh.
 
 CI tests simulate this exact path and require smooth UV iso-curves, no geometry overlaps, a centreline-anchored texture, and unchanged UV2. Verification with the actual Cocos Editor + actual road material is still required.
+
+## Test adaptive Road va vach ke duong bang geometry rieng
+
+**Dau tien:** nho cap nhat extension ZIP moi va Rebuild Preview. Truoc day Inspector Continuous co the van build Clip cho Road khong co shoulder/curb; ban moi da sua loi chuyen tham so nay.
+
+- Trên Road v2, chọn **Surface Mode = Continuous**, **Adaptive Sampling = on**, **Max Turn Angle Degrees = 6**, **Max Chord Error = 0.03**. Giữ Sample Step = 0.25, Width = 4 và UV Longitudinal Axis = U. Rebuild Preview.
+- Với texture Road có vạch vàng/trắng sẵn, giữ **UV Cross Mode = Legacy**. Thử Physical chỉ khi bạn muốn giữ tỷ lệ asphalt ở đoạn đường co hẹp, vì đường sơn nằm trong texture có thể dịch.
+- **Cách tách vạch đường:** chuyển material slot 0 sang asphalt KHÔNG có vạch kẻ, bật **Generate Markings**, đặt Materials slot 3 = trắng và slot 4 = vàng. Slot 1/2 giữ shoulder/curb. Giữ Marking Line Width 0.12, Dash Length 3, Dash Gap 4 để thử.
+- Vạch mép là một dải liên tục, vạch giữa có khoảng đứt theo nhịp dash/gap, không phụ thuộc vào UV của asphalt. Rebuild Preview và so sánh trực tiếp.
+- Chỉ bật Generate Markings trong **Continuous**. Với Clip Overlaps, tùy chọn này chủ động báo lỗi để không tạo mesh marking không theo hình học sau cắt.
+- Khi đã ổn, nhấn **Bake glTF Asset** lại và gán materials cho từng slot. Do fingerprint phụ thuộc UV/geometry, Mesh Baked cũ sẽ stale sau khi đổi chế độ.
+- Đây vẫn là bản TEST. Kiểm tra trong Cocos Creator 3.8.x, đặc biệt vật liệu hai mặt, seam của đường sơn và hiệu năng của mesh dày.

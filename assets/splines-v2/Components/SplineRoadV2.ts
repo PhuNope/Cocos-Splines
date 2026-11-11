@@ -17,6 +17,7 @@ const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineV2UVAxis {V=0,U=1}
+export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
 export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1}
 /**
@@ -40,6 +41,12 @@ export class SplineRoadV2 extends Component {
     @property({min:0}) curbWidth=0;
     @property({min:0}) curbHeight=0;
     @property({min:0.01}) sampleStep=.5;
+    @property({tooltip:'Adaptive: add samples when the turn angle or spline chord error is large.'})
+    adaptiveSampling=true;
+    @property({min:1,max:90,step:1,tooltip:'Maximum local tangent turn (degrees) between Road rings.'})
+    maxTurnAngleDegrees=6;
+    @property({min:0.001,max:1,step:0.005,tooltip:'Maximum deviation from the curve to a mesh chord, in local units.'})
+    maxChordError=.03;
     @property({type:Enum(SplineV2RoadCornerMode),tooltip:'JoinAndTrim prevents local inner-edge folds at sharp bends; Legacy restores old ribbon sections.'})
     cornerMode=SplineV2RoadCornerMode.JoinAndTrim;
     @property({min:0.5,max:0.98,step:0.01,tooltip:'Safety fraction of local bend radius for the inside road edge.'})
@@ -57,6 +64,13 @@ export class SplineRoadV2 extends Component {
     @property({tooltip:'Align repeating UV0 texture phase at cut boundaries with the retained Road surface. Does not join lane markings with different directions.'})
     stitchCutUV=true;
     @property({min:0.01}) uvMetersPerRepeat=5;
+    @property({tooltip:'Generate independent white centre dashes (material 3) and solid edge lines (material 4). Use plain asphalt without baked-in paint.'})
+    generateMarkings=false;
+    @property({min:0.01,max:1,step:0.01}) markingLineWidth=.12;
+    @property({min:0.05,max:100,step:0.1}) markingDashLength=3;
+    @property({min:0,max:100,step:0.1}) markingDashGap=4;
+    @property({type:Enum(SplineV2UVCrossMode),tooltip:'Legacy preserves painted-edge UV positions. Physical preserves texel density when Road narrows (paint may shift). '})
+    uvCrossMode=SplineV2UVCrossMode.Legacy;
     @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=SplineV2UVAxis.V;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
@@ -127,7 +141,10 @@ export class SplineRoadV2 extends Component {
     public inspectCornerRisk():RoadCornerReportV2|null {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
-        const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep});
+        const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep,
+            ...(this.adaptiveSampling?{
+                maxAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError
+            }:{})});
         const sections=buildRoadCornerSectionsV2(frameTable.frames,
             this.width*.5+this.shoulderWidth+this.curbWidth,this.cornerSettings(),this.closed);
         const report=inspectRoadCornersV2(sections);
@@ -143,6 +160,12 @@ export class SplineRoadV2 extends Component {
         const curve=this.source();
         const cache=buildSplineCacheV2(curve);
         const uvLongitudinalAxis=this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v';
+        const uvCrossMode=this.uvCrossMode===SplineV2UVCrossMode.Physical?'physical' as const:'legacy' as const;
+        const markingOptions={lineWidth:this.markingLineWidth,
+            dashLength:this.markingDashLength,dashGap:this.markingDashGap};
+        const roadSampling={generateMarkings:this.generateMarkings,markingOptions,
+            adaptiveSampling:this.adaptiveSampling,
+            maxTurnAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError,uvCrossMode};
         const corners=this.cornerSettings();
         this._lastOverlapReport=null;
         this._lastContinuousReport=null;
@@ -154,11 +177,13 @@ export class SplineRoadV2 extends Component {
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
                 uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
-                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...corners
+                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...roadSampling,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
-                resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,...corners
+                resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
+                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
+                ...roadSampling,...corners
             });
         return {geometry};
     }
