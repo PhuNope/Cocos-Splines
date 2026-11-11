@@ -1,4 +1,4 @@
-name: Cocos Splines — validation only (no release)
+name: Cocos Splines — validation and opt-in test build (no release)
 
 on:
   push:
@@ -38,5 +38,37 @@ jobs:
       - name: Run regression tests including v2 core
         run: npm test
 
-# Deliberately NO release/tag/upload job. Release publication is a separate,
-# explicit, owner-approved action. Do not add an automatic on:push release job.
+  package-v2-test:
+    # This is a downloadable GitHub Actions *test artifact*, NOT a GitHub Release.
+    # Only a deliberately marked commit or manually dispatched workflow builds it.
+    if: >-
+      github.ref == 'refs/heads/v2.0.0' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && contains(github.event.head_commit.message, '[test-build]')))
+    needs: validate
+    name: Stage installable v2 ZIP artifact (no tag, no release)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build Editor scripts
+        run: npm run build
+      - name: Stage and verify installable extension
+        run: npm run pack:v2-test
+      - name: Upload test extension folder as a single downloadable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: cocos-splines-v2.0.0-test-${{ github.sha }}
+          path: test-build/
+          if-no-files-found: error
+          retention-days: 30
+
+# NO tags, GitHub Releases, npm publish, or release assets are created here.
+# The test artifact is available only from its GitHub Actions run for 30 days.
+
