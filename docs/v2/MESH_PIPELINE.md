@@ -56,3 +56,12 @@ Do not copy/paste a second material or create a separate Material instance for e
 3. Manual/Baked: verify **zero mesh generation in Play**, even after scene reload; Dynamic: verify old GPU meshes destroyed.
 4. Collider physics cook and teardown, material sharing and edit-mode-only warnings.
 5. Verify actual Cocos 3.8.x `Mesh` attribute layout and AssetDB serializer before enabling baked exports.
+
+## Cocos v2 Road bridge (prototype)
+
+- Add `SplinesV2.SplineRoad` to a Node with a MeshRenderer. Assign ordered knot Nodes in the Inspector (positions are transformed to the Road node's local coordinates).
+- **Rebuild preview** creates transient meshes, never a persisted asset. Dynamic creates and releases temporary meshes in Play. Temporary child renderers are flagged DontSave/HideInHierarchy in Editor.
+- **Bake glTF asset** exports a content-fingerprinted `.gltf` to `db://assets/SplineV2_...gltf` through `asset-db` main-process messages. It contains actual primitive geometry, UV0/UV2, normals, tangent handedness and material indices.
+- **Important manual step:** after Creator imports the glTF, expand it under Assets, drag the generated `.mesh` subasset into **Baked Mesh**. Choose **Manual** or **Baked**. Both modes only read this saved Mesh during Play and do not run `generate()`.
+- **Check bake status** compares geometry fingerprints and reports if the exported content is stale or the Mesh reference is missing. Bake does not overwrite existing assets, change material asset references, or automatically assign an imported subasset.
+- First-pass strip does **not** yet join road corners, produce curbs, perform junction Boolean trim, or guarantee nonoverlapping UV2 lightmap atlases. Actual Creator 3.8.x import/save-reload remains an integration gate.

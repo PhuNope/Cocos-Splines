@@ -69,6 +69,51 @@ async function selectedSpline(){
 }
 function alertError(action,e){console.error(`[Cocos Splines] ${action}:`,e);return {ok:false,error:String(e?.message||e)};}
 const methods={
+
+    async rebuildV2Road(){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            return await invokeScene('rebuildV2Road',uuid);
+        }catch(e){return alertError('v2-road-rebuild',e);}
+    },
+    async checkV2RoadBake(){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            const result=await invokeScene('inspectV2RoadBake',uuid);
+            if(!result?.ok)throw Error(result?.error||'Cannot inspect bake');
+            return {...result,message:!result.hasMesh
+                ? 'No Mesh assigned. Import/export a Bake glTF, then drag the .mesh subasset to Baked Mesh.'
+                : result.stale?'Warning: spline source changed since last Bake. Re-bake in Inspector.'
+                :'Saved mesh is assigned and the last stored fingerprint matches the source.'};
+        }catch(e){return alertError('v2-road-status',e);}
+    },
+    async bakeV2Road(){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            const prepared=await invokeScene('prepareV2RoadBake',uuid);
+            if(!prepared?.ok||!prepared.content||!prepared.fingerprint)
+                throw Error(prepared?.error||'Could not export v2 geometry');
+            // Include geometry fingerprint in filename. Never overwrite an older
+            // asset / UUID, so undo or an in-progress scene cannot lose its mesh.
+            const safeId=uuid.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
+            const target=`db://assets/SplineV2_${safeId}_${prepared.fingerprint}.gltf`;
+            let existed=false;
+            try{
+                const info=await Editor.Message.request('asset-db','query-asset-info',target);
+                existed=!!(info?.uuid);
+            }catch(_){/* older Editor variants may not expose this read; create-asset will fail safely if present */}
+            if(!existed){
+                const created=await Editor.Message.request('asset-db','create-asset',target,prepared.content);
+                if(created===false||created==null)throw Error('AssetDB did not confirm glTF creation');
+            }
+            await property(uuid,prepared.componentIndex,'bakedSourceFingerprint',prepared.fingerprint,'String');
+            await property(uuid,prepared.componentIndex,'bakedSourceUrl',target,'String');
+            await snapshot();
+            return {ok:true,url:target,primitiveCount:prepared.primitiveCount,message:
+                'Exported glTF into project Assets: '+target+
+                '. After import completes, expand the glTF and drag its Mesh subasset onto Baked Mesh; select Manual/Baked. Runtime never regenerates these modes.'};
+        }catch(e){return alertError('v2-road-bake',e);}
+    },
     async create2DSpline(){
         try{
             await ensureClasses();

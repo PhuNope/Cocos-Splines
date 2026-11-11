@@ -5,7 +5,8 @@
 - [ ] Core 2 hardening: high-curvature extrema, cusp and zero-length frame policy, adaptive frame subdivision and Editor integration.
 - [x] Mesh Pipeline 2 data foundation: multi-submesh/material slot, UV0/UV2, tangent normals, 16-bit chunking, collider triangle soup, fingerprints, seeded/large mesh regression.
 - [ ] Mesh Pipeline 2 Cocos integration: MeshRenderer/material binding, UV2 attribute layout, persisted editor asset and physics collider adapter.
-- [ ] Road/Extrude/Profile 2: replace legacy geometry with reusable mesh pipeline; precise profiles, helix, steep bends and corners.
+- [x] v2 Road strip vertical slice: pure geometry builder, Cocos component with Inspector preview and glTF Bake export, safe Manual/Baked Play gate.
+- [ ] Road/Extrude/Profile 2: sharp trims, curbs, full profiles, automatic AssetDB Mesh reference binding and real Cocos 3.8.x verification.
 - [ ] Editor bake: AssetDB-backed Mesh Assets with persisted references, Dynamic/Manual/Baked modes, preview and stale asset detection.
 - [ ] Network + Junction Geometry 2: linked endpoints, trim Road mesh, triangulation and matching UV, flat junction first.
 - [ ] Modular snapping/placement + follower/train traffic helpers, pooling and optional modifiers.

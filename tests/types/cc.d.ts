@@ -37,11 +37,13 @@ declare module 'cc' {
         m00:number;m01:number;m02:number;m04:number;m05:number;m06:number;m08:number;m09:number;m10:number;m12:number;m13:number;m14:number;
         static invert(out:Mat4,a:Mat4):Mat4;
     }
+    export class CCObject { static Flags:{DontSave:number;HideInHierarchy:number}; }
     export class Node {
         constructor(name?:string);
         parent:Node|null;worldPosition:Vec3;
-        uuid:string;name:string;isValid:boolean;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;
+        uuid:string;name:string;isValid:boolean;hideFlags:number;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
+        addComponent<T>(c:new (...args:any[])=>T):T;
         setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
         emit(event:string,payload?:any):void;
         destroy():void;
@@ -53,7 +55,7 @@ declare module 'cc' {
     export class EventHandler { static emitEvents(events:EventHandler[],...args:any[]):void; }
     export class Prefab {uuid:string}
     export function instantiate(p:Prefab):Node;
-    export class Mesh {uuid:string;data:Uint8Array;allowDataAccess:boolean;
+    export class Mesh {uuid:string;isValid:boolean;data:Uint8Array;allowDataAccess:boolean;
         struct:{primitives:any[];vertexBundles?:any[]};readAttribute(i:number,attr:string):Float32Array|Uint16Array|Int16Array|Uint32Array|Int32Array|null;
         readIndices(i:number):Uint16Array|Uint32Array|null;
         readAttributeFormat(i:number,attr:string):{name:string;size:number;count:number}|number|null;

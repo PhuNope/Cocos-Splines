@@ -223,5 +223,32 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+
+/** v2-only Inspector actions. These are not reachable from gameplay. */
+function roadV2Component(uuid){
+    const node=resolve(uuid);
+    const component=node?.components.find(c=>classOf(c)==='SplinesV2.SplineRoad');
+    return {node,component};
+}
+function rebuildV2Road(uuid){
+    const {component}=roadV2Component(uuid);
+    if(!component)return {ok:false,error:'Select a node with SplinesV2.SplineRoad'};
+    try{component.rebuildPreview();return {ok:true,message:'V2 preview rebuilt (temporary; not saved into the scene).'};}
+    catch(e){return {ok:false,error:String(e)};}
+}
+function prepareV2RoadBake(uuid){
+    const {node,component}=roadV2Component(uuid);
+    if(!node||!component)return {ok:false,error:'SplinesV2.SplineRoad not found'};
+    try{
+        const out=component.prepareBake();
+        return {ok:true,...out,componentIndex:node.components.indexOf(component)};
+    }catch(e){return {ok:false,error:String(e)};}
+}
+function inspectV2RoadBake(uuid){
+    const {component}=roadV2Component(uuid);
+    if(!component)return {ok:false,error:'SplinesV2.SplineRoad not found'};
+    try{return {ok:true,...component.inspectBake()};}
+    catch(e){return {ok:false,error:String(e)};}
+}
+exports.methods={rebuildV2Road,prepareV2RoadBake,inspectV2RoadBake,spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

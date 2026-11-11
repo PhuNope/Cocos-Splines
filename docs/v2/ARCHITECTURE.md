@@ -44,3 +44,7 @@ Follower, Junction routing and population depend only on Spline Core, not Mesh P
 - New `src-v2/geometry/MeshProcessing.ts`: triangle-level chunking with all attributes preserved, geometry diagnostics without Play logging, and local-space collider triangle soup.
 - New `src-v2/geometry/MeshBuildPlan.ts`: deterministic mesh+source revision fingerprints and data-only plans for Dynamic/Manual/Baked modes.
 - Full guide: [Mesh Pipeline 2](MESH_PIPELINE.md). Still missing a real Cocos Mesh/AssetDB/physics bridge, so it is **not yet a functional bake workflow**.
+
+## Engine bridge experimental vertical slice
+
+The `assets/splines-v2` AssetDB mount mirrors `src-v2/core` and `src-v2/geometry` without changing these pure TypeScript modules. A CI regression checks mirror identity. `SplinesV2.SplineRoad` owns a transient renderer for Dynamic/Editor preview; Manual/Baked only use an imported glTF Mesh subasset. A custom Inspector triggers explicit Rebuild/Bake/Check actions through main -> scene messages. Automatic glTF subasset binding and Cocos Editor smoke validation remain open.
