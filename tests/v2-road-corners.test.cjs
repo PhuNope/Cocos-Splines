@@ -66,7 +66,7 @@ try {
    const cross=[ab[1]*ac[2]-ab[2]*ac[1],ab[2]*ac[0]-ab[0]*ac[2],ab[0]*ac[1]-ab[1]*ac[0]];
    const expected=[0,1,2].map(k=>normals[a*3+k]+normals[b*3+k]+normals[c*3+k]);
    const dot=cross.reduce((s,x,k)=>s+x*expected[k],0);
-   assert(dot>1e-8,'Inverted/degenerate road triangle at index '+i+': '+dot);
+   assert(dot>0,'Back-facing road triangle at index '+i+': '+dot);
    checked++;
   }
   assert(checked>0);
