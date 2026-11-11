@@ -282,7 +282,7 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
             }else owner.set(key,{u:vertex.u,v:vertex.v});
         }
     }
-    const positions:Vec3MeshV2[]=,uv0:Vec2MeshV2[]=[],secondary:Vec2MeshV2[]=[],outNormals:Vec3MeshV2[]=[];
+    const positions:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],secondary:Vec2MeshV2[]=[],outNormals:Vec3MeshV2[]=[];
     const groups=new Map<number,number[]>();
     for(const item of finalPieces){
         let indices=groups.get(item.slot);
