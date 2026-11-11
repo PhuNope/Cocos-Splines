@@ -58,6 +58,7 @@ try{
  assert(component.includes('else this.showSavedMesh();'),'Manual/Baked should restore saved Mesh');
  assert(component.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor bake guard');
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
- assert.match(inspector.template,/Rebuild preview/);assert.match(inspector.template,/Bake glTF asset/);
+ assert.match(inspector.template,/Rebuild preview/i);assert.match(inspector.template,/Bake glTF asset/i);
+ assert.match(inspector.template,/Bind Imported Mesh/i);
  console.log('V2 COCOS BRIDGE PASS: road generator, glTF embedded UV2/multi-material, runtime gate, TS mirror and Inspector');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),os=require('node:os'),fs=require('nod
 const repo=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'v2-profile-'));
 try{
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--outDir',tmp,
-  path.join(repo,'src-v2/geometry/ProfileSweep.ts')],{stdio:'pipe'});
+  path.join(repo,'src-v2/geometry/ProfileSweep.ts'),path.join(repo,'src-v2/geometry/GltfExporter.ts')],{stdio:'pipe'});
  const {buildSplineCacheV2}=require(path.join(tmp,'core/SplineCache.js'));
  const {buildRoadProfileV2,buildTubeV2,buildProfileSweepV2}=require(path.join(tmp,'geometry/ProfileSweep.js'));
  const {exportMeshGltfV2}=require(path.join(tmp,'geometry/GltfExporter.js'));
