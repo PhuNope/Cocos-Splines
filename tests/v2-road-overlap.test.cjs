@@ -11,7 +11,8 @@ try{
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--outDir',temp,
   path.join(root,'src-v2/geometry/RoadOverlapClip.ts'),
   path.join(root,'src-v2/geometry/RoadStrip.ts'),
-  path.join(root,'src-v2/geometry/ProfileSweep.ts')],{stdio:'pipe'});
+  path.join(root,'src-v2/geometry/ProfileSweep.ts'),
+  path.join(root,'src-v2/geometry/MeshBuildPlan.ts')],{stdio:'pipe'});
  const {buildMeshV2}=require(path.join(temp,'geometry/MeshData.js'));
  const {resolveRoadOverlapV2}=require(path.join(temp,'geometry/RoadOverlapClip.js'));
  const {buildSplineCacheV2}=require(path.join(temp,'core/SplineCache.js'));
