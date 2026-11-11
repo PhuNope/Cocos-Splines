@@ -65,7 +65,7 @@ declare module 'cc' {
         lineWidth:number;strokeColor:Color;clear():void;moveTo(x:number,y:number):void;
         lineTo(x:number,y:number):void;stroke():void;close():void;
     }
-    export const gfx:{AttributeName:{ATTR_POSITION:string;ATTR_TEX_COORD:string;ATTR_NORMAL:string};Format:{RGB32F:number;RG32F:number;RGB16F:number;RG16F:number;RGB16I:number;RGB16UI:number;RG16I:number;RG16UI:number}};
+    export const gfx:{Attribute:new (name:string,format:number)=>any;AttributeName:{ATTR_TEX_COORD1:string;ATTR_POSITION:string;ATTR_TEX_COORD:string;ATTR_NORMAL:string};Format:{RGB32F:number;RG32F:number;RGB16F:number;RG16F:number;RGB16I:number;RGB16UI:number;RG16I:number;RG16UI:number}};
     export class Color {constructor(r?:number,g?:number,b?:number,a?:number);r:number;g:number;b:number;a:number;}
     export class Material {uuid:string;initialize(options:any):void;setProperty(key:string,value:any):void;destroy():void;}
     export class MeshRenderer extends Component {

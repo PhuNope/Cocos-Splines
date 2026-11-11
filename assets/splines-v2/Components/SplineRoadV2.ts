@@ -1,5 +1,5 @@
 import {
-    _decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,Enum,CCObject,utils
+    _decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,Enum,CCObject,utils,gfx
 } from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
@@ -119,7 +119,11 @@ export class SplineRoadV2 extends Component {
         const nextMeshes=plan.parts.map(part=>utils.createMesh({
             positions:Array.from(part.positions),normals:Array.from(part.normals),
             tangents:Array.from(part.tangents),uvs:Array.from(part.uv0),
-            indices:Array.from(part.indices)
+            indices:Array.from(part.indices),
+            ...(part.uv2?{customAttributes:[{
+                attr:new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD1,gfx.Format.RG32F),
+                values:Array.from(part.uv2)
+            }]}:{})
         }));
         const nextNodes:Node[]=[];
         try{

@@ -65,3 +65,8 @@ Do not copy/paste a second material or create a separate Material instance for e
 - **Important manual step:** after Creator imports the glTF, expand it under Assets, drag the generated `.mesh` subasset into **Baked Mesh**. Choose **Manual** or **Baked**. Both modes only read this saved Mesh during Play and do not run `generate()`.
 - **Check bake status** compares geometry fingerprints and reports if the exported content is stale or the Mesh reference is missing. Bake does not overwrite existing assets, change material asset references, or automatically assign an imported subasset.
 - First-pass strip does **not** yet join road corners, produce curbs, perform junction Boolean trim, or guarantee nonoverlapping UV2 lightmap atlases. Actual Creator 3.8.x import/save-reload remains an integration gate.
+
+### Dynamic UV2 and Play lifecycle validation
+
+- The Dynamic geometry adapter writes UV2 as a Cocos `customAttributes` attribute with `gfx.AttributeName.ATTR_TEX_COORD1` and `gfx.Format.RG32F` (the correct secondary-UV vertex semantic); glTF Bake writes `TEXCOORD_1`.
+- `tests/v2-road-play-mode.test.cjs` compiles and exercises `SplineRoadV2` against Cocos mocks: Manual and Baked never invoke geometry generation in Play, Dynamic meshes are disposed, scene meshes are not destroyed, and Editor-only commands reject Play calls. A real Creator project test remains required.
