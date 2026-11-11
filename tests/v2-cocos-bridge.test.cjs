@@ -32,8 +32,9 @@ try{
  assert.equal(gltf.accessors[gltf.meshes[0].primitives[0].indices].componentType,5123);
  const at=gltf.accessors[attrs.TEXCOORD_1],view=gltf.bufferViews[at.bufferView];
  assert(Math.abs(binary.readFloatLE(view.byteOffset)-0)<1e-6);
- assert(Math.abs(binary.readFloatLE(view.byteOffset+8)-1)<1e-6);
- assert(binary.readFloatLE(view.byteOffset+20)>0);
+ const uv2Values=Array.from({length:at.count*2},(_,i)=>binary.readFloatLE(view.byteOffset+4*i));
+ assert(uv2Values.some((v,i)=>i%2===0&&Math.abs(v-1)<1e-6),'UV2 across coordinate lost');
+ assert(uv2Values.some((v,i)=>i%2===1&&v>0),'UV2 distance coordinate lost');
  assert.equal(gltf.extras.cocosSplinesV2.fingerprint,data.fingerprint);
  // Multi-material geometry must remain separate glTF primitives.
  const multi=buildMeshV2({positions:[
