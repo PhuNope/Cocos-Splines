@@ -34,10 +34,15 @@ try{
   assert(fitted.report.constrainedSections>0&&fitted.report.minimumWidthRatio<1);
   assert.equal(fitted.report.hitSafetyLimit,false);
   const mesh=buildRoadStripV2(hairpin,{width:4,step,surfaceMode:'continuous',uvLongitudinalAxis:axis});
-  assert.equal(mesh.vertexCount,frames.length*2,'Do not cut or duplicate the regular strip UV rings');
-  assert.equal(mesh.triangleCount,(frames.length-1)*2,'Do not cut triangles from the UV strip');
-  for(let i=0;i<frames.length;i++)for(let side=0;side<2;side++){
-   const idx=2*(2*i+side),along=frames[i].distance/5,across=side;
+  assert.equal(mesh.vertexCount,frames.length*3,'Keep left/centre/right rings without cut vertices');
+  assert.equal(mesh.triangleCount,(frames.length-1)*4,'Two continuous half-width quads per ring segment');
+  for(let i=0;i<frames.length;i++)for(let side=0;side<3;side++){
+   const idx=2*(3*i+side),along=frames[i].distance/5,across=side/2;
+   if(side===1){
+    const pos=3*(3*i+side);
+    assert(Math.abs(mesh.positions[pos]-frames[i].position.x)<1e-4);
+    assert(Math.abs(mesh.positions[pos+2]-frames[i].position.z)<1e-4);
+   }
    assert(Math.abs(mesh.uv0[idx]-(axis==='u'?along:across))<2e-6);
    assert(Math.abs(mesh.uv0[idx+1]-(axis==='u'?across:along))<2e-6);
    assert(Math.abs(mesh.uv2[idx]-across)<2e-6);
@@ -58,8 +63,15 @@ try{
  const straight=buildSplineCacheV2({type:'linear',closed:false,knots:[k(0,0),k(0,12)]});
  const continuous=buildRoadStripV2(straight,{width:4,surfaceMode:'continuous'});
  const original=buildRoadStripV2(straight,{width:4,surfaceMode:'clip',resolvePlanarOverlaps:false});
- assert.deepEqual(Array.from(continuous.positions),Array.from(original.positions));
- assert.deepEqual(Array.from(continuous.uv0),Array.from(original.uv0));
+ assert.equal(continuous.vertexCount,(original.vertexCount/2)*3);
+ for(let i=0;i<original.vertexCount/2;i++){
+  for(const [j,k] of [[0,0],[2,1]]){
+   for(let c=0;c<3;c++)
+    assert(Math.abs(continuous.positions[3*(3*i+j)+c]-original.positions[3*(2*i+k)+c])<1e-5);
+   for(let c=0;c<2;c++)
+    assert(Math.abs(continuous.uv0[2*(3*i+j)+c]-original.uv0[2*(2*i+k)+c])<1e-5);
+  }
+ }
  const frames=buildSplineFramesV2(hairpin,{maxStep:.15}).frames;
  const sections=buildRoadContinuousSectionsV2(frames,2).sections;
  for(let i=1;i<sections.length;i++){
@@ -90,5 +102,5 @@ try{
   assert.throws(()=>buildRoadContinuousSectionsV2(frames,2,bad),/Continuous/);
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert.match(inspector.template,/spl-v2-surfaceMode/);
- console.log('CONTINUOUS ROAD PASS: no clipped triangles or UV breaks, U/V UV0, UV2, shoulders, curbs, height separation and glTF Bake.');
+ console.log('CONTINUOUS ROAD PASS: centre-anchored UV rings without clipping, U/V UV0, UV2, shoulders, curbs, height separation and glTF Bake.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

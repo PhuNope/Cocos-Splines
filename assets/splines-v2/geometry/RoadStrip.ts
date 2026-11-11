@@ -43,12 +43,14 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     const corners=buildRoadCornerSectionsV2(table.frames,width*.5,options,cache.spline.closed);
     const mode=options.surfaceMode??'clip';
     if(mode!=='clip'&&mode!=='continuous')throw new Error('Unknown Road surface mode');
-    const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(table.frames,width*.5,{...options,closed:cache.spline.closed}):null;
+    const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(table.frames,width*.5,{...options,cornerSections:corners,closed:cache.spline.closed}):null;
     if(continuous)options.onContinuousReport?.(continuous.report);
     // UV2 is a deterministic secondary channel, not a lightmap atlas unwrap.
     for(let i=0;i<count;i++){
         const f=table.frames[i];
-        for(const side of [-1,1]){
+        // The centre UV must stay on the real spline centreline even when the
+        // inside shoulder narrows. Two endpoints would shift lane markings.
+        for(const side of (mode==='continuous'?[-1,0,1]:[-1,1])){
             const half=width*.5*side;
             const renderX=continuous?roadContinuousProfileX_V2(half,width*.5,continuous.sections[i]):half;
             positions.push(roadCornerPositionV2(f,corners[i],renderX,0));
@@ -59,8 +61,9 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
         }
     }
     const indices:number[]=[];
-    for(let i=0;i<count-1;i++){
-        const a=2*i,b=a+1,c=a+2,d=a+3;
+    const vertsPerRing=mode==='continuous'?3:2;
+    for(let i=0;i<count-1;i++)for(let lane=0;lane<vertsPerRing-1;lane++){
+        const a=i*vertsPerRing+lane,b=a+1,c=a+vertsPerRing,d=c+1;
         appendRoadQuadV2(positions,normals,a,b,c,d,indices);
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});

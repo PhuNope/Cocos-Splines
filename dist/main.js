@@ -97,6 +97,10 @@ const methods={
             const continuous=result.cornerRisk?.continuousReport;
             const warn=(continuous?.constrainedSections
                 ?' Continuous Road: '+continuous.constrainedSections+' sections width-fitted; smallest '+Math.round(100*continuous.minimumWidthRatio)+'% of requested Width, UV uncut.':'')+
+                (continuous?.curvatureConstrainedSections
+                ?' Local curve radius narrowed '+continuous.curvatureConstrainedSections+' inside sections.':'')+
+                (continuous?.slopeSafetyCapped
+                ?' Effective Width Slope safety-capped to '+continuous.effectiveWidthSlope+'.':'')+
                 (continuous?.hitSafetyLimit
                 ?' Continuous width solver reached safety limit; inspect mesh.':'')+
                 (result.cornerRisk?.pinchedSections

@@ -1,4 +1,5 @@
 import {type SplineFrameV2} from '../core/SplineFrames';
+import {type RoadCornerSectionV2} from './RoadCorners';
 
 /** Per-ring asymmetric clearance for a continuous, non-Boolean Road ribbon. */
 export interface RoadContinuousOptionsV2 {
@@ -6,6 +7,8 @@ export interface RoadContinuousOptionsV2 {
     readonly clearanceSafety?:number;
     /** Maximum change in rendered half-width per metre of spline. */
     readonly widthSlope?:number;
+    /** Local curvature constraints sampled at exactly the same spline frames. */
+    readonly cornerSections?:ReadonlyArray<RoadCornerSectionV2>;
     /** True for a spline whose final sample joins the first. */
     readonly closed?:boolean;
 }
@@ -15,6 +18,9 @@ export interface RoadContinuousSectionV2 {
 }
 export interface RoadContinuousReportV2 {
     readonly constrainedSections:number;
+    readonly curvatureConstrainedSections:number;
+    readonly effectiveWidthSlope:number;
+    readonly slopeSafetyCapped:boolean;
     readonly minimumWidthRatio:number;
     readonly impossibleCrossings:number;
     /** Safety cap reached when many nearby frame pairs occupy a small area. */
@@ -38,10 +44,14 @@ export function buildRoadContinuousSectionsV2(
     options:RoadContinuousOptionsV2={}
 ):RoadContinuousResultV2 {
     if(!Number.isFinite(halfExtent)||halfExtent<=0)throw new Error('Invalid continuous Road half extent');
-    const safety=options.clearanceSafety??.35,slope=options.widthSlope??.65;
+    const safety=options.clearanceSafety??.35,requestedSlope=options.widthSlope??.65;
+    // A larger width derivative produces sharp corners in inside-edge UV isolines.
+    const slope=Math.min(requestedSlope,.25);
     if(!Number.isFinite(safety)||safety<.05||safety>.98)throw new Error('Continuous Road clearanceSafety must be 0.05..0.98');
-    if(!Number.isFinite(slope)||slope<=0||slope>4)throw new Error('Continuous Road widthSlope must be >0 and <=4');
+    if(!Number.isFinite(requestedSlope)||requestedSlope<=0||requestedSlope>4)throw new Error('Continuous Road widthSlope must be >0 and <=4');
     const n=frames.length;
+    if(options.cornerSections&&options.cornerSections.length!==n)
+        throw new Error('Continuous Road corner section count mismatch');
     if(n<2)throw new Error('Continuous Road needs at least two frames');
     const negative=Array(n).fill(halfExtent) as number[];
     const positive=Array(n).fill(halfExtent) as number[];
@@ -87,19 +97,65 @@ export function buildRoadContinuousSectionsV2(
             }
         }
     }
+    // The original solver only checked clearance between distant arms.
+    // A single C1 bend can also fold when its inside half-width exceeds the
+    // local curvature radius. Keep the inside offset well below the radius,
+    // with a margin under RoadCorners' nonlinear compression threshold (0.7).
+    // Applying the cap before smoothing means UV0 and geometry remain one strip.
+    let curvatureConstrainedSections=0;
+    if(options.cornerSections)for(let i=0;i<n;i++){
+        const corner=options.cornerSections[i];
+        if(!corner.insideSign||!Number.isFinite(corner.insideLimit))continue;
+        const safe=Math.max(.005*halfExtent,Math.min(halfExtent,corner.insideLimit*.35));
+        if(corner.insideSign>0){
+            if(safe<positive[i]-1e-6)curvatureConstrainedSections++;
+            positive[i]=Math.min(positive[i],safe);
+        }else{
+            if(safe<negative[i]-1e-6)curvatureConstrainedSections++;
+            negative[i]=Math.min(negative[i],safe);
+        }
+    }
     // Lipschitz envelope: local width cannot jump sharply between rings.
     const spread=(values:number[])=>{
         for(let i=1;i<n;i++)values[i]=Math.min(values[i],values[i-1]+slope*Math.max(0,frames[i].distance-frames[i-1].distance));
         for(let i=n-2;i>=0;i--)values[i]=Math.min(values[i],values[i+1]+slope*Math.max(0,frames[i+1].distance-frames[i].distance));
     };
     spread(negative);spread(positive);
+    // A plain minimum-of-linear-cones has a derivative cusp at the narrowest
+    // ring: this showed up as a visibly stepped yellow line on a real 3-knot
+    // turn. Rounded minimum convolution preserves conservative width bounds,
+    // but transitions through that narrow ring with a smooth derivative.
+    const soften=(values:number[])=>{
+        const original=values.slice(),out=values.slice();
+        const radius=Math.max(2,halfExtent*5),transition=Math.max(.5,halfExtent*2);
+        for(let i=0;i<n;i++){
+            let best=original[i];
+            for(let delta=1;delta<=128;delta++){
+                let any=false;
+                for(const j of [i-delta,i+delta]){
+                    if(j<0||j>=n)continue;
+                    const distance=Math.abs(frames[i].distance-frames[j].distance);
+                    if(distance>radius)continue;
+                    any=true;
+                    const cost=slope*distance*distance/(distance+transition);
+                    best=Math.min(best,original[j]+cost);
+                }
+                if(!any)break;
+            }
+            out[i]=best;
+        }
+        for(let i=0;i<n;i++)values[i]=out[i];
+    };
+    soften(negative);soften(positive);
     const sections=negative.map((left,i)=>({left,right:positive[i]}));
     let constrained=0,minRatio=1;
     for(const s of sections){
         if(s.left<halfExtent-1e-5||s.right<halfExtent-1e-5)constrained++;
         minRatio=Math.min(minRatio,(s.left+s.right)/(2*halfExtent));
     }
-    return {sections,report:{constrainedSections:constrained,minimumWidthRatio:minRatio,impossibleCrossings:crossings,hitSafetyLimit}};
+    return {sections,report:{constrainedSections:constrained,curvatureConstrainedSections,
+        effectiveWidthSlope:slope,slopeSafetyCapped:requestedSlope>slope,
+        minimumWidthRatio:minRatio,impossibleCrossings:crossings,hitSafetyLimit}};
 }
 export function roadContinuousProfileX_V2(x:number,halfExtent:number,section:RoadContinuousSectionV2):number {
     return x<0?x*section.left/halfExtent:x*section.right/halfExtent;

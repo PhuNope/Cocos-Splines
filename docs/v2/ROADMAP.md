@@ -29,3 +29,6 @@
 - No duplicate mesh, memory leaks or rebuild in Baked mode during Play.
 - No runtime diagnostics that are only useful for authoring; use Editor-only warnings.
 - All authoring controls remain in Inspector, not a separate graph editor panel.
+
+- [x] Real 3-Knot curve regression: local curvature width limits, rounded conservative width envelope, UV0 centreline vertex, U/V and UV2 preservation (TypeScript test).
+- [ ] Confirm in real Cocos Creator 3.8.x Editor against the original asphalt material and screenshot.

@@ -86,3 +86,16 @@ Set Width 4, Sample Step 0.15, Corner Mode JoinAndTrim; run Rebuild Preview and 
 4. So sánh **Surface Mode = Clip Overlaps** rồi Rebuild: Clip sẽ ưu tiên giữ bề rộng nhưng có thể làm vạch kẻ gãy tại nơi hai nhánh chồng nhau. Quay về Continuous để ưu tiên texture chạy liên tục.
 5. Với U-turn có hai nhánh quá gần, Road sẽ hẹp lại tại phía trong khúc cua để tránh tự chồng. Đây là đánh đổi hình học cần thiết; muốn giữ `Width=4` trên toàn đường, tăng bán kính cua/khoảng cách hai nhánh bằng Knot.
 6. Test Road có Shoulder/Curb, cả trục U và V, rồi **Bake glTF Asset** lại sau khi hài lòng với hình học. Chú ý kiểm tra lại texture trong Editor thật vì CI chỉ có test TypeScript/Mock.
+
+## Kiem thu Road 3 Knot tu screenshot (khong con vach vang giat bac)
+
+Node Road local knots: K0 (-1.701,0,-7.206), K1 (-3.869,0,3.720), K2 (5.820,0,4.347).
+
+1. Thay toan bo extension ZIP cu, reload extension/AssetDB. Chon `SplinesV2.SplineRoad`.
+2. `Interpolation=Centripetal`, `Width=4`, `Sample Step=0.25`, `Corner Mode=JoinAndTrim`, `Surface Mode=Continuous`, `UV Longitudinal Axis=U`, `UV Meters Per Repeat=5`.
+3. `Clearance Safety=0.98` van duoc ho tro. `Width Slope` nen de `0.25`; neu Scene cu luu `2`, generator se gioi han gia tri hieu luc ve 0.25 de tranh mep cua giat bac.
+4. `Rebuild Preview`. Quan sat vach vang phia trong va vach trang giua duong. Mesh Continuous moi co 3 dinh (trai/tam/phai) moi tiet dien, UV giua dinh tam chinh xac theo spline, khong con giat sang ben khi mep trong thu hep.
+5. Chung minh khong phai do Polygon UV Clip: khi `Surface Mode=Continuous`, `Resolve Planar Overlaps` va `Stitch Cut UV` khong thuc hien bat ky viec cat tam giac nao. Chi co bo giai radius + width smoothing.
+6. Khi hinh hoc on, click `Bake glTF Asset` lai neu su dung Baked. Scene o Manual/Baked co the dang hien thi Mesh asset cu neu chua Rebuild/Show Baked Mesh.
+
+CI tests simulate this exact path and require smooth UV iso-curves, no geometry overlaps, a centreline-anchored texture, and unchanged UV2. Verification with the actual Cocos Editor + actual road material is still required.

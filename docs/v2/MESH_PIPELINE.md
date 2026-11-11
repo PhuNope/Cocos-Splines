@@ -141,3 +141,20 @@ The geometry of a road of fixed `Width=4` cannot remain an injective strip where
 - **Surface Mode = Clip Overlaps** remains available for comparisons or intentionally unioned overlapping polygons; only in that mode are **Resolve Planar Overlaps** and **Stitch Cut UV** consulted.
 - Editor diagnostics report constrained frame count and minimum effective width ratio; there is no new Play-mode logging.
 - This is not a proof of self-intersection-free geometry for arbitrary loops, bridges, coincident centreline crossings, very steep banked roads, or full Junctions. A geometrically impossible sharp turn may still need knot edits, a separate junction mesh or authored lane markings. No claim of a perfect constant-width U-turn is made.
+
+## Actual user 3-knot turn: preserve centre marking and smooth inner radius
+
+Regression uses the exact Knot local positions seen in Cocos Creator:
+- K0 = (-1.701, 0, -7.206)
+- K1 = (-3.869, 0, 3.720)
+- K2 = (5.820, 0, 4.347)
+- Centripetal, Width=4, Sample Step=0.25, UV Longitudinal Axis=U, Corner Mode=JoinAndTrim,
+  Surface Mode=Continuous, Clearance Safety=0.98, previous Width Slope=2.
+
+The prior Continuous road only fitted widths based on *proximity of distant arms*. This 3-knot turn does not require distant-arm collision to be visibly broken: the inside offset reverses when the half-width exceeds the **local curvature radius**. The original per-ring exponential corner trim produced a sharp wedge; with two vertices per ring, asymmetric narrowing additionally displaced the UV midline away from the spline centre.
+
+The updated Continuous solver accepts per-ring `RoadCornerSectionV2` radius limits, constrains the inside half-width to 0.35 times its safe local limit, then applies a conservative **rounded minimum envelope** over distance. Its effective `Width Slope` is capped at **0.25**, including old Scenes where the serialized value was higher (e.g. 2). It deliberately narrows the inside lane when geometry cannot support a constant Width. The Editor-only status reports radius-limited ring count and slope safety capping.
+
+Continuous `RoadStrip` now writes **left, centre, right** vertices per sample, with UV0 across = 0, 0.5, 1. The centre UV is exactly on the spline centreline, not at the geometrically displaced midpoint of the asymmetric edges. RoadProfile also adds an asphalt centre vertex when Continuous is selected. This preserves centre dashed marking and outer painted lines without Boolean cuts. UV2 remains a distinct channel; both U/V axis modes and glTF Bake use identical coordinates. The existing programmatic/Inspector Clip mode remains unchanged, and Tube Extrude is not affected.
+
+**Limitation:** local width fitting is not topology-aware CSG for arbitrary splines, road networks or overlapping branches at different heights. It may temporarily narrow a two-lane road too much; in that case revise Knot positions or increase bend radius. The safety slope cap is intentional to prevent reintroducing stepped lane stripes.

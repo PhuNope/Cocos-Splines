@@ -242,6 +242,10 @@ function rebuildV2Road(uuid){
             ?' Continuous UV strip: auto-fitted width at '+continuous.constrainedSections+
               ' sections (minimum '+Math.round(100*continuous.minimumWidthRatio)+
               '% of requested Width); no overlap polygon cuts.':'')+
+            (continuous?.curvatureConstrainedSections
+            ?' Local bend radius limited inside width at '+continuous.curvatureConstrainedSections+' frames.':'')+
+            (continuous?.slopeSafetyCapped
+            ?' Width Slope safety-capped to '+continuous.effectiveWidthSlope+' to keep markings smooth.':'')+
             (continuous?.hitSafetyLimit
             ?' Continuous width solver reached its safety cap; inspect extreme overlaps.':'')+
             (continuous?.impossibleCrossings

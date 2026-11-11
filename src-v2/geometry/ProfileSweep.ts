@@ -194,9 +194,10 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     const mode=options.surfaceMode??'clip';
     if(mode!=='clip'&&mode!=='continuous')throw new Error('Unknown Road surface mode');
     const totalHalfExtent=half+shoulder+curb;
+    const frames=buildSplineFramesV2(cache,{maxStep:options.step??.5}).frames;
+    const cornerSections=buildRoadCornerSectionsV2(frames,totalHalfExtent,options,cache.spline.closed);
     const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(
-        buildSplineFramesV2(cache,{maxStep:options.step??.5}).frames,totalHalfExtent,
-        {...options,closed:cache.spline.closed}):null;
+        frames,totalHalfExtent,{...options,cornerSections,closed:cache.spline.closed}):null;
     if(continuous)options.onContinuousReport?.(continuous.report);
     const push=(x:number,y:number,slot?:number)=>{
         if(slot!==undefined)slots.push(slot);
@@ -210,6 +211,8 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     }
     if(!pts.length)push(-half-shoulder,0);
     if(shoulder>0)push(-half,0,1);
+    // Continuous mode anchors the asphalt's UV0 middle at the centreline.
+    if(mode==='continuous')push(0,0,0);
     push(half,0,0);
     if(shoulder>0)push(half+shoulder,0,1);
     if(height>0)push(half+shoulder,height,2);

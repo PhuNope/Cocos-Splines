@@ -52,8 +52,8 @@ export class SplineRoadV2 extends Component {
     surfaceMode=SplineV2SurfaceMode.Continuous;
     @property({min:.05,max:.98,step:.01,tooltip:'Reduce width near nearby road arms, without cutting textures.'})
     clearanceSafety=.35;
-    @property({min:.05,max:4,step:.05,tooltip:'Controls how smoothly road width changes near U-turns.'})
-    widthSlope=.65;
+    @property({min:.05,max:4,step:.05,tooltip:'Smooth width response near bends. Effective slope is capped at 0.25 in Continuous mode so road stripes cannot form steps.'})
+    widthSlope=.25;
     @property({tooltip:'Align repeating UV0 texture phase at cut boundaries with the retained Road surface. Does not join lane markings with different directions.'})
     stitchCutUV=true;
     @property({min:0.01}) uvMetersPerRepeat=5;
