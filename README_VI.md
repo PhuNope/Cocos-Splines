@@ -63,3 +63,5 @@ Trong `SplineRoad` → **Sharp Corners**, đặt `Corner Mode = Join And Trim` �
 ### Junction Mesh nối UV của Road (v0.9.12)
 
 Trong `SplineJunctionMesh` chọn **UV Mode = Road Matched**, đặt **UV Blend Start = 0.55**, gán **cùng một Material** cho tất cả `SplineRoad` và Junction Mesh. Texture cần **Wrap U/V = Repeat**. Mesh patch lấy đúng vị trí và UV0 ở biên asphalt Road đã dựng, hỗ trợ UV Length Along U/V, đảo chiều, offset, Width Tiles và Width Modifiers. Tâm giao lộ dùng nội suy UV, nên các vạch kẻ làn phức tạp vẫn có thể bị méo ở khu vực này. `World Projected` là mặc định cũ. Xem `docs/pages/junction-mesh.html`.
+
+> **Đang phát triển trên nhánh v2.0.0:** nền tảng Mesh Pipeline 2 (UV0/UV2, nhiều material, chia mesh theo chunk, dữ liệu collider) đã có ở `src-v2/geometry`. Chưa có component v2 tích hợp Cocos Editor hoặc Bake AssetDB. Xem [Mesh Pipeline 2](docs/v2/MESH_PIPELINE.md).

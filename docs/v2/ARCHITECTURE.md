@@ -37,3 +37,10 @@ Follower, Junction routing and population depend only on Spline Core, not Mesh P
 - `SplineFrames.ts`: parallel transport produces right/up/tangent orthonormal frames for near-vertical splines and helices; correct accumulated loop twist at the seam. Sample a prebuilt frame table at runtime; use maxStep to bound approximation cost.
 - V2 core remains engine-independent and is **not yet a Cocos Component**. Frame orientation is not an automatic collision-free mesh guarantee: tight helix pitch and excessive profile width can still self-intersect. Editor-only diagnostics and geometric safety tests are planned.
 - CI remains validation only; no tag, artifact or release before owner approval.
+
+## Mesh Pipeline 2 data foundation
+
+- New `src-v2/geometry/MeshData.ts`: stable vertex-array and submesh index layout, material slots, UV0/UV2, area-weighted normals and UV tangents with handedness.
+- New `src-v2/geometry/MeshProcessing.ts`: triangle-level chunking with all attributes preserved, geometry diagnostics without Play logging, and local-space collider triangle soup.
+- New `src-v2/geometry/MeshBuildPlan.ts`: deterministic mesh+source revision fingerprints and data-only plans for Dynamic/Manual/Baked modes.
+- Full guide: [Mesh Pipeline 2](MESH_PIPELINE.md). Still missing a real Cocos Mesh/AssetDB/physics bridge, so it is **not yet a functional bake workflow**.
