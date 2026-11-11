@@ -165,7 +165,12 @@ export function appendRoadQuadV2(
     const alternate:[[number,number,number],[number,number,number]]=
         flipFaces?[[a,d,c],[a,b,d]]:[[a,c,d],[a,d,b]];
     function score(tri:[number,number,number]):number {
-        const [i,j,k]=tri,p=positions[i],q=positions[j],r=positions[k];
+        const [i,j,k]=tri;
+        // GPU and baked .mesh positions are Float32. Validate after that
+        // quantization, or tiny but valid Float64 curb wedges can collapse
+        // into zero-area triangles when finally uploaded.
+        const f=(a:V3):V3=>v(Math.fround(a.x),Math.fround(a.y),Math.fround(a.z));
+        const p=f(positions[i]),q=f(positions[j]),r=f(positions[k]);
         const e1=sub(q,p),e2=sub(r,p),face=cross(e1,e2);
         const area=len(face);
         if(!Number.isFinite(area)||area<1e-11)return -1;
