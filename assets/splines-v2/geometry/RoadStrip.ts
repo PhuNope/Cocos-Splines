@@ -2,6 +2,7 @@ import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
+import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     /** Total asphalt width in spline-local units. */
     readonly width:number;
@@ -11,6 +12,9 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     readonly uvLongitudinalAxis?:'u'|'v';
     readonly step?:number;
     readonly materialSlot?:number;
+    /** Remove near-coplanar duplicate Road surfaces; enabled for JoinAndTrim by default. */
+    readonly resolvePlanarOverlaps?:boolean;
+    readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
 }
 /**
  * Minimal v2 road geometry generator. Uses the same stable frames as followers,
@@ -48,5 +52,9 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
         const a=2*i,b=a+1,c=a+2,d=a+3;
         appendRoadQuadV2(positions,normals,a,b,c,d,indices);
     }
-    return buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});
+    const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});
+    if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
+    const result=resolveRoadOverlapV2(mesh,{roadWidth:width});
+    options.onOverlapReport?.(result.report);
+    return result.mesh;
 }

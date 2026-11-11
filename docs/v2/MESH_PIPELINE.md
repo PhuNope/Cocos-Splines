@@ -106,3 +106,13 @@ Road V2 and Extrude V2 both expose `uvLongitudinalAxis` in the Inspector (native
 The road section triangulator now checks face orientation against generated normals for each quad. When the inner edge becomes concave, it switches the diagonal rather than rendering an inverted triangle. In the rare crossed/degenerate case, only front-facing triangles are emitted. Both RoadStrip and material-banded RoadProfile share the same function; Tube Extrude remains unchanged.
 
 The Editor-only **Check Bake Status** and **Rebuild Preview** messages also inspect distant centreline sections with a bounded 3D proximity check. A 'potential nonlocal overlap' warning means two parts of the same Road come closer than its width, so local trim **cannot** safely union them. Use a dedicated Junction Mesh, reduce width or redesign the loop. Elevated crossings separated in 3D should not be treated as intersections solely from the XZ projection.
+
+## Road v2: resolving actual planar self-overlap (U-turn)
+
+The earlier JoinAndTrim reduces local inner corner foldover but cannot remove a wide Road surface covering itself. **Resolve Planar Overlaps** now defaults to enabled in the Road V2 Inspector. A separate, pure TypeScript `RoadOverlapClip.ts` performs a first-surface-wins *triangle union*: spatially query previous Road triangles, subtract overlapping nearly coplanar regions, and triangulate the exposed polygons with interpolated UV0/UV2 and normals. This is different from culling back-faces: it removes duplicate coplanar Road area so textures are not drawn twice.
+
+Material slots remain independent, with earlier asphalt faces taking precedence where cross-section bands overlap. Existing bake fingerprints update after geometry changes. The exported glTF is generated from the resolved mesh, exactly like Dynamic previews. **Show Baked Mesh** still restores a saved asset when necessary.
+
+Limits: this is not road intersection topology generation, a full 3D Boolean, or a guarantee of seamless lane markings. First-surface-wins can leave a *texture direction seam* at the cut boundary. Height-separated overpasses, vertical walls, very steep banking and tube Extrude are left alone; non-planar intersections must be handled using junction geometry. The resolver has explicit performance caps; in extreme cases it returns the input mesh and reports that the safety limit was reached, rather than hanging the Editor.
+
+In **Rebuild Preview** / **Check Bake Status** the Inspector reports how many source triangles were clipped. Warnings remain Editor-only, not Play runtime logs. To compare visually, disable `resolvePlanarOverlaps` and rebuild; enable and rebuild again. A previously saved Baked mesh requires a fresh Bake.

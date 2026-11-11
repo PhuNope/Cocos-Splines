@@ -236,11 +236,15 @@ function rebuildV2Road(uuid){
     try{
         component.rebuildPreview();
         const risk=component.inspectCornerRisk?.();
+        const overlap=risk?.overlapReport;
         const warn=(risk?.pinchedSections
             ?' Inside edge trimmed at '+risk.pinchedSections+' samples.':'')+
+            (overlap?.clippedSourceTriangles
+            ?' Coplanar overlap removed from '+overlap.clippedSourceTriangles+' source triangles.':'')+
+            (overlap?.hitSafetyLimit
+            ?' Overlap resolver reached its safety limit; original surface retained.':'')+
             (risk?.potentialOverlapPairs
-            ?' Potential nonlocal overlap ('+risk.potentialOverlapPairs+
-              ' close segment pairs); use separate junction/less road width.':'');
+            ?' '+risk.potentialOverlapPairs+' close centreline pairs detected; inspect nonplanar crossings visually.':'');
         return {ok:true,cornerRisk:risk||null,
             message:'V2 preview rebuilt (temporary; not saved into the scene).'+warn};
     }

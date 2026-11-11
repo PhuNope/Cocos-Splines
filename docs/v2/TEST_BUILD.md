@@ -59,3 +59,11 @@ Không có tag, Release hoặc npm publish từ quy trình đóng gói này.
 ## Triangulation verification for a tight U-turn
 
 Set Width 4, Sample Step 0.15, Corner Mode JoinAndTrim; run Rebuild Preview and compare Legacy on a duplicate Scene. Front-facing road triangles should no longer flip at the inner concave sections. The Inspector may still warn about nonlocal road self-overlap when the **entire road width is greater than the spacing between two different arms** of the U-turn. A single road-strip generator cannot safely merge those arms without junction/Boolean geometry.
+
+## Kiểm thử Road tự chồng (ảnh đường chữ U)
+
+1. Trong Road V2, giữ `Width=4`, `Sample Step=0.25`, `Corner Mode=JoinAndTrim`. Bật **Resolve Planar Overlaps** (mặc định).
+2. Nhấn **Rebuild Preview**. Thông báo Inspector có thể hiển thị số tam giác đã cắt khỏi vùng Road bị chồng; quan sát các vạch đường gần phía trong khúc cua.
+3. Tắt **Resolve Planar Overlaps**, nhấn Rebuild Preview để so sánh; bật lại khi đã kiểm tra. Đây là tùy chọn cho **mặt Road gần đồng phẳng**, không áp dụng cho cầu vượt/Extrude dạng ống.
+4. Giữ `UV Longitudinal Axis=U` như texture của bạn. UV0/UV2 được nội suy tại mép cắt. Nếu hai chiều texture khác nhau gặp nhau, vẫn có thể xuất hiện đường nối texture, nhưng không còn hai mặt đồng phẳng cùng vẽ lên một vùng.
+5. Sau khi xem preview ổn, nhấn **Bake glTF Asset** lại để cập nhật mesh lưu. Nếu có đường giao thực sự, lối rẽ nhánh, hoặc cầu vượt, dùng Junction Mesh chuyên dụng.

@@ -8,6 +8,7 @@ import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2} from '../geometry/ProfileSweep';
 import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
 import {buildSplineFramesV2} from '../core/SplineFrames';
+import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -43,6 +44,8 @@ export class SplineRoadV2 extends Component {
     cornerTrimSafety=.9;
     @property({min:1,max:4,step:.1,tooltip:'Limit outward miter spikes at sharp corners.'})
     cornerMiterLimit=2.5;
+    @property({tooltip:'Remove overlapping near-coplanar road faces (like a wide U-turn) before rendering. Does not Boolean-union crossings at different heights.'})
+    resolvePlanarOverlaps=true;
     @property({min:0.01}) uvMetersPerRepeat=5;
     @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=SplineV2UVAxis.V;
@@ -55,6 +58,7 @@ export class SplineRoadV2 extends Component {
     @property({visible:false}) bakedSourceUrl='';
     @property({visible:false}) pendingBakeUrl='';
     @property({visible:false}) pendingBakeFingerprint='';
+    private _lastOverlapReport:RoadOverlapReportV2|null=null;
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -118,7 +122,7 @@ export class SplineRoadV2 extends Component {
         const report=inspectRoadCornersV2(sections);
         const clearance=inspectRoadCenterlineClearanceV2(frameTable.frames,
             this.width+2*this.shoulderWidth+2*this.curbWidth);
-        return {...report,...clearance};
+        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined};
     }
     private cornerSettings(){
         return {cornerMode:this.cornerMode===SplineV2RoadCornerMode.Legacy?'legacy' as const:'join-trim' as const,
@@ -129,14 +133,17 @@ export class SplineRoadV2 extends Component {
         const cache=buildSplineCacheV2(curve);
         const uvLongitudinalAxis=this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v';
         const corners=this.cornerSettings();
+        this._lastOverlapReport=null;
+        const onOverlapReport=(report:RoadOverlapReportV2):void=>{this._lastOverlapReport=report;};
         const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
-                uvLongitudinalAxis,...corners
+                uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,onOverlapReport,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
-                step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,...corners
+                step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
+                resolvePlanarOverlaps:this.resolvePlanarOverlaps,onOverlapReport,...corners
             });
         return {geometry};
     }

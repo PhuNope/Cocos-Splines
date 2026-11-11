@@ -26,7 +26,9 @@ try {
  const uturn=buildSplineCacheV2({type:'catmull-rom-centripetal',closed:false,
   knots:[p(0,0,0),p(0,0,2),p(2,0,2),p(2,0,0)]},{tolerance:.001});
  const options={width:4,step:.15,uvMetersPerRepeat:3,uvLongitudinalAxis:'u'};
- const trimmed=buildRoadStripV2(uturn,options);
+ const trimmed=buildRoadStripV2(uturn,{...options,resolvePlanarOverlaps:false});
+ const globallyResolved=buildRoadStripV2(uturn,options);
+ assert(globallyResolved.triangleCount>0);
  const old=buildRoadStripV2(uturn,{...options,cornerMode:'legacy'});
  const frameList=buildSplineFramesV2(uturn,{maxStep:options.step}).frames;
  const sections=buildRoadCornerSectionsV2(frameList,options.width*.5,{},false);
@@ -72,9 +74,12 @@ try {
   assert(checked>0);
  }
  validateFaceOrientation(trimmed);
+ validateFaceOrientation(globallyResolved);
 
  const profOpts={...options,shoulderWidth:1,curbWidth:.3,curbHeight:.2};
- const profile=buildRoadProfileV2(uturn,profOpts);
+ const profile=buildRoadProfileV2(uturn,{...profOpts,resolvePlanarOverlaps:false});
+ const globallyResolvedProfile=buildRoadProfileV2(uturn,profOpts);
+ assert(globallyResolvedProfile.triangleCount>0);
  const profileOld=buildRoadProfileV2(uturn,{...profOpts,cornerMode:'legacy'});
  assert.notEqual(fingerprintMeshV2(profile),fingerprintMeshV2(profileOld));
  assert.deepEqual(profile.submeshes.map(x=>x.materialSlot),[0,1,2]);
@@ -82,6 +87,7 @@ try {
  assert.deepEqual(Array.from(profile.uv2),Array.from(profileOld.uv2));
  assert(Array.from(profile.positions).every(Number.isFinite));
  validateFaceOrientation(profile);
+ validateFaceOrientation(globallyResolvedProfile);
  const gltf=JSON.parse(exportMeshGltfV2(profile).json);
  assert.equal(gltf.meshes[0].primitives.length,3);
 

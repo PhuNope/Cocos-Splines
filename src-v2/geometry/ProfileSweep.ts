@@ -2,6 +2,7 @@ import {buildSplineFramesV2,type SplineFrameV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
+import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
 export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
@@ -20,6 +21,8 @@ export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
 }
 export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2 {
     readonly width:number;
+    readonly resolvePlanarOverlaps?:boolean;
+    readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
     readonly shoulderWidth?:number;
     readonly curbWidth?:number;
     readonly curbHeight?:number;
@@ -196,11 +199,16 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(shoulder>0)push(half+shoulder,0,1);
     if(height>0)push(half+shoulder,height,2);
     if(curb>0)push(half+shoulder+curb,height,2);
-    return buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
+    const mesh=buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
         uvLongitudinalAxis:options.uvLongitudinalAxis,
         cornerMode:options.cornerMode??'join-trim',
         cornerTrimSafety:options.cornerTrimSafety,
         cornerMiterLimit:options.cornerMiterLimit});
+    const fullWidth=width+2*shoulder+2*curb;
+    if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
+    const result=resolveRoadOverlapV2(mesh,{roadWidth:fullWidth});
+    options.onOverlapReport?.(result.report);
+    return result.mesh;
 }
 export function buildTubeV2(cache:SplineCacheV2,options:TubeOptionsV2):MeshDataV2 {
     const sides=options.sides??12;

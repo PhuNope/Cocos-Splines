@@ -19,12 +19,14 @@ export interface RoadCornerSectionV2 {
     readonly angleRadians:number;
     readonly isPinched:boolean;
 }
+import {type RoadOverlapReportV2} from './RoadOverlapClip';
 export interface RoadCornerReportV2 {
     readonly pinchedSections:number;
     readonly sharpSections:number;
     readonly largestTurnDegrees:number;
     readonly measuredSections:number;
     /** Distant centreline segments closer than full road width (Editor hint only). */
+    readonly overlapReport?:RoadOverlapReportV2;
     readonly potentialOverlapPairs?:number;
     readonly minimumClearance?:number;
 }
@@ -165,12 +167,7 @@ export function appendRoadQuadV2(
     const alternate:[[number,number,number],[number,number,number]]=
         flipFaces?[[a,d,c],[a,b,d]]:[[a,c,d],[a,d,b]];
     function score(tri:[number,number,number]):number {
-        const [i,j,k]=tri;
-        // GPU and baked .mesh positions are Float32. Validate after that
-        // quantization, or tiny but valid Float64 curb wedges can collapse
-        // into zero-area triangles when finally uploaded.
-        const f=(a:V3):V3=>v(Math.fround(a.x),Math.fround(a.y),Math.fround(a.z));
-        const p=f(positions[i]),q=f(positions[j]),r=f(positions[k]);
+        const [i,j,k]=tri,p=positions[i],q=positions[j],r=positions[k];
         const e1=sub(q,p),e2=sub(r,p),face=cross(e1,e2);
         const area=len(face);
         if(!Number.isFinite(area)||area<1e-11)return -1;
@@ -233,7 +230,7 @@ export function inspectRoadCenterlineClearanceV2(
         const a=points[i],b=points[i+1],c=points[j],d=points[j+1];
         // Neighbor samples share a swept surface and are not road crossings.
         const arcGap=Math.min(Math.abs(a.distance-d.distance),Math.abs(b.distance-c.distance));
-        if(arcGap<fullWidth)continue;
+        if(arcGap<fullWidth*1.5)continue;
         const dx=Math.max(0,Math.max(Math.min(a.position.x,b.position.x),Math.min(c.position.x,d.position.x))
             -Math.min(Math.max(a.position.x,b.position.x),Math.max(c.position.x,d.position.x)));
         const dy=Math.max(0,Math.max(Math.min(a.position.y,b.position.y),Math.min(c.position.y,d.position.y))
