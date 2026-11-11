@@ -14,6 +14,8 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     readonly materialSlot?:number;
     /** Remove near-coplanar duplicate Road surfaces; enabled for JoinAndTrim by default. */
     readonly resolvePlanarOverlaps?:boolean;
+    /** Match UV0 phase on coplanar cut edges (Repeat sampler). */
+    readonly stitchCutUV?:boolean;
     readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
 }
 /**
@@ -54,7 +56,7 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});
     if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
-    const result=resolveRoadOverlapV2(mesh,{roadWidth:width});
+    const result=resolveRoadOverlapV2(mesh,{roadWidth:width,stitchCutUV:options.stitchCutUV});
     options.onOverlapReport?.(result.report);
     return result.mesh;
 }

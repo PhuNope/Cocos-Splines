@@ -6,7 +6,7 @@ function makeV2Inspector(kind='road'){
     const fields=tube?
         [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
-        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','cornerMode','cornerTrimSafety','cornerMiterLimit','resolvePlanarOverlaps','uvMetersPerRepeat','uvLongitudinalAxis']],
+        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','cornerMode','cornerTrimSafety','cornerMiterLimit','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]];
     const names=fields.flatMap(g=>g[1]);
     const selectors={status:'.spl-status',preview:'.spl-v2-preview',restore:'.spl-v2-restore',bake:'.spl-v2-bake',bind:'.spl-v2-bind',inspect:'.spl-v2-inspect'};
@@ -29,7 +29,7 @@ function makeV2Inspector(kind='road'){
             <button type="button" class="spl-btn spl-v2-bind">⌁ Bind Imported Mesh</button>
             <button type="button" class="spl-btn spl-v2-inspect">◎ Check Bake Status</button>
           </div>
-          <p class="spl-note">Bake creates a glTF under Project Assets and tries to link its unique cc.Mesh subasset automatically. If import is still pending, use Bind Imported Mesh later. Manual/Baked never generate geometry in Play. Select Longitudinal UV Axis: V repeats along texture Y (default); U repeats along texture X. Use Repeat wrap mode and Rebuild/Bake. Rebuild Preview replaces the visible renderer with a temporary Mesh; Show Baked Mesh restores the saved asset. Road Corner Mode JoinAndTrim locally trims tight inside bends. Resolve Planar Overlaps removes near-coplanar duplicate triangles (first surface wins) while interpolating UV0/UV2. Road markings can still change direction at a resulting seam. Separate-height crossings and true junctions still need dedicated geometry. Road materials use slots 0=asphalt, 1=shoulder, 2=curb.</p>
+          <p class="spl-note">Bake creates a glTF under Project Assets and tries to link its unique cc.Mesh subasset automatically. If import is still pending, use Bind Imported Mesh later. Manual/Baked never generate geometry in Play. Select Longitudinal UV Axis: V repeats along texture Y (default); U repeats along texture X. Use Repeat wrap mode and Rebuild/Bake. Rebuild Preview replaces the visible renderer with a temporary Mesh; Show Baked Mesh restores the saved asset. Road Corner Mode JoinAndTrim locally trims tight inside bends. Resolve Planar Overlaps removes near-coplanar duplicate triangles (first surface wins) while interpolating UV0/UV2. UV Stitch Cut matches repeating UV0 phase to the retained material at the cut, while keeping UV2 unchanged. Directional lane markings at a true intersection require a dedicated junction material. Separate-height crossings and true junctions still need dedicated geometry. Road materials use slots 0=asphalt, 1=shoulder, 2=curb.</p>
           <div class="spl-status" role="status"></div>
         </div>`,
         $:selectors,

@@ -22,6 +22,8 @@ export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
 export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2 {
     readonly width:number;
     readonly resolvePlanarOverlaps?:boolean;
+    /** Match UV0 phase on coplanar cut edges (Repeat sampler). */
+    readonly stitchCutUV?:boolean;
     readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
     readonly shoulderWidth?:number;
     readonly curbWidth?:number;
@@ -206,7 +208,7 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
         cornerMiterLimit:options.cornerMiterLimit});
     const fullWidth=width+2*shoulder+2*curb;
     if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
-    const result=resolveRoadOverlapV2(mesh,{roadWidth:fullWidth});
+    const result=resolveRoadOverlapV2(mesh,{roadWidth:fullWidth,stitchCutUV:options.stitchCutUV});
     options.onOverlapReport?.(result.report);
     return result.mesh;
 }

@@ -67,3 +67,13 @@ Set Width 4, Sample Step 0.15, Corner Mode JoinAndTrim; run Rebuild Preview and 
 3. Tắt **Resolve Planar Overlaps**, nhấn Rebuild Preview để so sánh; bật lại khi đã kiểm tra. Đây là tùy chọn cho **mặt Road gần đồng phẳng**, không áp dụng cho cầu vượt/Extrude dạng ống.
 4. Giữ `UV Longitudinal Axis=U` như texture của bạn. UV0/UV2 được nội suy tại mép cắt. Nếu hai chiều texture khác nhau gặp nhau, vẫn có thể xuất hiện đường nối texture, nhưng không còn hai mặt đồng phẳng cùng vẽ lên một vùng.
 5. Sau khi xem preview ổn, nhấn **Bake glTF Asset** lại để cập nhật mesh lưu. Nếu có đường giao thực sự, lối rẽ nhánh, hoặc cầu vượt, dùng Junction Mesh chuyên dụng.
+
+## Test UV0 sau khi cắt mesh bị chồng
+
+1. Tạo bản sao Scene chữ U, cài bản test mới, vào `SplineRoadV2`.
+2. Bật **Resolve Planar Overlaps** và **Stitch Cut UV** (mặc định bật); giữ `Corner Mode=JoinAndTrim`.
+3. Giữ `UV Longitudinal Axis=U` cho texture có đường chạy theo trục X của ảnh, đặt sampler **Repeat** theo trục đó.
+4. Nhấn **Rebuild Preview**. Tắt **Stitch Cut UV** rồi Rebuild để so sánh chỗ texture đổi pha ở mép cắt; bật lại sau khi so sánh.
+5. Thử cả trục `V`, `Shoulder Width` và `Curb Width`. UV2 không được thay bởi tùy chọn Stitch Cut UV.
+6. **Bake glTF Asset** lại sau khi đổi UV, lưu Scene và kiểm tra Play. Mesh Baked cũ không tự cập nhật khi đổi tùy chọn.
+7. Nếu vạch sơn giao nhau theo hai hướng khác nhau tại nút đường, stitching UV0 chỉ khớp *pha texture* trên mép cắt. Để vạch sơn nối đúng theo một hướng cụ thể cần Junction Mesh/marking decal chuyên dụng.

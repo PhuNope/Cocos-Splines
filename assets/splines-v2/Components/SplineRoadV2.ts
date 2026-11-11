@@ -46,6 +46,8 @@ export class SplineRoadV2 extends Component {
     cornerMiterLimit=2.5;
     @property({tooltip:'Remove overlapping near-coplanar road faces (like a wide U-turn) before rendering. Does not Boolean-union crossings at different heights.'})
     resolvePlanarOverlaps=true;
+    @property({tooltip:'Align repeating UV0 texture phase at cut boundaries with the retained Road surface. Does not join lane markings with different directions.'})
+    stitchCutUV=true;
     @property({min:0.01}) uvMetersPerRepeat=5;
     @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=SplineV2UVAxis.V;
@@ -139,11 +141,11 @@ export class SplineRoadV2 extends Component {
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
-                uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,onOverlapReport,...corners
+                uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
-                resolvePlanarOverlaps:this.resolvePlanarOverlaps,onOverlapReport,...corners
+                resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,...corners
             });
         return {geometry};
     }

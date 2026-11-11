@@ -8,9 +8,12 @@ export interface RoadOverlapOptionsV2 {
     readonly heightTolerance?:number;
     /** Non-horizontal faces (steep ramps, walls) are preserved untouched. */
     readonly minUpComponent?:number;
+    /** Match wrapped UV0 phase to the retained sheet along new cut edges. Default true. */
+    readonly stitchCutUV?:boolean;
 }
 export interface RoadOverlapReportV2 {
     readonly clippedSourceTriangles:number;
+    readonly stitchedCutVertices:number;
     readonly removedSourceTriangles:number;
     readonly outputTriangles:number;
     readonly originalTriangles:number;
@@ -83,15 +86,53 @@ function intersection(poly:ReadonlyArray<Vertex>,candidate:Tri):Vertex[] {
     return inside;
 }
 /** Difference against a candidate convex triangle, returning nonoverlapping pieces. */
-function subtract(poly:ReadonlyArray<Vertex>,candidate:Tri,epsilonArea:number):Vertex[][] {
+/**
+ * Sample the retained triangle's linear UV field in XZ. The clipping phase
+ * must be matched modulo a whole tile, not by copying raw distance values:
+ * doing the latter could stretch UV0 by tens of repetitions in a hairpin.
+ * UV2 must never be modified here.
+ */
+function retainedUVAt(p:Vertex,tri:Tri):{u:number;v:number}|null {
+    const [a,b,c]=tri.verts,den=cross2(a,b,c);
+    if(Math.abs(den)<1e-12)return null;
+    const wb=cross2(a,p,c)/den,wc=cross2(a,b,p)/den,wa=1-wb-wc;
+    if(Math.min(wa,wb,wc)<-1e-5||Math.max(wa,wb,wc)>1+1e-5)return null;
+    return {u:wa*a.u+wb*b.u+wc*c.u,v:wa*a.v+wb*b.v+wc*c.v};
+}
+function matchUVAtCut(p:Vertex,tri:Tri,phase:{u:number;v:number}):Vertex {
+    const retained=retainedUVAt(p,tri);
+    if(!retained)return p;
+    const verts=tri.verts;
+    // Only correct NEW cut-border vertices. Source vertices and interior
+    // vertices retain their spline-distance UVs, like the legacy Road.
+    let onEdge=false;
+    for(let i=0;i<3;i++){
+        const a=verts[i],b=verts[(i+1)%3];
+        const length=Math.hypot(b.x-a.x,b.z-a.z);
+        if(length>1e-10&&Math.abs(cross2(a,b,p))/length<2e-5){onEdge=true;break;}
+    }
+    if(!onEdge)return p;
+    // Use ONE integer offset for the whole clipped seam. Rounding at each
+    // endpoint separately breaks continuity between them when the relative
+    // UV phase traverses half a tile along an edge.
+    return {...p,u:retained.u+phase.u,v:retained.v+phase.v};
+}
+/** Difference against a candidate convex triangle, returning nonoverlapping pieces. */
+function subtract(poly:ReadonlyArray<Vertex>,candidate:Tri,epsilonArea:number,
+    stitchUV:boolean,phase:{u:number;v:number}):Vertex[][] {
     const clip=candidate.verts,sign=Math.sign(cross2(clip[0],clip[1],clip[2]));
     if(!sign)return [Array.from(poly)];
     let rest=Array.from(poly);
     const outside:Vertex[][]=[];
     for(let e=0;e<3&&rest.length>=3;e++){
         const next=half(rest,clip[e],clip[(e+1)%3],sign,false);
-        if(next.length>=3&&Math.abs(area2(next))>epsilonArea)outside.push(next);
-        rest=half(rest,clip[e],clip[(e+1)%3],sign,true);
+        if(next.length>=3&&Math.abs(area2(next))>epsilonArea)
+            outside.push(stitchUV?next.map(p=>matchUVAtCut(p,candidate,phase)):next);
+        const remaining=half(rest,clip[e],clip[(e+1)%3],sign,true);
+        // Outside fragments and the still-clipped interior share the very
+        // same new border. Correct BOTH sides of that temporary split so
+        // subsequent outside fragments do not inherit a UV discontinuity.
+        rest=stitchUV?remaining.map(p=>matchUVAtCut(p,candidate,phase)):remaining;
     }
     return outside;
 }
@@ -118,9 +159,11 @@ function normalDot(a:Tri,b:Tri):number {
  *
  * Unlike merely culling back-facing triangles, this prevents distant portions
  * of the SAME road from drawing over each other in a flat U-turn. UV0 and UV2
- * are interpolated at cut edges. The earlier source face wins where multiple
- * asphalt fragments overlap; this may leave a texture direction seam, but no
- * Z-fighting or duplicate road markings. Shoulder/curb mesh groups retain slots.
+ * are interpolated at cut edges. When stitchCutUV=true, the losing face's
+ * border UV0 is phase-matched (modulo Repeat) to the winning face of the SAME
+ * material. This avoids an arbitrary texture discontinuity at the cut, but
+ * cannot connect road markings on branches whose directions genuinely diverge.
+ * UV2 is never phase-adjusted. Shoulder/curb mesh groups retain slots.
  *
  * Vertical walls, steep/rolled roads, overpasses and distinct-height sheets
  * are not welded. Always use a junction/CSG tool for genuinely crossed roads.
@@ -132,7 +175,7 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
        !Number.isFinite(upMin)||upMin<0||upMin>1)
         throw new Error('Invalid Road overlap resolution options');
     const total=mesh.triangleCount;
-    const empty={clippedSourceTriangles:0,removedSourceTriangles:0,outputTriangles:total,
+    const empty={clippedSourceTriangles:0,stitchedCutVertices:0,removedSourceTriangles:0,outputTriangles:total,
         originalTriangles:total,skippedNonplanarPairs:0,hitSafetyLimit:false};
     if(total<2)return {mesh,report:empty};
     if(total>24000)return {mesh,report:{...empty,hitSafetyLimit:true}};
@@ -146,8 +189,9 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
     const cell=Math.max(.1,width),areaEps=Math.max(1e-11,width*width*1e-10);
     const buckets=new Map<string,number[]>();
     const originals:Tri[]=[];
+    const originalSlots:number[]=[];
     const finalPieces:{poly:Vertex[];slot:number}[]=[];
-    let clipped=0,removed=0,nonplanar=0,limitHit=false;
+    let clipped=0,removed=0,nonplanar=0,limitHit=false,stitched=0;
     let visits=0;
     outer:for(const sub of mesh.submeshes)for(let k=0;k<sub.indices.length;k+=3){
         const indices=sub.indices,tri=bounds([point(indices[k]),point(indices[k+1]),point(indices[k+2])]);
@@ -177,9 +221,25 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
                 const delta=Math.abs(heightAt(xx,zz,tri)-heightAt(xx,zz,other));
                 if(!Number.isFinite(delta)||delta>heightTol)continue;
                 const next:Vertex[][]=[];
+                const sameMaterial=options.stitchCutUV!==false&&sub.materialSlot===originalSlots[id];
+                const midpoint={...overlap[0],x:xx,z:zz};
+                const candidateUV=retainedUVAt(midpoint,other);
+                const sourceUV=retainedUVAt(midpoint,tri);
+                const enabled=!!(sameMaterial&&candidateUV&&sourceUV);
+                const phase={u:enabled?Math.round(sourceUV!.u-candidateUV!.u):0,
+                    v:enabled?Math.round(sourceUV!.v-candidateUV!.v):0};
                 for(const piece of parts){
                     if(piece.length<3||Math.abs(area2(piece))<=areaEps)continue;
-                    const slices=subtract(piece,other,areaEps);
+                    const slices=subtract(piece,other,areaEps,enabled,phase);
+                    if(enabled){
+                        for(const slice of slices)for(const point of slice){
+                            // Report is diagnostic only; count unique-ish edited
+                            // cut vertices by comparing against original source UV.
+                            const original=retainedUVAt(point,tri);
+                            if(original&&Math.abs(point.u-original.u)+Math.abs(point.v-original.v)>1e-5)
+                                stitched++;
+                        }
+                    }
                     next.push(...slices);
                 }
                 const oldArea=parts.reduce((sum,p)=>sum+Math.abs(area2(p)),0);
@@ -195,6 +255,7 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
         for(const poly of parts)if(poly.length>=3&&Math.abs(area2(poly))>areaEps)
             finalPieces.push({poly,slot:sub.materialSlot});
         originals.push(tri);
+        originalSlots.push(sub.materialSlot);
         for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){
             const key=x+':'+z,existing=buckets.get(key);
             if(existing)existing.push(originalId);else buckets.set(key,[originalId]);
@@ -203,7 +264,25 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
     }
     if(limitHit)return {mesh,report:{...empty,skippedNonplanarPairs:nonplanar,hitSafetyLimit:true}};
     if(!clipped)return {mesh,report:{...empty,skippedNonplanarPairs:nonplanar}};
-    const positions:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],secondary:Vec2MeshV2[]=[],outNormals:Vec3MeshV2[]=[];
+    if(options.stitchCutUV!==false){
+        // Triangle clipping and local joins duplicate vertices across polygon
+        // pieces. Retain first-surface UV0 on their shared boundary, modulo
+        // whole texture tiles. Do not weld positions/normals or touch UV2.
+        const owner=new Map<string,{u:number;v:number}>();
+        for(const {poly,slot} of finalPieces)for(const vertex of poly){
+            const key=slot+':'+[vertex.x,vertex.y,vertex.z]
+                .map(n=>Math.fround(n).toFixed(5)).join(':');
+            const first=owner.get(key);
+            if(first){
+                const u=first.u+Math.round(vertex.u-first.u);
+                const v=first.v+Math.round(vertex.v-first.v);
+                if(Math.abs(u-vertex.u)+Math.abs(v-vertex.v)>1e-6){
+                    vertex.u=u;vertex.v=v;stitched++;
+                }
+            }else owner.set(key,{u:vertex.u,v:vertex.v});
+        }
+    }
+    const positions:Vec3MeshV2[]=,uv0:Vec2MeshV2[]=[],secondary:Vec2MeshV2[]=[],outNormals:Vec3MeshV2[]=[];
     const groups=new Map<number,number[]>();
     for(const item of finalPieces){
         let indices=groups.get(item.slot);
@@ -233,7 +312,7 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
         .map(([materialSlot,indices])=>({materialSlot,indices}));
     if(!submeshes.length)return {mesh,report:{...empty,hitSafetyLimit:true}};
     const result=buildMeshV2({positions,uv0,uv2:uv2?secondary:undefined,normals:outNormals,submeshes});
-    return {mesh:result,report:{clippedSourceTriangles:clipped,removedSourceTriangles:removed,
+    return {mesh:result,report:{clippedSourceTriangles:clipped,stitchedCutVertices:stitched,removedSourceTriangles:removed,
         outputTriangles:result.triangleCount,originalTriangles:total,
         skippedNonplanarPairs:nonplanar,hitSafetyLimit:false}};
 }
