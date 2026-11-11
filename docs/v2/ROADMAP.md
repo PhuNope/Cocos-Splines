@@ -1,7 +1,8 @@
 # Cocos Splines 2.0 — execution milestones
 
 - [x] Branch `v2.0.0`, safe CI workflow (no publishing), isolated v2 core bootstrap.
-- [ ] Core 2: segment cache, stable 3D frames, additional interpolation modes, adaptive sampling and fuzz testing.
+- [x] Core 2 foundation: immutable segment cache, rotation-minimizing 3D frames, centripetal Catmull-Rom, quarter-point adaptive arc length, seeded fuzz tests.
+- [ ] Core 2 hardening: high-curvature extrema, cusp and zero-length frame policy, adaptive frame subdivision and Editor integration.
 - [ ] Mesh Pipeline 2: shared multi-submesh/material geometry, UV0/UV2, tangents, normals, chunking and collider support.
 - [ ] Road/Extrude/Profile 2: replace legacy geometry with reusable mesh pipeline; precise profiles, helix, steep bends and corners.
 - [ ] Editor bake: AssetDB-backed Mesh Assets with persisted references, Dynamic/Manual/Baked modes, preview and stale asset detection.
