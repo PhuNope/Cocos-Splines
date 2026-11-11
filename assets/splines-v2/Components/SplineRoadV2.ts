@@ -5,6 +5,7 @@ import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
+import {buildRoadProfileV2} from '../geometry/ProfileSweep';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -28,6 +29,9 @@ export class SplineRoadV2 extends Component {
     @property({type:Enum(SplineV2CurveMode)}) interpolation=SplineV2CurveMode.Centripetal;
     @property({tooltip:'Connect last knot to first knot.'}) closed=false;
     @property({min:0.01}) width=4;
+    @property({min:0}) shoulderWidth=0;
+    @property({min:0}) curbWidth=0;
+    @property({min:0}) curbHeight=0;
     @property({min:0.01}) sampleStep=.5;
     @property({min:0.01}) uvMetersPerRepeat=5;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
@@ -37,6 +41,8 @@ export class SplineRoadV2 extends Component {
     bakedMesh:Mesh|null=null;
     @property({visible:false}) bakedSourceFingerprint='';
     @property({visible:false}) bakedSourceUrl='';
+    @property({visible:false}) pendingBakeUrl='';
+    @property({visible:false}) pendingBakeFingerprint='';
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -76,7 +82,7 @@ export class SplineRoadV2 extends Component {
         this._ownedMeshes=[];
     }
     /** No dependency on legacy SplineContainer or serialized UUIDs. */
-    private source():SplineDataV2 {
+    protected source():SplineDataV2 {
         if(this.knots.length<2||this.knots.some(k=>!k||!k.isValid))
             throw new Error('Assign at least two valid v2 knot Nodes');
         const inv=new Mat4();
@@ -90,13 +96,17 @@ export class SplineRoadV2 extends Component {
         ][this.interpolation] as CurveTypeV2;
         return {type:curve,closed:this.closed,knots:data};
     }
-    private generate(){
+    protected generate(){
         const curve=this.source();
         const cache=buildSplineCacheV2(curve);
-        const geometry=buildRoadStripV2(cache,{
-            width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
-            step:this.sampleStep,materialSlot:0
-        });
+        const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
+            buildRoadProfileV2(cache,{
+                width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
+                curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep
+            }):buildRoadStripV2(cache,{
+                width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
+                step:this.sampleStep,materialSlot:0
+            });
         return {geometry};
     }
     public getCurrentFingerprint():string {

@@ -1,5 +1,6 @@
 'use strict';
 const NAME='cocos-splines';
+const {bindWhenImported}=require('./v2/EditorAssetBind');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -72,47 +73,75 @@ const methods={
 
     async rebuildV2Road(){
         try{
-            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
             return await invokeScene('rebuildV2Road',uuid);
-        }catch(e){return alertError('v2-road-rebuild',e);}
+        }catch(e){return alertError('v2-rebuild',e);}
     },
     async checkV2RoadBake(){
         try{
-            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
             const result=await invokeScene('inspectV2RoadBake',uuid);
             if(!result?.ok)throw Error(result?.error||'Cannot inspect bake');
-            return {...result,message:!result.hasMesh
-                ? 'No Mesh assigned. Import/export a Bake glTF, then drag the .mesh subasset to Baked Mesh.'
-                : result.stale?'Warning: spline source changed since last Bake. Re-bake in Inspector.'
-                :'Saved mesh is assigned and the last stored fingerprint matches the source.'};
-        }catch(e){return alertError('v2-road-status',e);}
+            return {...result,message:result.pendingUrl
+                ? 'Bake import pending: '+result.pendingUrl+'. Use Bind imported Mesh once AssetDB has finished.'
+                : !result.hasMesh?'No baked Mesh assigned. Use Bake from the Inspector.'
+                : result.stale?'Source changed since saved Mesh was baked. Re-bake before publishing.'
+                :'Saved Mesh reference exists and fingerprint matches the spline.'};
+        }catch(e){return alertError('v2-status',e);}
+    },
+    async bindV2RoadMesh(){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
+            const status=await invokeScene('inspectV2RoadBake',uuid);
+            if(!status?.ok)throw Error(status?.error||'Cannot inspect pending Bake');
+            if(!status.pendingUrl||!status.pendingFingerprint)
+                return {ok:false,error:'No pending Bake. Click Bake glTF Asset first.'};
+            if(status.fingerprint!==status.pendingFingerprint)
+                return {ok:false,error:'Spline changed since Bake was exported; click Bake again.'};
+            const result=await bindWhenImported(Editor,{
+                nodeUuid:uuid,componentIndex:status.componentIndex,
+                assetUrl:status.pendingUrl,fingerprint:status.pendingFingerprint
+            },{attempts:1});
+            if(!result.ok)return {ok:false,error:result.reason||'Mesh import not finished',pending:!!result.pending,
+                message:'Asset imported but cannot bind automatically. Check the Assets panel.'};
+            await snapshot();
+            return {ok:true,uuid:result.uuid,url:result.assetUrl,
+                message:'Imported Mesh '+result.uuid+' has been linked to the Scene; mode set to Baked.'};
+        }catch(e){return alertError('v2-bind',e);}
     },
     async bakeV2Road(){
         try{
-            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road component Node.');
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
             const prepared=await invokeScene('prepareV2RoadBake',uuid);
             if(!prepared?.ok||!prepared.content||!prepared.fingerprint)
                 throw Error(prepared?.error||'Could not export v2 geometry');
-            // Include geometry fingerprint in filename. Never overwrite an older
-            // asset / UUID, so undo or an in-progress scene cannot lose its mesh.
             const safeId=uuid.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,45);
             const target=`db://assets/SplineV2_${safeId}_${prepared.fingerprint}.gltf`;
-            let existed=false;
-            try{
-                const info=await Editor.Message.request('asset-db','query-asset-info',target);
-                existed=!!(info?.uuid);
-            }catch(_){/* older Editor variants may not expose this read; create-asset will fail safely if present */}
-            if(!existed){
+            const prior=await Editor.Message.request('asset-db','query-asset-info',target);
+            if(!prior?.uuid){
                 const created=await Editor.Message.request('asset-db','create-asset',target,prepared.content);
                 if(created===false||created==null)throw Error('AssetDB did not confirm glTF creation');
             }
-            await property(uuid,prepared.componentIndex,'bakedSourceFingerprint',prepared.fingerprint,'String');
-            await property(uuid,prepared.componentIndex,'bakedSourceUrl',target,'String');
+            // Separate pending from committed fingerprints: on import failure,
+            // never mark an older Mesh as fresh and never replace its reference.
+            await property(uuid,prepared.componentIndex,'pendingBakeUrl',target,'String');
+            await property(uuid,prepared.componentIndex,'pendingBakeFingerprint',prepared.fingerprint,'String');
             await snapshot();
-            return {ok:true,url:target,primitiveCount:prepared.primitiveCount,message:
-                'Exported glTF into project Assets: '+target+
-                '. After import completes, expand the glTF and drag its Mesh subasset onto Baked Mesh; select Manual/Baked. Runtime never regenerates these modes.'};
-        }catch(e){return alertError('v2-road-bake',e);}
+            const latest=await invokeScene('inspectV2RoadBake',uuid);
+            if(!latest?.ok||latest.fingerprint!==prepared.fingerprint)
+                return {ok:false,error:'Spline changed during import. Exported asset kept, but not auto-bound.'};
+            const bound=await bindWhenImported(Editor,{
+                nodeUuid:uuid,componentIndex:prepared.componentIndex,
+                assetUrl:target,fingerprint:prepared.fingerprint
+            },{attempts:10,delayMs:200});
+            if(!bound.ok)return {ok:true,bound:false,url:target,message:
+                'glTF exported successfully, but Mesh is not linked yet: '+(bound.reason||'AssetDB import pending')+
+                '. Click Bind Imported Mesh in Inspector when import completes.'};
+            await snapshot();
+            return {ok:true,bound:true,url:target,meshUuid:bound.uuid,
+                primitiveCount:prepared.primitiveCount,message:
+                'Bake finished. Mesh subasset '+bound.uuid+' linked to Scene; Baked mode selected.'};
+        }catch(e){return alertError('v2-bake',e);}
     },
     async create2DSpline(){
         try{

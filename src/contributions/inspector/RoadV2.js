@@ -1,43 +1,50 @@
 'use strict';
-/** Inspector only, no extra editor panel. Uses native ui-prop dumps for undo/prefab support. */
-const NAME='cocos-splines';
+/** Inspector-only geometry and persistence actions; native ui-prop owns Undo. */
 const {style,callEditor}=require('./common');
-const groups=[
- ['Path and geometry',['knots','interpolation','closed','width','sampleStep','uvMetersPerRepeat']],
- ['Materials and persistence',['meshMode','materials','bakedMesh']]
-];
-const fields=groups.flatMap(g=>g[1]);
-const selectors={status:'.spl-status',preview:'.spl-v2-preview',bake:'.spl-v2-bake',inspect:'.spl-v2-inspect'};
-const sections=groups.map(([title,names])=>
-    `<details open class="spl-section"><summary>${title}</summary>`+
-    names.map(name=>{
-        selectors[name]='.spl-v2-'+name;
-        return `<ui-prop type="dump" class="spl-prop spl-v2-${name}"></ui-prop>`;
-    }).join('')+'</details>'
-).join('');
-module.exports={
-    style,
-    template:`<div class="spl-inspector">
-      <div class="spl-header"><strong>∿ Spline Road V2</strong><p>Experimental v2 strip — dedicated knot Nodes, no legacy UUIDs.</p></div>
-      ${sections}
-      <div class="spl-btns">
-        <button type="button" class="spl-btn spl-v2-preview">↻ Rebuild preview</button>
-        <button type="button" class="spl-btn spl-v2-bake">▣ Bake glTF asset</button>
-        <button type="button" class="spl-btn spl-v2-inspect">◎ Check bake status</button>
-      </div>
-      <p class="spl-note">Bake exports a new .gltf asset under Project Assets. After import, expand it and assign its Mesh subasset to Baked Mesh. Manual/Baked never generate geometry during Play; Dynamic does.</p>
-      <div class="spl-status" role="status"></div>
-    </div>`,
-    $:selectors,
-    update(dump){
-        for(const field of fields){
-            const prop=dump?.value?.[field];
-            if(prop&&this.$[field])this.$[field].render(prop);
+function makeV2Inspector(kind='road'){
+    const tube=kind==='extrude';
+    const fields=tube?
+        [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat']],
+         ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
+        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','uvMetersPerRepeat']],
+         ['Materials and persistence',['meshMode','materials','bakedMesh']]];
+    const names=fields.flatMap(g=>g[1]);
+    const selectors={status:'.spl-status',preview:'.spl-v2-preview',bake:'.spl-v2-bake',bind:'.spl-v2-bind',inspect:'.spl-v2-inspect'};
+    const sections=fields.map(([title,props])=>
+        `<details open class="spl-section"><summary>${title}</summary>`+
+        props.map(name=>{
+            selectors[name]='.spl-v2-'+name;
+            return `<div class="spl-row"><ui-prop type="dump" class="spl-prop spl-v2-${name}"></ui-prop></div>`;
+        }).join('')+'</details>'
+    ).join('');
+    return {
+        style,
+        template:`<div class="spl-inspector">
+          <div class="spl-header"><strong>∿ Spline ${tube?'Extrude':'Road'} V2</strong><p>Mesh generation happens only on request in Editor or Dynamic Play.</p></div>
+          ${sections}
+          <div class="spl-btns">
+            <button type="button" class="spl-btn spl-v2-preview">↻ Rebuild Preview</button>
+            <button type="button" class="spl-btn spl-v2-bake">▣ Bake glTF Asset</button>
+            <button type="button" class="spl-btn spl-v2-bind">⌁ Bind Imported Mesh</button>
+            <button type="button" class="spl-btn spl-v2-inspect">◎ Check Bake Status</button>
+          </div>
+          <p class="spl-note">Bake creates a glTF under Project Assets and tries to link its unique cc.Mesh subasset automatically. If import is still pending, use Bind Imported Mesh later. Manual/Baked never generate geometry in Play. Road materials use slots 0=asphalt, 1=shoulder, 2=curb.</p>
+          <div class="spl-status" role="status"></div>
+        </div>`,
+        $:selectors,
+        update(dump){
+            for(const field of names){
+                const prop=dump?.value?.[field];
+                if(prop&&this.$[field])this.$[field].render(prop);
+            }
+        },
+        ready(){
+            this.$.preview.addEventListener('click',()=>void callEditor(this,'rebuild-v2-road'));
+            this.$.bake.addEventListener('click',()=>void callEditor(this,'bake-v2-road'));
+            this.$.bind.addEventListener('click',()=>void callEditor(this,'bind-v2-road-mesh'));
+            this.$.inspect.addEventListener('click',()=>void callEditor(this,'check-v2-road-bake'));
         }
-    },
-    ready(){
-        this.$.preview.addEventListener('click',()=>void callEditor(this,'rebuild-v2-road'));
-        this.$.bake.addEventListener('click',()=>void callEditor(this,'bake-v2-road'));
-        this.$.inspect.addEventListener('click',()=>void callEditor(this,'check-v2-road-bake'));
-    }
-};
+    };
+}
+module.exports=makeV2Inspector('road');
+module.exports.makeV2Inspector=makeV2Inspector;

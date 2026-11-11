@@ -70,3 +70,12 @@ Do not copy/paste a second material or create a separate Material instance for e
 
 - The Dynamic geometry adapter writes UV2 as a Cocos `customAttributes` attribute with `gfx.AttributeName.ATTR_TEX_COORD1` and `gfx.Format.RG32F` (the correct secondary-UV vertex semantic); glTF Bake writes `TEXCOORD_1`.
 - `tests/v2-road-play-mode.test.cjs` compiles and exercises `SplineRoadV2` against Cocos mocks: Manual and Baked never invoke geometry generation in Play, Dynamic meshes are disposed, scene meshes are not destroyed, and Editor-only commands reject Play calls. A real Creator project test remains required.
+
+## v2 Road profile / tube and automatic asset binding (next milestone)
+
+- `ProfileSweep.ts` implements piecewise cross-section sweeps along rotation-minimizing spline frames. Road geometry adds shoulder and curb bands with **shared material slots**: asphalt 0, shoulder 1, curb 2. Each band has independent vertices for hard edges/UV seams.
+- `SplineExtrudeV2` uses the same base rendering/persistence component with circle profile, adjustable radius/sides and convex end caps. It supports steep/helical paths. An over-wide tube can still geometrically self-intersect; no Boolean solver is included.
+- Bake asks AssetDB for the imported `.gltf`'s `subAssets`. Only **exactly one** asset of type `cc.Mesh` is eligible. It sets the native scene dump `bakedMesh` field by UUID, then saves its fingerprint, URL and Baked mode via scene messages. No UUID guesses or runtime loading.
+- If the glTF import is still pending or has ambiguous Mesh subassets, the Inspector reports the pending asset and exposes **Bind Imported Mesh** retry. Existing linked Mesh and its fingerprint are left untouched until a verified binding succeeds.
+- Bake fingerprints and pending pointers are separate. Changes to spline/source while importing prohibit automatic binding of stale geometry. Previous glTF assets are never overwritten.
+- The scene reference is tested by a serializable dump mock and Play mode generator mocks. **Actual Creator 3.8.x import, serialization and scene reload must still be verified on an installed Editor.** Do not claim production-ready baking yet.

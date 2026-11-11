@@ -19,4 +19,10 @@ for(const dir of ['Core','Components']){
  }
 }
 for(const dir of ['assets','assets/splines','assets/splines/Core','assets/splines/Components'])checkRel(dir+'.meta');
+for(const name of ['ProfileSweep','RoadStrip','GltfExporter']) {
+ checkRel('assets/splines-v2/geometry/'+name+'.ts');
+ checkRel('assets/splines-v2/geometry/'+name+'.ts.meta');
+}
+checkRel('assets/splines-v2/Components/SplineExtrudeV2.ts');
+checkRel('assets/splines-v2/Components/SplineExtrudeV2.ts.meta');
 console.log('VERIFY PASS: Editor manifest, scripts, asset DB and UUID metadata.');

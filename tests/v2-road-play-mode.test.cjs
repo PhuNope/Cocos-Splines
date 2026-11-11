@@ -7,7 +7,7 @@ try{
  const file=path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts');
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--experimentalDecorators',
   '--skipLibCheck','--useDefineForClassFields','false','--rootDir',path.join(root,'assets/splines-v2'),
-  '--outDir',temp,file,types],{stdio:'pipe'});
+  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),types],{stdio:'pipe'});
  const generated=[];
  const env={EDITOR_NOT_IN_PREVIEW:false};
  const identity={};
@@ -45,8 +45,9 @@ try{
   if(request==='cc/env')return env;
   return originalLoad.apply(this,arguments);
  };
- let SplineRoadV2,SplineV2MeshMode;
- try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));}
+ let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2;
+ try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));
+  ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));}
  finally{Module._load=originalLoad;}
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
@@ -84,5 +85,19 @@ try{
  road.width=5;assert.equal(road.inspectBake().stale,true);
  road.onDisable();assert(generated[2].destroyed);
  assert.equal(saved.destroyed,false);
- console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
+ const extrudeNode=new Node('ExtrudeV2'),extrudeRenderer=extrudeNode.addComponent(MeshRenderer);
+ const extrude=extrudeNode.addComponent(SplineExtrudeV2);
+ extrude.knots=[a,b];extrude.interpolation=0;extrude.sampleStep=1;extrude.radius=.75;
+ extrude.sides=8;extrude.capEnds=true;extrude.bakedMesh=saved;
+ const countBefore=generated.length;
+ env.EDITOR_NOT_IN_PREVIEW=false;extrude.meshMode=SplineV2MeshMode.Baked;extrude.onEnable();
+ assert.equal(generated.length,countBefore);assert.equal(extrudeRenderer.mesh,saved);
+ extrude.meshMode=SplineV2MeshMode.Dynamic;extrude.onEnable();
+ assert.equal(generated.length,countBefore+1);
+ assert(generated.at(-1).geometry.indices.length>100,'Tube should contain side and end cap faces');
+ extrude.onDisable();
+ assert(generated.at(-1).destroyed);assert(!saved.destroyed);
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ const tubeBake=extrude.prepareBake();assert.equal(JSON.parse(tubeBake.content).meshes[0].primitives.length,1);
+  console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

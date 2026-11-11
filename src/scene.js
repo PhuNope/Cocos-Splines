@@ -227,7 +227,7 @@ function spawnPrefabs(uuid,kind,action){
 /** v2-only Inspector actions. These are not reachable from gameplay. */
 function roadV2Component(uuid){
     const node=resolve(uuid);
-    const component=node?.components.find(c=>classOf(c)==='SplinesV2.SplineRoad');
+    const component=node?.components.find(c=>['SplinesV2.SplineRoad','SplinesV2.SplineExtrude'].includes(classOf(c)));
     return {node,component};
 }
 function rebuildV2Road(uuid){
@@ -245,9 +245,10 @@ function prepareV2RoadBake(uuid){
     }catch(e){return {ok:false,error:String(e)};}
 }
 function inspectV2RoadBake(uuid){
-    const {component}=roadV2Component(uuid);
+    const {node,component}=roadV2Component(uuid);
     if(!component)return {ok:false,error:'SplinesV2.SplineRoad not found'};
-    try{return {ok:true,...component.inspectBake()};}
+    try{return {ok:true,...component.inspectBake(),componentIndex:node.components.indexOf(component),
+        pendingUrl:component.pendingBakeUrl||'',pendingFingerprint:component.pendingBakeFingerprint||''};}
     catch(e){return {ok:false,error:String(e)};}
 }
 exports.methods={rebuildV2Road,prepareV2RoadBake,inspectV2RoadBake,spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};

@@ -48,3 +48,7 @@ Follower, Junction routing and population depend only on Spline Core, not Mesh P
 ## Engine bridge experimental vertical slice
 
 The `assets/splines-v2` AssetDB mount mirrors `src-v2/core` and `src-v2/geometry` without changing these pure TypeScript modules. A CI regression checks mirror identity. `SplinesV2.SplineRoad` owns a transient renderer for Dynamic/Editor preview; Manual/Baked only use an imported glTF Mesh subasset. A custom Inspector triggers explicit Rebuild/Bake/Check actions through main -> scene messages. Automatic glTF subasset binding and Cocos Editor smoke validation remain open.
+
+## Geometry and AssetDB binding follow-up
+
+`ProfileSweep.ts` is shared by the v2 road band generator and tube extruder. It stores non-overlapping *material bands*, not guaranteed collision-free road sections or unique lightmap UV atlases. The glTF importer produces a Mesh subasset containing its primitives. `src/v2/EditorAssetBind.js` resolves this imported UUID and writes native scene dumps, with a bounded import wait and explicit retry. No Editor-only log appears at Play, and normal gameplay never invokes AssetDB. Editor integration is unverified until a Creator 3.8.x smoke test on a real scene.
