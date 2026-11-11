@@ -1,3 +1,5 @@
+> **Cocos Splines v2.0.0 rewrite branch**: This branch contains an in-progress, breaking rewrite and is not a published release. The v2 Core is under `src-v2/core`; the still-present v0.9.12 runtime is retained temporarily as a reference/baseline. There is no tag or Release until explicit owner approval. See [v2 architecture](docs/v2/ARCHITECTURE.md) and [roadmap](docs/v2/ROADMAP.md).
+
 # Cocos Splines
 
 Cocos Splines is an Inspector-driven spline extension for **Cocos Creator >= 3.8.2**. It supports spline editing, runtime followers, junction routing and procedural geometry. All editing tools are available from the Inspector; no standalone spline panel is required.
