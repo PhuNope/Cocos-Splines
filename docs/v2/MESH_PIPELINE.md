@@ -100,3 +100,9 @@ Road V2 and Extrude V2 both expose `uvLongitudinalAxis` in the Inspector (native
 - **Check Bake Status** reports pinched local sections in the Inspector without Play-mode console warnings.
 - This is **local bend correction**, not polygon clipping/CSG for two independent roads or for full 3D self-intersections. Extremely tight hairpins, crossing roads and helix turns still need geometry diagnostics and/or Junction Mesh v2. Never claim globally self-intersection-free road geometry.
 - If a scene previously baked the old ribbon, it must be re-baked after enabling JoinAndTrim. Compare JoinAndTrim and Legacy on a safe duplicate Scene, not production data.
+
+### Concave quad triangulation and clearance warning
+
+The road section triangulator now checks face orientation against generated normals for each quad. When the inner edge becomes concave, it switches the diagonal rather than rendering an inverted triangle. In the rare crossed/degenerate case, only front-facing triangles are emitted. Both RoadStrip and material-banded RoadProfile share the same function; Tube Extrude remains unchanged.
+
+The Editor-only **Check Bake Status** and **Rebuild Preview** messages also inspect distant centreline sections with a bounded 3D proximity check. A 'potential nonlocal overlap' warning means two parts of the same Road come closer than its width, so local trim **cannot** safely union them. Use a dedicated Junction Mesh, reduce width or redesign the loop. Elevated crossings separated in 3D should not be treated as intersections solely from the XZ projection.

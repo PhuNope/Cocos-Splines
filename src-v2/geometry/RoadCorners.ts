@@ -24,6 +24,9 @@ export interface RoadCornerReportV2 {
     readonly sharpSections:number;
     readonly largestTurnDegrees:number;
     readonly measuredSections:number;
+    /** Distant centreline segments closer than full road width (Editor hint only). */
+    readonly potentialOverlapPairs?:number;
+    readonly minimumClearance?:number;
 }
 const v=(x:number,y:number,z:number):V3=>({x,y,z});
 const add=(a:V3,b:V3):V3=>v(a.x+b.x,a.y+b.y,a.z+b.z);
@@ -140,4 +143,102 @@ export function inspectRoadCornersV2(
         largestTurnDegrees=Math.max(largestTurnDegrees,c.angleRadians*180/Math.PI);
     }
     return {pinchedSections,sharpSections,largestTurnDegrees,measuredSections:sections.length};
+}
+
+/**
+ * Build two outward-facing triangles for a potentially concave Road quad.
+ * A tight inner bend can put one ring vertex on the opposite side of the
+ * fixed diagonal. Choose the OTHER diagonal when that keeps both triangles
+ * facing the authored normals. For truly crossed quads, omit only inverted
+ * triangles rather than drawing long, black, back-facing geometry.
+ * Returns the number of triangles emitted (normally 2).
+ */
+export function appendRoadQuadV2(
+    positions:ReadonlyArray<V3>,
+    normals:ReadonlyArray<V3>,
+    a:number,b:number,c:number,d:number,
+    indices:number[],
+    flipFaces=false
+):number {
+    const base:[[number,number,number],[number,number,number]]=
+        flipFaces?[[a,b,c],[b,d,c]]:[[a,c,b],[b,c,d]];
+    const alternate:[[number,number,number],[number,number,number]]=
+        flipFaces?[[a,d,c],[a,b,d]]:[[a,c,d],[a,d,b]];
+    function score(tri:[number,number,number]):number {
+        const [i,j,k]=tri,p=positions[i],q=positions[j],r=positions[k];
+        const e1=sub(q,p),e2=sub(r,p),face=cross(e1,e2);
+        const area=len(face);
+        if(!Number.isFinite(area)||area<1e-11)return -1;
+        const expected=add(add(normals[i],normals[j]),normals[k]);
+        const expectedLen=len(expected);
+        if(!Number.isFinite(expectedLen)||expectedLen<1e-11)return -1;
+        return dot(face,expected)/(area*expectedLen);
+    }
+    const s0=base.map(score),s1=alternate.map(score);
+    const ok=(scores:number[])=>scores.every(x=>x>1e-7);
+    let chosen=base,scores=s0;
+    if(!ok(s0)&&ok(s1)){chosen=alternate;scores=s1;}
+    else if(!ok(s0)&&!ok(s1)){
+        // Crossed or degenerate quad. Salvage only valid triangles, not
+        // a back-facing or zero-area wedge.
+        if(s1.filter(x=>x>1e-7).length>s0.filter(x=>x>1e-7).length){
+            chosen=alternate;scores=s1;
+        }
+    }
+    let written=0;
+    for(let i=0;i<2;i++)if(scores[i]>1e-7){
+        indices.push(...chosen[i]);written++;
+    }
+    return written;
+}
+/**
+ * Warn only in the Editor when distant portions of one road centreline come
+ * within a full road width. This is a conservative proximity hint (not CSG).
+ * A subsampling cap prevents large roads from triggering quadratic lag.
+ */
+export function inspectRoadCenterlineClearanceV2(
+    frames:ReadonlyArray<SplineFrameV2>,fullWidth:number,maxSamples=384
+):{potentialOverlapPairs:number;minimumClearance:number} {
+    if(!Number.isFinite(fullWidth)||fullWidth<=0)throw new Error('Invalid road clearance width');
+    const step=Math.max(1,Math.ceil((frames.length-1)/maxSamples));
+    const points:SplineFrameV2[]=[];
+    for(let i=0;i<frames.length;i+=step)points.push(frames[i]);
+    if(points[points.length-1]!==frames[frames.length-1])points.push(frames[frames.length-1]);
+    const sq=(a:V3)=>dot(a,a);
+    const distanceBetween=(p1:V3,q1:V3,p2:V3,q2:V3):number=>{
+        // Shortest 3D distance between line segments, including endpoints.
+        const u=sub(q1,p1),v2=sub(q2,p2),w=sub(p1,p2);
+        const a=dot(u,u),b=dot(u,v2),c=dot(v2,v2),d=dot(u,w),e=dot(v2,w);
+        const D=a*c-b*b;
+        let sN:number,sD=D,tN:number,tD=D;
+        if(D<1e-14){sN=0;sD=1;tN=e;tD=c;}
+        else{
+            sN=b*e-c*d;tN=a*e-b*d;
+            if(sN<0){sN=0;tN=e;tD=c;}
+            else if(sN>sD){sN=sD;tN=e+b;tD=c;}
+        }
+        if(tN<0){tN=0;if(-d<0)sN=0;else if(-d>a)sN=sD;else{sN=-d;sD=a;}}
+        else if(tN>tD){tN=tD;if(-d+b<0)sN=0;else if(-d+b>a)sN=sD;else{sN=-d+b;sD=a;}}
+        const sc=Math.abs(sN)<1e-14?0:sN/Math.max(sD,1e-14);
+        const tc=Math.abs(tN)<1e-14?0:tN/Math.max(tD,1e-14);
+        return Math.sqrt(sq(sub(add(w,mul(u,sc)),mul(v2,tc))));
+    };
+    let min=Infinity,pairs=0;
+    for(let i=0;i+1<points.length;i++)for(let j=i+2;j+1<points.length;j++){
+        const a=points[i],b=points[i+1],c=points[j],d=points[j+1];
+        // Neighbor samples share a swept surface and are not road crossings.
+        const arcGap=Math.min(Math.abs(a.distance-d.distance),Math.abs(b.distance-c.distance));
+        if(arcGap<fullWidth*1.5)continue;
+        const dx=Math.max(0,Math.max(Math.min(a.position.x,b.position.x),Math.min(c.position.x,d.position.x))
+            -Math.min(Math.max(a.position.x,b.position.x),Math.max(c.position.x,d.position.x)));
+        const dy=Math.max(0,Math.max(Math.min(a.position.y,b.position.y),Math.min(c.position.y,d.position.y))
+            -Math.min(Math.max(a.position.y,b.position.y),Math.max(c.position.y,d.position.y)));
+        const dz=Math.max(0,Math.max(Math.min(a.position.z,b.position.z),Math.min(c.position.z,d.position.z))
+            -Math.min(Math.max(a.position.z,b.position.z),Math.max(c.position.z,d.position.z)));
+        if(dx*dx+dy*dy+dz*dz>=fullWidth*fullWidth)continue;
+        const clearance=distanceBetween(a.position,b.position,c.position,d.position);
+        min=Math.min(min,clearance);
+        if(clearance<fullWidth) pairs++;
+    }
+    return {potentialOverlapPairs:pairs,minimumClearance:Number.isFinite(min)?min:-1};
 }

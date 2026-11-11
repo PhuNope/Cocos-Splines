@@ -6,7 +6,7 @@ import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2} from '../geometry/ProfileSweep';
-import {buildRoadCornerSectionsV2,inspectRoadCornersV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
+import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
@@ -115,7 +115,10 @@ export class SplineRoadV2 extends Component {
         const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep});
         const sections=buildRoadCornerSectionsV2(frameTable.frames,
             this.width*.5+this.shoulderWidth+this.curbWidth,this.cornerSettings(),this.closed);
-        return inspectRoadCornersV2(sections);
+        const report=inspectRoadCornersV2(sections);
+        const clearance=inspectRoadCenterlineClearanceV2(frameTable.frames,
+            this.width+2*this.shoulderWidth+2*this.curbWidth);
+        return {...report,...clearance};
     }
     private cornerSettings(){
         return {cornerMode:this.cornerMode===SplineV2RoadCornerMode.Legacy?'legacy' as const:'join-trim' as const,

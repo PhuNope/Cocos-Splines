@@ -55,3 +55,7 @@ Không có tag, Release hoặc npm publish từ quy trình đóng gói này.
 4. Test with `shoulderWidth=1`, `curbWidth=0.3`, `curbHeight=0.2`, and UV Longitudinal Axis U and V to inspect material seams/tiling.
 5. Set Baked and use **Show Baked Mesh** to see the persisted asset rather than the temporary preview. After changing corner settings, click **Bake glTF Asset**, save Scene, reopen and Play.
 6. **Check Bake Status** reports local pinched sections. Crossing branches/roads, underpasses and 3D helix-wide self-intersections are *not* solved by local trimming; they require junction-aware mesh operations.
+
+## Triangulation verification for a tight U-turn
+
+Set Width 4, Sample Step 0.15, Corner Mode JoinAndTrim; run Rebuild Preview and compare Legacy on a duplicate Scene. Front-facing road triangles should no longer flip at the inner concave sections. The Inspector may still warn about nonlocal road self-overlap when the **entire road width is greater than the spacing between two different arms** of the U-turn. A single road-strip generator cannot safely merge those arms without junction/Boolean geometry.

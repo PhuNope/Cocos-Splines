@@ -236,10 +236,11 @@ function rebuildV2Road(uuid){
     try{
         component.rebuildPreview();
         const risk=component.inspectCornerRisk?.();
-        const warn=risk?.pinchedSections
-            ?' Inside edge trimmed at '+risk.pinchedSections+
-              ' samples; for intersecting road branches use a separate junction.'
-            :'';
+        const warn=(risk?.pinchedSections
+            ?' Inside edge trimmed at '+risk.pinchedSections+' samples.':'')+
+            (risk?.potentialOverlapPairs
+            ?' Potential nonlocal overlap ('+risk.potentialOverlapPairs+
+              ' close segment pairs); use separate junction/less road width.':'');
         return {ok:true,cornerRisk:risk||null,
             message:'V2 preview rebuilt (temporary; not saved into the scene).'+warn};
     }

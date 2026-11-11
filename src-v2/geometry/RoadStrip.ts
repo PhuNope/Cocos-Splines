@@ -1,7 +1,7 @@
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
-import {buildRoadCornerSectionsV2,roadCornerPositionV2,type RoadCornerOptionsV2} from './RoadCorners';
+import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
 export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     /** Total asphalt width in spline-local units. */
     readonly width:number;
@@ -46,7 +46,7 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     const indices:number[]=[];
     for(let i=0;i<count-1;i++){
         const a=2*i,b=a+1,c=a+2,d=a+3;
-        indices.push(a,c,b,b,c,d);
+        appendRoadQuadV2(positions,normals,a,b,c,d,indices);
     }
     return buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});
 }

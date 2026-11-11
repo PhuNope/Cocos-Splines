@@ -1,7 +1,7 @@
 import {buildSplineFramesV2,type SplineFrameV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
-import {buildRoadCornerSectionsV2,roadCornerPositionV2,type RoadCornerOptionsV2} from './RoadCorners';
+import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
 export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
@@ -137,7 +137,10 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
         const tris:number[]=[];
         for(let i=0;i<frames.length-1;i++){
             const k=start+2*i;
-            if(flipped)tris.push(k,k+1,k+2,k+1,k+3,k+2);
+            if(roadSections){
+                // Choose the correct diagonal when local curvature makes an inner quad concave.
+                appendRoadQuadV2(positions,normals,k,k+1,k+2,k+3,tris,flipped);
+            }else if(flipped)tris.push(k,k+1,k+2,k+1,k+3,k+2);
             else tris.push(k,k+2,k+1,k+1,k+2,k+3);
         }
         addGroup(options.edgeMaterials[edge],tris);

@@ -93,10 +93,11 @@ const methods={
                 : !result.hasMesh?'No baked Mesh assigned. Use Bake from the Inspector.'
                 : result.stale?'Source changed since saved Mesh was baked. Re-bake before publishing.'
                 :'Saved Mesh reference exists and fingerprint matches the spline.';
-            const warn=result.cornerRisk?.pinchedSections
-                ?' Editor geometry note: '+result.cornerRisk.pinchedSections+
-                 ' tight-bend sections trimmed; global road intersections require a junction.'
-                :'';
+            const warn=(result.cornerRisk?.pinchedSections
+                ?' Editor geometry note: '+result.cornerRisk.pinchedSections+' local tight bends trimmed.':'')+
+                (result.cornerRisk?.potentialOverlapPairs
+                ?' Possible road self-overlap: '+result.cornerRisk.potentialOverlapPairs+
+                  ' close segment pairs; reduce Width or build a proper Junction Mesh.':'');
             return {...result,message:message+warn};
         }catch(e){return alertError('v2-status',e);}
     },
