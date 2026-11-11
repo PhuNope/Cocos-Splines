@@ -39,7 +39,8 @@ try {
  assert(risk.largestTurnDegrees>0);
  assert.notEqual(fingerprintMeshV2(trimmed),fingerprintMeshV2(old),'Trim should change the baked geometry');
  assert.equal(trimmed.vertexCount,old.vertexCount);
- assert.equal(trimmed.triangleCount,old.triangleCount);
+ assert(trimmed.triangleCount>=old.triangleCount,'JoinAndTrim should preserve more valid faces than legacy');
+ assert(trimmed.triangleCount<=2*(frameList.length-1),'No duplicated faces on the Road ribbon');
  assert.deepEqual(Array.from(trimmed.uv0),Array.from(old.uv0),'UV0 world-distance tiling must be stable');
  assert.deepEqual(Array.from(trimmed.uv2),Array.from(old.uv2),'UV2 must be untouched');
  for(let i=0;i<sections.length;i++){
