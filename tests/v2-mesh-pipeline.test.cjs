@@ -98,5 +98,49 @@ try{
     assert.notEqual(fingerprintMeshV2(edit),fingerprint);
     const editedUV=buildMeshV2({...input,uv2:[uv(.9,.9),...input.uv2.slice(1)]});
     assert.notEqual(fingerprintMeshV2(editedUV),fingerprint);
+
+    assert.throws(()=>buildMeshV2({...input,positions:[p(1e40),...input.positions.slice(1)]}),/position/);
+    assert.throws(()=>buildMeshV2({...input,uv0:[uv(1e40,0),...input.uv0.slice(1)]}),/uv0/);
+    assert.throws(()=>buildMeshV2({...input,submeshes:[{materialSlot:2**32,indices:[0,2,1]}]}),/slot/);
+
+    // Deterministic randomized tests verify triangle/material order after chunking.
+    let seed=0x5b1e2026;
+    const rand=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/2**32);
+    for(let round=0;round<120;round++){
+        const count=3+Math.floor(rand()*35);
+        const points=Array.from({length:count},()=>p((rand()-.5)*8,(rand()-.5)*8,(rand()-.5)*8));
+        const uv0=points.map(()=>uv(rand(),rand()));
+        const uv2=points.map(()=>uv(rand(),rand()));
+        const groups=Array.from({length:1+Math.floor(rand()*5)},(_,slot)=>({
+            materialSlot:slot*3,
+            indices:Array.from({length:3*(1+Math.floor(rand()*20))},()=>Math.floor(rand()*count))
+        }));
+        const result=buildMeshV2({positions:points,uv0,uv2,submeshes:groups});
+        const max=3+Math.floor(rand()*12);
+        const chunks=splitMeshV2(result,max);
+        const rebuilt=groups.map(()=>[]);
+        for(const chunk of chunks){
+            assert(chunk.mesh.vertexCount<=max);
+            assert(chunk.mesh.submeshes.every(sub=>sub.indices instanceof Uint16Array));
+            chunk.mesh.submeshes.forEach((sub,idx)=>{
+                const sourceId=chunk.sourceSubmeshIds[idx];
+                assert.equal(sub.materialSlot,groups[sourceId].materialSlot);
+                for(const localId of sub.indices){
+                    rebuilt[sourceId].push(chunk.sourceVertexIds[localId]);
+                    assert(localId<chunk.mesh.vertexCount);
+                }
+            });
+            for(let i=0;i<chunk.mesh.vertexCount;i++){
+                const sourceId=chunk.sourceVertexIds[i];
+                for(let j=0;j<2;j++){
+                    near(chunk.mesh.uv0[i*2+j],result.uv0[sourceId*2+j]);
+                    near(chunk.mesh.uv2[i*2+j],result.uv2[sourceId*2+j]);
+                }
+            }
+            assert(Array.from(chunk.mesh.tangents).every(Number.isFinite));
+            assert(Array.from(chunk.mesh.normals).every(Number.isFinite));
+        }
+        groups.forEach((g,idx)=>assert.deepEqual(rebuilt[idx],g.indices));
+    }
     console.log('V2 MESH PIPELINE PASS: submeshes/material slots, UV0/UV2, normals, tangent signs, chunking, collider data, fingerprints, modes');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

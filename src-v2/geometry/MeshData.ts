@@ -57,7 +57,7 @@ export function validateMeshInputV2(data:MeshInputV2):void {
     const count=data.positions.length;
     if(!count)throw new Error('Mesh requires vertices');
     if(!data.submeshes.length)throw new Error('Mesh requires at least one submesh');
-    for(const point of data.positions)if(!point||!finite(point.x,point.y,point.z))
+    for(const point of data.positions)if(!point||!finite(point.x,point.y,point.z)||!finite(Math.fround(point.x),Math.fround(point.y),Math.fround(point.z)))
         throw new Error('Non-finite mesh position');
     for(const [key,channel,size] of [
         ['uv0',data.uv0,2],['uv2',data.uv2,2],['normals',data.normals,3],['tangents',data.tangents,4]
@@ -65,12 +65,12 @@ export function validateMeshInputV2(data:MeshInputV2):void {
         if(channel===undefined)continue;
         if(channel.length!==count)throw new Error(key+' count must match vertex count');
         for(const item of channel){
-            if(!item||!Object.values(item).every(Number.isFinite)||Object.keys(item).length!==size)
+            if(!item||!Object.values(item).every(value=>Number.isFinite(value)&&Number.isFinite(Math.fround(value)))||Object.keys(item).length!==size)
                 throw new Error('Non-finite or malformed '+key);
         }
     }
     for(const sub of data.submeshes){
-        if(!Number.isSafeInteger(sub.materialSlot)||sub.materialSlot<0)
+        if(!Number.isSafeInteger(sub.materialSlot)||sub.materialSlot<0||sub.materialSlot>0xffffffff)
             throw new Error('Invalid material slot');
         if(sub.indices.length===0||sub.indices.length%3!==0)
             throw new Error('Triangle indices must be nonempty and divisible by three');
