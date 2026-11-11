@@ -237,7 +237,16 @@ function rebuildV2Road(uuid){
         component.rebuildPreview();
         const risk=component.inspectCornerRisk?.();
         const overlap=risk?.overlapReport;
-        const warn=(risk?.pinchedSections
+        const continuous=risk?.continuousReport;
+        const warn=(continuous?.constrainedSections
+            ?' Continuous UV strip: auto-fitted width at '+continuous.constrainedSections+
+              ' sections (minimum '+Math.round(100*continuous.minimumWidthRatio)+
+              '% of requested Width); no overlap polygon cuts.':'')+
+            (continuous?.hitSafetyLimit
+            ?' Continuous width solver reached its safety cap; inspect extreme overlaps.':'')+
+            (continuous?.impossibleCrossings
+            ?' Coincident spline centerline points cannot be resolved by width fitting.':'')+
+            (risk?.pinchedSections
             ?' Inside edge trimmed at '+risk.pinchedSections+' samples.':'')+
             (overlap?.clippedSourceTriangles
             ?' Coplanar overlap removed from '+overlap.clippedSourceTriangles+' source triangles.':'')+

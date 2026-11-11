@@ -3,9 +3,11 @@ import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
 import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
+import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2,type RoadContinuousResultV2} from './RoadContinuous';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
-export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
+export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
+    readonly roadContinuous?:RoadContinuousResultV2;
     readonly points:ReadonlyArray<ProfileVertexV2>;
     /** One material slot per profile edge, including wrap edge if closedProfile. */
     readonly edgeMaterials:ReadonlyArray<number>;
@@ -19,7 +21,9 @@ export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
     /** UV0 coordinate that repeats longitudinally; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
 }
-export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2 {
+export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
+    readonly surfaceMode?:'clip'|'continuous';
+    readonly onContinuousReport?:(report:RoadContinuousReportV2)=>void;
     readonly width:number;
     readonly resolvePlanarOverlaps?:boolean;
     /** Match UV0 phase on coplanar cut edges (Repeat sampler). */
@@ -122,7 +126,9 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
     }
     function push(f:SplineFrameV2,frameIndex:number,pt:ProfileVertexV2,nx:number,ny:number,u:number){
         const id=positions.length;
-        positions.push(roadSections?roadCornerPositionV2(f,roadSections[frameIndex],pt.x,pt.y):vec(f,pt.x,pt.y));
+        const section=options.roadContinuous?.sections[frameIndex];
+        const renderX=section?roadContinuousProfileX_V2(pt.x,Math.max(...pts.map(p=>Math.abs(p.x))),section):pt.x;
+        positions.push(roadSections?roadCornerPositionV2(f,roadSections[frameIndex],renderX,pt.y):vec(f,renderX,pt.y));
         normals.push(normal(f,nx,ny,flipped));
         const across=u/total,along=f.distance/uvRepeat;
         uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});
@@ -185,6 +191,13 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(!finite(width)||width<=0||![shoulder,curb,height].every(x=>finite(x)&&x>=0))
         throw new Error('Invalid road width, shoulder or curb dimensions');
     const half=width/2,pts:ProfileVertexV2[]=[],slots:number[]=[];
+    const mode=options.surfaceMode??'clip';
+    if(mode!=='clip'&&mode!=='continuous')throw new Error('Unknown Road surface mode');
+    const totalHalfExtent=half+shoulder+curb;
+    const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(
+        buildSplineFramesV2(cache,{maxStep:options.step??.5}).frames,totalHalfExtent,
+        {...options,closed:cache.spline.closed}):null;
+    if(continuous)options.onContinuousReport?.(continuous.report);
     const push=(x:number,y:number,slot?:number)=>{
         if(slot!==undefined)slots.push(slot);
         pts.push({x,y});
@@ -205,9 +218,9 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
         uvLongitudinalAxis:options.uvLongitudinalAxis,
         cornerMode:options.cornerMode??'join-trim',
         cornerTrimSafety:options.cornerTrimSafety,
-        cornerMiterLimit:options.cornerMiterLimit});
+        cornerMiterLimit:options.cornerMiterLimit,roadContinuous:continuous??undefined});
     const fullWidth=width+2*shoulder+2*curb;
-    if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
+    if(mode==='continuous'||!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
     const result=resolveRoadOverlapV2(mesh,{roadWidth:fullWidth,stitchCutUV:options.stitchCutUV});
     options.onOverlapReport?.(result.report);
     return result.mesh;

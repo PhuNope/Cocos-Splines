@@ -94,7 +94,12 @@ const methods={
                 : result.stale?'Source changed since saved Mesh was baked. Re-bake before publishing.'
                 :'Saved Mesh reference exists and fingerprint matches the spline.';
             const report=result.cornerRisk?.overlapReport;
-            const warn=(result.cornerRisk?.pinchedSections
+            const continuous=result.cornerRisk?.continuousReport;
+            const warn=(continuous?.constrainedSections
+                ?' Continuous Road: '+continuous.constrainedSections+' sections width-fitted; smallest '+Math.round(100*continuous.minimumWidthRatio)+'% of requested Width, UV uncut.':'')+
+                (continuous?.hitSafetyLimit
+                ?' Continuous width solver reached safety limit; inspect mesh.':'')+
+                (result.cornerRisk?.pinchedSections
                 ?' Editor geometry note: '+result.cornerRisk.pinchedSections+' local tight bends trimmed.':'')+
                 (report?.clippedSourceTriangles
                 ?' Removed planar duplicate area from '+report.clippedSourceTriangles+' source triangles.':'')+

@@ -3,7 +3,8 @@ import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type RoadCornerOptionsV2} from './RoadCorners';
 import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
-export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
+import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2} from './RoadContinuous';
+export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
     /** Total asphalt width in spline-local units. */
     readonly width:number;
     /** Longitudinal metres per UV repetition. */
@@ -17,6 +18,9 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     /** Match UV0 phase on coplanar cut edges (Repeat sampler). */
     readonly stitchCutUV?:boolean;
     readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
+    /** Continuous Road strip with smooth width adaptation; no UV/mesh clipping. */
+    readonly surfaceMode?:'clip'|'continuous';
+    readonly onContinuousReport?:(report:RoadContinuousReportV2)=>void;
 }
 /**
  * Minimal v2 road geometry generator. Uses the same stable frames as followers,
@@ -37,12 +41,17 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     const positions:Vec3MeshV2[]=[],normals:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[];
     const count=table.frames.length;
     const corners=buildRoadCornerSectionsV2(table.frames,width*.5,options,cache.spline.closed);
+    const mode=options.surfaceMode??'clip';
+    if(mode!=='clip'&&mode!=='continuous')throw new Error('Unknown Road surface mode');
+    const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(table.frames,width*.5,{...options,closed:cache.spline.closed}):null;
+    if(continuous)options.onContinuousReport?.(continuous.report);
     // UV2 is a deterministic secondary channel, not a lightmap atlas unwrap.
     for(let i=0;i<count;i++){
         const f=table.frames[i];
         for(const side of [-1,1]){
             const half=width*.5*side;
-            positions.push(roadCornerPositionV2(f,corners[i],half,0));
+            const renderX=continuous?roadContinuousProfileX_V2(half,width*.5,continuous.sections[i]):half;
+            positions.push(roadCornerPositionV2(f,corners[i],renderX,0));
             normals.push({...f.up});
             const across=(side+1)/2,along=f.distance/uvMeters;
             uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});
@@ -55,7 +64,7 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
         appendRoadQuadV2(positions,normals,a,b,c,d,indices);
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot,indices}]});
-    if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
+    if(mode==='continuous'||!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
     const result=resolveRoadOverlapV2(mesh,{roadWidth:width,stitchCutUV:options.stitchCutUV});
     options.onOverlapReport?.(result.report);
     return result.mesh;

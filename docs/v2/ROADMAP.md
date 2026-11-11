@@ -12,6 +12,8 @@
 - [x] Planar same-road overlap clipping for U-turns (first-surface-wins, UV0/UV2 interpolation, Editor diagnostics, safety caps).
 - [x] Phase-consistent UV0 stitching at planar cut borders (U/V repeat, shared-material vertices), preserving UV2 and Bake fingerprint.
 - [ ] Junction-aware lane markings/decal topology for truly crossing road strips.
+- [x] Continuous Road surface mode: adaptive inner width, uncut spline UV0/UV2, U/V axis, shoulder/curb, editor diagnostics.
+- [ ] Arbitrary spline self-crossing topology and fixed-width junction-aware lane markings.
 - [ ] Road/Extrude/Profile hardening: sharp corner trimming, junctions, advanced profiles, editor-generated lightmap UV atlas, and actual Creator 3.8.x integration tests.
 - [x] Editor Bake candidate: glTF AssetDB export, unique Mesh subasset binding and scene-serialized reference/fingerprint, explicit pending/retry; mock verification only.
 - [ ] Editor Bake certification: real Cocos 3.8.x import/save/reopen/Play test, material/UV2 validation and collision integration.

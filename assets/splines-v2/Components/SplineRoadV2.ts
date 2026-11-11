@@ -9,6 +9,7 @@ import {buildRoadProfileV2} from '../geometry/ProfileSweep';
 import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
+import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -17,6 +18,7 @@ export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
+export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
  * gameplay and NEVER builds Manual/Baked geometry at runtime.
@@ -46,6 +48,12 @@ export class SplineRoadV2 extends Component {
     cornerMiterLimit=2.5;
     @property({tooltip:'Remove overlapping near-coplanar road faces (like a wide U-turn) before rendering. Does not Boolean-union crossings at different heights.'})
     resolvePlanarOverlaps=true;
+    @property({type:Enum(SplineV2SurfaceMode),tooltip:'Continuous: connected UV Road ribbon with automatic width fit. Clip Overlaps: keeps width but cuts mesh/texture at self-intersections.'})
+    surfaceMode=SplineV2SurfaceMode.Continuous;
+    @property({min:.05,max:.98,step:.01,tooltip:'Reduce width near nearby road arms, without cutting textures.'})
+    clearanceSafety=.35;
+    @property({min:.05,max:4,step:.05,tooltip:'Controls how smoothly road width changes near U-turns.'})
+    widthSlope=.65;
     @property({tooltip:'Align repeating UV0 texture phase at cut boundaries with the retained Road surface. Does not join lane markings with different directions.'})
     stitchCutUV=true;
     @property({min:0.01}) uvMetersPerRepeat=5;
@@ -61,6 +69,7 @@ export class SplineRoadV2 extends Component {
     @property({visible:false}) pendingBakeUrl='';
     @property({visible:false}) pendingBakeFingerprint='';
     private _lastOverlapReport:RoadOverlapReportV2|null=null;
+    private _lastContinuousReport:RoadContinuousReportV2|null=null;
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -124,7 +133,7 @@ export class SplineRoadV2 extends Component {
         const report=inspectRoadCornersV2(sections);
         const clearance=inspectRoadCenterlineClearanceV2(frameTable.frames,
             this.width+2*this.shoulderWidth+2*this.curbWidth);
-        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined};
+        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined,continuousReport:this._lastContinuousReport??undefined};
     }
     private cornerSettings(){
         return {cornerMode:this.cornerMode===SplineV2RoadCornerMode.Legacy?'legacy' as const:'join-trim' as const,
@@ -136,12 +145,16 @@ export class SplineRoadV2 extends Component {
         const uvLongitudinalAxis=this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v';
         const corners=this.cornerSettings();
         this._lastOverlapReport=null;
+        this._lastContinuousReport=null;
         const onOverlapReport=(report:RoadOverlapReportV2):void=>{this._lastOverlapReport=report;};
+        const onContinuousReport=(report:RoadContinuousReportV2):void=>{this._lastContinuousReport=report;};
+        const surfaceMode=this.surfaceMode===SplineV2SurfaceMode.Continuous?'continuous' as const:'clip' as const;
         const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
-                uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,...corners
+                uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
+                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,

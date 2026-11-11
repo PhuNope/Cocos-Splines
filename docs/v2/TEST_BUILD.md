@@ -77,3 +77,12 @@ Set Width 4, Sample Step 0.15, Corner Mode JoinAndTrim; run Rebuild Preview and 
 5. Thử cả trục `V`, `Shoulder Width` và `Curb Width`. UV2 không được thay bởi tùy chọn Stitch Cut UV.
 6. **Bake glTF Asset** lại sau khi đổi UV, lưu Scene và kiểm tra Play. Mesh Baked cũ không tự cập nhật khi đổi tùy chọn.
 7. Nếu vạch sơn giao nhau theo hai hướng khác nhau tại nút đường, stitching UV0 chỉ khớp *pha texture* trên mép cắt. Để vạch sơn nối đúng theo một hướng cụ thể cần Junction Mesh/marking decal chuyên dụng.
+
+## Kiểm tra Road không đứt texture tại cua chữ U
+
+1. Sau khi cài bản test mới, chọn `SplineRoadV2`. Đặt **Surface Mode = Continuous** (mặc định).
+2. Giữ `Corner Mode = JoinAndTrim`, `Width = 4`, `Sample Step = 0.25`, `UV Longitudinal Axis = U` với texture chạy theo trục X; texture sampler đặt **Repeat**.
+3. `Clearance Safety = 0.35` và `Width Slope = 0.65`; bấm **Rebuild Preview**. Trong chế độ này không có cắt tam giác hay UV, nên không còn đường cắt UV chạy qua mặt đường.
+4. So sánh **Surface Mode = Clip Overlaps** rồi Rebuild: Clip sẽ ưu tiên giữ bề rộng nhưng có thể làm vạch kẻ gãy tại nơi hai nhánh chồng nhau. Quay về Continuous để ưu tiên texture chạy liên tục.
+5. Với U-turn có hai nhánh quá gần, Road sẽ hẹp lại tại phía trong khúc cua để tránh tự chồng. Đây là đánh đổi hình học cần thiết; muốn giữ `Width=4` trên toàn đường, tăng bán kính cua/khoảng cách hai nhánh bằng Knot.
+6. Test Road có Shoulder/Curb, cả trục U và V, rồi **Bake glTF Asset** lại sau khi hài lòng với hình học. Chú ý kiểm tra lại texture trong Editor thật vì CI chỉ có test TypeScript/Mock.

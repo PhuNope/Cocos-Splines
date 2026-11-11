@@ -126,3 +126,18 @@ The original Road v2 planar resolver removed double-covered triangles but kept t
 This fixes arbitrary UV phase breaks at coplanar cut edges. It **does not** make all road markings continuous through a genuine fork or crossover: the two branches can have incompatible longitudinal directions. For painted lane markings that must turn or merge through a junction, use an intersection-specific marking/decal mesh and material. Texture UV0 continuity (same sample at one point) and continuity of the *direction* of markings are different constraints; this renderer cannot solve both at a real crossroads without a junction-aware texture layout.
 
 For debugging, compare **Stitch Cut UV** enabled versus disabled while keeping **Resolve Planar Overlaps** enabled, then click **Rebuild Preview**. Make sure texture U/V address modes are **Repeat**, and re-Bake saved meshes after changing the option. The stitching affects Road strip and Road profile (including shoulder/curb where material slots match), not Tube Extrude. Diagnostics are Editor-only.
+
+## Continuous Road Surface: no cut UVs in a narrow hairpin
+
+The previous `Resolve Planar Overlaps` + `Stitch Cut UV` pipeline cannot preserve directional road stripes through a wide, self-overlapping U-turn: it performs a triangle union, which necessarily discards portions of the *original spline UV mapping* and leaves a transition between incompatible texture directions.
+
+New **Surface Mode = Continuous** (default for the v2 Cocos Road component) builds a **single uncut spline ribbon** with exactly one longitudinal UV progression and a smooth per-ring cross-section. It does **not** call the planar polygon clipping/UV stitching pipeline, even if the older checkboxes are enabled. The pure Road builders retain their default `clip` mode for legacy programmatic callers; the Cocos Inspector explicitly selects Continuous.
+
+The geometry of a road of fixed `Width=4` cannot remain an injective strip where the centreline U-turn arms are only 2 units apart. To keep the UVs and road marking unbroken, the Continuous mode narrows the **inside cross-section near close arms**. A spatial neighbour check creates asymmetric safe widths, avoiding height-separated crossings; a forward/backward Lipschitz envelope makes the width change gradually instead of introducing sharp steps. It leaves full width on unconstrained straight sections. Initial controls: `Clearance Safety=0.35`, `Width Slope=0.65`. Increasing the clearance factor may bring back overlapping strips; if preserving full width is necessary, move the knots farther apart or increase the turn radius.
+
+- **U/V Longitudinal UV Axis** and **UV Meters Per Repeat** work exactly as before; UV0 is generated once per spline frame, never reprojected after a triangle cut.
+- **UV2 remains separate**, and glTF Bake uses the same continuous mesh as Editor Preview/Dynamic.
+- Profile roads with Shoulder/Curb scale every profile band consistently so stripes and material boundaries stay attached to the same spline frame.
+- **Surface Mode = Clip Overlaps** remains available for comparisons or intentionally unioned overlapping polygons; only in that mode are **Resolve Planar Overlaps** and **Stitch Cut UV** consulted.
+- Editor diagnostics report constrained frame count and minimum effective width ratio; there is no new Play-mode logging.
+- This is not a proof of self-intersection-free geometry for arbitrary loops, bridges, coincident centreline crossings, very steep banked roads, or full Junctions. A geometrically impossible sharp turn may still need knot edits, a separate junction mesh or authored lane markings. No claim of a perfect constant-width U-turn is made.
