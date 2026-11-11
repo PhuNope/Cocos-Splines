@@ -15,8 +15,8 @@ const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
 export class SplineExtrudeV2 extends SplineRoadV2 {
     @property({min:0.01}) radius=.5;
     @property({min:3,max:256,step:1}) sides=12;
-    @property capEnds=true;
-    @property flipFaces=false;
+    @property() capEnds=true;
+    @property() flipFaces=false;
     protected generate(){
         const cache=buildSplineCacheV2(this.source());
         const geometry=buildTubeV2(cache,{
