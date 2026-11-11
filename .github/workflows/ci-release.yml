@@ -29,6 +29,8 @@ jobs:
         run: npm run check:runtime
       - name: Typecheck new v2 core
         run: npm run check:v2
+      - name: Typecheck Cocos v2 Editor bridge
+        run: npm run check:v2-editor
       - name: Build editor extension baseline
         run: npm run build
       - name: Verify extension structure
