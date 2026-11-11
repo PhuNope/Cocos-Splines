@@ -228,7 +228,7 @@ export function inspectRoadCenterlineClearanceV2(
         const a=points[i],b=points[i+1],c=points[j],d=points[j+1];
         // Neighbor samples share a swept surface and are not road crossings.
         const arcGap=Math.min(Math.abs(a.distance-d.distance),Math.abs(b.distance-c.distance));
-        if(arcGap<fullWidth*1.5)continue;
+        if(arcGap<fullWidth)continue;
         const dx=Math.max(0,Math.max(Math.min(a.position.x,b.position.x),Math.min(c.position.x,d.position.x))
             -Math.min(Math.max(a.position.x,b.position.x),Math.max(c.position.x,d.position.x)));
         const dy=Math.max(0,Math.max(Math.min(a.position.y,b.position.y),Math.min(c.position.y,d.position.y))
