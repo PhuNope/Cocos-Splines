@@ -1,7 +1,8 @@
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
-export interface RoadStripOptionsV2 {
+import {buildRoadCornerSectionsV2,roadCornerPositionV2,type RoadCornerOptionsV2} from './RoadCorners';
+export interface RoadStripOptionsV2 extends RoadCornerOptionsV2 {
     /** Total asphalt width in spline-local units. */
     readonly width:number;
     /** Longitudinal metres per UV repetition. */
@@ -14,7 +15,7 @@ export interface RoadStripOptionsV2 {
 /**
  * Minimal v2 road geometry generator. Uses the same stable frames as followers,
  * and Mesh Pipeline 2 to preserve UV0, UV2, normal and tangent channels.
- * This strip does not yet implement corner trimming, curbs or junction welding.
+ * Applies local miter-and-inside-trim by default; full junction CSG is separate.
  */
 export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2):MeshDataV2 {
     const width=options.width,uvMeters=options.uvMetersPerRepeat??5,step=options.step??.5,materialSlot=options.materialSlot??0;
@@ -29,13 +30,13 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     const table=buildSplineFramesV2(cache,{maxStep:step});
     const positions:Vec3MeshV2[]=[],normals:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[];
     const count=table.frames.length;
+    const corners=buildRoadCornerSectionsV2(table.frames,width*.5,options,cache.spline.closed);
     // UV2 is a deterministic secondary channel, not a lightmap atlas unwrap.
     for(let i=0;i<count;i++){
         const f=table.frames[i];
         for(const side of [-1,1]){
             const half=width*.5*side;
-            positions.push({x:f.position.x+f.right.x*half,
-                y:f.position.y+f.right.y*half,z:f.position.z+f.right.z*half});
+            positions.push(roadCornerPositionV2(f,corners[i],half,0));
             normals.push({...f.up});
             const across=(side+1)/2,along=f.distance/uvMeters;
             uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});

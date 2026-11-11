@@ -46,3 +46,12 @@ Không có tag, Release hoặc npm publish từ quy trình đóng gói này.
 - If the texture's road direction is **along image X** (U), select **U**. When the texture's road direction is **along image Y** (V), select **V** (default).
 - Set `uvMetersPerRepeat` to `5` as a starting value. The texture wrap setting should be **Repeat U** or **Repeat V** as appropriate.
 - Click **Rebuild Preview**; if using Manual or Baked, **Bake glTF Asset** again. Test that shoulder, curb, and Extrude textures rotate their longitudinal mapping consistently. UV2 remains untouched.
+
+## Test: tight road corners (JoinAndTrim)
+
+1. Use the **new** test build and a *copy* of a Scene. Road v2 Inspector → **Corner Mode = JoinAndTrim**.
+2. Create a tight U-turn (e.g. three or four knots), set `width=4` and `sampleStep=0.2`. Click **Rebuild Preview**. The inner edge should pinch smoothly rather than fold across the curve. Use `Corner Trim Safety=0.9`, `Corner Miter Limit=2.5` initially.
+3. Toggle **Corner Mode = Legacy**, Rebuild Preview and compare. Legacy may fold the inner curve. Re-enable JoinAndTrim.
+4. Test with `shoulderWidth=1`, `curbWidth=0.3`, `curbHeight=0.2`, and UV Longitudinal Axis U and V to inspect material seams/tiling.
+5. Set Baked and use **Show Baked Mesh** to see the persisted asset rather than the temporary preview. After changing corner settings, click **Bake glTF Asset**, save Scene, reopen and Play.
+6. **Check Bake Status** reports local pinched sections. Crossing branches/roads, underpasses and 3D helix-wide self-intersections are *not* solved by local trimming; they require junction-aware mesh operations.

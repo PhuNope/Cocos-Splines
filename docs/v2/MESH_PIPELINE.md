@@ -90,3 +90,13 @@ Road V2 and Extrude V2 both expose `uvLongitudinalAxis` in the Inspector (native
 - UV2 is **unchanged** when switching between U and V. For the tube `capEnds` use independent planar UV0 mapping on end faces.
 - Switching the enum changes the generated geometry fingerprint. For Manual/Baked click **Bake glTF Asset** again; Dynamic rebuilds at next Play enable, and Editor can click **Rebuild Preview**. The material's texture sampler must be set to Repeat on the corresponding axis. A clamp sampler will not tile.
 - UV0 tangents and handedness are regenerated from the chosen mapping, including shoulder/curb material bands and tube surfaces.
+
+## Road V2: local corner JoinAndTrim
+
+- **Corner Mode** in Road Inspector defaults to `JoinAndTrim`; `Legacy` keeps the old perpendicular sampled rings for comparisons.
+- The Road strip and the Road shoulder/curb profile now share `RoadCorners.ts`: chord-based outside miter joins and a monotonic, smooth compression of the **inside** of each sharp bend. Settings are `cornerTrimSafety` (default 0.9) and `cornerMiterLimit` (default 2.5).
+- Mesh UV0 is **based on the original untrimmed profile**, preserving U/V longitudinal tiling, with UV2 unchanged by the corner option.
+- In the Inspector, **Rebuild Preview** replaces the visible Mesh temporarily; **Show Baked Mesh** removes the preview and restores the saved asset. A successful Bake or Bind also attempts to show the saved asset.
+- **Check Bake Status** reports pinched local sections in the Inspector without Play-mode console warnings.
+- This is **local bend correction**, not polygon clipping/CSG for two independent roads or for full 3D self-intersections. Extremely tight hairpins, crossing roads and helix turns still need geometry diagnostics and/or Junction Mesh v2. Never claim globally self-intersection-free road geometry.
+- If a scene previously baked the old ribbon, it must be re-baked after enabling JoinAndTrim. Compare JoinAndTrim and Legacy on a safe duplicate Scene, not production data.

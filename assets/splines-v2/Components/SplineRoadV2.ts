@@ -6,6 +6,8 @@ import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2} from '../geometry/ProfileSweep';
+import {buildRoadCornerSectionsV2,inspectRoadCornersV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
+import {buildSplineFramesV2} from '../core/SplineFrames';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -13,6 +15,7 @@ const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineV2UVAxis {V=0,U=1}
+export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
  * gameplay and NEVER builds Manual/Baked geometry at runtime.
@@ -34,6 +37,12 @@ export class SplineRoadV2 extends Component {
     @property({min:0}) curbWidth=0;
     @property({min:0}) curbHeight=0;
     @property({min:0.01}) sampleStep=.5;
+    @property({type:Enum(SplineV2RoadCornerMode),tooltip:'JoinAndTrim prevents local inner-edge folds at sharp bends; Legacy restores old ribbon sections.'})
+    cornerMode=SplineV2RoadCornerMode.JoinAndTrim;
+    @property({min:0.5,max:0.98,step:0.01,tooltip:'Safety fraction of local bend radius for the inside road edge.'})
+    cornerTrimSafety=.9;
+    @property({min:1,max:4,step:.1,tooltip:'Limit outward miter spikes at sharp corners.'})
+    cornerMiterLimit=2.5;
     @property({min:0.01}) uvMetersPerRepeat=5;
     @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=SplineV2UVAxis.V;
@@ -99,18 +108,32 @@ export class SplineRoadV2 extends Component {
         ][this.interpolation] as CurveTypeV2;
         return {type:curve,closed:this.closed,knots:data};
     }
+    /** Editor-only local corner report; no warnings are printed during Play. */
+    public inspectCornerRisk():RoadCornerReportV2|null {
+        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
+        const cache=buildSplineCacheV2(this.source());
+        const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep});
+        const sections=buildRoadCornerSectionsV2(frameTable.frames,
+            this.width*.5+this.shoulderWidth+this.curbWidth,this.cornerSettings(),this.closed);
+        return inspectRoadCornersV2(sections);
+    }
+    private cornerSettings(){
+        return {cornerMode:this.cornerMode===SplineV2RoadCornerMode.Legacy?'legacy' as const:'join-trim' as const,
+            cornerTrimSafety:this.cornerTrimSafety,cornerMiterLimit:this.cornerMiterLimit};
+    }
     protected generate(){
         const curve=this.source();
         const cache=buildSplineCacheV2(curve);
         const uvLongitudinalAxis=this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v';
+        const corners=this.cornerSettings();
         const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
-                uvLongitudinalAxis
+                uvLongitudinalAxis,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
-                step:this.sampleStep,materialSlot:0,uvLongitudinalAxis
+                step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,...corners
             });
         return {geometry};
     }
@@ -122,6 +145,11 @@ export class SplineRoadV2 extends Component {
      * Call from the Inspector only. Preview geometry is temporary, never
      * serialized; optional parts are hidden and DontSave in the Editor.
      */
+    /** Inspector: switch back to the persisted Mesh, disposing temporary preview. */
+    public restoreBakedPreview():void {
+        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Restore saved mesh is Editor-only');
+        this.showSavedMesh();
+    }
     public rebuildPreview():void {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Editor-only Rebuild is unavailable during Play');
         this.rebuildTransient();

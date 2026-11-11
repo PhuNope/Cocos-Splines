@@ -77,6 +77,7 @@ try{
  // Editor-only preview/Bake never persist temporary GPU assets.
  assert.throws(()=>road.rebuildPreview(),/Editor-only/);
  assert.throws(()=>road.prepareBake(),/Editor-only/);
+ assert.throws(()=>road.restoreBakedPreview(),/Editor-only/);
  env.EDITOR_NOT_IN_PREVIEW=true;
  road.rebuildPreview();assert.equal(generated.length,3);
  const baked=road.prepareBake();assert.equal(JSON.parse(baked.content).asset.version,'2.0');
@@ -85,6 +86,11 @@ try{
  road.uvLongitudinalAxis=1;assert.equal(road.inspectBake().stale,true,'Switching to U must invalidate baked UV0');
  road.uvLongitudinalAxis=0;assert.equal(road.inspectBake().stale,false,'Restoring V keeps previous mapping');
  road.width=5;assert.equal(road.inspectBake().stale,true);
+ const report=road.inspectCornerRisk();
+ assert.equal(report.pinchedSections,0,'Straight road needs no pinch warning');
+ road.restoreBakedPreview();
+ assert.equal(renderer.mesh,saved,'Baked asset must be visible after preview is cleared');
+ assert(generated[2].destroyed,'Old temporary preview must be destroyed');
  road.onDisable();assert(generated[2].destroyed);
  assert.equal(saved.destroyed,false);
  const extrudeNode=new Node('ExtrudeV2'),extrudeRenderer=extrudeNode.addComponent(MeshRenderer);
@@ -101,6 +107,7 @@ try{
  extrude.onDisable();
  assert(generated.at(-1).destroyed);assert(!saved.destroyed);
  env.EDITOR_NOT_IN_PREVIEW=true;
+ assert.equal(extrude.inspectCornerRisk(),null);
  const tubeBake=extrude.prepareBake();assert.equal(JSON.parse(tubeBake.content).meshes[0].primitives.length,1);
   console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

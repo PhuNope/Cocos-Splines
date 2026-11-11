@@ -1,9 +1,10 @@
 import {buildSplineFramesV2,type SplineFrameV2} from '../core/SplineFrames';
 import {type SplineCacheV2} from '../core/SplineCache';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
+import {buildRoadCornerSectionsV2,roadCornerPositionV2,type RoadCornerOptionsV2} from './RoadCorners';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
-export interface ProfileSweepOptionsV2 {
+export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2 {
     readonly points:ReadonlyArray<ProfileVertexV2>;
     /** One material slot per profile edge, including wrap edge if closedProfile. */
     readonly edgeMaterials:ReadonlyArray<number>;
@@ -17,7 +18,7 @@ export interface ProfileSweepOptionsV2 {
     /** UV0 coordinate that repeats longitudinally; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
 }
-export interface RoadProfileOptionsV2 {
+export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2 {
     readonly width:number;
     readonly shoulderWidth?:number;
     readonly curbWidth?:number;
@@ -94,6 +95,10 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
         }
     }
     const frames=buildSplineFramesV2(cache,{maxStep:step}).frames;
+    // Only Road chooses join-trim. Extrude tubes remain regular cross-sections.
+    const roadSections=options.cornerMode==='join-trim'
+        ?buildRoadCornerSectionsV2(frames,Math.max(...pts.map(p=>Math.abs(p.x))),options,cache.spline.closed)
+        :null;
     const positions:Vec3MeshV2[]=[],normals:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[];
     const groups=new Map<number,number[]>();
     const addGroup=(slot:number,triangles:number[]):void=>{let a=groups.get(slot);if(!a){a=[];groups.set(slot,a);}a.push(...triangles);};
@@ -110,9 +115,9 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
             cornerNormals.push({x:nx,y:ny});
         }
     }
-    function push(f:SplineFrameV2,pt:ProfileVertexV2,nx:number,ny:number,u:number){
+    function push(f:SplineFrameV2,frameIndex:number,pt:ProfileVertexV2,nx:number,ny:number,u:number){
         const id=positions.length;
-        positions.push(vec(f,pt.x,pt.y));
+        positions.push(roadSections?roadCornerPositionV2(f,roadSections[frameIndex],pt.x,pt.y):vec(f,pt.x,pt.y));
         normals.push(normal(f,nx,ny,flipped));
         const across=u/total,along=f.distance/uvRepeat;
         uv0.push(axis==='u'?{x:along,y:across}:{x:across,y:along});
@@ -124,9 +129,10 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
         const na=options.smoothNormals?cornerNormals[edge]:{x:-dy,y:dx};
         const nb=options.smoothNormals?cornerNormals[(edge+1)%pts.length]:na;
         const start=positions.length;
-        for(const f of frames){
-            push(f,a,na.x,na.y,lengths[edge]);
-            push(f,b,nb.x,nb.y,lengths[edge+1]);
+        for(let ring=0;ring<frames.length;ring++){
+            const f=frames[ring];
+            push(f,ring,a,na.x,na.y,lengths[edge]);
+            push(f,ring,b,nb.x,nb.y,lengths[edge+1]);
         }
         const tris:number[]=[];
         for(let i=0;i<frames.length-1;i++){
@@ -188,7 +194,10 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(height>0)push(half+shoulder,height,2);
     if(curb>0)push(half+shoulder+curb,height,2);
     return buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
-        uvLongitudinalAxis:options.uvLongitudinalAxis});
+        uvLongitudinalAxis:options.uvLongitudinalAxis,
+        cornerMode:options.cornerMode??'join-trim',
+        cornerTrimSafety:options.cornerTrimSafety,
+        cornerMiterLimit:options.cornerMiterLimit});
 }
 export function buildTubeV2(cache:SplineCacheV2,options:TubeOptionsV2):MeshDataV2 {
     const sides=options.sides??12;

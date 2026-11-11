@@ -17,6 +17,8 @@ export class SplineExtrudeV2 extends SplineRoadV2 {
     @property({min:3,max:256,step:1}) sides=12;
     @property() capEnds=true;
     @property() flipFaces=false;
+    /** Extrude cylinders are not road ribbons; do not apply corner miter/trim. */
+    public inspectCornerRisk():null {return null;}
     protected generate(){
         const cache=buildSplineCacheV2(this.source());
         const geometry=buildTubeV2(cache,{

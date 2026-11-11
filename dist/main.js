@@ -77,16 +77,27 @@ const methods={
             return await invokeScene('rebuildV2Road',uuid);
         }catch(e){return alertError('v2-rebuild',e);}
     },
+    async restoreV2RoadBaked(){
+        try{
+            const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
+            return await invokeScene('restoreV2RoadBaked',uuid);
+        }catch(e){return alertError('v2-road-restore',e);}
+    },
     async checkV2RoadBake(){
         try{
             const uuid=selected()[0];if(!uuid)throw Error('Select a v2 Road/Extrude component Node.');
             const result=await invokeScene('inspectV2RoadBake',uuid);
             if(!result?.ok)throw Error(result?.error||'Cannot inspect bake');
-            return {...result,message:result.pendingUrl
+            const message=result.pendingUrl
                 ? 'Bake import pending: '+result.pendingUrl+'. Use Bind imported Mesh once AssetDB has finished.'
                 : !result.hasMesh?'No baked Mesh assigned. Use Bake from the Inspector.'
                 : result.stale?'Source changed since saved Mesh was baked. Re-bake before publishing.'
-                :'Saved Mesh reference exists and fingerprint matches the spline.'};
+                :'Saved Mesh reference exists and fingerprint matches the spline.';
+            const warn=result.cornerRisk?.pinchedSections
+                ?' Editor geometry note: '+result.cornerRisk.pinchedSections+
+                 ' tight-bend sections trimmed; global road intersections require a junction.'
+                :'';
+            return {...result,message:message+warn};
         }catch(e){return alertError('v2-status',e);}
     },
     async bindV2RoadMesh(){
@@ -104,6 +115,8 @@ const methods={
             },{attempts:1});
             if(!result.ok)return {ok:false,error:result.reason||'Mesh import not finished',pending:!!result.pending,
                 message:'Asset imported but cannot bind automatically. Check the Assets panel.'};
+            const restored=await invokeScene('restoreV2RoadBaked',uuid);
+            if(!restored?.ok)throw Error(restored?.error||'Mesh bound but could not show saved Mesh');
             await snapshot();
             return {ok:true,uuid:result.uuid,url:result.assetUrl,
                 message:'Imported Mesh '+result.uuid+' has been linked to the Scene; mode set to Baked.'};
@@ -137,6 +150,8 @@ const methods={
             if(!bound.ok)return {ok:true,bound:false,url:target,message:
                 'glTF exported successfully, but Mesh is not linked yet: '+(bound.reason||'AssetDB import pending')+
                 '. Click Bind Imported Mesh in Inspector when import completes.'};
+            const restored=await invokeScene('restoreV2RoadBaked',uuid);
+            if(!restored?.ok)throw Error(restored?.error||'Mesh bound but could not show saved Mesh');
             await snapshot();
             return {ok:true,bound:true,url:target,meshUuid:bound.uuid,
                 primitiveCount:prepared.primitiveCount,message:

@@ -233,7 +233,22 @@ function roadV2Component(uuid){
 function rebuildV2Road(uuid){
     const {component}=roadV2Component(uuid);
     if(!component)return {ok:false,error:'Select a node with SplinesV2.SplineRoad'};
-    try{component.rebuildPreview();return {ok:true,message:'V2 preview rebuilt (temporary; not saved into the scene).'};}
+    try{
+        component.rebuildPreview();
+        const risk=component.inspectCornerRisk?.();
+        const warn=risk?.pinchedSections
+            ?' Inside edge trimmed at '+risk.pinchedSections+
+              ' samples; for intersecting road branches use a separate junction.'
+            :'';
+        return {ok:true,cornerRisk:risk||null,
+            message:'V2 preview rebuilt (temporary; not saved into the scene).'+warn};
+    }
+    catch(e){return {ok:false,error:String(e)};}
+}
+function restoreV2RoadBaked(uuid){
+    const {component}=roadV2Component(uuid);
+    if(!component)return {ok:false,error:'SplineRoadV2/ExtrudeV2 not found'};
+    try{component.restoreBakedPreview();return {ok:true,message:'Preview removed; showing saved Mesh asset.'};}
     catch(e){return {ok:false,error:String(e)};}
 }
 function prepareV2RoadBake(uuid){
@@ -247,9 +262,10 @@ function prepareV2RoadBake(uuid){
 function inspectV2RoadBake(uuid){
     const {node,component}=roadV2Component(uuid);
     if(!component)return {ok:false,error:'SplinesV2.SplineRoad not found'};
-    try{return {ok:true,...component.inspectBake(),componentIndex:node.components.indexOf(component),
+    try{return {ok:true,...component.inspectBake(),cornerRisk:component.inspectCornerRisk?.()||null,
+        componentIndex:node.components.indexOf(component),
         pendingUrl:component.pendingBakeUrl||'',pendingFingerprint:component.pendingBakeFingerprint||''};}
     catch(e){return {ok:false,error:String(e)};}
 }
-exports.methods={rebuildV2Road,prepareV2RoadBake,inspectV2RoadBake,spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,inspectV2RoadBake,spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
