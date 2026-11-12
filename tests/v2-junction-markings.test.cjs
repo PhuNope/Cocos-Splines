@@ -7,6 +7,7 @@ try{
   '--rootDir',path.join(root,'src-v2'),'--outDir',tmp,
   path.join(root,'src-v2/geometry/JunctionMarkingsV2.ts'),
   path.join(root,'src-v2/geometry/JunctionPatchV2.ts'),
+  path.join(root,'src-v2/geometry/RoadMarkings.ts'),
   path.join(root,'src-v2/geometry/GltfExporter.ts')],{stdio:'pipe'});
  const {buildJunctionMarkingsV2}=require(path.join(tmp,'geometry/JunctionMarkingsV2.js'));
  const {buildJunctionPatchV2}=require(path.join(tmp,'geometry/JunctionPatchV2.js'));
