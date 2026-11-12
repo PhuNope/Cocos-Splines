@@ -24,6 +24,7 @@ export class JunctionTurnGuideV2 {
     toBranch=1;
 }
 export enum JunctionUVModeV2 {MatchedRepeat=0,WorldProjected=1}
+export enum JunctionGradeModeV2 {Flat=0,Gentle=1}
 /**
  * Flat 3- or 4-way junction bridging genuine trimmed Road endpoints.
  * Inherits the v2 Manual/Baked/Dynamic lifecycle, glTF Bake and UV2 handling.
@@ -42,8 +43,12 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     junctionUVBlend=.55;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum gap between the original (untrimmed) Road endpoints, in local units.'})
     endpointTolerance=.25;
-    @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units.'})
+    @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units; in Gentle Grade, also caps crossfall (max .03).'})
     flatTolerance=.1;
+    @property({type:Enum(JunctionGradeModeV2),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
+    gradeMode=JunctionGradeModeV2.Flat;
+    @property({min:.01,max:.35,step:.01,tooltip:'Largest allowed rise per horizontal metre from center to each trimmed Road ring (Gentle Grade only).'})
+    maxGrade=.15;
     @property({min:-.2,max:.2,step:.001,tooltip:'Optional small lift in local Y; normally 0 because Roads have already been trimmed.'})
     patchLift=0;
     @property({min:.01,max:2,step:.01,tooltip:'Maximum curb lip height above flat asphalt supported by the radial shoulder/curb transition.'})
@@ -99,7 +104,9 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
             uvMetersPerRepeat:this.uvMetersPerRepeat,
             uvBlendStart:this.junctionUVBlend,endpointTolerance:this.endpointTolerance,
-            flatTolerance:this.flatTolerance,surfaceLift:this.patchLift,materialSlot:0,
+            flatTolerance:this.flatTolerance,
+            gradeMode:this.gradeMode===JunctionGradeModeV2.Gentle?'gentle':'flat',
+            maxGrade:this.maxGrade,surfaceLift:this.patchLift,materialSlot:0,
             maxCurbHeight:this.maxCurbHeight
         });
         if(!this.generateJunctionMarkings){
