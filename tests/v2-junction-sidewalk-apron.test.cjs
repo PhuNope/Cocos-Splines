@@ -114,7 +114,7 @@ try{
   assert.throws(()=>buildJunctionPatchV2(input,{...options,sidewalkMaxCrossSlope:.03}),/Max Cross Slope/);
   assert.throws(()=>buildJunctionPatchV2(input,{...options,sidewalkTerrainHeightOffset:3}),/invalid sidewalk apron/);
   assert.throws(()=>buildJunctionPatchV2(input,{...options,gradeMode:'gentle'}),/flat Roads/);
-  assert.throws(()=>buildJunctionPatchV2(input,{...options,curbCornerMode:'radial'}),/require Rounded/);
+  assert.throws(()=>buildJunctionPatchV2(input,{...options,curbCornerMode:'radial'}),/requires Rounded/);
  }
  console.log('JUNCTION SIDEWALK APRON PASS: 3/4 Road joints, curb/terrain rail geometry, top-facing normals, UV0/UV2, ramps, Bake and constraints.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
