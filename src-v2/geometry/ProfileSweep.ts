@@ -5,6 +5,7 @@ import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type Roa
 import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2,type RoadContinuousResultV2} from './RoadContinuous';
 import {buildRoadMarkingsV2,appendRoadMarkingsV2,type RoadMarkingOptionsV2} from './RoadMarkings';
+import {buildRoadFilletCacheV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
 export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
@@ -25,8 +26,9 @@ export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuo
     /** UV0 coordinate that repeats longitudinally; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
 }
-export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
-    readonly surfaceMode?:'clip'|'continuous';
+export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2, RoadFilletOptionsV2 {
+    readonly surfaceMode?:'clip'|'continuous'|'fillet';
+    readonly onFilletReport?:(report:RoadFilletReportV2)=>void;
     readonly onContinuousReport?:(report:RoadContinuousReportV2)=>void;
     readonly adaptiveSampling?:boolean;
     readonly maxTurnAngleDegrees?:number;
@@ -213,15 +215,19 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
         throw new Error('Invalid road width, shoulder or curb dimensions');
     const half=width/2,pts:ProfileVertexV2[]=[],slots:number[]=[];
     const mode=options.surfaceMode??'clip';
-    if(mode!=='clip'&&mode!=='continuous')throw new Error('Unknown Road surface mode');
+    if(mode!=='clip'&&mode!=='continuous'&&mode!=='fillet')throw new Error('Unknown Road surface mode');
     const totalHalfExtent=half+shoulder+curb;
-    const frames=buildSplineFramesV2(cache,{maxStep:options.step??.5,
-        ...(options.adaptiveSampling?{
+    const fillet=mode==='fillet'?buildRoadFilletCacheV2(cache,totalHalfExtent,{...options,maxArcStep:options.step??.5}):null;
+    if(fillet)options.onFilletReport?.(fillet.report);
+    const workingCache=fillet?.cache??cache;
+    const frames=buildSplineFramesV2(workingCache,{maxStep:options.step??.5,
+        ...(options.adaptiveSampling&&mode!=='fillet'?{
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
         }:{})}).frames;
-    const cornerSections=buildRoadCornerSectionsV2(frames,totalHalfExtent,options,cache.spline.closed);
+    const cornerSections=buildRoadCornerSectionsV2(frames,totalHalfExtent,
+        mode==='fillet'?{cornerMode:'legacy'}:options,workingCache.spline.closed);
     const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(
-        frames,totalHalfExtent,{...options,cornerSections,closed:cache.spline.closed}):null;
+        frames,totalHalfExtent,{...options,cornerSections,closed:workingCache.spline.closed}):null;
     if(continuous)options.onContinuousReport?.(continuous.report);
     const push=(x:number,y:number,slot?:number)=>{
         if(slot!==undefined)slots.push(slot);
@@ -236,25 +242,30 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(!pts.length)push(-half-shoulder,0);
     if(shoulder>0)push(-half,0,1);
     // Continuous mode anchors the asphalt's UV0 middle at the centreline.
-    if(mode==='continuous')push(0,0,0);
+    if(mode==='continuous'||mode==='fillet')push(0,0,0);
     push(half,0,0);
     if(shoulder>0)push(half+shoulder,0,1);
     if(height>0)push(half+shoulder,height,2);
     if(curb>0)push(half+shoulder+curb,height,2);
-    const mesh=buildProfileSweepV2(cache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
+    const mesh=buildProfileSweepV2(workingCache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
         uvLongitudinalAxis:options.uvLongitudinalAxis,
-        cornerMode:options.cornerMode??'join-trim',
+        cornerMode:mode==='fillet'?'legacy':options.cornerMode??'join-trim',
         cornerTrimSafety:options.cornerTrimSafety,
         cornerMiterLimit:options.cornerMiterLimit,roadContinuous:continuous??undefined,
         roadFrames:frames,uvCrossMode:options.uvCrossMode});
     const fullWidth=width+2*shoulder+2*curb;
-    if(mode==='continuous'){
+    if(mode==='continuous'||mode==='fillet'){
         if(!options.generateMarkings)return mesh;
-        const markings=buildRoadMarkingsV2(frames,cornerSections,continuous!,half,totalHalfExtent,{...options.markingOptions,
+        const fullWidthSections=continuous??{
+            sections:frames.map(()=>({left:totalHalfExtent,right:totalHalfExtent})),
+            report:{constrainedSections:0,curvatureConstrainedSections:0,effectiveWidthSlope:0,
+                slopeSafetyCapped:false,minimumWidthRatio:1,impossibleCrossings:0,hitSafetyLimit:false}
+        };
+        const markings=buildRoadMarkingsV2(frames,cornerSections,fullWidthSections,half,totalHalfExtent,{...options.markingOptions,
             uvMetersPerRepeat:options.uvMetersPerRepeat,uvLongitudinalAxis:options.uvLongitudinalAxis});
         return appendRoadMarkingsV2(mesh,markings);
     }
-    if(options.generateMarkings)throw new Error('Separate Road markings require Continuous mode');
+    if(options.generateMarkings)throw new Error('Separate Road markings require Continuous or Constant Width mode');
     if(!(options.resolvePlanarOverlaps??options.cornerMode!=='legacy'))return mesh;
     const result=resolveRoadOverlapV2(mesh,{roadWidth:fullWidth,stitchCutUV:options.stitchCutUV});
     options.onOverlapReport?.(result.report);

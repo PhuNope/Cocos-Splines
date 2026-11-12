@@ -10,6 +10,7 @@ import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClea
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
+import {buildRoadFilletCacheV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -19,7 +20,7 @@ export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
-export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1}
+export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1,ConstantWidth=2}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
  * gameplay and NEVER builds Manual/Baked geometry at runtime.
@@ -55,8 +56,14 @@ export class SplineRoadV2 extends Component {
     cornerMiterLimit=2.5;
     @property({tooltip:'Remove overlapping near-coplanar road faces (like a wide U-turn) before rendering. Does not Boolean-union crossings at different heights.'})
     resolvePlanarOverlaps=true;
-    @property({type:Enum(SplineV2SurfaceMode),tooltip:'Continuous: connected UV Road ribbon with automatic width fit. Clip Overlaps: keeps width but cuts mesh/texture at self-intersections.'})
-    surfaceMode=SplineV2SurfaceMode.Continuous;
+    @property({type:Enum(SplineV2SurfaceMode),tooltip:'ConstantWidth: round knot corners into tangent arcs without squeezing Road or cutting UV. Continuous: old adaptive width. ClipOverlaps: old mesh clipping.'})
+    surfaceMode=SplineV2SurfaceMode.ConstantWidth;
+    @property({min:1.02,max:6,step:.05,tooltip:'Minimum circular turn radius = full half-width (including shoulder/curb) times this factor. Larger values need more knot spacing.'})
+    filletRadiusScale=1.35;
+    @property({min:0.5,max:45,step:.5,tooltip:'Maximum angle for each tangent Bezier fillet segment in degrees.'})
+    filletArcAngleDegrees=4;
+    @property({min:.001,max:1,step:.005,tooltip:'Maximum sagitta/chord approximation error of rounded corners.'})
+    filletChordError=.015;
     @property({min:.05,max:.98,step:.01,tooltip:'Reduce width near nearby road arms, without cutting textures.'})
     clearanceSafety=.35;
     @property({min:.05,max:4,step:.05,tooltip:'Smooth width response near bends. Effective slope is capped at 0.25 in Continuous mode so road stripes cannot form steps.'})
@@ -84,6 +91,7 @@ export class SplineRoadV2 extends Component {
     @property({visible:false}) pendingBakeFingerprint='';
     private _lastOverlapReport:RoadOverlapReportV2|null=null;
     private _lastContinuousReport:RoadContinuousReportV2|null=null;
+    private _lastFilletReport:RoadFilletReportV2|null=null;
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -141,16 +149,23 @@ export class SplineRoadV2 extends Component {
     public inspectCornerRisk():RoadCornerReportV2|null {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
-        const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep,
-            ...(this.adaptiveSampling?{
+        const fillet=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?buildRoadFilletCacheV2(cache,
+            this.width*.5+this.shoulderWidth+this.curbWidth,{minimumRadiusScale:this.filletRadiusScale,
+            maxArcAngleDegrees:this.filletArcAngleDegrees,maxArcChordError:this.filletChordError,
+            maxArcStep:this.sampleStep}):null;
+        const testedCache=fillet?.cache??cache;
+        const frameTable=buildSplineFramesV2(testedCache,{maxStep:this.sampleStep,
+            ...(this.adaptiveSampling&&!fillet?{
                 maxAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError
             }:{})});
         const sections=buildRoadCornerSectionsV2(frameTable.frames,
-            this.width*.5+this.shoulderWidth+this.curbWidth,this.cornerSettings(),this.closed);
+            this.width*.5+this.shoulderWidth+this.curbWidth,
+            fillet?{cornerMode:'legacy'}:this.cornerSettings(),this.closed);
         const report=inspectRoadCornersV2(sections);
         const clearance=inspectRoadCenterlineClearanceV2(frameTable.frames,
             this.width+2*this.shoulderWidth+2*this.curbWidth);
-        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined,continuousReport:this._lastContinuousReport??undefined};
+        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined,
+            continuousReport:this._lastContinuousReport??undefined,filletReport:fillet?.report};
     }
     private cornerSettings(){
         return {cornerMode:this.cornerMode===SplineV2RoadCornerMode.Legacy?'legacy' as const:'join-trim' as const,
@@ -169,21 +184,26 @@ export class SplineRoadV2 extends Component {
         const corners=this.cornerSettings();
         this._lastOverlapReport=null;
         this._lastContinuousReport=null;
+        this._lastFilletReport=null;
         const onOverlapReport=(report:RoadOverlapReportV2):void=>{this._lastOverlapReport=report;};
         const onContinuousReport=(report:RoadContinuousReportV2):void=>{this._lastContinuousReport=report;};
-        const surfaceMode=this.surfaceMode===SplineV2SurfaceMode.Continuous?'continuous' as const:'clip' as const;
+        const onFilletReport=(report:RoadFilletReportV2):void=>{this._lastFilletReport=report;};
+        const filletSettings={minimumRadiusScale:this.filletRadiusScale,
+            maxArcAngleDegrees:this.filletArcAngleDegrees,maxArcChordError:this.filletChordError,onFilletReport};
+        const surfaceMode=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?'fillet' as const:
+            this.surfaceMode===SplineV2SurfaceMode.Continuous?'continuous' as const:'clip' as const;
         const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
                 uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
-                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...roadSampling,...corners
+                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...roadSampling,...filletSettings,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
                 resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
                 onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
-                ...roadSampling,...corners
+                ...roadSampling,...filletSettings,...corners
             });
         return {geometry};
     }

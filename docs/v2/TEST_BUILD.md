@@ -111,3 +111,19 @@ CI tests simulate this exact path and require smooth UV iso-curves, no geometry 
 - Chỉ bật Generate Markings trong **Continuous**. Với Clip Overlaps, tùy chọn này chủ động báo lỗi để không tạo mesh marking không theo hình học sau cắt.
 - Khi đã ổn, nhấn **Bake glTF Asset** lại và gán materials cho từng slot. Do fingerprint phụ thuộc UV/geometry, Mesh Baked cũ sẽ stale sau khi đổi chế độ.
 - Đây vẫn là bản TEST. Kiểm tra trong Cocos Creator 3.8.x, đặc biệt vật liệu hai mặt, seam của đường sơn và hiệu năng của mesh dày.
+
+## Test Constant Width Fillet — correct the user's Road curve
+
+This is a TEST build, not a stable release. Replace the old extension and reload TypeScript/AssetDB before using Rebuild Preview.
+
+With **K0=(-1.701,0,-7.206), K1=(-3.869,0,3.720), K2=(5.820,0,4.347)** and Width=4:
+
+1. Select `SplinesV2.SplineRoad` and explicitly set **Surface Mode = ConstantWidth**. Existing scenes retain their old Continuous choice until changed; newly added components default to ConstantWidth.
+2. Start with `Fillet Radius Scale=1.35`, `Fillet Arc Angle Degrees=4`, `Fillet Chord Error=.015`, `Sample Step=.25`, `UV Longitudinal Axis=U`, `UV Cross Mode=Legacy`, `Generate Markings=Off`. Click **Rebuild Preview**.
+3. The Road should now keep its full Width=4 around the curved centerline without cutting mesh triangles or UV0; the guide Knot 1 is intentionally no longer on the road centerline because the new fillet rounds the corner.
+4. If it still looks pinched, confirm Surface Mode is **ConstantWidth** (not old Continuous), and check you have pressed Rebuild Preview, not Show Baked Mesh. Manual/Baked will otherwise display the old saved mesh.
+5. If the Inspector reports an error about Knot spacing, move those knots farther apart or reduce Width. The algorithm refuses to generate an unsafe full-width turn instead of distorting geometry. Too-close global branches still require junction/road network geometry.
+6. Once satisfied, click **Bake glTF Asset**, wait for AssetDB, bind imported Mesh if needed, then save/reopen Scene and Play. Preview meshes are temporary.
+7. To separate paint from asphalt, use unpainted asphalt material slot 0 and enable Generate Markings with white slot 3 and yellow slot 4. Existing paint baked into Road.mtl should be removed/disabled before doing this.
+
+Check the Editor scene visually: the numeric/typecheck tests cannot validate your real Road.mtl shader and paint pattern.

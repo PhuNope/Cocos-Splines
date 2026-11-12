@@ -95,7 +95,11 @@ const methods={
                 :'Saved Mesh reference exists and fingerprint matches the spline.';
             const report=result.cornerRisk?.overlapReport;
             const continuous=result.cornerRisk?.continuousReport;
-            const warn=(continuous?.constrainedSections
+            const fillet=result.cornerRisk?.filletReport;
+            const warn=(fillet?.filletedCorners
+                ?' Constant Width: '+fillet.filletedCorners+' tangent fillets, radius '+fillet.minimumRadius.toFixed(2)+
+                  ', max Knot guide deviation '+fillet.maxKnotDeviation.toFixed(2)+'. Mesh/UV uncut.':'')+
+                (continuous?.constrainedSections
                 ?' Continuous Road: '+continuous.constrainedSections+' sections width-fitted; smallest '+Math.round(100*continuous.minimumWidthRatio)+'% of requested Width, UV uncut.':'')+
                 (continuous?.curvatureConstrainedSections
                 ?' Local curve radius narrowed '+continuous.curvatureConstrainedSections+' inside sections.':'')+

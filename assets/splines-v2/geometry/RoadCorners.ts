@@ -21,6 +21,7 @@ export interface RoadCornerSectionV2 {
 }
 import {type RoadOverlapReportV2} from './RoadOverlapClip';
 import {type RoadContinuousReportV2} from './RoadContinuous';
+import {type RoadFilletReportV2} from './RoadFillet';
 export interface RoadCornerReportV2 {
     readonly pinchedSections:number;
     readonly sharpSections:number;
@@ -29,6 +30,7 @@ export interface RoadCornerReportV2 {
     /** Distant centreline segments closer than full road width (Editor hint only). */
     readonly overlapReport?:RoadOverlapReportV2;
     readonly continuousReport?:RoadContinuousReportV2;
+    readonly filletReport?:RoadFilletReportV2;
     readonly potentialOverlapPairs?:number;
     readonly minimumClearance?:number;
 }

@@ -75,6 +75,25 @@ try{
  const overlay=road.generate().geometry;
  assert.deepEqual(overlay.submeshes.map(s=>s.materialSlot),[0,3,4]);
  road.generateMarkings=false;
+ // Constant Width Fillet must be selectable from the actual Cocos component.
+ const originalKnots=road.knots,originalA=a.worldPosition,originalB=b.worldPosition;
+ const k2=new Node('K2');
+ a.worldPosition=new Vec3(-1.701,0,-7.206);
+ b.worldPosition=new Vec3(-3.869,0,3.72);
+ k2.worldPosition=new Vec3(5.82,0,4.347);
+ road.knots=[a,b,k2];road.surfaceMode=2;road.interpolation=3;
+ road.width=4;road.sampleStep=.25;
+ const filletRoad=road.generate().geometry;
+ assert(filletRoad.vertexCount>100);
+ assert.equal(filletRoad.triangleCount,4*(filletRoad.vertexCount/3-1),
+   'Cocos component fillet must preserve every quad on the exact 3-Knot road');
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ const report=road.inspectCornerRisk();
+ assert.equal(report.filletReport.filletedCorners,1);
+ assert(report.filletReport.minimumRadius>2);
+ env.EDITOR_NOT_IN_PREVIEW=false;
+ road.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
+ road.surfaceMode=0;road.interpolation=0;road.sampleStep=1;road.width=4;
  // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
  road.meshMode=SplineV2MeshMode.Dynamic;road.onEnable();
  assert.equal(generated.length,1);

@@ -184,3 +184,21 @@ For this mode, use a **plain asphalt Material in slot 0**, an opaque **white Mat
 ### Regression and compatibility
 
 `tests/v2-road-play-mode.test.cjs` now explicitly verifies Inspector Continuous is forwarded to plain Road (3 ring vertices rather than 2 for the Clip mode). `tests/v2-adaptive-uv.test.cjs` covers adaptive tangent bounds and UV0/UV2 on exact knots K0(-1.701,0,-7.206), K1(-3.869,0,3.72), K2(5.82,0,4.347). `tests/v2-road-markings.test.cjs` checks dashed/solid material groups and glTF export. Real Cocos 3.8.x Scene visual validation remains required.
+
+## Road V2 Constant Width Fillet (new test mode)
+
+The earlier Continuous solver preserved UV0 but squeezed the inner Road width, visibly deforming the asphalt and painted markings. Clip Overlaps removed geometry and broke directional texture; those modes remain for compatibility but are not the new default.
+
+**Constant Width** (Cocos `Surface Mode` enum value 2, default on NEW components) replaces guide-knot corners with circular tangent fillets whose minimum radius is `(width/2 + shoulderWidth + curbWidth) * Fillet Radius Scale`. The default scale is 1.35. Cubic Bezier arc segments with precisely aligned handles maintain tangent continuity at every connection to a straight Road section. The component does NOT apply the legacy JoinAndTrim offset compression, width-fitting, planar mesh clipping, or UV stitching in this mode. Every cross-section remains the full specified width and U/V longitudinal texture mapping advances strictly by actual generated centerline arc length. Road centerline/UV row remains exactly the generated spline center.
+
+This mode **moves the actual centerline away from interior guide Knot positions**. It is a rounded polyline guided by the Knot sequence, rather than a Catmull-Rom curve interpolating every original Knot. The existing Interpolation dropdown is therefore interpreted as the source guide sequence; Bezier with handles is not supported by this mode and returns an informative error. Endpoints of open paths remain fixed. Curvature radius and path deviation can be inspected in Editor after Preview / Check Bake Status.
+
+Controls: `Fillet Radius Scale` default 1.35 (must be >1.01), `Fillet Arc Angle Degrees` default 4, and `Fillet Chord Error` default 0.015. These arc-geometry controls are separate from `Adaptive Sampling`; the generated tangent Bezier arcs already have fine control segments, so global adaptive subdivision is intentionally skipped in Constant Width mode to avoid excess frames at joint parameters. `Sample Step` still limits ring spacing. UV Cross Mode Physical and Legacy use the same uncompressed width; no forced UV rescaling is applied.
+
+**Cannot be geometrically guaranteed for arbitrary Knots:** If adjacent input segments cannot fit the requested minimum radius, Preview/Bake reports an Editor error with the Knot indices, available spacing and recommended action (separate knots, reduce Width, or choose Continuous). It does NOT silently lower radius, move endpoints, shrink Width or generate folded triangles. The fillet is local and does not Boolean-union distant self-crossings or junctions; full scene roads can still overlap at unrelated segments. Check overall road network topology separately.
+
+New material slots remain 0=asphalt, 1=shoulder, 2=curb, 3=white dashed markings, 4=yellow continuous edge lines. Optional Generate Markings uses the same full-width tangent frame geometry in Constant Width mode and is off by default. Use blank asphalt if enabling separated marking geometry. Existing scenes with stored Surface Mode 0 stay Continuous until manually changed to **ConstantWidth**; no old enum values or UUIDs are rewritten.
+
+### Verified regression
+
+The sample three Knot positions K0=(-1.701,0,-7.206), K1=(-3.869,0,3.720), K2=(5.820,0,4.347) with Width 4 and Sample Step .25 generated 1 tangent fillet of radius 2.7, 79 cross-section rings / 237 vertices / 312 forward-facing triangles (4 per adjacent ring pair) in the local TypeScript simulation. Every cross-section measured Width 4, with uncut UV0 U/V and UV2, exact centerline anchoring, plus glTF and shoulder/curb/marking tests. Only the scene shown in Cocos Creator can confirm the real shader, texture and Editor visual result.

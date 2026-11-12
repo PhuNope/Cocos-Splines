@@ -39,3 +39,9 @@
 - [x] Optional separated white center dashes and yellow edge-line geometry, multi-material glTF Bake, both plain and profile Roads.
 - [ ] Mesh-source deformation Road mode based on SplineArchitect, after Creator 3.8.x source-mesh readback integration testing.
 - [ ] Junction-aware dashed lanes, paint intersections and material auto-creation.
+
+- [x] Constant Width tangent circular/Bezier fillets for road geometry and constant physical UV cross section.
+- [x] Exact 3-Knot regression: no triangle culling, UV0 U/V & UV2, material bands, marking strips, glTF export.
+- [x] Safe failure when Knot spacing cannot fit full-width fillet radius; Editor-only diagnostics.
+- [ ] Visual confirmation with the actual Cocos Creator 3.8.x scene and painted asphalt material.
+- [ ] Global road-road self-intersection Boolean/junction topology (not part of local fillet).

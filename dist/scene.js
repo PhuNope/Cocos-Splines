@@ -238,7 +238,11 @@ function rebuildV2Road(uuid){
         const risk=component.inspectCornerRisk?.();
         const overlap=risk?.overlapReport;
         const continuous=risk?.continuousReport;
-        const warn=(continuous?.constrainedSections
+        const fillet=risk?.filletReport;
+        const warn=(fillet?.filletedCorners
+            ?' Constant Width: '+fillet.filletedCorners+' corner(s) rounded, minimum radius '+
+              fillet.minimumRadius.toFixed(2)+', maximum guide-Knot deviation '+fillet.maxKnotDeviation.toFixed(2)+'. No UV cutting or width squeeze.':'')+
+            (continuous?.constrainedSections
             ?' Continuous UV strip: auto-fitted width at '+continuous.constrainedSections+
               ' sections (minimum '+Math.round(100*continuous.minimumWidthRatio)+
               '% of requested Width); no overlap polygon cuts.':'')+
