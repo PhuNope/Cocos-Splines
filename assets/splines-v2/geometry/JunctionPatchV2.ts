@@ -182,10 +182,9 @@ export function buildJunctionPatchV2(
         indices.push(0,innerJ,innerI);
     }
     if(gradeMode==='gentle'){
-        // Indexed triangle normals must follow the sloped surface instead of
-        // the flat default (+Y). Area-weighting avoids visible lighting steps
-        // between the radial UV rings without changing any seam vertex/UV.
-        for(const normal of normals){normal.x=0;normal.y=0;normal.z=0;}
+        // Build area-weighted normals using a mutable accumulator; MeshData
+        // vectors are intentionally readonly and must not be mutated.
+        const summed=positions.map(()=>({x:0,y:0,z:0}));
         for(let i=0;i<indices.length;i+=3){
             const ia=indices[i],ib=indices[i+1],ic=indices[i+2];
             const a=positions[ia],b=positions[ib],c=positions[ic];
@@ -193,13 +192,13 @@ export function buildJunctionPatchV2(
             const face={x:ab.y*ac.z-ab.z*ac.y,y:ab.z*ac.x-ab.x*ac.z,z:ab.x*ac.y-ab.y*ac.x};
             if(face.y<=1e-9)throw new Error('Junction V2 gentle grade produced a folded surface');
             for(const index of [ia,ib,ic]){
-                normals[index].x+=face.x;normals[index].y+=face.y;normals[index].z+=face.z;
+                summed[index].x+=face.x;summed[index].y+=face.y;summed[index].z+=face.z;
             }
         }
-        for(const normal of normals){
-            const magnitude=length(normal);
-            if(magnitude<1e-9)throw new Error('Junction V2 degenerate gentle grade normal');
-            normal.x/=magnitude;normal.y/=magnitude;normal.z/=magnitude;
+        for(let i=0;i<summed.length;i++){
+            const n=summed[i],m=length(n);
+            if(m<1e-9)throw new Error('Junction V2 degenerate gentle grade normal');
+            normals[i]={x:n.x/m,y:n.y/m,z:n.z/m};
         }
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot:slot,indices}]});
