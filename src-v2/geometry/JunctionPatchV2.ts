@@ -6,6 +6,8 @@ export interface JunctionRoadBranchV2 {
     readonly endpoint:Vec3MeshV2;
     /** Exact asphalt edge vertices/UV0 from the Road's trimmed end ring. */
     readonly left:JunctionRoadEdgeV2;
+    /** Same middle vertex as the trimmed Road's three-point cross-section. */
+    readonly middle:JunctionRoadEdgeV2;
     readonly right:JunctionRoadEdgeV2;
 }
 export interface JunctionPatchOptionsV2 {
@@ -36,6 +38,7 @@ const finite=(a:number)=>Number.isFinite(a)&&Number.isFinite(Math.fround(a));
  * intact Road triangles. This surface is a local XZ star polygon, not global
  * road-network CSG or lane-marking topology. All source edge vertices and UV
  * samples remain exact modulo INTEGER repeat periods at the patch perimeter.
+ * The center vertex from each Road ring is preserved to avoid T-junction cracks.
  */
 export function buildJunctionPatchV2(
     branches:ReadonlyArray<JunctionRoadBranchV2>,options:JunctionPatchOptionsV2={}
@@ -53,7 +56,7 @@ export function buildJunctionPatchV2(
     const validate=(p:Vec3MeshV2)=>[p.x,p.y,p.z].every(finite);
     for(const branch of branches){
         if(!validate(branch.endpoint))throw new Error('Junction V2 invalid endpoint');
-        for(const v of [branch.left,branch.right])
+        for(const v of [branch.left,branch.middle,branch.right])
             if(!validate(v.position)||![v.uv0.x,v.uv0.y].every(finite))
                 throw new Error('Junction V2 invalid Road edge/UV');
     }
@@ -65,13 +68,15 @@ export function buildJunctionPatchV2(
     for(const b of branches){
         if(length(sub(b.endpoint,center))>tolerance)
             throw new Error('Junction V2 endpoint positions are not co-located; snap all Road endpoints');
-        for(const edge of [b.left,b.right])
+        for(const edge of [b.left,b.middle,b.right])
             if(Math.abs(edge.position.y-center.y)>flat)
                 throw new Error('Junction V2 is flat only; banked/sloped roads need a dedicated junction');
         if(Math.hypot(b.left.position.x-b.right.position.x,b.left.position.z-b.right.position.z)<.01)
             throw new Error('Junction V2 Road boundary has zero width');
         const mid={x:(b.left.position.x+b.right.position.x)*.5,
             y:center.y,z:(b.left.position.z+b.right.position.z)*.5};
+        if(length(sub(mid,b.middle.position))>.02)
+            throw new Error('Junction V2 center row must match the Road middle vertex');
         const offset=length(sub(mid,center));
         const width=length(sub(b.left.position,b.right.position));
         if(offset<width*.6)
@@ -83,22 +88,29 @@ export function buildJunctionPatchV2(
         x:(first.left.uv0.x+first.right.uv0.x)*.5,
         y:(first.left.uv0.y+first.right.uv0.y)*.5
     };
-    const points:Array<{position:Vec3MeshV2;uv0:Vec2MeshV2;angle:number}>=[];
-    for(const b of branches){
+    const points:Array<{position:Vec3MeshV2;uv0:Vec2MeshV2;angle:number;branchId:number}>=[];
+    for(const [branchId,b] of branches.entries()){
         const uvMid={x:(b.left.uv0.x+b.right.uv0.x)*.5,y:(b.left.uv0.y+b.right.uv0.y)*.5};
         const shift=mode==='matched'?{
             x:Math.round(reference.x-uvMid.x),y:Math.round(reference.y-uvMid.y)
         }:{x:0,y:0};
-        for(const e of [b.left,b.right]){
+        for(const e of [b.left,b.middle,b.right]){
             const p=e.position;
             points.push({position:p,
                 uv0:mode==='matched'?{x:e.uv0.x+shift.x,y:e.uv0.y+shift.y}
                     :{x:(p.x-center.x)/uvRepeat+.5,y:(p.z-center.z)/uvRepeat+.5},
-                angle:Math.atan2(p.z-center.z,p.x-center.x)});
+                angle:Math.atan2(p.z-center.z,p.x-center.x),branchId});
         }
     }
     points.sort((a,b)=>a.angle-b.angle);
     const m=points.length;
+    // The three points of each Road boundary must be consecutive on the
+    // angular perimeter; interleaving spokes indicate overlapping Road arms.
+    for(let branchId=0;branchId<n;branchId++){
+        const ids=points.map((p,i)=>p.branchId===branchId?i:-1).filter(i=>i>=0);
+        if(ids.length!==3||!ids.some(start=>[0,1,2].every(delta=>ids.includes((start+delta)%m))))
+            throw new Error('Junction V2 Road arms overlap in angle; separate their directions or increase trim');
+    }
     let minWedge=Infinity;
     for(let i=0;i<m;i++){
         const a=points[i],b=points[(i+1)%m];

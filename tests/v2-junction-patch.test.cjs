@@ -34,7 +34,7 @@ try{
    const start=(atEnd?mesh.vertexCount-3:0);
    const point=j=>({position:{x:mesh.positions[3*j],y:mesh.positions[3*j+1],z:mesh.positions[3*j+2]},
     uv0:{x:mesh.uv0[2*j],y:mesh.uv0[2*j+1]}});
-   result.push({endpoint:{x:0,y:0,z:0},left:point(start),right:point(start+2)});
+   result.push({endpoint:{x:0,y:0,z:0},left:point(start),middle:point(start+1),right:point(start+2)});
    // UV0 should preserve the ORIGINAL spline distance, never restart at trim.
    const d=atEnd?cache.length-3:3,expected=d/5;
    for(const j of [start,start+2])
@@ -46,8 +46,8 @@ try{
   const roads=around(armCount);
   for(const mode of ['matched','projected']){
    const {mesh,report}=buildJunctionPatchV2(roads,{uvMode:mode,uvBlendStart:.55});
-   assert.equal(mesh.vertexCount,1+4*armCount);
-   assert.equal(mesh.triangleCount,armCount*6);
+   assert.equal(mesh.vertexCount,1+6*armCount);
+   assert.equal(mesh.triangleCount,armCount*9);
    assert.equal(report.branches,armCount);
    assert.equal(report.matchedUV,mode==='matched');
    assert.deepEqual(mesh.submeshes.map(s=>s.materialSlot),[0]);
@@ -60,9 +60,9 @@ try{
     assert(cross>1e-8,'Junction V2 triangle flipped or degenerate');
    }
    if(mode==='matched'){
-    for(const b of roads)for(const e of [b.left,b.right]){
+    for(const b of roads)for(const e of [b.left,b.middle,b.right]){
      let found=false;
-     for(let i=1;i<=2*armCount;i++){
+     for(let i=1;i<=3*armCount;i++){
       const j=3*i;
       if(!equal(mesh.positions[j],e.position.x)||!equal(mesh.positions[j+2],e.position.z))continue;
       const dx=mesh.uv0[2*i]-e.uv0.x,dy=mesh.uv0[2*i+1]-e.uv0.y;

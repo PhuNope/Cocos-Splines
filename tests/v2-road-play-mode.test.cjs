@@ -208,7 +208,7 @@ try{
  const boundary=arms[0].road.sampleJunctionEndV2(false);
  assert(Math.abs(boundary.left.uv0.y-.6)<1e-5,'Road UV must retain 3m original path distance');
  const {geometry:patchMesh}=patch.generate();
- assert.equal(patchMesh.triangleCount,18);
+ assert.equal(patchMesh.triangleCount,27);
  assert.equal(patchMesh.submeshes[0].materialSlot,0);
  assert.equal(patch.inspectJunction().branches,3);
  patch.rebuildPreview();

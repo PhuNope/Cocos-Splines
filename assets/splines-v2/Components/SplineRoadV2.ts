@@ -242,7 +242,7 @@ export class SplineRoadV2 extends Component {
         const endpoint=this.knots[atEnd?this.knots.length-1:0]?.worldPosition;
         if(!endpoint)throw new Error('Junction V2 requires a valid Road endpoint Knot');
         return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
-            left:vertex(start),right:vertex(start+2)};
+            left:vertex(start),middle:vertex(start+1),right:vertex(start+2)};
     }
     public getCurrentFingerprint():string {
         const {geometry}=this.generate();

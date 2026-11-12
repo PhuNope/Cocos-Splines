@@ -53,6 +53,7 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             const edge=road.sampleJunctionEndV2(!!link.atEnd);
             return {endpoint:local(edge.endpoint),
                 left:{position:local(edge.left.position),uv0:edge.left.uv0},
+                middle:{position:local(edge.middle.position),uv0:edge.middle.uv0},
                 right:{position:local(edge.right.position),uv0:edge.right.uv0}};
         });
         const result=buildJunctionPatchV2(entries,{
