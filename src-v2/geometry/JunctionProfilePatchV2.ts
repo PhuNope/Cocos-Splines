@@ -59,7 +59,9 @@ export function buildJunctionProfilePatchV2(
             const p=vertex.position,u=vertex.uv0;
             if(![p.x,p.y,p.z,u.x,u.y].every(finite))
                 throw new Error('Junction V2 Road profile has invalid position/UV at branch '+i);
-            if(p.y<center.y-.02||p.y>center.y+maxHeight+1e-5)
+            // Compare curb height to THIS Road's trimmed asphalt, not to the
+            // shared Junction center: a gentle grade may lift/drop each arm.
+            if(p.y<b.middle.position.y-.02||p.y>b.middle.position.y+maxHeight+1e-5)
                 throw new Error('Junction V2 curb height exceeds permitted flat junction transition');
         }
         for(const edge of [b.left,b.middle,b.right])
