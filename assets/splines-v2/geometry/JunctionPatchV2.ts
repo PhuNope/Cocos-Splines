@@ -48,6 +48,12 @@ export interface JunctionPatchOptionsV2 {
     readonly curbRampMinLip?:number;
     /** Maximum vertical slope of the top along either longitudinal corner rail. */
     readonly curbRampMaxSlope?:number;
+    /** Exterior local sidewalk apron width in metres; zero disables it (default). Rounded Curb only. */
+    readonly sidewalkApronWidth?:number;
+    /** Height of the planar terrain boundary relative to Junction center (not terrain sampling). */
+    readonly sidewalkTerrainHeightOffset?:number;
+    /** Reject apron crossfall steeper than the configured rise/run. */
+    readonly sidewalkMaxCrossSlope?:number;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
@@ -60,6 +66,9 @@ export interface JunctionPatchReportV2 {
     readonly roundedCurbCorners?:number;
     readonly curbWallTriangles?:number;
     readonly loweredCurbCorners?:number;
+    /** Number of local corner apron sections, not full city sidewalk CSG. */
+    readonly sidewalkApronCorners?:number;
+    readonly sidewalkApronTriangles?:number;
 }
 const sub=(a:Vec3MeshV2,b:Vec3MeshV2)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const length=(a:Vec3MeshV2)=>Math.hypot(a.x,a.y,a.z);
@@ -80,6 +89,8 @@ export function buildJunctionPatchV2(
     const n=branches.length;
     if(options.curbRampPairs?.length && options.curbCornerMode!=='rounded')
         throw new Error('Junction V2 curb ramps require Rounded Continuous Curb mode');
+    if((options.sidewalkApronWidth??0)!==0&&options.curbCornerMode!=='rounded')
+        throw new Error('Junction V2 sidewalk apron requires Rounded Continuous Curb mode');
     if(n!==3&&n!==4)throw new Error('Junction V2 needs 3 or 4 Road branches');
     const mode=options.uvMode??'matched';
     const uvRepeat=options.uvMetersPerRepeat??5,blend=options.uvBlendStart??.55;
