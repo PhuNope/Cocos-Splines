@@ -98,7 +98,11 @@ const methods={
             const fillet=result.cornerRisk?.filletReport;
             const junction=result.junctionReport;
             const warn=(junction?.branches
-                ?' Junction V2: '+junction.branches+' links, '+junction.triangles+' flat patch triangles with UV0 matched at trimmed edges.':'')+
+                ?' Junction V2: '+junction.branches+' links, '+junction.triangles+
+                    ' asphalt triangles; UV0 matched at trimmed edges.'+
+                    (junction.markings?' Paint: '+junction.markings.stopBars+' stop bars, '+
+                        junction.markings.zebraStripes+' zebra stripes, '+
+                        junction.markings.guideRoutes+' guides.':''):'')+
                 (fillet?.filletedCorners
                 ?' Constant Width: '+fillet.filletedCorners+' tangent fillets, radius '+fillet.minimumRadius.toFixed(2)+
                   ', max Knot guide deviation '+fillet.maxKnotDeviation.toFixed(2)+'. Mesh/UV uncut.':'')+

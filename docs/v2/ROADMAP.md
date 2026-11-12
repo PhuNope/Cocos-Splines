@@ -56,3 +56,8 @@
 - [ ] Extend Junctions to shoulder/curb bands, elevated ramps, and real 3.8.x Editor save/reimport certification.
 - [ ] Dedicated multi-road lane marking topology (stop bars, turns, crossings, arrows), not simple UV stitching.
 - [ ] Automated trim management and multi-road endpoint snapping; current authoring is explicit per Road.
+
+- [x] Junction Markings v2 alpha: optional white stop bars, white zebra stripes, explicit curved turn-guide routes, separate slot 3/4, UV0/UV2, glTF Bake.
+- [x] Per-branch paint eligibility and Inspector controls; paint placement validated inside flat Junction polygon.
+- [ ] Lane arrows, vehicle lane graphs and rule-aware traffic control; turn guides currently visual-only explicit pairs.
+- [ ] Visually verify paints/materials, scene save/reimport and winding in actual Cocos Creator 3.8.x Editor.

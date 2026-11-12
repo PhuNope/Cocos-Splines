@@ -242,7 +242,9 @@ function rebuildV2Road(uuid){
         const fillet=risk?.filletReport;
         const warn=(junction?.branches
             ?' Junction V2: '+junction.branches+' trimmed Roads, '+junction.triangles+
-                ' triangles; outer edge UV0 matches source Road under Repeat.' : '')+
+                ' asphalt triangles; outer UV0 matches source Road under Repeat.'+
+                (junction.markings?' Paint: '+junction.markings.stopBars+' stop bars, '+
+                  junction.markings.zebraStripes+' zebra stripes, '+junction.markings.guideRoutes+' guides.':''):'')+
             (fillet?.filletedCorners
             ?' Constant Width: '+fillet.filletedCorners+' corner(s) rounded, minimum radius '+
               fillet.minimumRadius.toFixed(2)+', maximum guide-Knot deviation '+fillet.maxKnotDeviation.toFixed(2)+'. No UV cutting or width squeeze.':'')+

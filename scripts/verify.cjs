@@ -19,7 +19,7 @@ for(const dir of ['Core','Components']){
  }
 }
 for(const dir of ['assets','assets/splines','assets/splines/Core','assets/splines/Components'])checkRel(dir+'.meta');
-for(const name of ['ProfileSweep','RoadStrip','RoadCorners','RoadOverlapClip','RoadContinuous','RoadFillet','RoadMarkings','SourceMeshRead','SourceMeshDeform','RoadJunctionTrim','JunctionPatchV2','GltfExporter']) {
+for(const name of ['ProfileSweep','RoadStrip','RoadCorners','RoadOverlapClip','RoadContinuous','RoadFillet','RoadMarkings','SourceMeshRead','SourceMeshDeform','RoadJunctionTrim','JunctionPatchV2','JunctionMarkingsV2','GltfExporter']) {
  checkRel('assets/splines-v2/geometry/'+name+'.ts');
  checkRel('assets/splines-v2/geometry/'+name+'.ts.meta');
 }

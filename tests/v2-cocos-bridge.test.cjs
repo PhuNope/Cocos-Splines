@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-bridge-'));
 try{
  const inputs=['core/SplineCurves','core/SplineCache','core/SplineFrames','geometry/MeshData',
-  'geometry/MeshProcessing','geometry/MeshBuildPlan','geometry/RoadCorners','geometry/RoadOverlapClip','geometry/RoadContinuous','geometry/RoadFillet','geometry/SourceMeshRead','geometry/SourceMeshDeform','geometry/RoadJunctionTrim','geometry/JunctionPatchV2','geometry/RoadMarkings','geometry/RoadStrip','geometry/ProfileSweep','geometry/GltfExporter']
+  'geometry/MeshProcessing','geometry/MeshBuildPlan','geometry/RoadCorners','geometry/RoadOverlapClip','geometry/RoadContinuous','geometry/RoadFillet','geometry/SourceMeshRead','geometry/SourceMeshDeform','geometry/RoadJunctionTrim','geometry/JunctionPatchV2','geometry/JunctionMarkingsV2','geometry/RoadMarkings','geometry/RoadStrip','geometry/ProfileSweep','geometry/GltfExporter']
     .map(n=>path.join(root,'src-v2',n+'.ts'));
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--outDir',temp,...inputs],{stdio:'pipe'});
  const curves=require(path.join(temp,'core/SplineCurves.js'));
@@ -69,6 +69,9 @@ try{
  const junctionInspector=require(path.join(root,'src/contributions/inspector/JunctionV2.js'));
  assert.match(junctionInspector.template,/spl-v2-branches/);
  assert.match(junctionInspector.template,/spl-v2-junctionUVMode/);
+ assert.match(junctionInspector.template,/spl-v2-generateJunctionMarkings/);
+ assert.match(junctionInspector.template,/spl-v2-generateCrosswalks/);
+ assert.match(junctionInspector.template,/spl-v2-turnGuides/);
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts.meta')));
  console.log('V2 COCOS BRIDGE PASS: road generator, glTF embedded UV2/multi-material, runtime gate, TS mirror and Inspector');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

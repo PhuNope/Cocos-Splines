@@ -238,3 +238,20 @@ Material slot 0 of the Junction should use the same basic asphalt material as Ro
 ### Real-world Editor verification still needed
 
 Tests cover pure XZ 3-/4-way geometry and mock Cocos component lifecycle, but do not replace opening a Creator 3.8.x Scene with real Road materials, saving, reimporting and comparing UV seams. A patch can blend asphalt noise, not direction-specific lane paintings. Ensure the Junction Node uses a horizontal local XZ plane (no tilted local axes). Transform the Junction Node near the endpoint Knot cluster, set matching materials, Rebuild Roads first, then Rebuild Junction, then Bake and save the Scene.
+
+## Junction Markings V2: stop bars, zebra crossing, explicit turn guides — experimental
+
+The v2 `SplinesV2.JunctionPatch` now supports an **opt-in paint overlay** generated as separate geometry appended to the same junction MeshData. The existing asphalt and source Road UV0/UV2 are not modified; the component still accepts only flat 3-/4-way Junctions with trimmed, open ConstantWidth Road arms.
+
+The Inspector toggle `Generate Junction Markings` is **off by default**, so upgrading an old scene does not change its geometry or material requirements. With paint enabled, it can create:
+- **Stop Bars**: one short white bar per enabled JunctionRoadLink, placed a specified distance inwards from the trimmed Road boundary, on the triangular central-to-Road wedge.
+- **Crosswalks**: three white transverse stripes per approach by default, with adjustable stripe length, gap and starting setback. Each JunctionRoadLink has separate `Stop Bar Enabled` and `Crosswalk Enabled` toggles so not every approach must be painted.
+- **Turn Guides**: zero or more **explicit** `JunctionTurnGuideV2` pairs `From Branch` → `To Branch` using 0-based branch indices, creating a narrow quadratic Bezier ribbon inside the Junction. These are visual guides, not driving/navigation semantics or automatically selected legal turning routes. No automatic traffic rules, lane arrows or zebra road signs.
+
+Geometry is constructed in local XZ from exactly the Road boundary vertices and the common junction center. Each stop/crosswalk strip is restricted to the centre-to-end-ring wedge and checked against the angularly sorted patch outline. Turn Guide sample edges are checked against the same outline. Unsafe paint is rejected with a descriptive Editor error advising more Junction Trim or smaller stripe dimensions, rather than placing paint off the asphalt or cutting the source UV.
+
+**Material slots:** 0 = existing asphalt (recommended blank/unpainted), 3 = **white** (stop bars and zebra), 4 = **yellow** (turn guides). Slots 1/2 are unchanged and not used in the flat Junction prototype. Paint uses a small positive `Marking Lift` (default 0.015) above `Patch Lift` to avoid coplanar Z-fighting; each strip has independent UV0 and deterministic UV2. As with other V2 geometry, UV2 is not a certified lightmap atlas. Paint is baked together with the Junction Patch as additional glTF primitives and retained in its fingerprint; changing any mark setting marks a previous Bake stale. Baked/Manual playback reuses the saved asset, with no procedural rebuild or runtime warning.
+
+**Required setup:** Set Road's asphalt material (slot 0) to an unpainted texture, configure its trim and the Junction Patch, then enable Generate Junction Markings. Set the Junction's `materials[3]` to the white paint Material and `materials[4]` to yellow. If no turn guides are needed, slot 4 is absent. `Generate Junction Markings` requires at least one bar, crosswalk or guide; leaving everything disabled is an explicit authoring error so invisible geometry is not silently baked.
+
+**Limits:** This is a flat, visual-only paint surface; it is not a lane-topology or road-rule system. Turn arrows, zebra traffic signs, multi-lane routing, proper pavement separation at sidewalk/curb bands, junction CSG and 3D flyover markings remain separate follow-up tasks. Actual shader/material and save/reimport behavior still requires a physical Cocos Creator 3.8.x scene test.

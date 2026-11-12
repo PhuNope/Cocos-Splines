@@ -50,11 +50,11 @@ try{
   if(request==='cc/env')return env;
   return originalLoad.apply(this,arguments);
  };
- let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2,SplineJunctionPatchV2,JunctionRoadLinkV2;
+ let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2,SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2;
  try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));
   ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));
   ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));
-  ({SplineJunctionPatchV2,JunctionRoadLinkV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
+  ({SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
  finally{Module._load=originalLoad;}
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
@@ -215,6 +215,31 @@ try{
  assert.equal(generated.length,savedCount+1);
  const junctionBake=patch.prepareBake();
  assert.equal(JSON.parse(junctionBake.content).meshes[0].primitives.length,1);
+ patch.bakedSourceFingerprint=junctionBake.fingerprint;
+ assert.equal(patch.inspectBake().stale,false);
+ // Paint toggles must update the same Junction preview/Bake lifecycle, with
+ // zero changes to the linked Roads' geometry or unpainted material slot.
+ patch.generateJunctionMarkings=true;
+ patch.generateStopBars=true;
+ patch.generateCrosswalks=true;
+ const guide=new JunctionTurnGuideV2();
+ guide.fromBranch=0;guide.toBranch=1;
+ patch.turnGuides=[guide];
+ assert.equal(patch.inspectBake().stale,true,'Paint settings invalidate baked geometry');
+ const painted=patch.generate().geometry;
+ assert.deepEqual(painted.submeshes.map(s=>s.materialSlot),[0,3,4]);
+ assert.equal(patch.inspectJunction().markings.stopBars,3);
+ assert.equal(patch.inspectJunction().markings.zebraStripes,9);
+ assert.equal(patch.inspectJunction().markings.guideRoutes,1);
+ const paintedBake=patch.prepareBake();
+ assert.equal(JSON.parse(paintedBake.content).meshes[0].primitives.length,3);
+ patch.rebuildPreview();
+ assert.equal(generated.length,savedCount+2);
+ const paintedAsset=generated.at(-1);
+ patch.generateJunctionMarkings=false;
+ patch.rebuildPreview();
+ assert.equal(generated.length,savedCount+3);
+ assert(paintedAsset.destroyed,'Old painted Preview is disposed, no leaking meshes');
  patch.restoreBakedPreview();assert.equal(patchRenderer.mesh,saved);
  assert.equal(patch.inspectCornerRisk(),null);
  patch.branches=arms.slice(0,2);

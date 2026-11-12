@@ -149,3 +149,14 @@ Check the Editor scene visually: the numeric/typecheck tests cannot validate you
 7. When satisfied, Bake glTF Asset for each Road and the Junction, assign the imported .mesh subasset when pending, save/reopen Scene and inspect. Manual/Baked Play never recreates the procedural mesh.
 
 This does **not** make lane stripes from different Road arms join automatically. A dedicated junction marking/decal system is the next milestone.
+
+## Test Junction Markings V2 — white stop bars, zebra and optional turn guides
+
+1. Make a 3-/4-way Junction with ConstantWidth asphalt-only Roads exactly as described above (e.g., Width=4 and matching Junction Start/End Trim=3 on the connected ends). Rebuild each Road and the Junction once, confirming the unpainted patch is geometrically correct.
+2. On the **Junction Patch** component, set `Generate Junction Markings = On`. Initially use `Generate Stop Bars = On`, `Generate Crosswalks = Off`, `Turn Guides = []`. Use flat unpainted asphalt in slot **0** and a simple white material in slot **3**. Rebuild Preview.
+3. To test zebra, enable `Generate Crosswalks`. Defaults: `Zebra Stripe Length = 0.26`, `Zebra Gap = 0.18`, `Zebra Start Setback = 0.65`, `Zebra Stripe Count = 3`. Each JunctionRoadLink can disable stop/crosswalk paint on that arm. Increase Junction Trim if paint reports insufficient room.
+4. For guided turn example, add a `Turn Guides` entry `From Branch = 0`, `To Branch = 1`, and assign yellow material to slot **4**. The pair numbers reference the order of entries in `Branches`; do not repeat the same from/to, and avoid out-of-range or same-branch pairs. This is geometry only, not a lane routing or legal driving decision.
+5. `Marking Lift = 0.015` avoids coplanar Z-fighting; `Stop Bar Width = 0.14`, `Stop Bar Setback = 0.22`, `Marking Lateral Inset = 0.13`, and `Guide Line Width = 0.10` are starter values. The generator deliberately rejects markings that extend beyond the Junction polygon.
+6. Rebuild Preview, inspect the Junction from the top and from a shallow camera angle, then Bake glTF Asset; a painted patch should have material slots `[0,3]` or `[0,3,4]`. Bind imported Mesh, save/reopen Scene, and Play in Baked mode. Runtime should neither create new Mesh assets nor log Editor warnings.
+
+Do not assume lane arrows, road priority/traffic laws or complicated curb/junction joins are implemented in this test build.
