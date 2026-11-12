@@ -230,3 +230,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. **So sánh Flat Height** (mặc định, không dùng Terrain) và **Sample Terrain** trên cả Junction 3/4 nhánh và với Terrain được tịnh tiến, scale, xoay Y.
 
 > **Giới hạn quan trọng:** chỉ lấy mẫu mặt Terrain tại vertex của dải sidewalk ở các góc Junction. Không xén/Boolean Terrain, không chống xuyên ở khoảng giữa các vertex, không sinh sidewalk dọc toàn bộ tuyến Road, không hỗ trợ Terrain/Junction nghiêng ngang, chưa kiểm thử trong Creator thật hoặc chứng nhận dốc tiếp cận. Không dùng cho production.
+
+
+## Road-length sidewalk + Road ↔ Junction seam (alpha)
+
+1. Trên mỗi **Road** nối vào giao lộ, chọn **Surface Mode = ConstantWidth**, Road mở (không Closed), có `Curb Width > 0`, `Curb Height > 0`, và đặt **Road Sidewalk Width = 1**. Vật liệu sidewalk mới dùng **material slot 5**; hai phía trái/phải tạo từ vòng curb có sẵn nên không làm lại spline.
+2. Chọn Road Sidewalk Terrain Mode **Flat Height** (Road-local Y) hoặc **Sample Terrain**, kéo Terrain component vào Road Sidewalk Terrain Source. Nếu dùng Terrain, gán cùng Terrain cho Junction, đặt cùng Height Offset; nhập giới hạn **Max Cross Slope / Max Edge Slope**. Mỗi mẫu mép ngoài Road phải nằm trong Terrain.
+3. Ở Junction: dùng **Rounded Continuous Curb**, **Sidewalk Apron Width = 1** (khớp Road), đặt **Join Road Sidewalks = true**. Với Sample Terrain, chọn cùng Terrain Source, cùng Terrain Mode, cùng Height Offset. **Chỉ hỗ trợ các node Junction/Road có scale (1,1,1)**; Flat Height cần cùng world base Y. Không hỗ trợ junction bank/crossfall.
+4. Rebuild Preview riêng các Road rồi Junction. Kiểm tra ở mỗi cặp biên nối Road/Junction: **mép trong trùng curb ngoài Road; mép ngoài trùng X/Y/Z với Road sidewalk; Repeat-UV U khớp modulo 1**. Road asphalt vẫn có thể chọn UV Longitudinal Axis U hoặc V; sidewalk slot 5 dùng U=dọc Road và V=ngang bề rộng.
+5. Thử giao lộ 3/4 nhánh, Road tại đầu/cuối, bật/tắt `Join Road Sidewalks`, thay độ rộng Road hoặc Junction để xác nhận tool báo lỗi khi không khớp. Kiểm tra các tam giác không lật mặt, texture không bị cắt tại biên trim, Road cũ không thay đổi vị trí.
+6. Bake glTF cho **từng Road và Junction**, gắn material slot 5, lưu Scene, đóng/mở lại, Play Baked. Sau thay đổi heightmap hoặc cấu hình, phải rebuild/bake lại thủ công; Preview và Baked không cập nhật Terrain khi đang Play.
+
+> **Giới hạn:** hiện chỉ khớp đầu biên tại các Junction được liên kết thủ công. Chưa có network graph/snap tự động, sidewalk liên tục qua giao lộ phức tạp, Boolean nối Terrain, lightmap unwrap production hoặc test chứng nhận Cocos Creator thật. **Không dùng production.**
