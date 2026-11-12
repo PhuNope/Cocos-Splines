@@ -88,9 +88,9 @@ try{
  assert.equal(filletRoad.triangleCount,4*(filletRoad.vertexCount/3-1),
    'Cocos component fillet must preserve every quad on the exact 3-Knot road');
  env.EDITOR_NOT_IN_PREVIEW=true;
- const report=road.inspectCornerRisk();
- assert.equal(report.filletReport.filletedCorners,1);
- assert(report.filletReport.minimumRadius>2);
+ const filletStatus=road.inspectCornerRisk();
+ assert.equal(filletStatus.filletReport.filletedCorners,1);
+ assert(filletStatus.filletReport.minimumRadius>2);
  env.EDITOR_NOT_IN_PREVIEW=false;
  road.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
  road.surfaceMode=0;road.interpolation=0;road.sampleStep=1;road.width=4;
