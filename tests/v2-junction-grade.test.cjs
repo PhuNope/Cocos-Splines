@@ -38,7 +38,7 @@ try{
    const [a,b,c]=group.indices.slice(i,i+3).map(k=>({
     x:mesh.positions[3*k],y:mesh.positions[3*k+1],z:mesh.positions[3*k+2]}));
    const crossY=(b.z-a.z)*(c.x-a.x)-(b.x-a.x)*(c.z-a.z);
-   assert(crossY>1e-7,'Gentle grade must not reverse projected triangle winding');
+   assert(crossY>1e-7,'Gentle grade must not reverse projected triangle winding: '+JSON.stringify({count,i,crossY,a,b,c}));
   }
   assert.throws(()=>buildJunctionPatchV2(input),/flat only/);
   assert.throws(()=>buildJunctionPatchV2(input,{gradeMode:'gentle',maxGrade:.03}),/grade exceeds/);
