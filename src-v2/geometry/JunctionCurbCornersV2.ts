@@ -232,6 +232,21 @@ export function buildJunctionCurbCornersV2(
                 !finite(branches[next.index].sidewalkStation??NaN)))
                 throw new Error('Junction V2 Road Sidewalk join needs exact sidewalk UV station on each linked Road');
             const rows:Array<{inner:P;outer:P}>=[];
+            // Build a separate OUTER Bezier from the two EXACT Road sidewalk
+            // outer endpoints. Interpolating normalized curb lateral vectors
+            // per sample can reverse the outer edge on concave inner corners.
+            // The paired cubic keeps endpoint seams exact without the fold.
+            const extend=(outer:P,high:P):P=>{
+                const dx=outer.position.x-high.position.x;
+                const dz=outer.position.z-high.position.z;
+                const size=Math.hypot(dx,dz);
+                if(size<.01)throw new Error('Junction V2 sidewalk outward curb tangent collapsed');
+                return {position:{x:outer.position.x+apronWidth*dx/size,
+                    y:outer.position.y,z:outer.position.z+apronWidth*dz/size},
+                    uv0:outer.uv0};
+            };
+            const outerStart=joinRoads?extend(arm.after.outer,arm.after.high):null;
+            const outerFinish=joinRoads?extend(next.before.outer,next.before.high):null;
             let station=0;
             for(let k=0;k<=segments;k++){
                 const curb=samples[k].outer.position;
@@ -240,16 +255,14 @@ export function buildJunctionCurbCornersV2(
                 const dx=curb.x-center.x,dz=curb.z-center.z,radius=Math.hypot(dx,dz);
                 if(radius<.1||apronWidth>radius*.6)
                     throw new Error('Junction V2 sidewalk apron extends beyond safe local corner width; increase Road trim or reduce Apron Width');
-                // For a network join use the curb TOP lateral direction,
-                // not the radial direction. At t=0,1 it is exactly the
-                // source Road curb profile outward unit vector, so Road and
-                // Junction apron endpoints are mathematically identical.
-                const outwardX=joinRoads?curb.x-samples[k].high.position.x:dx;
-                const outwardZ=joinRoads?curb.z-samples[k].high.position.z:dz;
-                const norm=Math.hypot(outwardX,outwardZ);
-                if(norm<.01)throw new Error('Junction V2 sidewalk outward direction collapsed at curb corner');
-                const edgeX=curb.x+apronWidth*outwardX/norm;
-                const edgeZ=curb.z+apronWidth*outwardZ/norm;
+                // For joined Road sidewalks the outer rail follows its OWN
+                // cubic between the two exact Road-side endpoints (not a
+                // rapidly rotating local offset vector). This avoids
+                // flipping narrow corner quads and preserves seam XYZ.
+                const outside=joinRoads?
+                    arc(outerStart!,outerFinish!,center,pull,k/segments).position:null;
+                const edgeX=outside?outside.x:curb.x+apronWidth*dx/radius;
+                const edgeZ=outside?outside.z:curb.z+apronWidth*dz/radius;
                 let outerY=elevation;
                 if(terrainMode==='sample'){
                     try{
