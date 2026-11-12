@@ -54,7 +54,8 @@
 - [x] Flat Junction Patch v2 alpha: exact end-ring matched 3-/4-way Road trims, Repeat-phase UV0, material slot 0, deterministic UV2 and glTF Bake.
 - [x] V2 Inspector branches and Start/End Trim properties, independent Manual/Dynamic/Baked lifecycle and Editor-only validation.
 - [x] Flat Junction Shoulder/Curb transition bands (alpha; exact 3D end-ring seam and UV0, 0/1/2 material slots, low curb lip tapers inward).
-- [ ] Elevated/banked Junction ramps, continuous sidewalk/curb perimeter and real 3.8.x Editor save/reimport certification.
+- [x] Opt-in gentle longitudinal Junction grade (up to 0.35 slope ceiling, default max 0.15), with flat-default compatibility, seam-preserving boundary and sloped normals; unit tests only.
+- [ ] Banked Junction ramps, continuous sidewalk/curb perimeter and real 3.8.x Editor save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
 - [ ] Traffic-aware arrows, route rules, lane graph and signal/priority logic.
 - [ ] Automated trim management and multi-road endpoint snapping; current authoring is explicit per Road.
