@@ -234,12 +234,16 @@ try{
  const paintedBake=patch.prepareBake();
  assert.equal(JSON.parse(paintedBake.content).meshes[0].primitives.length,3);
  patch.rebuildPreview();
- assert.equal(generated.length,savedCount+2);
- const paintedAsset=generated.at(-1);
+ // Each material primitive is rendered through its own Cocos MeshRenderer:
+ // slot 0 asphalt, slot 3 white paint, slot 4 yellow turn guide.
+ assert.equal(generated.length,savedCount+4);
+ assert.equal(patchNode.children.length,2,'Paint creates two auxiliary renderers');
+ const paintedAssets=generated.slice(-3);
  patch.generateJunctionMarkings=false;
  patch.rebuildPreview();
- assert.equal(generated.length,savedCount+3);
- assert(paintedAsset.destroyed,'Old painted Preview is disposed, no leaking meshes');
+ assert.equal(generated.length,savedCount+5);
+ assert(paintedAssets.every(mesh=>mesh.destroyed),
+     'All old painted draw-parts are disposed, no transient GPU mesh leak');
  patch.restoreBakedPreview();assert.equal(patchRenderer.mesh,saved);
  assert.equal(patch.inspectCornerRisk(),null);
  patch.branches=arms.slice(0,2);
