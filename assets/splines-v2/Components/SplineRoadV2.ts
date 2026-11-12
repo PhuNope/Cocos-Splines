@@ -11,6 +11,7 @@ import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
 import {buildRoadFilletCacheV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
+import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
@@ -42,6 +43,10 @@ export class SplineRoadV2 extends Component {
     @property({min:0}) curbWidth=0;
     @property({min:0}) curbHeight=0;
     @property({min:0.01}) sampleStep=.5;
+    @property({min:0,tooltip:'ConstantWidth Road only. Distance removed from its starting junction endpoint. Match Junction V2 setback.'})
+    junctionStartTrim=0;
+    @property({min:0,tooltip:'ConstantWidth Road only. Distance removed from its ending junction endpoint. Match Junction V2 setback.'})
+    junctionEndTrim=0;
     @property({tooltip:'Adaptive: add samples when the turn angle or spline chord error is large.'})
     adaptiveSampling=true;
     @property({min:1,max:90,step:1,tooltip:'Maximum local tangent turn (degrees) between Road rings.'})
@@ -178,7 +183,8 @@ export class SplineRoadV2 extends Component {
         const uvCrossMode=this.uvCrossMode===SplineV2UVCrossMode.Physical?'physical' as const:'legacy' as const;
         const markingOptions={lineWidth:this.markingLineWidth,
             dashLength:this.markingDashLength,dashGap:this.markingDashGap};
-        const roadSampling={generateMarkings:this.generateMarkings,markingOptions,
+        const roadSampling={junctionStartTrim:this.junctionStartTrim,junctionEndTrim:this.junctionEndTrim,
+            generateMarkings:this.generateMarkings,markingOptions,
             adaptiveSampling:this.adaptiveSampling,
             maxTurnAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError,uvCrossMode};
         const corners=this.cornerSettings();
@@ -206,6 +212,37 @@ export class SplineRoadV2 extends Component {
                 ...roadSampling,...filletSettings,...corners
             });
         return {geometry};
+    }
+    /**
+     * Editor authoring helper: read the EXACT trimmed asphalt edge positions and
+     * UV0 from this Road's own current procedural geometry. The patch never
+     * guesses the UV phase and never asks a Baked mesh to regenerate in Play.
+     */
+    public sampleJunctionEndV2(atEnd:boolean):JunctionRoadBranchV2 {
+        if(this.closed||this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth)
+            throw new Error('Junction V2 requires open ConstantWidth Road branches');
+        if(this.shoulderWidth!==0||this.curbWidth!==0||this.curbHeight!==0)
+            throw new Error('Junction V2 currently supports flat asphalt only (no Shoulder/Curb)');
+        if((atEnd?this.junctionEndTrim:this.junctionStartTrim)<=0)
+            throw new Error('Junction V2 requires a positive Junction '+(atEnd?'End':'Start')+' Trim on each Road');
+        const mesh=this.generate().geometry;
+        const asphalt=mesh.submeshes.find(g=>g.materialSlot===0);
+        if(!asphalt||asphalt.indices.length%12!==0)
+            throw new Error('Junction V2 cannot extract the Road asphalt ring');
+        const rings=asphalt.indices.length/12+1;
+        if(mesh.vertexCount<rings*3)
+            throw new Error('Junction V2 Road mesh is not a continuous 3-vertex strip');
+        const start=(atEnd?rings-1:0)*3;
+        const vertex=(i:number)=>{
+            const local=new Vec3(mesh.positions[3*i],mesh.positions[3*i+1],mesh.positions[3*i+2]);
+            const world=Vec3.transformMat4(new Vec3(),local,this.node.worldMatrix);
+            return {position:{x:world.x,y:world.y,z:world.z},
+                uv0:{x:mesh.uv0[2*i],y:mesh.uv0[2*i+1]}};
+        };
+        const endpoint=this.knots[atEnd?this.knots.length-1:0]?.worldPosition;
+        if(!endpoint)throw new Error('Junction V2 requires a valid Road endpoint Knot');
+        return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
+            left:vertex(start),right:vertex(start+2)};
     }
     public getCurrentFingerprint():string {
         const {geometry}=this.generate();

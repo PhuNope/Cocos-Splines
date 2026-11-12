@@ -227,7 +227,7 @@ function spawnPrefabs(uuid,kind,action){
 /** v2-only Inspector actions. These are not reachable from gameplay. */
 function roadV2Component(uuid){
     const node=resolve(uuid);
-    const component=node?.components.find(c=>['SplinesV2.SplineRoad','SplinesV2.SplineExtrude','SplinesV2.SplineMeshDeform'].includes(classOf(c)));
+    const component=node?.components.find(c=>['SplinesV2.SplineRoad','SplinesV2.SplineExtrude','SplinesV2.SplineMeshDeform','SplinesV2.JunctionPatch'].includes(classOf(c)));
     return {node,component};
 }
 function rebuildV2Road(uuid){
@@ -236,10 +236,14 @@ function rebuildV2Road(uuid){
     try{
         component.rebuildPreview();
         const risk=component.inspectCornerRisk?.();
+        const junction=component.inspectJunction?.();
         const overlap=risk?.overlapReport;
         const continuous=risk?.continuousReport;
         const fillet=risk?.filletReport;
-        const warn=(fillet?.filletedCorners
+        const warn=(junction?.branches
+            ?' Junction V2: '+junction.branches+' trimmed Roads, '+junction.triangles+
+                ' triangles; outer edge UV0 matches source Road under Repeat.' : '')+
+            (fillet?.filletedCorners
             ?' Constant Width: '+fillet.filletedCorners+' corner(s) rounded, minimum radius '+
               fillet.minimumRadius.toFixed(2)+', maximum guide-Knot deviation '+fillet.maxKnotDeviation.toFixed(2)+'. No UV cutting or width squeeze.':'')+
             (continuous?.constrainedSections
@@ -285,6 +289,7 @@ function inspectV2RoadBake(uuid){
     const {node,component}=roadV2Component(uuid);
     if(!component)return {ok:false,error:'SplinesV2.SplineRoad not found'};
     try{return {ok:true,...component.inspectBake(),cornerRisk:component.inspectCornerRisk?.()||null,
+        junctionReport:component.inspectJunction?.()||null,
         componentIndex:node.components.indexOf(component),
         pendingUrl:component.pendingBakeUrl||'',pendingFingerprint:component.pendingBakeFingerprint||''};}
     catch(e){return {ok:false,error:String(e)};}

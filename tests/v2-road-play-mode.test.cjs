@@ -7,7 +7,7 @@ try{
  const file=path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts');
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--experimentalDecorators',
   '--skipLibCheck','--useDefineForClassFields','false','--rootDir',path.join(root,'assets/splines-v2'),
-  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts'),types],{stdio:'pipe'});
+  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts'),path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),types],{stdio:'pipe'});
  const generated=[];
  const env={EDITOR_NOT_IN_PREVIEW:false};
  const identity={};
@@ -50,10 +50,11 @@ try{
   if(request==='cc/env')return env;
   return originalLoad.apply(this,arguments);
  };
- let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2;
+ let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2,SplineJunctionPatchV2,JunctionRoadLinkV2;
  try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));
   ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));
-  ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));}
+  ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));
+  ({SplineJunctionPatchV2,JunctionRoadLinkV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
  finally{Module._load=originalLoad;}
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
@@ -182,5 +183,45 @@ try{
  deform.repeatCount=2;
  assert.equal(deform.inspectBake().stale,true);
  assert(!dAsset.destroyed);
+ // Junction Patch must preserve Manual/Baked runtime gate and use exactly
+ // the Road's trimmed end ring, with no hidden runtime mesh generation.
+ const patchNode=new Node('JunctionV2'),patchRenderer=patchNode.addComponent(MeshRenderer);
+ const patch=patchNode.addComponent(SplineJunctionPatchV2);
+ patch.meshMode=SplineV2MeshMode.Baked;patch.bakedMesh=saved;
+ const savedCount=generated.length;
+ env.EDITOR_NOT_IN_PREVIEW=false;
+ patch.onEnable();assert.equal(generated.length,savedCount);
+ assert.equal(patchRenderer.mesh,saved,'Junction Baked Play must not generate geometry');
+ const shared=new Node('CommonKnot');
+ const arms=[];
+ for(let i=0;i<3;i++){
+  const angle=2*Math.PI*i/3,out=new Node('ArmEnd'+i);
+  out.worldPosition=new Vec3(Math.sin(angle)*12,0,Math.cos(angle)*12);
+  const n=new Node('Arm'+i);n.addComponent(MeshRenderer);
+  const arm=n.addComponent(SplineRoadV2);
+  arm.knots=[shared,out];arm.surfaceMode=2;arm.junctionStartTrim=3;
+  arm.sampleStep=.25;arm.interpolation=0;arm.width=4;
+  const link=new JunctionRoadLinkV2();link.road=arm;link.atEnd=false;arms.push(link);
+ }
+ patch.branches=arms;
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ const boundary=arms[0].road.sampleJunctionEndV2(false);
+ assert(Math.abs(boundary.left.uv0.y-.6)<1e-5,'Road UV must retain 3m original path distance');
+ const {geometry:patchMesh}=patch.generate();
+ assert.equal(patchMesh.triangleCount,36);
+ assert.equal(patchMesh.submeshes[0].materialSlot,0);
+ assert.equal(patch.inspectJunction().branches,3);
+ patch.rebuildPreview();
+ assert.equal(generated.length,savedCount+1);
+ const junctionBake=patch.prepareBake();
+ assert.equal(JSON.parse(junctionBake.content).meshes[0].primitives.length,1);
+ patch.restoreBakedPreview();assert.equal(patchRenderer.mesh,saved);
+ assert.equal(patch.inspectCornerRisk(),null);
+ patch.branches=arms.slice(0,2);
+ assert.throws(()=>patch.generate(),/3 or 4/);
+ patch.branches=arms;
+ env.EDITOR_NOT_IN_PREVIEW=false;
+ patch.onDisable();
+ assert.equal(patchRenderer.mesh,saved,'Baked asset stays on renderer');
  console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

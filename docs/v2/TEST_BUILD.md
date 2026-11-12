@@ -137,3 +137,15 @@ Check the Editor scene visually: the numeric/typecheck tests cannot validate you
 5. Set Materials to match submesh order. Verify the original asset is unchanged after Preview, and UV1/UV2 (if supplied) still match the authoring file.
 6. Optional: increase Repeat Count to 2-4; use UV Tile Mode Advance ONLY if source texture is tileable and its longitudinal UV span matches each repeating module. Expect repeated lightmap UV2; do not use a repeated mesh for baked lightmaps without re-unwrap.
 7. Bake glTF Asset, bind the imported Mesh and save/reopen the Scene. In Baked mode Play does not read or rebuild the source mesh. If source readback fails, verify import settings and source mesh vertex attributes.
+
+## V2 Junction Patch (flat 3/4-road Editor test)
+
+1. Create 3 or 4 open `SplinesV2.SplineRoad` nodes and make one endpoint Knot of every Road share the same world position. Set **Surface Mode = ConstantWidth**, asphalt only (Shoulder/Curb width and height all zero).
+2. Set **Junction Start Trim** (when connecting the first Knot) or **Junction End Trim** (when connecting the last Knot). Start with trim **3** for Width=4 and leave the unconnected end trim 0. All roads must have enough length. Click **Rebuild Preview** for each Road.
+3. Create another Node with MeshRenderer and add **Cocos Splines V2/Junction Patch** component. Under Branches assign exactly 3–4 Road components and set **At End** per branch.
+4. Set **Junction UV Mode = MatchedRepeat**, **Junction UV Blend = 0.55**, **Endpoint Tolerance=0.25**, **Flat Tolerance=0.1**, and **Patch Lift=0**. Use the SAME asphalt Material (slot 0) as the linked Roads. For road textures with baked-in directional lines, prefer plain asphalt for the junction.
+5. Select the Junction Node and click **Rebuild Preview**. There should be no overlapping old Road surface inside the filled junction gap, and boundary UV0 must sample the same texture modulo the Repeat tile.
+6. If rejected, inspect the Editor-only error: link the correct end, increase trim, align endpoints, remove shoulders/curbs or reduce geometry complexity. **Do not** use Junction Patch v2 for ramps, elevated roads or arbitrary crossings in this test milestone.
+7. When satisfied, Bake glTF Asset for each Road and the Junction, assign the imported .mesh subasset when pending, save/reopen Scene and inspect. Manual/Baked Play never recreates the procedural mesh.
+
+This does **not** make lane stripes from different Road arms join automatically. A dedicated junction marking/decal system is the next milestone.

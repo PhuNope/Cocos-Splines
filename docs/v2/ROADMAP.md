@@ -50,3 +50,9 @@
 - [x] Separate `SplinesV2.SplineMeshDeform` component and Inspector using existing Manual/Dynamic/Baked lifecycle, editor-only preview and glTF Bake.
 - [ ] Visual certification against real Creator 3.8.x source mesh with imported FBX/glTF CPU readback, normal maps, lightmap UV and reimport.
 - [ ] Source-mesh geometry adaptive subdivision and UV2 unwrap after tiling; current generator deforms original vertex tessellation only.
+
+- [x] Flat Junction Patch v2 alpha: exact end-ring matched 3-/4-way Road trims, Repeat-phase UV0, material slot 0, deterministic UV2 and glTF Bake.
+- [x] V2 Inspector branches and Start/End Trim properties, independent Manual/Dynamic/Baked lifecycle and Editor-only validation.
+- [ ] Extend Junctions to shoulder/curb bands, elevated ramps, and real 3.8.x Editor save/reimport certification.
+- [ ] Dedicated multi-road lane marking topology (stop bars, turns, crossings, arrows), not simple UV stitching.
+- [ ] Automated trim management and multi-road endpoint snapping; current authoring is explicit per Road.

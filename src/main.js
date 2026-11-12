@@ -96,7 +96,10 @@ const methods={
             const report=result.cornerRisk?.overlapReport;
             const continuous=result.cornerRisk?.continuousReport;
             const fillet=result.cornerRisk?.filletReport;
-            const warn=(fillet?.filletedCorners
+            const junction=result.junctionReport;
+            const warn=(junction?.branches
+                ?' Junction V2: '+junction.branches+' links, '+junction.triangles+' flat patch triangles with UV0 matched at trimmed edges.':'')+
+                (fillet?.filletedCorners
                 ?' Constant Width: '+fillet.filletedCorners+' tangent fillets, radius '+fillet.minimumRadius.toFixed(2)+
                   ', max Knot guide deviation '+fillet.maxKnotDeviation.toFixed(2)+'. Mesh/UV uncut.':'')+
                 (continuous?.constrainedSections

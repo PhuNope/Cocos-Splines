@@ -6,6 +6,7 @@ import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2,type RoadContinuousResultV2} from './RoadContinuous';
 import {buildRoadMarkingsV2,appendRoadMarkingsV2,type RoadMarkingOptionsV2} from './RoadMarkings';
 import {buildRoadFilletCacheV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
+import {trimmedRoadFramesV2,type RoadJunctionTrimV2} from './RoadJunctionTrim';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
 export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
@@ -26,7 +27,7 @@ export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuo
     /** UV0 coordinate that repeats longitudinally; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
 }
-export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2, RoadFilletOptionsV2 {
+export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2, RoadFilletOptionsV2, RoadJunctionTrimV2 {
     readonly surfaceMode?:'clip'|'continuous'|'fillet';
     readonly onFilletReport?:(report:RoadFilletReportV2)=>void;
     readonly onContinuousReport?:(report:RoadContinuousReportV2)=>void;
@@ -216,14 +217,17 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     const half=width/2,pts:ProfileVertexV2[]=[],slots:number[]=[];
     const mode=options.surfaceMode??'clip';
     if(mode!=='clip'&&mode!=='continuous'&&mode!=='fillet')throw new Error('Unknown Road surface mode');
+    if(mode!=='fillet'&&((options.junctionStartTrim??0)>0||(options.junctionEndTrim??0)>0))
+        throw new Error('Junction trim needs ConstantWidth Road mode');
     const totalHalfExtent=half+shoulder+curb;
     const fillet=mode==='fillet'?buildRoadFilletCacheV2(cache,totalHalfExtent,{...options,maxArcStep:options.step??.5}):null;
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
-    const frames=buildSplineFramesV2(workingCache,{maxStep:options.step??.5,
+    const fullFrames=buildSplineFramesV2(workingCache,{maxStep:options.step??.5,
         ...(options.adaptiveSampling&&mode!=='fillet'?{
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
-        }:{})}).frames;
+        }:{})});
+    const frames=trimmedRoadFramesV2(workingCache,fullFrames,options);
     const cornerSections=buildRoadCornerSectionsV2(frames,totalHalfExtent,
         mode==='fillet'?{cornerMode:'legacy'}:options,workingCache.spline.closed);
     const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(

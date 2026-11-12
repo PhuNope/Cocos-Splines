@@ -216,3 +216,25 @@ A single source mesh is **stretched to the whole spline** by default. This does 
 Existing Baked/Manual v2 playback lifecycle is inherited: no source mesh readback or generation during Play; Dynamic explicitly generates. Editor Rebuild Preview creates temporary mesh, Bake exports glTF, fingerprint tracks resulting UV/materials/geometry. The Editor inspector exposes Source Mesh, source axis, UV axis, Repeat Count, UV Tile Mode, centre lateral, vertical offset and basic spline sampling/fillet controls. **Real Creator 3.8.x import/readback is NOT yet certified.** If importer strips CPU geometry, the component refuses to generate. The source Mesh must be readable.
 
 **Limitations:** source topology is not subdivided; source-authored UV0 may stretch longitudinally if path length differs from source length. Repeated UV2 duplicates existing coordinates, so this is NOT a generated lightmap atlas; do not lightmap a repeated mesh without a proper UV2 unwrap. A source mesh containing only one length quad will remain one curved quad and may visibly cut across bends. Self-intersecting road network topology and junction paint are still outside this first Mesh Deform milestone.
+
+## Junction Patch V2: matched trimmed Road endings — experimental
+
+Version 2 now includes a separate flat `SplinesV2.JunctionPatch` component. The initial milestone supports **3- or 4-way Junctions only** with open `SplinesV2.SplineRoad` branches in `Surface Mode=ConstantWidth`, asphalt only (no shoulders/curbs). It is intentionally separate from the legacy `Splines.SplineJunctionMesh`, does not change old UUIDs or existing scenes and uses no automatic runtime editor warnings.
+
+### Trim the Road first — no overlay Z-fighting
+
+The Road v2 Inspector now exposes **Junction Start Trim** and **Junction End Trim** (default zero). In ConstantWidth mode, these values remove the corresponding road-end distance from the swept ribbon **before mesh generation**. `RoadJunctionTrim.ts` inserts an exact spline frame at each trim distance, keeps the full-path arc distance in UV0 and UV2, then uses those trimmed frames consistently for RoadStrip, RoadProfile and optional separate markings. Nonzero trims are rejected in other Surface modes, and closed roads cannot use junction trims.
+
+For each Junction Patch branch, assign a Road component and select **At End** for the Road's ending Knot (otherwise it is its starting Knot). Its matching Road must have positive Start/End Trim. The patch reads the Road's exact trimmed asphalt boundary ring from its own generated mesh, including UV0 (same positions/phase as the Road), instead of guessing a separate Road cross section.
+
+### Geometry & UV
+
+`JunctionPatchV2.ts` checks endpoint Knot positions are within tolerance, rejects height variations, near-overlapping angular sectors, insufficient setback, degenerate ribbons and junctions with fewer/more than 3/4 links. It polar-sorts the **actual Road boundary edge vertices** and builds an XZ star-shaped patch with a central blend ring. In **Matched Repeat** UV mode, each Road *pair* of boundary UVs is shifted by one shared integer U/V tile offset, guaranteeing identical texture sampling at the seam **when the material uses Repeat wrap**. The inner transition ring blends towards a shared central UV to prevent abrupt phase jumps between different branch directions. **World Projected** mode is an alternative if you want simple projected asphalt. UV2 is separately generated, not a unique lightmap atlas.
+
+Material slot 0 of the Junction should use the same basic asphalt material as Road slot 0, preferably **without lane markings**; a single UV projection cannot connect directional painted road stripes from 3–4 roads into a physically meaningful junction. Special stop lines, zebra crossings, turn arrows, lane continuation and road traffic topology remain follow-up tasks.
+
+**Does not perform arbitrary mesh CSG.** Only the explicitly linked, pre-trimmed endpoint gaps are filled. For safety, this initial version rejects shoulder/curb Roads and elevated/banked junctions. Other kinds of self-overlap may remain. Junction and Road assets are baked independently. In Manual/Baked Play no procedural rebuild or console logs occur; Dynamic is explicit. Patch source Road is temporarily regenerated for Preview/Bake or Dynamic Play; do not attach Junction to invalid/missing Roads.
+
+### Real-world Editor verification still needed
+
+Tests cover pure XZ 3-/4-way geometry and mock Cocos component lifecycle, but do not replace opening a Creator 3.8.x Scene with real Road materials, saving, reimporting and comparing UV seams. A patch can blend asphalt noise, not direction-specific lane paintings. Ensure the Junction Node uses a horizontal local XZ plane (no tilted local axes). Transform the Junction Node near the endpoint Knot cluster, set matching materials, Rebuild Roads first, then Rebuild Junction, then Bake and save the Scene.
