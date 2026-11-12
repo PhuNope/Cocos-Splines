@@ -73,6 +73,12 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     curbRampMinLip=.015;
     @property({min:.02,max:.6,step:.01,tooltip:'Upper limit of the local ramp top longitudinal rise/run. Unsafe short corners reject instead of folding.'})
     curbRampMaxSlope=.35;
+    @property({min:0,max:6,step:.05,tooltip:'Exterior sidewalk strip width in local metres. Set 0 to disable. Available only with Rounded Continuous Curb (slot 5).'})
+    sidewalkApronWidth=0;
+    @property({min:-2,max:2,step:.05,tooltip:'Local terrain-edge Y offset relative to Junction center. This is a planar target, NOT real Terrain height sampling.'})
+    sidewalkTerrainHeightOffset=0;
+    @property({min:.02,max:1,step:.01,tooltip:'Maximum vertical rise per horizontal metre from rounded curb outer rail to apron terrain edge.'})
+    sidewalkMaxCrossSlope=.35;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -131,7 +137,10 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             curbCornerMode:this.curbCornerMode===JunctionCurbCornerModeV2.RoundedContinuous?'rounded':'radial',
             curbCornerSegments:this.curbCornerSegments,curbCornerPull:this.curbCornerPull,
             curbRampPairs:this.curbRamps.map(pair=>({fromBranch:pair.fromBranch,toBranch:pair.toBranch})),
-            curbRampMinLip:this.curbRampMinLip,curbRampMaxSlope:this.curbRampMaxSlope
+            curbRampMinLip:this.curbRampMinLip,curbRampMaxSlope:this.curbRampMaxSlope,
+            sidewalkApronWidth:this.sidewalkApronWidth,
+            sidewalkTerrainHeightOffset:this.sidewalkTerrainHeightOffset,
+            sidewalkMaxCrossSlope:this.sidewalkMaxCrossSlope
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
