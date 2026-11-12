@@ -137,7 +137,10 @@ export function buildJunctionCurbCornersV2(
         indices.push(first,first+1,first+2);
     };
     const core=(a:P,b:P,slot:number)=>{
-        const c=area(center,a.position,b.position);
+        // Increasing polar angles are CCW when viewed in XZ, which
+        // produces a -Y cross product. Use its negation for a positive
+        // polygon sweep, then reverse the triangle for +Y-facing asphalt.
+        const c=-area(center,a.position,b.position);
         if(c<1e-7)throw new Error('Junction V2 Rounded Curb inner polygon folded');
         minWedge=Math.min(minWedge,
             Math.atan2(c,(a.position.x-center.x)*(b.position.x-center.x)+
