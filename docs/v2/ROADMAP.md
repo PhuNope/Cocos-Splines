@@ -57,6 +57,8 @@
 - [x] Opt-in gentle longitudinal Junction grade (up to 0.35 slope ceiling, default max 0.15), with flat-default compatibility, seam-preserving boundary and sloped normals; unit tests only.
 - [x] Flat Junction Rounded Curb Corner (opt-in alpha): per-corner continuous top and vertical wall arcs, non-tapering inner shoulder/asphalt boundary, source Road exact UV0 seam; 3-/4-way regression.
 - [x] Selected flat rounded-curb lowered corners (alpha): explicit adjacent Road pairs, smooth top depression and positive residual lip, slope safety, unchanged Road seam UV0/UV2, glTF Bake regression. Not a complete or standards-certified pedestrian ramp.
+- [x] Opt-in local corner sidewalk apron (alpha): create separate slot-5 UV surface from rounded curb outside edge to a specified, flat local terrain height with safe cross slope, original Road-end seam intact, UV2/fingerprint/glTF regressions.
+- [ ] Real Terrain heightmap sampling, full outer sidewalk network joins/sidewalk CSG, and pedestrian ramp accessibility geometry; mesh-only local apron is not a certified world-terrain splice.
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
 - [ ] Traffic-aware arrows, route rules, lane graph and signal/priority logic.
