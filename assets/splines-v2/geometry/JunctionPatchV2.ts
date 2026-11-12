@@ -26,6 +26,10 @@ export interface JunctionPatchOptionsV2 {
     readonly uvBlendStart?:number;
     readonly endpointTolerance?:number;
     readonly flatTolerance?:number;
+    /** Opt-in bounded gradients between the snapped center and trimmed Road rings; banked cross-sections remain unsupported. */
+    readonly gradeMode?:'flat'|'gentle';
+    /** Maximum absolute rise / horizontal distance to a trimmed Road center ring (gentle mode). */
+    readonly maxGrade?:number;
     readonly surfaceLift?:number;
     readonly materialSlot?:number;
     /** Maximum curb lip height above junction asphalt; flat-plan only. */
@@ -60,10 +64,13 @@ export function buildJunctionPatchV2(
     const mode=options.uvMode??'matched';
     const uvRepeat=options.uvMetersPerRepeat??5,blend=options.uvBlendStart??.55;
     const tolerance=options.endpointTolerance??.25,flat=options.flatTolerance??.1;
+    const gradeMode=options.gradeMode??'flat',maxGrade=options.maxGrade??.15;
     const lift=options.surfaceLift??0,slot=options.materialSlot??0;
     if(mode!=='matched'&&mode!=='projected'||!finite(uvRepeat)||uvRepeat<=0||
        !finite(blend)||blend<.05||blend>.95||!finite(tolerance)||tolerance<=0||
-       !finite(flat)||flat<=0||!finite(lift)||Math.abs(lift)>.2||
+       !finite(flat)||flat<=0||
+       (gradeMode!=='flat'&&gradeMode!=='gentle')||!finite(maxGrade)||maxGrade<=0||maxGrade>.35||
+       !finite(lift)||Math.abs(lift)>.2||
        !Number.isSafeInteger(slot)||slot<0)throw new Error('Invalid Junction V2 settings');
     const validate=(p:Vec3MeshV2)=>[p.x,p.y,p.z].every(finite);
     for(const branch of branches){
@@ -80,13 +87,25 @@ export function buildJunctionPatchV2(
     for(const b of branches){
         if(length(sub(b.endpoint,center))>tolerance)
             throw new Error('Junction V2 endpoint positions are not co-located; snap all Road endpoints');
-        for(const edge of [b.left,b.middle,b.right])
-            if(Math.abs(edge.position.y-center.y)>flat)
-                throw new Error('Junction V2 is flat only; banked/sloped roads need a dedicated junction');
+        if(gradeMode==='flat'){
+            for(const edge of [b.left,b.middle,b.right])
+                if(Math.abs(edge.position.y-center.y)>flat)
+                    throw new Error('Junction V2 is flat only; select Gentle Grade for shallow sloped roads');
+        }else{
+            // A grade is longitudinal only. Across-road banks, height steps and
+            // arbitrary 3D twisting are not safe for the polar XZ fan topology.
+            const crossfall=Math.min(flat,.03);
+            if(Math.abs(b.left.position.y-b.middle.position.y)>crossfall||
+               Math.abs(b.right.position.y-b.middle.position.y)>crossfall)
+                throw new Error('Junction V2 gentle grade does not support banked Road rings');
+            const run=Math.hypot(b.middle.position.x-center.x,b.middle.position.z-center.z);
+            if(run<1e-4||Math.abs(b.middle.position.y-center.y)>maxGrade*run+1e-6)
+                throw new Error('Junction V2 Road grade exceeds Max Grade');
+        }
         if(Math.hypot(b.left.position.x-b.right.position.x,b.left.position.z-b.right.position.z)<.01)
             throw new Error('Junction V2 Road boundary has zero width');
         const mid={x:(b.left.position.x+b.right.position.x)*.5,
-            y:center.y,z:(b.left.position.z+b.right.position.z)*.5};
+            y:b.middle.position.y,z:(b.left.position.z+b.right.position.z)*.5};
         if(length(sub(mid,b.middle.position))>.02)
             throw new Error('Junction V2 center row must match the Road middle vertex');
         const offset=length(sub(mid,center));
@@ -161,6 +180,27 @@ export function buildJunctionPatchV2(
         // In XZ a CCW perimeter has -Y normals. Reverse for +Y.
         indices.push(outerI,innerI,innerJ,outerI,innerJ,outerJ);
         indices.push(0,innerJ,innerI);
+    }
+    if(gradeMode==='gentle'){
+        // Indexed triangle normals must follow the sloped surface instead of
+        // the flat default (+Y). Area-weighting avoids visible lighting steps
+        // between the radial UV rings without changing any seam vertex/UV.
+        for(const normal of normals){normal.x=0;normal.y=0;normal.z=0;}
+        for(let i=0;i<indices.length;i+=3){
+            const ia=indices[i],ib=indices[i+1],ic=indices[i+2];
+            const a=positions[ia],b=positions[ib],c=positions[ic];
+            const ab=sub(b,a),ac=sub(c,a);
+            const face={x:ab.y*ac.z-ab.z*ac.y,y:ab.z*ac.x-ab.x*ac.z,z:ab.x*ac.y-ab.y*ac.x};
+            if(face.y<=1e-9)throw new Error('Junction V2 gentle grade produced a folded surface');
+            for(const index of [ia,ib,ic]){
+                normals[index].x+=face.x;normals[index].y+=face.y;normals[index].z+=face.z;
+            }
+        }
+        for(const normal of normals){
+            const magnitude=length(normal);
+            if(magnitude<1e-9)throw new Error('Junction V2 degenerate gentle grade normal');
+            normal.x/=magnitude;normal.y/=magnitude;normal.z/=magnitude;
+        }
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot:slot,indices}]});
     return {mesh,report:{branches:n,matchedUV:mode==='matched',polygonVertices:m,
