@@ -19,6 +19,8 @@ export interface JunctionRoadBranchV2 {
     /** Optional exact entire end-ring when the Road has Shoulder/Curb. */
     readonly profile?:JunctionBranchProfileV2;
 }
+/** Road indices are the original Inspector Branches indices, order-independent. */
+export interface JunctionCurbRampPairV2 {readonly fromBranch:number;readonly toBranch:number;}
 export interface JunctionPatchOptionsV2 {
     /** Matched mode samples the same repeat texture as each Road's edge. */
     readonly uvMode?:'matched'|'projected';
@@ -40,6 +42,12 @@ export interface JunctionPatchOptionsV2 {
     readonly curbCornerSegments?:number;
     /** Cubic inward tangent pull for corner radii, 0.1..0.7 (rounded only). */
     readonly curbCornerPull?:number;
+    /** Optional lowered curb at chosen adjacent Road corners, only in rounded flat mode. */
+    readonly curbRampPairs?:ReadonlyArray<JunctionCurbRampPairV2>;
+    /** Residual curb lip at the middle of each lowered corner (nonzero: 0.005..0.08). */
+    readonly curbRampMinLip?:number;
+    /** Maximum vertical slope of the top along either longitudinal corner rail. */
+    readonly curbRampMaxSlope?:number;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
@@ -51,6 +59,7 @@ export interface JunctionPatchReportV2 {
     /** Only present for opt-in continuous sidewalk curb mode. */
     readonly roundedCurbCorners?:number;
     readonly curbWallTriangles?:number;
+    readonly loweredCurbCorners?:number;
 }
 const sub=(a:Vec3MeshV2,b:Vec3MeshV2)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const length=(a:Vec3MeshV2)=>Math.hypot(a.x,a.y,a.z);
@@ -69,6 +78,8 @@ export function buildJunctionPatchV2(
     branches:ReadonlyArray<JunctionRoadBranchV2>,options:JunctionPatchOptionsV2={}
 ):{mesh:MeshDataV2;report:JunctionPatchReportV2}{
     const n=branches.length;
+    if(options.curbRampPairs?.length && options.curbCornerMode!=='rounded')
+        throw new Error('Junction V2 curb ramps require Rounded Continuous Curb mode');
     if(n!==3&&n!==4)throw new Error('Junction V2 needs 3 or 4 Road branches');
     const mode=options.uvMode??'matched';
     const uvRepeat=options.uvMetersPerRepeat??5,blend=options.uvBlendStart??.55;
