@@ -25,6 +25,7 @@ export class JunctionTurnGuideV2 {
 }
 export enum JunctionUVModeV2 {MatchedRepeat=0,WorldProjected=1}
 export enum JunctionGradeModeV2 {Flat=0,Gentle=1}
+export enum JunctionCurbCornerModeV2 {RadialLegacy=0,RoundedContinuous=1}
 /**
  * Flat 3- or 4-way junction bridging genuine trimmed Road endpoints.
  * Inherits the v2 Manual/Baked/Dynamic lifecycle, glTF Bake and UV2 handling.
@@ -53,6 +54,12 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     patchLift=0;
     @property({min:.01,max:2,step:.01,tooltip:'Maximum curb lip height above flat asphalt supported by the radial shoulder/curb transition.'})
     maxCurbHeight=.6;
+    @property({type:Enum(JunctionCurbCornerModeV2),tooltip:'Radial Legacy: taper curb to center. Rounded Continuous: smooth top and vertical wall around flat junction corners, all Roads need curb.'})
+    curbCornerMode=JunctionCurbCornerModeV2.RadialLegacy;
+    @property({min:4,max:48,step:1,tooltip:'Geometry divisions in each rounded curb corner. Active only for Rounded Continuous.'})
+    curbCornerSegments=12;
+    @property({min:.1,max:.7,step:.01,tooltip:'Cubic corner inward tangent pull (0.1..0.7). Active only for Rounded Continuous.'})
+    curbCornerPull=.32;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -107,7 +114,9 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             flatTolerance:this.flatTolerance,
             gradeMode:this.gradeMode===JunctionGradeModeV2.Gentle?'gentle':'flat',
             maxGrade:this.maxGrade,surfaceLift:this.patchLift,materialSlot:0,
-            maxCurbHeight:this.maxCurbHeight
+            maxCurbHeight:this.maxCurbHeight,
+            curbCornerMode:this.curbCornerMode===JunctionCurbCornerModeV2.RoundedContinuous?'rounded':'radial',
+            curbCornerSegments:this.curbCornerSegments,curbCornerPull:this.curbCornerPull
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
