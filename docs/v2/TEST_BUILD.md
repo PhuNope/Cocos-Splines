@@ -218,3 +218,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. Kiểm tra với Scene thực: đóng/mở, Play Baked, materials, tầm nhìn từ dưới và collider. Terrain nếu có phải được bố trí **phẳng tại độ cao đã nhập**; plugin chưa cắt/cập nhật mesh Terrain.
 
 > **Giới hạn:** dải apron hiện chỉ sinh trên *khoảng giữa các nhánh Road* quanh góc Junction. Chưa nối liên tục theo cả tuyến vỉa hè, chưa lấy mẫu heightmap, chưa Boolean ghép terrain, chưa chứng nhận dốc cho người đi bộ hoặc Cocos Creator 3.8.x production.
+
+
+## Junction Sidewalk → Cocos Terrain heightmap (alpha, mới)
+
+1. Trong Scene Cocos Creator 3.8.x, tạo Terrain có heightmap, gán đúng `Terrain` component. Đặt **Junction** và **Terrain** theo trục Y thẳng đứng (có thể xoay quanh Y, tịnh tiến, scale); tính năng chủ động từ chối nghiêng X/Z. Các điểm mép apron ngoài phải nằm **bên trong Terrain**.
+2. Trong Junction: `Curb Corner Mode = Rounded Continuous`, `Grade Mode = Flat`, `Sidewalk Apron Width = 1`. Đặt `Sidewalk Terrain Mode = Sample Terrain` và kéo **Terrain component** vào `Sidewalk Terrain Source`.
+3. `Sidewalk Terrain Height Offset = 0` sẽ đặt vertex mép ngoài lên đúng cao độ Terrain. Có thể tăng Offset một chút để tránh z-fighting; khi dùng Sample Terrain, offset được cộng vào độ cao đã lấy mẫu, **không phải thay cho Terrain**.
+4. `Sidewalk Max Cross Slope` giới hạn chênh Y theo bề rộng, và `Sidewalk Max Edge Slope` giới hạn thay đổi cao độ dọc mép ngoài. Khi nhận `null` ngoài biên, số không hợp lệ, độ dốc quá lớn hoặc Terrain chưa gán, Rebuild sẽ báo lỗi thay vì dùng cao độ phẳng giả.
+5. Rebuild Preview trong Editor, kiểm tra mép ngoài theo Terrain và Road/curb UV. **Bake glTF Asset**, lưu Scene, đóng mở lại rồi Play Baked. Khi chỉnh heightmap Terrain, phải Rebuild và Bake lại thủ công: bản Baked không tự cập nhật.
+6. **So sánh Flat Height** (mặc định, không dùng Terrain) và **Sample Terrain** trên cả Junction 3/4 nhánh và với Terrain được tịnh tiến, scale, xoay Y.
+
+> **Giới hạn quan trọng:** chỉ lấy mẫu mặt Terrain tại vertex của dải sidewalk ở các góc Junction. Không xén/Boolean Terrain, không chống xuyên ở khoảng giữa các vertex, không sinh sidewalk dọc toàn bộ tuyến Road, không hỗ trợ Terrain/Junction nghiêng ngang, chưa kiểm thử trong Creator thật hoặc chứng nhận dốc tiếp cận. Không dùng cho production.
