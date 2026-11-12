@@ -249,6 +249,32 @@ try{
  patch.branches=arms.slice(0,2);
  assert.throws(()=>patch.generate(),/3 or 4/);
  patch.branches=arms;
+ // Profiled Junction regression through REAL SplineRoadV2 sampled rings.
+ // All profile UVs must be copied at the authored trim edge, including
+ // left/right height-duplicate curb wall vertices.
+ for(const link of arms){
+  link.road.shoulderWidth=.45;link.road.curbWidth=.22;
+  link.road.curbHeight=.16;link.road.junctionStartTrim=4;
+ }
+ const ring=arms[0].road.sampleJunctionEndV2(false);
+ assert(ring.profile&&ring.profile.vertices.length>3);
+ assert(ring.profile.edgeMaterials.includes(1));
+ assert(ring.profile.edgeMaterials.includes(2));
+ const profileGeometry=patch.generate().geometry;
+ assert.deepEqual(profileGeometry.submeshes.map(s=>s.materialSlot),[0,1,2]);
+ assert(patch.inspectJunction().profileBands.curb>0);
+ const profileBake=patch.prepareBake();
+ assert.equal(JSON.parse(profileBake.content).meshes[0].primitives.length,3);
+ patch.generateJunctionMarkings=true;
+ patch.generateStopBars=true;patch.generateCrosswalks=false;patch.turnGuides=[];
+ const profilePainted=patch.generate().geometry;
+ assert.deepEqual(profilePainted.submeshes.map(s=>s.materialSlot),[0,1,2,3]);
+ assert.equal(patch.inspectJunction().markings.stopBars,3);
+ patch.generateJunctionMarkings=false;
+ // Flat Junctions intentionally refuse giant curb lips.
+ patch.maxCurbHeight=.05;
+ assert.throws(()=>patch.generate(),/curb height/);
+ patch.maxCurbHeight=.6;
  env.EDITOR_NOT_IN_PREVIEW=false;
  patch.onDisable();
  assert.equal(patchRenderer.mesh,saved,'Baked asset stays on renderer');

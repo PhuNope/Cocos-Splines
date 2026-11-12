@@ -1,6 +1,13 @@
+import {buildJunctionProfilePatchV2} from './JunctionProfilePatchV2';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 
 export interface JunctionRoadEdgeV2 {readonly position:Vec3MeshV2;readonly uv0:Vec2MeshV2;}
+export interface JunctionBranchProfileV2 {
+    /** Ordered left-to-right as authored by roadProfileLayoutV2. */
+    readonly vertices:ReadonlyArray<JunctionRoadEdgeV2>;
+    /** Material for each adjacent pair. 0 asphalt, 1 shoulder, 2 curb. */
+    readonly edgeMaterials:ReadonlyArray<number>;
+}
 export interface JunctionRoadBranchV2 {
     /** Original untrimmed spline endpoint: endpoints must be co-located. */
     readonly endpoint:Vec3MeshV2;
@@ -9,6 +16,8 @@ export interface JunctionRoadBranchV2 {
     /** Same middle vertex as the trimmed Road's three-point cross-section. */
     readonly middle:JunctionRoadEdgeV2;
     readonly right:JunctionRoadEdgeV2;
+    /** Optional exact entire end-ring when the Road has Shoulder/Curb. */
+    readonly profile?:JunctionBranchProfileV2;
 }
 export interface JunctionPatchOptionsV2 {
     /** Matched mode samples the same repeat texture as each Road's edge. */
@@ -19,6 +28,8 @@ export interface JunctionPatchOptionsV2 {
     readonly flatTolerance?:number;
     readonly surfaceLift?:number;
     readonly materialSlot?:number;
+    /** Maximum curb lip height above junction asphalt; flat-plan only. */
+    readonly maxCurbHeight?:number;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
@@ -26,6 +37,7 @@ export interface JunctionPatchReportV2 {
     readonly polygonVertices:number;
     readonly triangles:number;
     readonly minimumWedgeDegrees:number;
+    readonly profileBands?:Readonly<{asphalt:number;shoulder:number;curb:number}>;
 }
 const sub=(a:Vec3MeshV2,b:Vec3MeshV2)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const length=(a:Vec3MeshV2)=>Math.hypot(a.x,a.y,a.z);
@@ -82,6 +94,7 @@ export function buildJunctionPatchV2(
         if(offset<width*.6)
             throw new Error('Junction V2 Road trim is too short for its width; increase Junction Start/End Trim');
     }
+    if(branches.some(b=>b.profile))return buildJunctionProfilePatchV2(branches,options,center);
     // One INTEGER UV offset per branch: matches the existing material under a
     // Repeat sampler but never wraps left/right independently.
     const first=branches[0],reference={

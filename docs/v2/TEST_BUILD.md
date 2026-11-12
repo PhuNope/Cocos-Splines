@@ -160,3 +160,15 @@ This does **not** make lane stripes from different Road arms join automatically.
 6. Rebuild Preview, inspect the Junction from the top and from a shallow camera angle, then Bake glTF Asset; a painted patch should have material slots `[0,3]` or `[0,3,4]`. Bind imported Mesh, save/reopen Scene, and Play in Baked mode. Runtime should neither create new Mesh assets nor log Editor warnings.
 
 Do not assume lane arrows, road priority/traffic laws or complicated curb/junction joins are implemented in this test build.
+
+## Test Junction with Shoulder/Curb v2 — flat 3-/4-way
+
+1. Use an existing flat `SplinesV2.JunctionPatch` with exactly 3 or 4 open ConstantWidth Road arms, sharing the common world-space endpoint Knot. Select each Road, set **Width=4**, **Shoulder Width=0.45**, **Curb Width=0.22**, **Curb Height=0.16**. The same dimensions on all arms is the simplest first test, though mixed plain/profile arms are also supported.
+2. Set connected **Junction Start/End Trim=4** on every linked Road, leaving the opposite end trim unchanged. Click **Rebuild Preview** on EVERY Road before Junction. A too-small trim raises an Editor error instead of generating overlapping profile polygons.
+3. On the **Junction Patch**, set **Max Curb Height=0.6**, **Flat Tolerance=0.1**, **Junction UV Mode=MatchedRepeat**, **Patch Lift=0**. Keep a horizontal local XZ plane and use compatible materials on Roads and Junction: `0=asphalt`, `1=shoulder`, `2=curb`.
+4. Click **Rebuild Preview** on Junction. Inspect the **whole profile edge**, including curb top/wall at every Road end. Its material/UV should meet the Road directly at the trimmed seam. Within the patch, curb lip is intentionally lowered to zero toward the intersection centre; it is not a sidewalk perimeter/curb CSG solver.
+5. Optionally turn on **Generate Junction Markings** with asphalt unpainted, set `3=white paint`, `4=yellow turn guides`, and confirm the new paint remains on the asphalt wedge, not on the raised curb.
+6. Bake each Road and the Junction via **Bake glTF Asset**, then save and reopen the scene. In Baked Play, the extension must not generate another procedural mesh or print authoring diagnostics.
+7. If the scene still shows cracks/steep curb jumps, report the Road+Junction Inspector configuration and an overhead/sidelong screenshot. Real Cocos Creator 3.8.x has not yet been visually certified in CI.
+
+Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb accessibility ramps and terrain contour merging.

@@ -46,6 +46,8 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     flatTolerance=.1;
     @property({min:-.2,max:.2,step:.001,tooltip:'Optional small lift in local Y; normally 0 because Roads have already been trimmed.'})
     patchLift=0;
+    @property({min:.01,max:2,step:.01,tooltip:'Maximum curb lip height above flat asphalt supported by the radial shoulder/curb transition.'})
+    maxCurbHeight=.6;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -91,7 +93,8 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
             uvMetersPerRepeat:this.uvMetersPerRepeat,
             uvBlendStart:this.junctionUVBlend,endpointTolerance:this.endpointTolerance,
-            flatTolerance:this.flatTolerance,surfaceLift:this.patchLift,materialSlot:0
+            flatTolerance:this.flatTolerance,surfaceLift:this.patchLift,materialSlot:0,
+            maxCurbHeight:this.maxCurbHeight
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;

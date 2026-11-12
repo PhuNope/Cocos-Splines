@@ -5,7 +5,7 @@ import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
-import {buildRoadProfileV2} from '../geometry/ProfileSweep';
+import {buildRoadProfileV2,roadProfileLayoutV2} from '../geometry/ProfileSweep';
 import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
@@ -221,8 +221,6 @@ export class SplineRoadV2 extends Component {
     public sampleJunctionEndV2(atEnd:boolean):JunctionRoadBranchV2 {
         if(this.closed||this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth)
             throw new Error('Junction V2 requires open ConstantWidth Road branches');
-        if(this.shoulderWidth!==0||this.curbWidth!==0||this.curbHeight!==0)
-            throw new Error('Junction V2 currently supports flat asphalt only (no Shoulder/Curb)');
         if((atEnd?this.junctionEndTrim:this.junctionStartTrim)<=0)
             throw new Error('Junction V2 requires a positive Junction '+(atEnd?'End':'Start')+' Trim on each Road');
         const mesh=this.generate().geometry;
@@ -232,6 +230,9 @@ export class SplineRoadV2 extends Component {
         const rings=asphalt.indices.length/12+1;
         if(mesh.vertexCount<rings*3)
             throw new Error('Junction V2 Road mesh is not a continuous 3-vertex strip');
+        const isProfile=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0;
+        const layout=isProfile?roadProfileLayoutV2(
+            this.width,this.shoulderWidth,this.curbWidth,this.curbHeight,true):null;
         const start=(atEnd?rings-1:0)*3;
         const vertex=(i:number)=>{
             const local=new Vec3(mesh.positions[3*i],mesh.positions[3*i+1],mesh.positions[3*i+2]);
@@ -241,8 +242,28 @@ export class SplineRoadV2 extends Component {
         };
         const endpoint=this.knots[atEnd?this.knots.length-1:0]?.worldPosition;
         if(!endpoint)throw new Error('Junction V2 requires a valid Road endpoint Knot');
-        return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
+        if(!layout)return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
             left:vertex(start),middle:vertex(start+1),right:vertex(start+2)};
+        const edges=layout.edgeMaterials.length;
+        if(mesh.vertexCount<edges*2*rings)
+            throw new Error('Junction V2 Road profile mesh does not match sampled end-ring layout');
+        // ProfileSweep stores each authored edge consecutively, 2 vertices
+        // per ring. Reading the exact indexed boundary retains position and
+        // UV0 even for vertical curb walls, with no synthetic UV projection.
+        const boundary=(edge:number,second:boolean)=>{
+            const index=edge*2*rings+2*(atEnd?rings-1:0)+(second?1:0);
+            return vertex(index);
+        };
+        const profile=[boundary(0,false)];
+        for(let edge=0;edge<edges;edge++)profile.push(boundary(edge,true));
+        const match=(x:number)=>{
+            const candidate=layout.points.findIndex(pt=>Math.abs(pt.x-x)<1e-6&&Math.abs(pt.y)<1e-6);
+            if(candidate<0)throw new Error('Junction V2 profile is missing asphalt boundary x='+x);
+            return profile[candidate];
+        };
+        return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
+            left:match(-this.width*.5),middle:match(0),right:match(this.width*.5),
+            profile:{vertices:profile,edgeMaterials:layout.edgeMaterials}};
     }
     public getCurrentFingerprint():string {
         const {geometry}=this.generate();

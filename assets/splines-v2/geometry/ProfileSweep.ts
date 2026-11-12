@@ -209,12 +209,42 @@ export function buildProfileSweepV2(cache:SplineCacheV2,options:ProfileSweepOpti
     const submeshes=Array.from(groups.entries()).sort((a,b)=>a[0]-b[0]).map(([materialSlot,indices])=>({materialSlot,indices}));
     return buildMeshV2({positions,normals,uv0,uv2,submeshes});
 }
+/**
+ * Exact authored Road cross-section layout. The profile builder and the
+ * junction endpoint sampler MUST use the same sequence of material edges.
+ * Includes height-duplicate vertices for vertical curb walls.
+ */
+export function roadProfileLayoutV2(width:number,shoulder:number,curb:number,height:number,
+    includeCenter=true):{points:ReadonlyArray<ProfileVertexV2>;edgeMaterials:ReadonlyArray<number>}{
+    if(!finite(width)||width<=0||![shoulder,curb,height].every(x=>finite(x)&&x>=0))
+        throw new Error('Invalid road profile layout dimensions');
+    const half=width/2,pts:ProfileVertexV2[]=[],slots:number[]=[];
+    const push=(x:number,y:number,slot?:number)=>{
+        if(slot!==undefined)slots.push(slot);
+        pts.push({x,y});
+    };
+    if(curb>0)push(-half-shoulder-curb,height);
+    if(curb>0||height>0){
+        if(curb>0)push(-half-shoulder,height,2);
+        else push(-half-shoulder,height);
+        if(height>0)push(-half-shoulder,0,2);
+    }
+    if(!pts.length)push(-half-shoulder,0);
+    if(shoulder>0)push(-half,0,1);
+    // Continuous mode anchors the asphalt's UV0 middle at the centreline.
+    if(includeCenter)push(0,0,0);
+    push(half,0,0);
+    if(shoulder>0)push(half+shoulder,0,1);
+    if(height>0)push(half+shoulder,height,2);
+    if(curb>0)push(half+shoulder+curb,height,2);
+    return {points:pts,edgeMaterials:slots};
+}
 /** Material 0 asphalt, 1 shoulders, 2 curbs (shared across left/right). */
 export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOptionsV2):MeshDataV2 {
     const {width}=options,shoulder=options.shoulderWidth??0,curb=options.curbWidth??0,height=options.curbHeight??0;
     if(!finite(width)||width<=0||![shoulder,curb,height].every(x=>finite(x)&&x>=0))
         throw new Error('Invalid road width, shoulder or curb dimensions');
-    const half=width/2,pts:ProfileVertexV2[]=[],slots:number[]=[];
+    const half=width/2;
     const mode=options.surfaceMode??'clip';
     if(mode!=='clip'&&mode!=='continuous'&&mode!=='fillet')throw new Error('Unknown Road surface mode');
     if(mode!=='fillet'&&((options.junctionStartTrim??0)>0||(options.junctionEndTrim??0)>0))
@@ -233,24 +263,7 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     const continuous=mode==='continuous'?buildRoadContinuousSectionsV2(
         frames,totalHalfExtent,{...options,cornerSections,closed:workingCache.spline.closed}):null;
     if(continuous)options.onContinuousReport?.(continuous.report);
-    const push=(x:number,y:number,slot?:number)=>{
-        if(slot!==undefined)slots.push(slot);
-        pts.push({x,y});
-    };
-    if(curb>0)push(-half-shoulder-curb,height);
-    if(curb>0||height>0){
-        if(curb>0)push(-half-shoulder,height,2);
-        else push(-half-shoulder,height);
-        if(height>0)push(-half-shoulder,0,2);
-    }
-    if(!pts.length)push(-half-shoulder,0);
-    if(shoulder>0)push(-half,0,1);
-    // Continuous mode anchors the asphalt's UV0 middle at the centreline.
-    if(mode==='continuous'||mode==='fillet')push(0,0,0);
-    push(half,0,0);
-    if(shoulder>0)push(half+shoulder,0,1);
-    if(height>0)push(half+shoulder,height,2);
-    if(curb>0)push(half+shoulder+curb,height,2);
+    const {points:pts,edgeMaterials:slots}=roadProfileLayoutV2(width,shoulder,curb,height,mode==='continuous'||mode==='fillet');
     const mesh=buildProfileSweepV2(workingCache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
         uvLongitudinalAxis:options.uvLongitudinalAxis,
         cornerMode:mode==='fillet'?'legacy':options.cornerMode??'join-trim',
