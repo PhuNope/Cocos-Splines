@@ -89,6 +89,7 @@ try{
  assert.throws(()=>buildJunctionPatchV2(raised),/flat only/);
  const tooShort=triple.map((b,i)=>i!==0?b:{
   ...b,left:{...b.left,position:{...b.left.position,z:b.left.position.z/10}},
+  middle:{...b.middle,position:{...b.middle.position,z:b.middle.position.z/10}},
   right:{...b.right,position:{...b.right.position,z:b.right.position.z/10}}});
  assert.throws(()=>buildJunctionPatchV2(tooShort),/trim is too short/);
  const cache=buildSplineCacheV2({type:'linear',closed:false,knots:[knot(0,0,0),knot(0,0,10)]});
