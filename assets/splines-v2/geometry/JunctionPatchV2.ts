@@ -18,6 +18,8 @@ export interface JunctionRoadBranchV2 {
     readonly right:JunctionRoadEdgeV2;
     /** Optional exact entire end-ring when the Road has Shoulder/Curb. */
     readonly profile?:JunctionBranchProfileV2;
+    /** Optional exact Road sidewalk U station (metres / UV repeat) at this trimmed ring. */
+    readonly sidewalkStation?:number;
 }
 /** Road indices are the original Inspector Branches indices, order-independent. */
 export interface JunctionCurbRampPairV2 {readonly fromBranch:number;readonly toBranch:number;}
@@ -60,6 +62,8 @@ export interface JunctionPatchOptionsV2 {
     readonly sidewalkTerrainSampler?:(x:number,z:number)=>number|null;
     /** Longitudinal rise/run at adjacent sampled outer-edge stations, default .35. */
     readonly sidewalkMaxEdgeSlope?:number;
+    /** Join apron outer endpoints to Road sidewalk edges + Repeat-UV U phase (opt-in). */
+    readonly sidewalkRoadJoin?:boolean;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
@@ -97,6 +101,9 @@ export function buildJunctionPatchV2(
         throw new Error('Junction V2 curb ramps require Rounded Continuous Curb mode');
     if((options.sidewalkApronWidth??0)!==0&&options.curbCornerMode!=='rounded')
         throw new Error('Junction V2 sidewalk apron requires Rounded Continuous Curb mode');
+    if(options.sidewalkRoadJoin&&((options.sidewalkApronWidth??0)<=0||
+       options.curbCornerMode!=='rounded'))
+        throw new Error('Junction V2 Road Sidewalk join requires enabled Rounded Continuous Apron');
     if(n!==3&&n!==4)throw new Error('Junction V2 needs 3 or 4 Road branches');
     const mode=options.uvMode??'matched';
     const uvRepeat=options.uvMetersPerRepeat??5,blend=options.uvBlendStart??.55;
