@@ -1,5 +1,5 @@
 import {
-    _decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,Enum,CCObject,utils,gfx
+    _decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,Enum,CCObject,utils,gfx,Terrain
 } from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
@@ -14,6 +14,8 @@ import {buildRoadFilletCacheV2,type RoadFilletReportV2} from '../geometry/RoadFi
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
+import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
+import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
@@ -22,6 +24,7 @@ export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
 export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1,ConstantWidth=2}
+export enum SplineV2RoadTerrainMode {FlatHeight=0,SampleTerrain=1}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
  * gameplay and NEVER builds Manual/Baked geometry at runtime.
@@ -85,6 +88,18 @@ export class SplineRoadV2 extends Component {
     uvCrossMode=SplineV2UVCrossMode.Legacy;
     @property({type:Enum(SplineV2UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=SplineV2UVAxis.V;
+    @property({min:0,max:6,step:.05,tooltip:'Road-length sidewalk both sides (material slot 5). Set 0 to disable. Requires open ConstantWidth Road with full curb.'})
+    roadSidewalkWidth=0;
+    @property({type:Enum(SplineV2RoadTerrainMode),tooltip:'Flat local height or per-vertex Cocos Terrain sampling for Road sidewalk outer edges.'})
+    roadSidewalkTerrainMode=SplineV2RoadTerrainMode.FlatHeight;
+    @property({type:Terrain,tooltip:'Used by Road sidewalk Sample Terrain. Heightmap is read at Rebuild/Bake or Dynamic Play; never modified.'})
+    roadSidewalkTerrainSource:Terrain|null=null;
+    @property({min:-2,max:2,step:.05,tooltip:'Road-local terrain Y for flat mode; height adjustment when sampling linked Terrain.'})
+    roadSidewalkTerrainHeightOffset=0;
+    @property({min:.02,max:1,step:.01,tooltip:'Maximum Road sidewalk cross slope between curb top and outer edge.'})
+    roadSidewalkMaxCrossSlope=.35;
+    @property({min:.02,max:1,step:.01,tooltip:'Maximum rise/run between adjacent Road sidewalk outer edge vertices.'})
+    roadSidewalkMaxEdgeSlope=.35;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
     materials:Material[]=[];
@@ -211,7 +226,48 @@ export class SplineRoadV2 extends Component {
                 onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
                 ...roadSampling,...filletSettings,...corners
             });
-        return {geometry};
+
+        if(this.roadSidewalkWidth<=0)return {geometry};
+        if(this.closed||this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth)
+            throw new Error('Road Sidewalk V2 requires an open ConstantWidth Road');
+        if(this.curbWidth<=.01||this.curbHeight<=.01)
+            throw new Error('Road Sidewalk V2 requires a positive curb width and height');
+        const sampleTerrain=this.roadSidewalkTerrainMode===SplineV2RoadTerrainMode.SampleTerrain;
+        let terrainSampler:((x:number,z:number)=>number|null)|undefined;
+        if(sampleTerrain){
+            const terrain=this.roadSidewalkTerrainSource;
+            if(!terrain||!terrain.node?.isValid)
+                throw new Error('Road Sidewalk V2 Sample Terrain requires a linked Terrain component');
+            const upright=(m:Mat4)=>m.m05>1e-6&&
+                Math.hypot(m.m04,m.m06)<=m.m05*1e-4;
+            if(!upright(this.node.worldMatrix)||!upright(terrain.node.worldMatrix))
+                throw new Error('Road Sidewalk V2 Sample Terrain requires upright Road and Terrain nodes');
+            const inverseTerrain=Mat4.invert(new Mat4(),terrain.node.worldMatrix);
+            const inverseRoad=Mat4.invert(new Mat4(),this.node.worldMatrix);
+            terrainSampler=(x,z)=>{
+                // Cocos getHeightAt expects Terrain-LOCAL XZ. Sample in world
+                // then convert Terrain-local height back to Road-local Y.
+                const world=Vec3.transformMat4(new Vec3(),
+                    new Vec3(x,0,z),this.node.worldMatrix);
+                const terrainLocal=Vec3.transformMat4(new Vec3(),world,inverseTerrain);
+                const height=terrain.getHeightAt(terrainLocal.x,terrainLocal.z);
+                if(height===null||height===undefined||!Number.isFinite(height))return null;
+                const onTerrain=Vec3.transformMat4(new Vec3(),
+                    new Vec3(terrainLocal.x,height,terrainLocal.z),terrain.node.worldMatrix);
+                const localY=Vec3.transformMat4(new Vec3(),onTerrain,inverseRoad).y;
+                return Number.isFinite(localY)?localY:null;
+            };
+        }
+        const apron=buildRoadSidewalkV2(geometry,{
+            width:this.roadSidewalkWidth,roadWidth:this.width,
+            shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
+            curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,
+            uvLongitudinalAxis,terrainMode:sampleTerrain?'sample':'flat',
+            terrainSampler,terrainHeightOffset:this.roadSidewalkTerrainHeightOffset,
+            maxCrossSlope:this.roadSidewalkMaxCrossSlope,
+            maxEdgeSlope:this.roadSidewalkMaxEdgeSlope
+        });
+        return {geometry:appendRoadMarkingsV2(geometry,apron.mesh)};
     }
     /**
      * Editor authoring helper: read the EXACT trimmed asphalt edge positions and
@@ -263,6 +319,8 @@ export class SplineRoadV2 extends Component {
         };
         return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
             left:match(-this.width*.5),middle:match(0),right:match(this.width*.5),
+            sidewalkStation:this.roadSidewalkWidth>0?
+                (this.uvLongitudinalAxis===SplineV2UVAxis.U?profile[0].uv0.x:profile[0].uv0.y):undefined,
             profile:{vertices:profile,edgeMaterials:layout.edgeMaterials}};
     }
     public getCurrentFingerprint():string {
