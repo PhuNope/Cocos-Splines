@@ -172,3 +172,14 @@ Do not assume lane arrows, road priority/traffic laws or complicated curb/juncti
 7. If the scene still shows cracks/steep curb jumps, report the Road+Junction Inspector configuration and an overhead/sidelong screenshot. Real Cocos Creator 3.8.x has not yet been visually certified in CI.
 
 Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb accessibility ramps and terrain contour merging.
+
+
+## Junction Gentle Grade (alpha, chưa chứng nhận trong Editor thật)
+
+1. Dùng 3 hoặc 4 Road ConstantWidth, trim đầu kết nối; có thể nâng/hạ điểm trim theo chiều dọc với độ dốc vừa phải. Knot endpoint của tất cả Road phải trùng nhau.
+2. Trên Junction Patch: chọn **Grade Mode = Gentle**; để **Max Grade = 0.15** (chênh cao tối đa 0.15 đơn vị cho 1 đơn vị khoảng cách ngang từ tâm). **Flat** vẫn là mặc định.
+3. Không nghiêng ngang mặt đường (bank/crossfall) quá 0.03; không dùng cho cầu vượt, cua xoắn, dốc gấp hoặc curb/sidewalk phức tạp.
+4. Rebuild từng Road, rồi Rebuild Junction. Kiểm tra biên UV0 nối khớp, normal/ánh sáng, curb, paint và Bake/Reload trong bản sao Scene Cocos 3.8.x.
+5. Các lỗi vượt grade, lệch endpoint hoặc road bị bank phải báo lỗi Editor; chế độ Baked Play không tự rebuild geometry.
+
+> Đây là bước phụ của checkpoint 9; nối sidewalk/curb vòng ngoài chưa hoàn thành. Không sử dụng cho production.
