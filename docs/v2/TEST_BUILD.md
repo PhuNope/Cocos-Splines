@@ -206,3 +206,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 5. Nhấn **Bake glTF Asset**, lưu/đóng/mở Scene và Play ở Baked; kiểm tra không có rebuild trong Play, fingerprint khác so với bản không có ramp.
 
 > Đây mới chỉ là **lowered curb transition trong mesh Junction**, không tạo đủ sidewalk dốc có chiều sâu nối tới terrain, không đạt tiêu chuẩn thiết kế đường cho người đi bộ và chưa được xác nhận trực quan trên Cocos Creator 3.8.x. Không dùng cho production.
+
+ 
+## Junction Sidewalk Apron → explicit terrain edge (alpha)
+
+1. Tạo Junction phẳng 3/4 nhánh với **Curb Corner Mode = Rounded Continuous**, đủ trim, `Curb Width > 0`, `Curb Height > 0`. Chế độ **Grade Mode = Flat**.
+2. Trong Junction Inspector đặt `Sidewalk Apron Width = 1` (0 = tắt), `Sidewalk Terrain Height Offset = 0`, `Sidewalk Max Cross Slope = 0.35`. Height Offset được đo theo **Y local của node Junction, tương đối với tâm Knot**, không lấy mẫu từ Terrain.
+3. Gán material sidewalk riêng ở **slot 5**. Các material slot khác giữ nguyên (0=asphalt, 1=shoulder, 2=curb, 3=white paint, 4=yellow guide).
+4. **Rebuild Preview**. Ở mỗi góc giao lộ, dải sidewalk mỏng chạy từ mép ngoài curb tới một đường biên địa hình phẳng ở Y mục tiêu. Kiểm tra không có tam giác úp, z-fighting và không phá texture đường. UV của riêng sidewalk lặp theo chiều dọc góc trên U, chiều ngang trên V.
+5. Thử cả `Curb Ramps` cho cặp 0→1 và 1→0, thay đổi `Sidewalk Terrain Height Offset` và Width; hệ thống phải từ chối nếu vượt `Max Cross Slope`, sát tâm Junction hoặc vượt giới hạn. Khi đổi cấu hình cần **Bake glTF Asset** lại nếu dùng Baked.
+6. Kiểm tra với Scene thực: đóng/mở, Play Baked, materials, tầm nhìn từ dưới và collider. Terrain nếu có phải được bố trí **phẳng tại độ cao đã nhập**; plugin chưa cắt/cập nhật mesh Terrain.
+
+> **Giới hạn:** dải apron hiện chỉ sinh trên *khoảng giữa các nhánh Road* quanh góc Junction. Chưa nối liên tục theo cả tuyến vỉa hè, chưa lấy mẫu heightmap, chưa Boolean ghép terrain, chưa chứng nhận dốc cho người đi bộ hoặc Cocos Creator 3.8.x production.
