@@ -51,6 +51,26 @@ export function buildJunctionCurbCornersV2(
        !finite(pull)||pull<.1||pull>.7)
         throw new Error('Junction V2 invalid Rounded Curb segments/pull');
     if(profiles.length!==count)throw new Error('Junction V2 Rounded Curb profile count mismatch');
+    // Each ramp selects a GAP between two adjacent Road arms. Use the original
+    // Inspector indices, not the polar-sorted list order; a pair is undirected.
+    const rampPairs=options.curbRampPairs??[];
+    const lip=options.curbRampMinLip??.015,maxSlope=options.curbRampMaxSlope??.35;
+    if(!Array.isArray(rampPairs)||rampPairs.length>count||
+       !finite(lip)||lip<.005||lip>.08||
+       !finite(maxSlope)||maxSlope<.02||maxSlope>.6)
+        throw new Error('Junction V2 invalid curb ramp lip/slope or pair count');
+    const rampKey=(a:number,b:number)=>Math.min(a,b)+':'+Math.max(a,b);
+    const requested=new Set<string>();
+    for(const pair of rampPairs){
+        if(!pair||!Number.isSafeInteger(pair.fromBranch)||!Number.isSafeInteger(pair.toBranch)||
+           pair.fromBranch<0||pair.toBranch<0||
+           pair.fromBranch>=count||pair.toBranch>=count||
+           pair.fromBranch===pair.toBranch)
+            throw new Error('Junction V2 curb ramp has invalid Road branch indices');
+        const key=rampKey(pair.fromBranch,pair.toBranch);
+        if(requested.has(key))throw new Error('Junction V2 duplicate curb ramp Road pair');
+        requested.add(key);
+    }
     const reference=branches[0].middle.uv0;
     const arms:Arm[]=profiles.map((profile,index)=>{
         const vertices=profile.vertices,slots=profile.edges,n=vertices.length;
@@ -105,9 +125,15 @@ export function buildJunctionCurbCornersV2(
         if(delta<.03||delta>=Math.PI-.01)
             throw new Error('Junction V2 Rounded Curb branches overlap; increase trim or separate directions');
     }
+    // Reject non-neighbour pairs rather than silently choosing the wrong corner.
+    const actualCorners=new Set<string>();
+    for(let i=0;i<count;i++)
+        actualCorners.add(rampKey(arms[i].index,arms[(i+1)%count].index));
+    for(const key of requested)
+        if(!actualCorners.has(key))throw new Error('Junction V2 curb ramp Roads are not adjacent in polar order');
     const positions:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[],normals:Vec3MeshV2[]=[];
     const groups=new Map<number,number[]>();
-    let wallTriangles=0,minWedge=Infinity;
+    let wallTriangles=0,minWedge=Infinity,loweredCurbCorners=0;
     const origin:P={position:center,uv0:reference};
     const push=(a:P,b:P,c:P,slot:number,face:'up'|'inward')=>{
         let n=cross(a.position,b.position,c.position);
@@ -153,14 +179,38 @@ export function buildJunctionCurbCornersV2(
             const a=arm.flat[k],b=arm.flat[k+1];
             core(a.p,b.p,profiles[arm.index].edges[Math.min(a.ordinal,b.ordinal)]);
         }
+        const lowered=requested.has(rampKey(arm.index,next.index));
+        if(lowered){
+            const h0=arm.after.high.position.y-arm.after.foot.position.y;
+            const h1=next.before.high.position.y-next.before.foot.position.y;
+            if(Math.min(h0,h1)<=lip+.01||Math.abs(h0-h1)>.01)
+                throw new Error('Junction V2 curb ramp requires compatible curb heights above residual lip');
+            loweredCurbCorners++;
+        }
         const samples=Array.from({length:segments+1},(_,k)=>{
             const t=k/segments;
-            return {
-                foot:arc(arm.after.foot,next.before.foot,center,pull,t),
-                high:arc(arm.after.high,next.before.high,center,pull,t),
-                outer:arc(arm.after.outer,next.before.outer,center,pull,t)
-            };
+            const foot=arc(arm.after.foot,next.before.foot,center,pull,t);
+            const high=arc(arm.after.high,next.before.high,center,pull,t);
+            const outer=arc(arm.after.outer,next.before.outer,center,pull,t);
+            if(!lowered)return {foot,high,outer};
+            // Cosine easing has zero derivative at source Road seams, so no
+            // abrupt UV or height jump there. Preserve nonzero wall height
+            // at the center to avoid degenerate/collapsed curb faces.
+            const drop=Math.max(0,high.position.y-foot.position.y-lip)*
+                Math.sin(Math.PI*t)**2;
+            return {foot,
+                high:{...high,position:{...high.position,y:high.position.y-drop}},
+                outer:{...outer,position:{...outer.position,y:outer.position.y-drop}}};
         });
+        if(lowered)for(let k=1;k<=segments;k++){
+            const a=samples[k-1],b=samples[k];
+            for(const rail of ['high','outer'] as const){
+                const v0=a[rail].position,v1=b[rail].position;
+                const run=dist(v0,v1),rise=Math.abs(v1.y-v0.y);
+                if(run<1e-5||rise>maxSlope*run+1e-7)
+                    throw new Error('Junction V2 curb ramp exceeds Max Slope; increase Junction Trim or Corner Segments');
+            }
+        }
         for(let k=0;k<segments;k++){
             const a=samples[k],b=samples[k+1];
             if(dist(a.foot.position,a.high.position)>2e-5||
@@ -182,7 +232,7 @@ export function buildJunctionCurbCornersV2(
     return {mesh,report:{branches:count,matchedUV:(options.uvMode??'matched')==='matched',
         polygonVertices:mesh.vertexCount,triangles:mesh.triangleCount,
         minimumWedgeDegrees:minWedge*180/Math.PI,
-        roundedCurbCorners:count,curbWallTriangles:wallTriangles,
+        roundedCurbCorners:count,curbWallTriangles:wallTriangles,loweredCurbCorners,
         profileBands:{asphalt:(groups.get(baseSlot)?.length??0)/3,
             shoulder:(groups.get(1)?.length??0)/3,
             curb:(groups.get(2)?.length??0)/3}}};
