@@ -35,7 +35,7 @@ try{
    assert(matched,'Junction grade boundary must match exact Road position and Repeat UV0');
   }
   for(const group of mesh.submeshes)for(let i=0;i<group.indices.length;i+=3){
-   const [a,b,c]=group.indices.slice(i,i+3).map(k=>({
+   const [a,b,c]=Array.from(group.indices.slice(i,i+3),k=>({
     x:mesh.positions[3*k],y:mesh.positions[3*k+1],z:mesh.positions[3*k+2]}));
    const crossY=(b.z-a.z)*(c.x-a.x)-(b.x-a.x)*(c.z-a.z);
    assert(crossY>1e-7,'Gentle grade must not reverse projected triangle winding: '+JSON.stringify({count,i,crossY,a,b,c}));
