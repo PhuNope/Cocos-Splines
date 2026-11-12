@@ -49,14 +49,21 @@ export function buildJunctionCurbCornersV2(
     const apronWidth=options.sidewalkApronWidth??0;
     const terrainOffset=options.sidewalkTerrainHeightOffset??0;
     const apronSlope=options.sidewalkMaxCrossSlope??.35;
+    const terrainMode=options.sidewalkTerrainMode??'flat';
+    const edgeSlope=options.sidewalkMaxEdgeSlope??.35;
     const apronEnabled=apronWidth>0;
     // Terrain elevation is explicit in the Junction node's LOCAL Y plane.
     // No external Terrain/heightmap is sampled by this geometry-only adapter.
     if(!finite(apronWidth)||apronWidth<0||apronWidth>6||
        (apronWidth>0&&apronWidth<.4)||
        !finite(terrainOffset)||Math.abs(terrainOffset)>2||
-       !finite(apronSlope)||apronSlope<.02||apronSlope>1)
-        throw new Error('Junction V2 invalid sidewalk apron width, terrain height or cross slope');
+       !finite(apronSlope)||apronSlope<.02||apronSlope>1||
+       !finite(edgeSlope)||edgeSlope<.02||edgeSlope>1||
+       (terrainMode!=='flat'&&terrainMode!=='sample'))
+        throw new Error('Junction V2 invalid sidewalk apron width, terrain height, sample mode or cross slope');
+    if(terrainMode==='sample'&&(!apronEnabled||
+       typeof options.sidewalkTerrainSampler!=='function'))
+        throw new Error('Junction V2 Terrain sample mode requires enabled Apron Width and valid Terrain sampler');
     if(options.gradeMode==='gentle')throw new Error('Junction V2 Rounded Curb needs level flat Roads');
     if(!Number.isSafeInteger(segments)||segments<4||segments>48||
        !finite(pull)||pull<.1||pull>.7)
@@ -229,15 +236,38 @@ export function buildJunctionCurbCornersV2(
                 const dx=curb.x-center.x,dz=curb.z-center.z,radius=Math.hypot(dx,dz);
                 if(radius<.1||apronWidth>radius*.6)
                     throw new Error('Junction V2 sidewalk apron extends beyond safe local corner width; increase Road trim or reduce Apron Width');
-                const crossfall=Math.abs(curb.y-elevation)/apronWidth;
+                // Sample at the actual OUTER rail (not curb or center) so
+                // vertex Y is exact at the terrain boundary after transform.
+                const edgeX=curb.x+apronWidth*dx/radius;
+                const edgeZ=curb.z+apronWidth*dz/radius;
+                let outerY=elevation;
+                if(terrainMode==='sample'){
+                    try{
+                        const sample=options.sidewalkTerrainSampler!(edgeX,edgeZ);
+                        if(sample===null||sample===undefined)
+                            throw new Error('outside Terrain bounds');
+                        if(!finite(sample))throw new Error('non-finite sampled height');
+                        // Height offset retains its manual role as an optional
+                        // lift when sampling, but must not silently fall back.
+                        outerY=sample+terrainOffset;
+                    }catch(error){
+                        throw new Error('Junction V2 Terrain height sample failed at apron outer edge: '+
+                            (error instanceof Error?error.message:String(error)));
+                    }
+                }
+                const crossfall=Math.abs(curb.y-outerY)/apronWidth;
                 if(crossfall>apronSlope+1e-7)
                     throw new Error('Junction V2 sidewalk apron exceeds Max Cross Slope; increase Apron Width or adjust Terrain Height');
+                if(rows.length){
+                    const prev=rows[rows.length-1].outer.position;
+                    const run=Math.hypot(edgeX-prev.x,edgeZ-prev.z);
+                    if(run<1e-5||Math.abs(outerY-prev.y)>edgeSlope*run+1e-7)
+                        throw new Error('Junction V2 Terrain edge exceeds Max Edge Slope; increase corner sampling or prepare Terrain');
+                }
                 rows.push({
                     inner:{position:curb,uv0:{x:station/repeat,y:0}},
                     outer:{position:{
-                        x:curb.x+apronWidth*dx/radius,
-                        y:elevation,
-                        z:curb.z+apronWidth*dz/radius
+                        x:edgeX,y:outerY,z:edgeZ
                     },uv0:{x:station/repeat,y:apronWidth/repeat}}
                 });
             }
