@@ -46,6 +46,17 @@ export function buildJunctionCurbCornersV2(
     const count=branches.length,segments=options.curbCornerSegments??12;
     const pull=options.curbCornerPull??.32,lift=options.surfaceLift??0;
     const repeat=options.uvMetersPerRepeat??5,baseSlot=options.materialSlot??0;
+    const apronWidth=options.sidewalkApronWidth??0;
+    const terrainOffset=options.sidewalkTerrainHeightOffset??0;
+    const apronSlope=options.sidewalkMaxCrossSlope??.35;
+    const apronEnabled=apronWidth>0;
+    // Terrain elevation is explicit in the Junction node's LOCAL Y plane.
+    // No external Terrain/heightmap is sampled by this geometry-only adapter.
+    if(!finite(apronWidth)||apronWidth<0||apronWidth>6||
+       (apronWidth>0&&apronWidth<.4)||
+       !finite(terrainOffset)||Math.abs(terrainOffset)>2||
+       !finite(apronSlope)||apronSlope<.02||apronSlope>1)
+        throw new Error('Junction V2 invalid sidewalk apron width, terrain height or cross slope');
     if(options.gradeMode==='gentle')throw new Error('Junction V2 Rounded Curb needs level flat Roads');
     if(!Number.isSafeInteger(segments)||segments<4||segments>48||
        !finite(pull)||pull<.1||pull>.7)
@@ -134,6 +145,7 @@ export function buildJunctionCurbCornersV2(
     const positions:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[],normals:Vec3MeshV2[]=[];
     const groups=new Map<number,number[]>();
     let wallTriangles=0,minWedge=Infinity,loweredCurbCorners=0;
+    let sidewalkApronCorners=0,sidewalkApronTriangles=0;
     const origin:P={position:center,uv0:reference};
     const push=(a:P,b:P,c:P,slot:number,face:'up'|'inward')=>{
         let n=cross(a.position,b.position,c.position);
@@ -202,6 +214,46 @@ export function buildJunctionCurbCornersV2(
                 high:{...high,position:{...high.position,y:high.position.y-drop}},
                 outer:{...outer,position:{...outer.position,y:outer.position.y-drop}}};
         });
+        // Optional terrace joins each existing outer curb-top rail to an
+        // independently authored local terrain-height edge. This is an
+        // exterior band, not a whole-road sidewalk or Terrain CSG operation.
+        if(apronEnabled){
+            sidewalkApronCorners++;
+            const elevation=center.y+terrainOffset;
+            const rows:Array<{inner:P;outer:P}>=[];
+            let station=0;
+            for(let k=0;k<=segments;k++){
+                const curb=samples[k].outer.position;
+                if(k)station+=Math.hypot(curb.x-samples[k-1].outer.position.x,
+                    curb.z-samples[k-1].outer.position.z);
+                const dx=curb.x-center.x,dz=curb.z-center.z,radius=Math.hypot(dx,dz);
+                if(radius<.1||apronWidth>radius*.6)
+                    throw new Error('Junction V2 sidewalk apron extends beyond safe local corner width; increase Road trim or reduce Apron Width');
+                const crossfall=Math.abs(curb.y-elevation)/apronWidth;
+                if(crossfall>apronSlope+1e-7)
+                    throw new Error('Junction V2 sidewalk apron exceeds Max Cross Slope; increase Apron Width or adjust Terrain Height');
+                rows.push({
+                    inner:{position:curb,uv0:{x:station/repeat,y:0}},
+                    outer:{position:{
+                        x:curb.x+apronWidth*dx/radius,
+                        y:elevation,
+                        z:curb.z+apronWidth*dz/radius
+                    },uv0:{x:station/repeat,y:apronWidth/repeat}}
+                });
+            }
+            // Positive projected winding: no inverted or overlapping strip
+            // triangles. Each curb-side vertex is identical in XYZ to the
+            // rounded curb top; apron UV is separate material-slot 5 UV.
+            for(let k=0;k<segments;k++){
+                const a=rows[k],b=rows[k+1];
+                if(area(a.inner.position,b.inner.position,a.outer.position)<1e-8||
+                   area(b.inner.position,b.outer.position,a.outer.position)<1e-8)
+                    throw new Error('Junction V2 sidewalk apron folds at corner; reduce width or Corner Pull');
+                push(a.inner,b.inner,a.outer,5,'up');
+                push(b.inner,b.outer,a.outer,5,'up');
+                sidewalkApronTriangles+=2;
+            }
+        }
         if(lowered)for(let k=1;k<=segments;k++){
             const a=samples[k-1],b=samples[k];
             for(const rail of ['high','outer'] as const){
@@ -233,6 +285,7 @@ export function buildJunctionCurbCornersV2(
         polygonVertices:mesh.vertexCount,triangles:mesh.triangleCount,
         minimumWedgeDegrees:minWedge*180/Math.PI,
         roundedCurbCorners:count,curbWallTriangles:wallTriangles,loweredCurbCorners,
+        sidewalkApronCorners,sidewalkApronTriangles,
         profileBands:{asphalt:(groups.get(baseSlot)?.length??0)/3,
             shoulder:(groups.get(1)?.length??0)/3,
             curb:(groups.get(2)?.length??0)/3}}};
