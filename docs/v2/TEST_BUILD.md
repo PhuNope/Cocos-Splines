@@ -195,3 +195,14 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. Đừng dùng Rounded Continuous nếu Road thiếu curb, bị bank, dốc hoặc trim quá ngắn; tool phải từ chối bằng thông báo trong Editor. Gentle Grade hiện chưa kết hợp với Rounded Continuous.
 
 > Đây là curb góc nối cục bộ, chưa phải CSG sidewalk liên tục với terrain hoặc các Road mạng lưới. Cần kiểm thử trong Creator 3.8.x thật trước khi sản xuất.
+
+ 
+## Junction Curb Ramp / Lowered Corner (alpha, chỉ hỗ trợ góc phẳng)
+
+1. Dùng Junction 3/4 nhánh với **Curb Corner Mode = Rounded Continuous**, **Grade Mode = Flat**, tất cả Road đã có **Curb Width > 0**, **Curb Height > 0**, đủ Junction Trim.
+2. Trong **Curb Ramps**, thêm cặp **From Branch = 0**, **To Branch = 1** (chỉ số từ mảng `Branches`, bắt đầu từ 0). Chọn hai nhánh thực sự kề nhau theo vòng giao lộ; không trùng cặp.
+3. Đặt **Curb Ramp Min Lip = 0.015**, **Curb Ramp Max Slope = 0.35**. Nhấn **Rebuild Preview**. Mặt trên và thành curb ở giữa góc giảm dần đến mép thấp nhưng vẫn dày một ít (tránh tam giác suy biến); tại hai đầu Road giữ nguyên chiều cao và UV.
+4. Test cả 3-way/4-way, đảo From/To, thay đổi cặp nhánh và so sánh trước/sau khi tắt hết Curb Ramps. Kiểm tra UV U/V, material slot 2, normal, vệt sáng và không bị mesh lọt vào asphalt. Thử Max Slope nhỏ để kiểm tra lỗi có thể sửa trong Editor.
+5. Nhấn **Bake glTF Asset**, lưu/đóng/mở Scene và Play ở Baked; kiểm tra không có rebuild trong Play, fingerprint khác so với bản không có ramp.
+
+> Đây mới chỉ là **lowered curb transition trong mesh Junction**, không tạo đủ sidewalk dốc có chiều sâu nối tới terrain, không đạt tiêu chuẩn thiết kế đường cho người đi bộ và chưa được xác nhận trực quan trên Cocos Creator 3.8.x. Không dùng cho production.
