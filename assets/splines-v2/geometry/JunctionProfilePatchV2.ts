@@ -1,4 +1,5 @@
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
+import {buildJunctionCurbCornersV2} from './JunctionCurbCornersV2';
 import {type JunctionRoadBranchV2,type JunctionRoadEdgeV2,type JunctionPatchOptionsV2,type JunctionPatchReportV2}
     from './JunctionPatchV2';
 
@@ -75,6 +76,11 @@ export function buildJunctionProfilePatchV2(
             throw new Error('Junction V2 profile needs more Junction Trim to fit Shoulder/Curb bands');
         return {vertices,edges};
     });
+    // The legacy radial fan remains the default for existing Scenes.
+    // Rounded mode replaces curb-to-center triangles with real corner
+    // wall/top ribbons, retaining all exact source Road ring boundary UVs.
+    if(options.curbCornerMode==='rounded')
+        return buildJunctionCurbCornersV2(branches,profiles,options,center);
     const reference={x:branches[0].middle.uv0.x,y:branches[0].middle.uv0.y};
     const points:MarkedPoint[]=[];
     const direction:number[]=[];
