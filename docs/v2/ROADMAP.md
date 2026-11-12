@@ -59,6 +59,9 @@
 - [x] Selected flat rounded-curb lowered corners (alpha): explicit adjacent Road pairs, smooth top depression and positive residual lip, slope safety, unchanged Road seam UV0/UV2, glTF Bake regression. Not a complete or standards-certified pedestrian ramp.
 - [x] Opt-in local corner sidewalk apron (alpha): create separate slot-5 UV surface from rounded curb outside edge to a specified, flat local terrain height with safe cross slope, original Road-end seam intact, UV2/fingerprint/glTF regressions.
 - [x] Optional Cocos Terrain 3.8 height sampling at each outer corner apron vertex during explicit Rebuild/Bake. Junction-local ↔ Terrain-local coordinates, null/out-of-bounds rejection, cross/edge slope checks, UV0/UV2 and glTF regression.
+- [x] Opt-in Road-length Sidewalk (alpha): extract exact outer curb-top rings from trimmed open ConstantWidth Road; generate left/right slot-5 bands with flat or linked Terrain per-vertex edge Y; retain existing Road UV0/UV2, material slots and Bake workflow.
+- [x] Opt-in Junction "Join Road Sidewalks" (alpha): match Road/Junction apron outer endpoints in XYZ using source curb lateral direction and matched UV0 U-phase modulo whole Repeat tiles; reject unmatched widths/Terrain modes, absent source stations and scaled nodes. 3-/4-way real-Road geometry tests; no automatic network graph/CSG.
+
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
