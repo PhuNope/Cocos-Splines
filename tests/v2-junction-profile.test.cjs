@@ -56,7 +56,7 @@ try{
    const m=layout.points.findIndex(p=>p.x===0&&p.y===0);
    const r=layout.points.findIndex(p=>p.x===2&&p.y===0);
    assert(m>=0&&r>=0);
-   const expected=atEnd?cache.length-4:4,axis=k%2?0:1;
+   const expected=atEnd?cache.length-4:4,axis=k%2?'x':'y';
    for(const indexId of [left,m,r])assert(near(profile[indexId].uv0[axis],expected/5));
   }
   const layout=style==='plain'?null:roadProfileLayoutV2(4,dimensions.shoulderWidth,
