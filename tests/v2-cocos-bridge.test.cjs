@@ -60,6 +60,8 @@ try{
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert.match(inspector.template,/Rebuild preview/i);assert.match(inspector.template,/Bake glTF asset/i);
  assert.match(inspector.template,/Bind Imported Mesh/i);
+ assert.match(inspector.template,/spl-v2-junctionStartTrim/);
+ assert.match(inspector.template,/spl-v2-junctionEndTrim/);
  const deformInspector=require(path.join(root,'src/contributions/inspector/MeshDeformV2.js'));
  assert.match(deformInspector.template,/spl-v2-sourceMesh/);
  assert.match(deformInspector.template,/spl-v2-repeatCount/);
