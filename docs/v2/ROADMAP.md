@@ -45,3 +45,8 @@
 - [x] Safe failure when Knot spacing cannot fit full-width fillet radius; Editor-only diagnostics.
 - [ ] Visual confirmation with the actual Cocos Creator 3.8.x scene and painted asphalt material.
 - [ ] Global road-road self-intersection Boolean/junction topology (not part of local fillet).
+
+- [x] Source Mesh Deform v2 (experimental): import readable Cocos Mesh, preserve authored UV0/UV2, normals and material slots, optional repeat/UV phase, X/Z length axes.
+- [x] Separate `SplinesV2.SplineMeshDeform` component and Inspector using existing Manual/Dynamic/Baked lifecycle, editor-only preview and glTF Bake.
+- [ ] Visual certification against real Creator 3.8.x source mesh with imported FBX/glTF CPU readback, normal maps, lightmap UV and reimport.
+- [ ] Source-mesh geometry adaptive subdivision and UV2 unwrap after tiling; current generator deforms original vertex tessellation only.

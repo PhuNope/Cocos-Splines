@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-bridge-'));
 try{
  const inputs=['core/SplineCurves','core/SplineCache','core/SplineFrames','geometry/MeshData',
-  'geometry/MeshProcessing','geometry/MeshBuildPlan','geometry/RoadCorners','geometry/RoadOverlapClip','geometry/RoadContinuous','geometry/RoadFillet','geometry/RoadMarkings','geometry/RoadStrip','geometry/ProfileSweep','geometry/GltfExporter']
+  'geometry/MeshProcessing','geometry/MeshBuildPlan','geometry/RoadCorners','geometry/RoadOverlapClip','geometry/RoadContinuous','geometry/RoadFillet','geometry/SourceMeshRead','geometry/SourceMeshDeform','geometry/RoadMarkings','geometry/RoadStrip','geometry/ProfileSweep','geometry/GltfExporter']
     .map(n=>path.join(root,'src-v2',n+'.ts'));
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--outDir',temp,...inputs],{stdio:'pipe'});
  const curves=require(path.join(temp,'core/SplineCurves.js'));
@@ -60,5 +60,9 @@ try{
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert.match(inspector.template,/Rebuild preview/i);assert.match(inspector.template,/Bake glTF asset/i);
  assert.match(inspector.template,/Bind Imported Mesh/i);
+ const deformInspector=require(path.join(root,'src/contributions/inspector/MeshDeformV2.js'));
+ assert.match(deformInspector.template,/spl-v2-sourceMesh/);
+ assert.match(deformInspector.template,/spl-v2-repeatCount/);
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts.meta')));
  console.log('V2 COCOS BRIDGE PASS: road generator, glTF embedded UV2/multi-material, runtime gate, TS mirror and Inspector');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

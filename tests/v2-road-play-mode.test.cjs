@@ -7,7 +7,7 @@ try{
  const file=path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts');
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--experimentalDecorators',
   '--skipLibCheck','--useDefineForClassFields','false','--rootDir',path.join(root,'assets/splines-v2'),
-  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),types],{stdio:'pipe'});
+  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts'),types],{stdio:'pipe'});
  const generated=[];
  const env={EDITOR_NOT_IN_PREVIEW:false};
  const identity={};
@@ -16,7 +16,12 @@ try{
   static transformMat4(out,v){out.x=v.x;out.y=v.y;out.z=v.z;return out;}
  }
  class Mat4{static invert(out){return out;}}
- class Mesh{constructor(){this.isValid=true;this.destroyed=false;}destroy(){this.isValid=false;this.destroyed=true;}}
+ class Mesh{
+  constructor(){this.isValid=true;this.destroyed=false;this.subMeshCount=1;this.attributes={};this.localIndices=null;}
+  readAttribute(i,name){return this.attributes[name]??null;}
+  readIndices(i){return this.localIndices;}
+  destroy(){this.isValid=false;this.destroyed=true;}
+ }
  class Material{}
  class Component{constructor(){this.node=null;}getComponent(cls){return this.node?.getComponent(cls)??null;}}
  class MeshRenderer extends Component{
@@ -36,7 +41,7 @@ try{
  class Attribute{constructor(name,format){this.name=name;this.format=format;}}
  const cc={_decorator:decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,
   CCObject:{Flags:{DontSave:8,HideInHierarchy:1024}},Enum:x=>x,
-  gfx:{Attribute,AttributeName:{ATTR_TEX_COORD1:'a_texCoord1'},Format:{RG32F:3}},
+  gfx:{Attribute,AttributeName:{ATTR_TEX_COORD1:'a_texCoord1',ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',ATTR_NORMAL:'a_normal',ATTR_TANGENT:'a_tangent'},Format:{RG32F:3}},
   utils:{createMesh(data){const mesh=new Mesh();mesh.geometry=data;generated.push(mesh);return mesh;}}
  };
  const originalLoad=Module._load;
@@ -45,9 +50,10 @@ try{
   if(request==='cc/env')return env;
   return originalLoad.apply(this,arguments);
  };
- let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2;
+ let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2;
  try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));
-  ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));}
+  ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));
+  ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));}
  finally{Module._load=originalLoad;}
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
@@ -142,5 +148,39 @@ try{
  env.EDITOR_NOT_IN_PREVIEW=true;
  assert.equal(extrude.inspectCornerRisk(),null);
  const tubeBake=extrude.prepareBake();assert.equal(JSON.parse(tubeBake.content).meshes[0].primitives.length,1);
-  console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
+  // New v2 source Mesh Deformer: Baked/Manual modes must never read source
+ // geometry, and transient previews must not destroy the source Mesh.
+ const deformNode=new Node('SourceDeformV2'),deformRenderer=deformNode.addComponent(MeshRenderer);
+ const deform=deformNode.addComponent(SplineMeshDeformV2);
+ deform.knots=[a,b];deform.interpolation=0;deform.sampleStep=.5;
+ deform.surfaceMode=2;deform.meshMode=SplineV2MeshMode.Baked;deform.bakedMesh=saved;
+ const dAsset=new Mesh();
+ dAsset.attributes={
+  a_position:new Float32Array([-1,0,0,1,0,0,-1,0,10,1,0,10]),
+  a_texCoord:new Float32Array([0,0,1,0,0,1,1,1]),
+  a_texCoord1:new Float32Array([0,0,1,0,0,1,1,1]),
+  a_normal:new Float32Array([0,1,0,0,1,0,0,1,0,0,1,0]),
+ };
+ dAsset.localIndices=new Uint16Array([0,2,1,1,2,3]);
+ deform.sourceMesh=dAsset;
+ const originalRead=dAsset.readAttribute;
+ dAsset.readAttribute=()=>{throw new Error('Baked mode touched source Mesh');};
+ env.EDITOR_NOT_IN_PREVIEW=false;
+ const beforeBaked=generated.length;
+ deform.onEnable();assert.equal(generated.length,beforeBaked);assert.equal(deformRenderer.mesh,saved);
+ dAsset.readAttribute=originalRead;
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ const data=deform.generate().geometry;
+ assert.deepEqual(data.submeshes.map(x=>x.materialSlot),[0]);
+ assert.deepEqual(Array.from(data.uv0),Array.from(dAsset.attributes.a_texCoord));
+ assert.deepEqual(Array.from(data.uv2),Array.from(dAsset.attributes.a_texCoord1));
+ const prepared=deform.prepareBake();
+ assert.equal(JSON.parse(prepared.content).meshes[0].primitives.length,1);
+ deform.rebuildPreview();assert.equal(generated.length,beforeBaked+1);
+ assert.equal(dAsset.destroyed,false);assert.equal(deformRenderer.mesh,generated.at(-1));
+ deform.restoreBakedPreview();assert.equal(deformRenderer.mesh,saved);
+ deform.repeatCount=2;
+ assert.equal(deform.inspectBake().stale,true);
+ assert(!dAsset.destroyed);
+ console.log('V2 ROAD PLAY PASS: Manual/Baked zero generation, Dynamic meshes dispose, UV2 bridge, Editor-only bake and stale checks.');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

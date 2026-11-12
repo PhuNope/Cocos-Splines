@@ -227,7 +227,7 @@ function spawnPrefabs(uuid,kind,action){
 /** v2-only Inspector actions. These are not reachable from gameplay. */
 function roadV2Component(uuid){
     const node=resolve(uuid);
-    const component=node?.components.find(c=>['SplinesV2.SplineRoad','SplinesV2.SplineExtrude'].includes(classOf(c)));
+    const component=node?.components.find(c=>['SplinesV2.SplineRoad','SplinesV2.SplineExtrude','SplinesV2.SplineMeshDeform'].includes(classOf(c)));
     return {node,component};
 }
 function rebuildV2Road(uuid){
@@ -269,7 +269,7 @@ function rebuildV2Road(uuid){
 }
 function restoreV2RoadBaked(uuid){
     const {component}=roadV2Component(uuid);
-    if(!component)return {ok:false,error:'SplineRoadV2/ExtrudeV2 not found'};
+    if(!component)return {ok:false,error:'SplineRoadV2/ExtrudeV2/MeshDeformV2 not found'};
     try{component.restoreBakedPreview();return {ok:true,message:'Preview removed; showing saved Mesh asset.'};}
     catch(e){return {ok:false,error:String(e)};}
 }

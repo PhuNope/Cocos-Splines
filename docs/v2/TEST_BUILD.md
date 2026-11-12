@@ -127,3 +127,13 @@ With **K0=(-1.701,0,-7.206), K1=(-3.869,0,3.720), K2=(5.820,0,4.347)** and Width
 7. To separate paint from asphalt, use unpainted asphalt material slot 0 and enable Generate Markings with white slot 3 and yellow slot 4. Existing paint baked into Road.mtl should be removed/disabled before doing this.
 
 Check the Editor scene visually: the numeric/typecheck tests cannot validate your real Road.mtl shader and paint pattern.
+
+## Test `SplineMeshDeformV2` using imported Source Mesh
+
+1. Import an FBX/glTF Road mesh which already has UV0 and at least 8-16 source longitudinal sections. Enable CPU/readable mesh data if that setting is available for your import format.
+2. Add Component **Cocos Splines V2 → Mesh Source Deformer** on a node with MeshRenderer. Assign the same Road Knot nodes as before and a **Source Mesh** asset.
+3. Choose **Source Longitudinal Axis = Z** (or X if source mesh length follows local X), and **Source Longitudinal UV Axis = U/V** to match your painted texture. Set **Repeat Count = 1**, **UV Tile Mode = Preserve** to keep original UV0 values.
+4. For the supplied three Knot scene, use **Surface Mode = ConstantWidth**, **Fillet Radius Scale = 1.35** and Sample Step .25. Rebuild Preview. The source mesh must already have enough longitudinal vertices for the curve to look smooth.
+5. Set Materials to match submesh order. Verify the original asset is unchanged after Preview, and UV1/UV2 (if supplied) still match the authoring file.
+6. Optional: increase Repeat Count to 2-4; use UV Tile Mode Advance ONLY if source texture is tileable and its longitudinal UV span matches each repeating module. Expect repeated lightmap UV2; do not use a repeated mesh for baked lightmaps without re-unwrap.
+7. Bake glTF Asset, bind the imported Mesh and save/reopen the Scene. In Baked mode Play does not read or rebuild the source mesh. If source readback fails, verify import settings and source mesh vertex attributes.
