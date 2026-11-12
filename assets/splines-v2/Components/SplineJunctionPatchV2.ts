@@ -23,6 +23,13 @@ export class JunctionTurnGuideV2 {
     @property({min:0,max:3,step:1,tooltip:'Index of exit Road in Branches (0-based), different from entry.'})
     toBranch=1;
 }
+@ccclass('SplinesV2.JunctionCurbRampLink')
+export class JunctionCurbRampLinkV2 {
+    @property({min:0,max:3,step:1,tooltip:'Index of the first Road from the Branches array (0-based).'})
+    fromBranch=0;
+    @property({min:0,max:3,step:1,tooltip:'Index of its adjacent Road from the Branches array. Order does not matter.'})
+    toBranch=1;
+}
 export enum JunctionUVModeV2 {MatchedRepeat=0,WorldProjected=1}
 export enum JunctionGradeModeV2 {Flat=0,Gentle=1}
 export enum JunctionCurbCornerModeV2 {RadialLegacy=0,RoundedContinuous=1}
@@ -60,6 +67,12 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     curbCornerSegments=12;
     @property({min:.1,max:.7,step:.01,tooltip:'Cubic corner inward tangent pull (0.1..0.7). Active only for Rounded Continuous.'})
     curbCornerPull=.32;
+    @property({type:[JunctionCurbRampLinkV2],tooltip:'Opt-in lowered corner pairs from original Branches indices. Only adjacent pairs in Rounded Continuous Curb / Flat mode.'})
+    curbRamps:JunctionCurbRampLinkV2[]=[];
+    @property({min:.005,max:.08,step:.005,tooltip:'Residual positive curb lip in middle of selected lowered corners, metres in Road-local coordinates.'})
+    curbRampMinLip=.015;
+    @property({min:.02,max:.6,step:.01,tooltip:'Upper limit of the local ramp top longitudinal rise/run. Unsafe short corners reject instead of folding.'})
+    curbRampMaxSlope=.35;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -116,7 +129,9 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             maxGrade:this.maxGrade,surfaceLift:this.patchLift,materialSlot:0,
             maxCurbHeight:this.maxCurbHeight,
             curbCornerMode:this.curbCornerMode===JunctionCurbCornerModeV2.RoundedContinuous?'rounded':'radial',
-            curbCornerSegments:this.curbCornerSegments,curbCornerPull:this.curbCornerPull
+            curbCornerSegments:this.curbCornerSegments,curbCornerPull:this.curbCornerPull,
+            curbRampPairs:this.curbRamps.map(pair=>({fromBranch:pair.fromBranch,toBranch:pair.toBranch})),
+            curbRampMinLip:this.curbRampMinLip,curbRampMaxSlope:this.curbRampMaxSlope
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
