@@ -86,6 +86,8 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     sidewalkTerrainSource:Terrain|null=null;
     @property({min:.02,max:1,step:.01,tooltip:'Reject steep height differences between consecutive sampled Terrain edge vertices.'})
     sidewalkMaxEdgeSlope=.35;
+    @property({tooltip:'Join each Junction apron end exactly to enabled Road Sidewalk outer edges with Repeat UV U phase. Requires identical apron/road width, Terrain mode, height offset and unit-scale Road/Junction nodes.'})
+    joinRoadSidewalks=false;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -123,6 +125,7 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             seen.add(road);
             const edge=road.sampleJunctionEndV2(!!link.atEnd);
             return {endpoint:local(edge.endpoint),
+                ...(edge.sidewalkStation===undefined?{}:{sidewalkStation:edge.sidewalkStation}),
                 left:{position:local(edge.left.position),uv0:edge.left.uv0},
                 middle:{position:local(edge.middle.position),uv0:edge.middle.uv0},
                 right:{position:local(edge.right.position),uv0:edge.right.uv0},
@@ -134,6 +137,36 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
                 }}:{})};
         });
         const sampleTerrain=this.sidewalkTerrainMode===JunctionTerrainEdgeModeV2.SampleTerrain;
+        if(this.joinRoadSidewalks){
+            if(this.curbCornerMode!==JunctionCurbCornerModeV2.RoundedContinuous||
+               this.sidewalkApronWidth<=0)
+                throw new Error('Junction Road Sidewalk join requires Rounded Continuous Curb with Sidewalk Apron Width > 0');
+            const unitScale=(m:Mat4)=>{
+                const near=(x:number)=>Math.abs(x-1)<1e-4;
+                return near(Math.hypot(m.m00,m.m01,m.m02))&&
+                    near(Math.hypot(m.m04,m.m05,m.m06))&&
+                    near(Math.hypot(m.m08,m.m09,m.m10));
+            };
+            if(!unitScale(this.node.worldMatrix))
+                throw new Error('Junction Road Sidewalk join requires unscaled Junction node');
+            for(const link of this.branches){
+                const road=link.road!;
+                if(!unitScale(road.node.worldMatrix))
+                    throw new Error('Junction Road Sidewalk join requires unscaled Road nodes');
+                if(Math.abs(road.roadSidewalkWidth-this.sidewalkApronWidth)>1e-5)
+                    throw new Error('Junction Road Sidewalk join requires matching Road Sidewalk/Apron widths');
+                const roadTerrain=road.roadSidewalkTerrainMode===1;
+                if(roadTerrain!==sampleTerrain||
+                   (sampleTerrain&&road.roadSidewalkTerrainSource!==this.sidewalkTerrainSource))
+                    throw new Error('Junction Road Sidewalk join requires the same Terrain sample mode/source');
+                if(Math.abs(road.roadSidewalkTerrainHeightOffset-
+                    this.sidewalkTerrainHeightOffset)>1e-5)
+                    throw new Error('Junction Road Sidewalk join requires matching Terrain height offsets');
+                if(!sampleTerrain&&Math.abs(road.node.worldPosition.y-
+                    this.node.worldPosition.y)>1e-5)
+                    throw new Error('Junction Road Sidewalk join requires identical world base Y in Flat mode');
+            }
+        }
         let terrainSample:((x:number,z:number)=>number|null)|undefined;
         if(sampleTerrain){
             const terrain=this.sidewalkTerrainSource;
@@ -180,7 +213,8 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             sidewalkMaxCrossSlope:this.sidewalkMaxCrossSlope,
             sidewalkTerrainMode:sampleTerrain?'sample':'flat',
             sidewalkTerrainSampler:terrainSample,
-            sidewalkMaxEdgeSlope:this.sidewalkMaxEdgeSlope
+            sidewalkMaxEdgeSlope:this.sidewalkMaxEdgeSlope,
+            sidewalkRoadJoin:this.joinRoadSidewalks
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
