@@ -54,6 +54,12 @@ export interface JunctionPatchOptionsV2 {
     readonly sidewalkTerrainHeightOffset?:number;
     /** Reject apron crossfall steeper than the configured rise/run. */
     readonly sidewalkMaxCrossSlope?:number;
+    /** Opt-in sample mode. Defaults to existing flat manual local height. */
+    readonly sidewalkTerrainMode?:'flat'|'sample';
+    /** Return Junction-LOCAL Y at an apron OUTER-edge Junction-local XZ; null = outside terrain. */
+    readonly sidewalkTerrainSampler?:(x:number,z:number)=>number|null;
+    /** Longitudinal rise/run at adjacent sampled outer-edge stations, default .35. */
+    readonly sidewalkMaxEdgeSlope?:number;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
