@@ -12,18 +12,18 @@
 | 6. Flat 3-/4-way Junction | Implemented (alpha) | Start/End Trim, edge-ring matched UV0, flat asphalt, separate glTF Bake |
 | 7. Junction Markings | Implemented (alpha) | Independent stop bars, zebra and explicit visual turn guides; no traffic-rule/arrow solver |
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
-| 9. Junction 3D / sidewalks | In progress (gentle grade + rounded curb + lowered corner + sidewalk apron alpha) | Opt-in separate slot-5 outer sidewalk apron reaches an explicit level terrain-edge Y; slope/UV/Bake tests added. No real Terrain sampling, full city CSG, banked ramp or real Creator certification |
+| 9. Junction 3D / sidewalks | In progress (Terrain sampled apron alpha) | Flat and optional linked-Cocos-Terrain height sampling at per-vertex outer apron edge; rejects missing/steep/out-of-bounds samples. Real Cocos 3.8 Editor certification, world terrain cuts and full sidewalk CSG remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
 | 11. Editor production hardening | Partial | Actual Creator 3.8.x import-save-reopen-Play certification, lightmap UV atlas, collider adapter, gizmos and workflow UX |
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
 ## Current checkpoint
 
-**Checkpoint 9 / 12 (in progress): opt-in rounded curb with optional lowered corner ramps now also supports a separate local sidewalk apron strip (material slot 5) from each curb outer edge to a specified local terrain plane. Road-end ring positions/UV0 remain untouched and UV2/Bake are generated. This is a planar-height adapter, NOT heightmap sampling, city sidewalk Boolean union or accessibility-certified pedestrian ramp. Full checkpoint 9 remains open: terrain/road network boundary CSG, banked ramps, mixing gentle grades and rounded curbs, physics and actual Cocos Creator certification.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
+**Checkpoint 9 / 12 (in progress): local rounded-curb apron (slot 5) can now match the per-vertex edge of a linked Cocos 3.8 Terrain heightfield via sampled local XZ; manual flat mode remains default. Exact Road-end vertex and UV0/UV2 are preserved, geometry/Bake regression covers null, invalid, steep and out-of-bounds samples. This only READS terrain during explicit preview/rebuild or Dynamic generation. It does not cut/modify Terrain geometry, auto-update a Baked Mesh, join full road-length sidewalks, or certify accessibility. Full milestone 9 remains open for network sidewalk/terrain CSG, banked ramps, combining gentle grade + rounded curb, collider and real Creator validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
 
 ## Next recommended implementation
 
-**Checkpoint 9, next:** certify the rounded-curb + sidewalk-apron composite in a real Cocos Creator 3.8.x Scene (material slot 5, normals, terrain Y alignment, reimport/Baked Play, collider), then build a real Terrain-height sampling adapter and network-wide outer sidewalk boundary. Treat the current manual terrain height as a test-only interface, never an automatically watertight terrain join; banked intersections remain unsupported.
+**Checkpoint 9, next:** test linked Cocos Terrain sampling in a real Creator 3.8.x Scene, including yaw/translation/scale, component import serialization, material slot 5, normals, save/reopen, re-Bake and Collider. After that, develop a network-wide sidewalk boundary and terrain triangulation adapter (not just per-corner sampled edge); banked intersections remain unsupported.
 
 ## Non-negotiable release gate
 
