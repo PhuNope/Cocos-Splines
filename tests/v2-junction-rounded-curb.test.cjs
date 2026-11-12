@@ -89,6 +89,66 @@ try{
   const finer=buildJunctionPatchV2(input,{...options,curbCornerSegments:20}).mesh;
   assert(finer.triangleCount>mesh.triangleCount);
   assert.notEqual(fingerprintMeshV2(finer),fingerprintMeshV2(mesh));
+  // Local curb ramp: drop only one chosen CORNER, never its Road endpoint
+  // rings. Positions in XZ, UV0/UV2, indexes and material slots stay identical.
+  const rampOptions={...options,curbRampPairs:[{fromBranch:0,toBranch:1}],
+   curbRampMinLip:.015,curbRampMaxSlope:.35};
+  const ramp=buildJunctionPatchV2(input,rampOptions);
+  assert.equal(ramp.report.loweredCurbCorners,1);
+  assert.equal(report.loweredCurbCorners,0);
+  assert.equal(ramp.mesh.triangleCount,mesh.triangleCount);
+  assert.deepEqual(ramp.mesh.submeshes.map(g=>g.materialSlot),[0,1,2]);
+  assert.deepEqual(Array.from(ramp.mesh.uv0),Array.from(mesh.uv0),
+   'Ramp must not alter existing Road/Junction Repeat texture UV0');
+  assert.deepEqual(Array.from(ramp.mesh.uv2),Array.from(mesh.uv2),
+   'Ramp must not change lightmap UV2');
+  let dropped=0;
+  for(let i=0;i<mesh.vertexCount;i++){
+   assert(near(ramp.mesh.positions[3*i],mesh.positions[3*i]));
+   assert(near(ramp.mesh.positions[3*i+2],mesh.positions[3*i+2]));
+   const dy=ramp.mesh.positions[3*i+1]-mesh.positions[3*i+1];
+   assert(dy<1e-5,'Ramp must never raise curb top');
+   if(dy<-.03)dropped++;
+  }
+  assert(dropped>6,'Chosen corner should have a meaningful smooth curb drop');
+  assert(ramp.mesh.positions.some((y,i)=>i%3===1&&y>.01&&y<.07),
+   'Ramp center must retain a short, positive curb lip');
+  for(const branch of input)for(const src of branch.profile.vertices){
+   let exact=false;
+   for(let j=0;j<ramp.mesh.vertexCount;j++){
+    if(near(ramp.mesh.positions[3*j],src.position.x)&&
+       near(ramp.mesh.positions[3*j+1],src.position.y)&&
+       near(ramp.mesh.positions[3*j+2],src.position.z)){
+     const u=ramp.mesh.uv0[2*j]-src.uv0.x,v=ramp.mesh.uv0[2*j+1]-src.uv0.y;
+     if(near(u,Math.round(u))&&near(v,Math.round(v)))exact=true;
+    }
+   }
+   assert(exact,'Curb ramp must keep every authored Road seam exactly');
+  }
+  assert.notEqual(fingerprintMeshV2(ramp.mesh),fingerprintMeshV2(mesh),
+   'Changing ramp profile must invalidate Baked fingerprint');
+  assert.deepEqual(Array.from(buildJunctionPatchV2(input,rampOptions).mesh.positions),
+   Array.from(ramp.mesh.positions),'Ramp rebuild must be deterministic');
+  assert.deepEqual(Array.from(buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampPairs:[{fromBranch:1,toBranch:0}]}).mesh.positions),
+   Array.from(ramp.mesh.positions),'Road corner pair order must not matter');
+  assert.equal(JSON.parse(exportMeshGltfV2(ramp.mesh).json).extras.cocosSplinesV2.fingerprint,
+   fingerprintMeshV2(ramp.mesh));
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampPairs:[{fromBranch:0,toBranch:0}]}),/invalid Road branch/);
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampPairs:[{fromBranch:0,toBranch:5}]}),/invalid Road branch/);
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampPairs:[{fromBranch:0,toBranch:1},{fromBranch:1,toBranch:0}]}),
+   /duplicate curb ramp/);
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampMinLip:0}),/invalid curb ramp/);
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampMaxSlope:.02}),/Max Slope/);
+  assert.throws(()=>buildJunctionPatchV2(input,{
+   curbRampPairs:[{fromBranch:0,toBranch:1}]}),/require Rounded/);
+  if(count===4)assert.throws(()=>buildJunctionPatchV2(input,{
+   ...rampOptions,curbRampPairs:[{fromBranch:0,toBranch:2}]}),/not adjacent/);
   const old=buildJunctionPatchV2(input,{maxCurbHeight:.4}).mesh;
   assert.notEqual(fingerprintMeshV2(old),fingerprintMeshV2(mesh));
   assert.throws(()=>buildJunctionPatchV2(input,{...options,curbCornerSegments:2}),/segments\/pull/);
@@ -102,5 +162,5 @@ try{
     vertices:[b.left,b.middle,b.right],edgeMaterials:[0,0]}});
   assert.throws(()=>buildJunctionPatchV2(noCurb,options),/requires curb width/);
  }
- console.log('JUNCTION ROUNDED CURB PASS: flat 3/4 Road profiles, continuous top/wall, exact UV seams, no radial curb taper, Bake and invalid inputs.');
+ console.log('JUNCTION ROUNDED CURB/RAMP PASS: flat 3/4 Road profiles, continuous top/wall, selected lowered corners, slope/UV seams, Bake, no radial taper and invalid inputs.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
