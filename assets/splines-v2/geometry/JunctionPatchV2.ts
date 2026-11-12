@@ -34,6 +34,12 @@ export interface JunctionPatchOptionsV2 {
     readonly materialSlot?:number;
     /** Maximum curb lip height above junction asphalt; flat-plan only. */
     readonly maxCurbHeight?:number;
+    /** Legacy radial curb tapers to center. Rounded connects continuous curb top/wall around each exterior corner. */
+    readonly curbCornerMode?:'radial'|'rounded';
+    /** Arc tessellation per exterior corner, 4..48 (rounded only). */
+    readonly curbCornerSegments?:number;
+    /** Cubic inward tangent pull for corner radii, 0.1..0.7 (rounded only). */
+    readonly curbCornerPull?:number;
 }
 export interface JunctionPatchReportV2 {
     readonly branches:number;
@@ -42,6 +48,9 @@ export interface JunctionPatchReportV2 {
     readonly triangles:number;
     readonly minimumWedgeDegrees:number;
     readonly profileBands?:Readonly<{asphalt:number;shoulder:number;curb:number}>;
+    /** Only present for opt-in continuous sidewalk curb mode. */
+    readonly roundedCurbCorners?:number;
+    readonly curbWallTriangles?:number;
 }
 const sub=(a:Vec3MeshV2,b:Vec3MeshV2)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const length=(a:Vec3MeshV2)=>Math.hypot(a.x,a.y,a.z);
@@ -70,6 +79,7 @@ export function buildJunctionPatchV2(
        !finite(blend)||blend<.05||blend>.95||!finite(tolerance)||tolerance<=0||
        !finite(flat)||flat<=0||
        (gradeMode!=='flat'&&gradeMode!=='gentle')||!finite(maxGrade)||maxGrade<=0||maxGrade>.35||
+       (options.curbCornerMode!==undefined&&options.curbCornerMode!=='radial'&&options.curbCornerMode!=='rounded')||
        !finite(lift)||Math.abs(lift)>.2||
        !Number.isSafeInteger(slot)||slot<0)throw new Error('Invalid Junction V2 settings');
     const validate=(p:Vec3MeshV2)=>[p.x,p.y,p.z].every(finite);
