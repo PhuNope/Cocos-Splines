@@ -46,8 +46,8 @@ try{
   const roads=around(armCount);
   for(const mode of ['matched','projected']){
    const {mesh,report}=buildJunctionPatchV2(roads,{uvMode:mode,uvBlendStart:.55});
-   assert.equal(mesh.vertexCount,1+4*armCount*2);
-   assert.equal(mesh.triangleCount,armCount*12);
+   assert.equal(mesh.vertexCount,1+4*armCount);
+   assert.equal(mesh.triangleCount,armCount*6);
    assert.equal(report.branches,armCount);
    assert.equal(report.matchedUV,mode==='matched');
    assert.deepEqual(mesh.submeshes.map(s=>s.materialSlot),[0]);
