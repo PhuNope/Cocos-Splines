@@ -303,9 +303,12 @@ export function buildJunctionCurbCornersV2(
             // rounded curb top; apron UV is separate material-slot 5 UV.
             for(let k=0;k<segments;k++){
                 const a=rows[k],b=rows[k+1];
-                if(area(a.inner.position,b.inner.position,a.outer.position)<1e-8||
-                   area(b.inner.position,b.outer.position,a.outer.position)<1e-8)
-                    throw new Error('Junction V2 sidewalk apron folds at corner; reduce width or Corner Pull');
+                const a0=area(a.inner.position,b.inner.position,a.outer.position);
+                const a1=area(b.inner.position,b.outer.position,a.outer.position);
+                if(a0<1e-8||a1<1e-8)
+                    throw new Error('Junction V2 sidewalk apron folds at corner; reduce width or Corner Pull '+
+                        JSON.stringify({corner:i,segment:k,a0,a1,inner0:a.inner.position,
+                            inner1:b.inner.position,outer0:a.outer.position,outer1:b.outer.position}));
                 push(a.inner,b.inner,a.outer,5,'up');
                 push(b.inner,b.outer,a.outer,5,'up');
                 sidewalkApronTriangles+=2;
