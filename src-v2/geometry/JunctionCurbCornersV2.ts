@@ -1,0 +1,186 @@
+import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
+import {type JunctionRoadBranchV2,type JunctionRoadEdgeV2,
+    type JunctionPatchOptionsV2,type JunctionPatchReportV2} from './JunctionPatchV2';
+
+/**
+ * Rounded, continuous curb corners for flat 3-/4-way Road junctions.
+ * Driveable asphalt/shoulder ends at a curved curb FOOT, while curved top
+ * and vertical curb wall connect exactly to each source Road end-ring.
+ * Unlike radial mode no curb face fans toward the Junction center.
+ *
+ * This is local corner topology, not full sidewalk Boolean/terrain CSG.
+ */
+type Profile={readonly vertices:ReadonlyArray<JunctionRoadEdgeV2>;readonly edges:ReadonlyArray<number>};
+type P=JunctionRoadEdgeV2;
+type Side={readonly outer:P;readonly high:P;readonly foot:P;
+    readonly shoulderSlot:number};
+type Arm={readonly index:number;readonly angle:number;
+    readonly flat:ReadonlyArray<{readonly p:P;readonly ordinal:number;readonly angle:number}>;
+    readonly before:Side;readonly after:Side};
+const finite=(v:number)=>Number.isFinite(v)&&Number.isFinite(Math.fround(v));
+const dist=(a:Vec3MeshV2,b:Vec3MeshV2)=>Math.hypot(a.x-b.x,a.z-b.z);
+const angle=(p:Vec3MeshV2,c:Vec3MeshV2)=>Math.atan2(p.z-c.z,p.x-c.x);
+const wrap=(x:number)=>((x+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
+const mix2=(a:Vec2MeshV2,b:Vec2MeshV2,t:number):Vec2MeshV2=>({
+    x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+const mix3=(a:Vec3MeshV2,b:Vec3MeshV2,t:number):Vec3MeshV2=>({
+    x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t});
+const cross=(a:Vec3MeshV2,b:Vec3MeshV2,c:Vec3MeshV2):Vec3MeshV2=>{
+    const u={x:b.x-a.x,y:b.y-a.y,z:b.z-a.z},v={x:c.x-a.x,y:c.y-a.y,z:c.z-a.z};
+    return {x:u.y*v.z-u.z*v.y,y:u.z*v.x-u.x*v.z,z:u.x*v.y-u.y*v.x};
+};
+const area=(a:Vec3MeshV2,b:Vec3MeshV2,c:Vec3MeshV2)=>
+    (b.z-a.z)*(c.x-a.x)-(b.x-a.x)*(c.z-a.z);
+function arc(a:P,b:P,center:Vec3MeshV2,pull:number,t:number):P{
+    const c1=mix3(a.position,center,pull),c2=mix3(b.position,center,pull),s=1-t;
+    return {position:{
+        x:s*s*s*a.position.x+3*s*s*t*c1.x+3*s*t*t*c2.x+t*t*t*b.position.x,
+        y:s*s*s*a.position.y+3*s*s*t*c1.y+3*s*t*t*c2.y+t*t*t*b.position.y,
+        z:s*s*s*a.position.z+3*s*s*t*c1.z+3*s*t*t*c2.z+t*t*t*b.position.z
+    },uv0:mix2(a.uv0,b.uv0,t)};
+}
+export function buildJunctionCurbCornersV2(
+    branches:ReadonlyArray<JunctionRoadBranchV2>,profiles:ReadonlyArray<Profile>,
+    options:JunctionPatchOptionsV2,center:Vec3MeshV2
+):{mesh:MeshDataV2;report:JunctionPatchReportV2}{
+    const count=branches.length,segments=options.curbCornerSegments??12;
+    const pull=options.curbCornerPull??.32,lift=options.surfaceLift??0;
+    const repeat=options.uvMetersPerRepeat??5,baseSlot=options.materialSlot??0;
+    if(options.gradeMode==='gentle')throw new Error('Junction V2 Rounded Curb needs level flat Roads');
+    if(!Number.isSafeInteger(segments)||segments<4||segments>48||
+       !finite(pull)||pull<.1||pull>.7)
+        throw new Error('Junction V2 invalid Rounded Curb segments/pull');
+    if(profiles.length!==count)throw new Error('Junction V2 Rounded Curb profile count mismatch');
+    const reference=branches[0].middle.uv0;
+    const arms:Arm[]=profiles.map((profile,index)=>{
+        const vertices=profile.vertices,slots=profile.edges,n=vertices.length;
+        if(n<7||slots.length!==n-1||slots[0]!==2||slots[1]!==2||
+           slots[n-3]!==2||slots[n-2]!==2)
+            throw new Error('Junction V2 Rounded Curb requires curb width and height on every Road');
+        const branch=branches[index],shift={
+            x:Math.round(reference.x-branch.middle.uv0.x),
+            y:Math.round(reference.y-branch.middle.uv0.y)
+        };
+        const pts=vertices.map(p=>({position:p.position,
+            uv0:(options.uvMode??'matched')==='matched'
+                ?{x:p.uv0.x+shift.x,y:p.uv0.y+shift.y}
+                :{x:.5+(p.position.x-center.x)/repeat,y:.5+(p.position.z-center.z)/repeat}}));
+        const side=(outerId:number,highId:number,footId:number,innerEdge:number):Side=>{
+            const outer=pts[outerId],high=pts[highId],foot=pts[footId];
+            if(dist(high.position,foot.position)>2e-5||
+               dist(outer.position,high.position)<.02||
+               Math.abs(outer.position.y-high.position.y)>.005||
+               high.position.y-foot.position.y<.02||
+               high.position.y-foot.position.y>(options.maxCurbHeight??.6)+1e-5||
+               (slots[innerEdge]!==0&&slots[innerEdge]!==1))
+                throw new Error('Junction V2 Rounded Curb requires a conventional vertical lip and level curb top');
+            return {outer,high,foot,shoulderSlot:slots[innerEdge]};
+        };
+        const first=side(0,1,2,2),last=side(n-1,n-2,n-3,n-4);
+        const y=branch.middle.position.y;
+        if(Math.abs(y-center.y)>.005||
+           Math.abs(first.foot.position.y-y)>.005||
+           Math.abs(last.foot.position.y-y)>.005||
+           Math.abs(first.high.position.y-last.high.position.y)>.005)
+            throw new Error('Junction V2 Rounded Curb needs a level flat Junction');
+        const midAngle=angle(branch.middle.position,center);
+        const a0=wrap(angle(first.outer.position,center)-midAngle);
+        const a1=wrap(angle(last.outer.position,center)-midAngle);
+        if(a0*a1>=0||Math.abs(a0)>=Math.PI/2||Math.abs(a1)>=Math.PI/2)
+            throw new Error('Junction V2 Rounded Curb profile crosses center; increase Road trim');
+        const flat=Array.from({length:n-4},(_,j)=>j+2)
+            .map(ordinal=>({p:pts[ordinal],ordinal,
+                angle:wrap(angle(pts[ordinal].position,center)-midAngle)}))
+            .sort((a,b)=>a.angle-b.angle);
+        if(flat.some((v,i)=>i>0&&(v.angle-flat[i-1].angle<1e-6||
+            Math.abs(v.ordinal-flat[i-1].ordinal)!==1)))
+            throw new Error('Junction V2 Rounded Curb flat profile is folded/interleaved');
+        return {index,angle:midAngle,flat,
+            before:a0<a1?first:last,after:a0>a1?first:last};
+    }).sort((a,b)=>a.angle-b.angle);
+    for(let i=0;i<count;i++){
+        const a=angle(arms[i].after.outer.position,center);
+        const b=angle(arms[(i+1)%count].before.outer.position,center);
+        const delta=((b-a)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+        if(delta<.03||delta>=Math.PI-.01)
+            throw new Error('Junction V2 Rounded Curb branches overlap; increase trim or separate directions');
+    }
+    const positions:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[],normals:Vec3MeshV2[]=[];
+    const groups=new Map<number,number[]>();
+    let wallTriangles=0,minWedge=Infinity;
+    const origin:P={position:center,uv0:reference};
+    const push=(a:P,b:P,c:P,slot:number,face:'up'|'inward')=>{
+        let n=cross(a.position,b.position,c.position);
+        let len=Math.hypot(n.x,n.y,n.z);
+        if(len<1e-8||!finite(len))throw new Error('Junction V2 Rounded Curb has degenerate geometry');
+        const tri=[a,b,c];
+        if(face==='up'&&n.y<0)tri.reverse();
+        if(face==='inward'){
+            const midpoint=mix3(a.position,c.position,.5);
+            const facing=n.x*(center.x-midpoint.x)+n.z*(center.z-midpoint.z);
+            if(Math.abs(facing)<1e-9)
+                throw new Error('Junction V2 Rounded Curb wall has undefined inward facing');
+            if(facing<0)tri.reverse();
+            wallTriangles++;
+        }
+        n=cross(tri[0].position,tri[1].position,tri[2].position);
+        len=Math.hypot(n.x,n.y,n.z);
+        const normal={x:n.x/len,y:n.y/len,z:n.z/len};
+        const first=positions.length;
+        for(const p of tri){
+            positions.push({x:p.position.x,y:p.position.y+lift,z:p.position.z});
+            normals.push(normal);uv0.push(p.uv0);
+            uv2.push({x:.5+(p.position.x-center.x)/(repeat*2*count),
+                y:.5+(p.position.z-center.z)/(repeat*2*count)});
+        }
+        let indices=groups.get(slot);if(!indices){indices=[];groups.set(slot,indices);}
+        indices.push(first,first+1,first+2);
+    };
+    const core=(a:P,b:P,slot:number)=>{
+        const c=area(center,a.position,b.position);
+        if(c<1e-7)throw new Error('Junction V2 Rounded Curb inner polygon folded');
+        minWedge=Math.min(minWedge,
+            Math.atan2(c,(a.position.x-center.x)*(b.position.x-center.x)+
+                (a.position.z-center.z)*(b.position.z-center.z)));
+        push(origin,b,a,slot===0?baseSlot:slot,'up');
+    };
+    for(let i=0;i<count;i++){
+        const arm=arms[i],next=arms[(i+1)%count];
+        for(let k=0;k<arm.flat.length-1;k++){
+            const a=arm.flat[k],b=arm.flat[k+1];
+            core(a.p,b.p,profiles[arm.index].edges[Math.min(a.ordinal,b.ordinal)]);
+        }
+        const samples=Array.from({length:segments+1},(_,k)=>{
+            const t=k/segments;
+            return {
+                foot:arc(arm.after.foot,next.before.foot,center,pull,t),
+                high:arc(arm.after.high,next.before.high,center,pull,t),
+                outer:arc(arm.after.outer,next.before.outer,center,pull,t)
+            };
+        });
+        for(let k=0;k<segments;k++){
+            const a=samples[k],b=samples[k+1];
+            if(dist(a.foot.position,a.high.position)>2e-5||
+               dist(b.foot.position,b.high.position)>2e-5||
+               dist(a.outer.position,a.high.position)<.005||
+               dist(b.outer.position,b.high.position)<.005)
+                throw new Error('Junction V2 Rounded Curb band overlaps/collapses; reduce Pull or increase trim');
+            const shoulder=arm.after.shoulderSlot===1&&next.before.shoulderSlot===1?1:0;
+            core(a.foot,b.foot,shoulder);
+            push(a.high,a.outer,b.outer,2,'up');
+            push(a.high,b.outer,b.high,2,'up');
+            push(a.foot,b.foot,a.high,2,'inward');
+            push(a.high,b.foot,b.high,2,'inward');
+        }
+    }
+    const submeshes=Array.from(groups.entries()).sort((a,b)=>a[0]-b[0])
+        .map(([materialSlot,indices])=>({materialSlot,indices}));
+    const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes});
+    return {mesh,report:{branches:count,matchedUV:(options.uvMode??'matched')==='matched',
+        polygonVertices:mesh.vertexCount,triangles:mesh.triangleCount,
+        minimumWedgeDegrees:minWedge*180/Math.PI,
+        roundedCurbCorners:count,curbWallTriangles:wallTriangles,
+        profileBands:{asphalt:(groups.get(baseSlot)?.length??0)/3,
+            shoulder:(groups.get(1)?.length??0)/3,
+            curb:(groups.get(2)?.length??0)/3}}};
+}
