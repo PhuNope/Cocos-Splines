@@ -183,3 +183,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 5. Các lỗi vượt grade, lệch endpoint hoặc road bị bank phải báo lỗi Editor; chế độ Baked Play không tự rebuild geometry.
 
 > Đây là bước phụ của checkpoint 9; nối sidewalk/curb vòng ngoài chưa hoàn thành. Không sử dụng cho production.
+
+
+## Junction Rounded Continuous Curb (alpha, flat only)
+
+1. Tạo 3 hoặc 4 Road ConstantWidth, `Width=4`, `Shoulder Width=0.45`, `Curb Width=0.22`, `Curb Height=0.16`, mỗi đầu nối có `Junction Start/End Trim=4`. Các Knot endpoint phải trùng nhau, Road nằm cùng mặt phẳng.
+2. Trong component `SplinesV2.JunctionPatch`, chọn `Curb Corner Mode = Rounded Continuous` thay cho `Radial Legacy` (mặc định). Dùng `Curb Corner Segments=12`, `Curb Corner Pull=0.32`, `Grade Mode=Flat`.
+3. Gán cùng vật liệu Road/Junction: **slot 0 asphalt, slot 1 shoulder, slot 2 curb**. Nhấn Rebuild cho từng Road, rồi **Rebuild Preview** Junction. Mặt trên và thành curb phải nối qua góc đường, không chạy chụm về tâm giao lộ. UV0 ở toàn bộ vòng cắt Road phải khớp modulo Repeat.
+4. Thử 3-way, 4-way, các Road dùng trục UV U/V khác nhau và chiều đi tới/đi ra Junction. Tăng Segments lên 20 để so sánh mặt cong. So sánh chế độ Radial Legacy trên bản sao Scene.
+5. **Bake glTF Asset**, lưu Scene, đóng/mở lại, rồi Play Baked để kiểm tra không sinh lại mesh; quan sát normals, z-fighting và ngắt texture theo material gốc.
+6. Đừng dùng Rounded Continuous nếu Road thiếu curb, bị bank, dốc hoặc trim quá ngắn; tool phải từ chối bằng thông báo trong Editor. Gentle Grade hiện chưa kết hợp với Rounded Continuous.
+
+> Đây là curb góc nối cục bộ, chưa phải CSG sidewalk liên tục với terrain hoặc các Road mạng lưới. Cần kiểm thử trong Creator 3.8.x thật trước khi sản xuất.
