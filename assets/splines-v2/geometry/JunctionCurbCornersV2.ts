@@ -52,6 +52,7 @@ export function buildJunctionCurbCornersV2(
     const terrainMode=options.sidewalkTerrainMode??'flat';
     const edgeSlope=options.sidewalkMaxEdgeSlope??.35;
     const apronEnabled=apronWidth>0;
+    const joinRoads=options.sidewalkRoadJoin===true;
     // Terrain elevation is explicit in the Junction node's LOCAL Y plane.
     // No external Terrain/heightmap is sampled by this geometry-only adapter.
     if(!finite(apronWidth)||apronWidth<0||apronWidth>6||
@@ -227,6 +228,9 @@ export function buildJunctionCurbCornersV2(
         if(apronEnabled){
             sidewalkApronCorners++;
             const elevation=center.y+terrainOffset;
+            if(joinRoads&&(!finite(branches[arm.index].sidewalkStation??NaN)||
+                !finite(branches[next.index].sidewalkStation??NaN)))
+                throw new Error('Junction V2 Road Sidewalk join needs exact sidewalk UV station on each linked Road');
             const rows:Array<{inner:P;outer:P}>=[];
             let station=0;
             for(let k=0;k<=segments;k++){
@@ -236,10 +240,16 @@ export function buildJunctionCurbCornersV2(
                 const dx=curb.x-center.x,dz=curb.z-center.z,radius=Math.hypot(dx,dz);
                 if(radius<.1||apronWidth>radius*.6)
                     throw new Error('Junction V2 sidewalk apron extends beyond safe local corner width; increase Road trim or reduce Apron Width');
-                // Sample at the actual OUTER rail (not curb or center) so
-                // vertex Y is exact at the terrain boundary after transform.
-                const edgeX=curb.x+apronWidth*dx/radius;
-                const edgeZ=curb.z+apronWidth*dz/radius;
+                // For a network join use the curb TOP lateral direction,
+                // not the radial direction. At t=0,1 it is exactly the
+                // source Road curb profile outward unit vector, so Road and
+                // Junction apron endpoints are mathematically identical.
+                const outwardX=joinRoads?curb.x-samples[k].high.position.x:dx;
+                const outwardZ=joinRoads?curb.z-samples[k].high.position.z:dz;
+                const norm=Math.hypot(outwardX,outwardZ);
+                if(norm<.01)throw new Error('Junction V2 sidewalk outward direction collapsed at curb corner');
+                const edgeX=curb.x+apronWidth*outwardX/norm;
+                const edgeZ=curb.z+apronWidth*outwardZ/norm;
                 let outerY=elevation;
                 if(terrainMode==='sample'){
                     try{
@@ -270,6 +280,23 @@ export function buildJunctionCurbCornersV2(
                         x:edgeX,y:outerY,z:edgeZ
                     },uv0:{x:station/repeat,y:apronWidth/repeat}}
                 });
+            }
+            // Phase-constrained UV: match BOTH independent source Road
+            // sidewalk U coordinates modulo integer Repeat periods. The
+            // small residual adjustment is distributed over the corner arc.
+            if(joinRoads){
+                const start=branches[arm.index].sidewalkStation!;
+                const end=branches[next.index].sidewalkStation!;
+                const curveLength=station;
+                if(curveLength<.05)throw new Error('Junction V2 Road Sidewalk corner arc is too short');
+                const predicted=start+curveLength/repeat;
+                const correction=end+Math.round(predicted-end)-predicted;
+                for(let k=0;k<rows.length;k++){
+                    const row=rows[k],distance=row.inner.uv0.x*repeat;
+                    const u=start+distance/repeat+correction*distance/curveLength;
+                    rows[k]={inner:{position:row.inner.position,uv0:{x:u,y:0}},
+                        outer:{position:row.outer.position,uv0:{x:u,y:apronWidth/repeat}}};
+                }
             }
             // Positive projected winding: no inverted or overlapping strip
             // triangles. Each curb-side vertex is identical in XYZ to the
