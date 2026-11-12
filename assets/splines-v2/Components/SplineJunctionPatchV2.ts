@@ -87,7 +87,13 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             return {endpoint:local(edge.endpoint),
                 left:{position:local(edge.left.position),uv0:edge.left.uv0},
                 middle:{position:local(edge.middle.position),uv0:edge.middle.uv0},
-                right:{position:local(edge.right.position),uv0:edge.right.uv0}};
+                right:{position:local(edge.right.position),uv0:edge.right.uv0},
+                ...(edge.profile?{profile:{
+                    vertices:edge.profile.vertices.map(v=>({
+                        position:local(v.position),uv0:v.uv0
+                    })),
+                    edgeMaterials:edge.profile.edgeMaterials
+                }}:{})};
         });
         const result=buildJunctionPatchV2(entries,{
             uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
