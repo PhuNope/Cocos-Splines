@@ -1,4 +1,4 @@
-import {_decorator,Enum,MeshRenderer,Vec3,Mat4} from 'cc';
+import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {SplineRoadV2} from './SplineRoadV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
@@ -33,6 +33,7 @@ export class JunctionCurbRampLinkV2 {
 export enum JunctionUVModeV2 {MatchedRepeat=0,WorldProjected=1}
 export enum JunctionGradeModeV2 {Flat=0,Gentle=1}
 export enum JunctionCurbCornerModeV2 {RadialLegacy=0,RoundedContinuous=1}
+export enum JunctionTerrainEdgeModeV2 {FlatHeight=0,SampleTerrain=1}
 /**
  * Flat 3- or 4-way junction bridging genuine trimmed Road endpoints.
  * Inherits the v2 Manual/Baked/Dynamic lifecycle, glTF Bake and UV2 handling.
@@ -79,6 +80,12 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     sidewalkTerrainHeightOffset=0;
     @property({min:.02,max:1,step:.01,tooltip:'Maximum vertical rise per horizontal metre from rounded curb outer rail to apron terrain edge.'})
     sidewalkMaxCrossSlope=.35;
+    @property({type:Enum(JunctionTerrainEdgeModeV2),tooltip:'Flat Height: old manually entered Y. Sample Terrain: read each outer apron vertex from a linked 3.8.x Terrain at Rebuild/Bake time.'})
+    sidewalkTerrainMode=JunctionTerrainEdgeModeV2.FlatHeight;
+    @property({type:Terrain,tooltip:'Optional Cocos Terrain component, only read when Sample Terrain is active. Its node must remain upright; no terrain geometry is modified.'})
+    sidewalkTerrainSource:Terrain|null=null;
+    @property({min:.02,max:1,step:.01,tooltip:'Reject steep height differences between consecutive sampled Terrain edge vertices.'})
+    sidewalkMaxEdgeSlope=.35;
     @property({tooltip:'Add standalone road-paint geometry (white slot 3, turn guides slot 4). Asphalt slot 0 should be unpainted.'})
     generateJunctionMarkings=false;
     @property({tooltip:'White stop bars on enabled Junction branches. Requires Generate Junction Markings.'})
@@ -126,6 +133,36 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
                     edgeMaterials:edge.profile.edgeMaterials
                 }}:{})};
         });
+        const sampleTerrain=this.sidewalkTerrainMode===JunctionTerrainEdgeModeV2.SampleTerrain;
+        let terrainSample:((x:number,z:number)=>number|null)|undefined;
+        if(sampleTerrain){
+            const terrain=this.sidewalkTerrainSource;
+            if(this.sidewalkApronWidth<=0)
+                throw new Error('Junction V2 Sample Terrain needs Sidewalk Apron Width > 0');
+            if(!terrain||!terrain.node?.isValid)
+                throw new Error('Junction V2 Sample Terrain needs a valid Terrain component in Inspector');
+            // Cocos Terrain.getHeightAt takes x,z in the Terrain NODE's
+            // local coordinate system and returns Terrain-local Y. Reject
+            // tilted nodes: in that case a heightfield's XZ domain no
+            // longer corresponds to a horizontal Junction apron.
+            const upright=(m:Mat4)=>m.m05>1e-6&&
+                Math.hypot(m.m04,m.m06)<=m.m05*1e-4;
+            if(!upright(this.node.worldMatrix)||!upright(terrain.node.worldMatrix))
+                throw new Error('Junction V2 Sample Terrain requires upright Junction/Terrain nodes (Y-axis rotations only)');
+            const terrainInverse=Mat4.invert(new Mat4(),terrain.node.worldMatrix);
+            const centerY=entries.reduce((sum,b)=>sum+b.endpoint.y,0)/entries.length;
+            terrainSample=(x,z)=>{
+                const world=Vec3.transformMat4(new Vec3(),
+                    new Vec3(x,centerY,z),this.node.worldMatrix);
+                const terrainLocal=Vec3.transformMat4(new Vec3(),world,terrainInverse);
+                const height=terrain.getHeightAt(terrainLocal.x,terrainLocal.z);
+                if(height===null||height===undefined||!Number.isFinite(height))return null;
+                const onTerrain=Vec3.transformMat4(new Vec3(),
+                    new Vec3(terrainLocal.x,height,terrainLocal.z),terrain.node.worldMatrix);
+                const localY=Vec3.transformMat4(new Vec3(),onTerrain,inverse).y;
+                return Number.isFinite(localY)?localY:null;
+            };
+        }
         const result=buildJunctionPatchV2(entries,{
             uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
             uvMetersPerRepeat:this.uvMetersPerRepeat,
@@ -140,7 +177,10 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
             curbRampMinLip:this.curbRampMinLip,curbRampMaxSlope:this.curbRampMaxSlope,
             sidewalkApronWidth:this.sidewalkApronWidth,
             sidewalkTerrainHeightOffset:this.sidewalkTerrainHeightOffset,
-            sidewalkMaxCrossSlope:this.sidewalkMaxCrossSlope
+            sidewalkMaxCrossSlope:this.sidewalkMaxCrossSlope,
+            sidewalkTerrainMode:sampleTerrain?'sample':'flat',
+            sidewalkTerrainSampler:terrainSample,
+            sidewalkMaxEdgeSlope:this.sidewalkMaxEdgeSlope
         });
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
