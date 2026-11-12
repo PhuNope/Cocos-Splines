@@ -48,6 +48,10 @@ declare module 'cc' {
         emit(event:string,payload?:any):void;
         destroy():void;
     }
+    // Cocos Creator 3.8 heightmap readback; arguments use local Terrain XZ.
+    export class Terrain extends Component {
+        getHeightAt(x:number,z:number):number|null;
+    }
     export class Component {
         node:Node;enabled:boolean;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
