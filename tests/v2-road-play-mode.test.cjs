@@ -61,7 +61,12 @@ try{
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
  b.worldPosition=new Vec3(0,0,10);
- road.knots=[a,b];road.interpolation=0;road.sampleStep=1;road.width=4;
+ const authoredNode=new Node('AuthoredPath');
+ const authoredPath=authoredNode.addComponent(SplinePathV2);
+ authoredPath.knots=[a,b];authoredPath.interpolation=0;
+ road.pathSource=authoredPath;road.sampleStep=1;road.width=4;
+ assert(!('knots' in road)&&!('interpolation' in road)&&!('closed' in road));
+ assert(!('onGizmoHandles' in road)&&!('onGizmoHudControls' in road));
  const saved=new Mesh();road.bakedMesh=saved;
  const originalGenerate=road.generate;
  road.generate=()=>{throw new Error('Manual/Baked must never generate');};
@@ -85,12 +90,12 @@ try{
  assert.deepEqual(overlay.submeshes.map(s=>s.materialSlot),[0,3,4]);
  road.generateMarkings=false;
  // Constant Width Fillet must be selectable from the actual Cocos component.
- const originalKnots=road.knots,originalA=a.worldPosition,originalB=b.worldPosition;
+ const originalKnots=authoredPath.knots,originalA=a.worldPosition,originalB=b.worldPosition;
  const k2=new Node('K2');
  a.worldPosition=new Vec3(-1.701,0,-7.206);
  b.worldPosition=new Vec3(-3.869,0,3.72);
  k2.worldPosition=new Vec3(5.82,0,4.347);
- road.knots=[a,b,k2];road.surfaceMode=2;road.interpolation=3;
+ authoredPath.knots=[a,b,k2];road.surfaceMode=2;authoredPath.interpolation=3;
  road.width=4;road.sampleStep=.25;
  const filletRoad=road.generate().geometry;
  assert(filletRoad.vertexCount>100);
@@ -103,11 +108,11 @@ try{
  // Regression from Editor: Knot 0-1 distance = sqrt(5) = 2.236,
  // fillet minimum radius = 1.35, and a sharp bend requires >2.236.
  // Old default ConstantWidth threw and produced no visible Road.
- const oldPositions=road.knots.map(k=>new Vec3(k.worldPosition.x,k.worldPosition.y,k.worldPosition.z));
+ const oldPositions=authoredPath.knots.map(k=>new Vec3(k.worldPosition.x,k.worldPosition.y,k.worldPosition.z));
  a.worldPosition=new Vec3(0,0,0);
  b.worldPosition=new Vec3(0,0,Math.sqrt(5));
  k2.worldPosition=new Vec3(-5,0,Math.sqrt(5)-3.236);
- road.width=2;road.sampleStep=.2;road.interpolation=0;road.surfaceMode=2;
+ road.width=2;road.sampleStep=.2;authoredPath.interpolation=0;road.surfaceMode=2;
  road.shortKnotMode=0;road.resolvePlanarOverlaps=true;
  for(const uvAxis of [0,1]){
    road.uvLongitudinalAxis=uvAxis;
@@ -144,11 +149,11 @@ try{
  assert.throws(()=>road.generate(),/too short for radius/,
     'Sidewalk Road may not silently change full-width curb geometry');
  road.roadSidewalkWidth=0;
- road.knots.forEach((k,i)=>{k.worldPosition=oldPositions[i];});
- road.width=4;road.sampleStep=.25;road.interpolation=3;
+ authoredPath.knots.forEach((k,i)=>{k.worldPosition=oldPositions[i];});
+ road.width=4;road.sampleStep=.25;authoredPath.interpolation=3;
  road.uvLongitudinalAxis=0;road.shortKnotMode=0;
- // Native Cocos-Gizmos: scene.js supplies global Gizmos3D;
- // Gizmos3D.move reads/writes the Road's live Knot proxy Vec3.
+ // The source Path owns all Knot editing; Road rebuilds as a
+ // subscriber. No Road-owned Knot proxy or HUD is permitted.
  const originalSdk=globalThis.Gizmos3D;
  const mockGizmos={beginColor:()=>{},drawLine:()=>{},
    move:(property,options)=>Array.from({length:6},(_,i)=>({
@@ -156,125 +161,64 @@ try{
      space:options.space}))};
  globalThis.Gizmos3D=mockGizmos;
  try{
-   road.gizmoEditKnot=true;road.gizmoKnotIndex=1;
-   road.gizmoMultiKnotPoints=true;road.gizmoPointLimit=16;
-   const multiHandles=road.onGizmoHandles();
-   assert.equal(multiHandles.length,8,'6 active move handles + 2 independent Knot points');
-   const hud=road.onGizmoHudControls();
-   assert.equal(hud.length,2);
-   assert.deepEqual(hud.map(x=>x.property),['gizmoKnotIndex','gizmoMultiKnotPoints']);
-   assert.equal(hud[0].max,2,'HUD slider must use current Knot count');
-   assert.equal(hud[0].step,1);
-   assert.deepEqual(multiHandles.slice(6).map(h=>h.index),[0,2]);
-   assert(multiHandles.slice(6).every(h=>h.property==='gizmoKnotPositions'));
-   assert.equal(Array.isArray(road.gizmoKnotPositions),true,
-     'v3 PositionHandles.writeField requires a real array-compatible Vec3[]');
-   assert.equal(road.gizmoKnotPositions.length,3);
-   const shortKnots=road.knots;
-   const extended=[...shortKnots,...Array.from({length:37},(_,i)=>new Node('ExtraKnot'+i))];
-   road.knots=extended;road.gizmoPointLimit=16;
-   assert.equal(road.gizmoKnotPositions.length,16,'Gizmo Proxy caps indexed Knots');
-   assert.equal(road.onGizmoHandles().length,21,'Six active handles + 15 other points');
-   road.gizmoPointLimit=NaN;
-   assert.equal(road.gizmoKnotPositions.length,16,
-     'Malformed editor slider value must not allocate an invalid proxy array');
-   assert.equal(road.onGizmoHandles().length,21);
-   road.gizmoPointLimit=16;road.knots=shortKnots;
-   const firstOriginal=new Vec3(a.worldPosition.x,a.worldPosition.y,a.worldPosition.z);
-   road.gizmoKnotPositions[0]=new Vec3(NaN,0,0);
-   assert.deepEqual({...a.worldPosition},{...firstOriginal},
-     'Non-finite interactive values cannot move scene Knots');
-   const pointProxy=road.gizmoKnotPositions;
-   pointProxy[0]=new Vec3(-7,2,1);
-   assert.deepEqual({...a.worldPosition},{x:-7,y:2,z:1},
-     'Indexed v3 point write must move original Knot Node immediately');
-   pointProxy[0]=firstOriginal;
-   assert.deepEqual({...a.worldPosition},{...firstOriginal},
-     'v3 indexed point rollback via writeField must restore Node');
-   // The SDK notifies begin AFTER snapshot and BEFORE any update, then
-   // invokes writeField(snapshot) BEFORE the cancel callback.
-   const originalKnot2=new Vec3(k2.worldPosition.x,k2.worldPosition.y,k2.worldPosition.z);
-   road.onGizmoChanged('gizmoKnotPositions','begin',2);
-   const reordered=road.knots;
-   road.knots=[k2,b,a];
-   road.gizmoKnotPositions[2]=new Vec3(6,4,-2);
+   authoredPath.gizmoKnotIndex=1;
+   const handles=authoredPath.onGizmoHandles();
+   assert.equal(handles.length,8,'Path owns active handles and two point handles');
+   assert.equal(authoredPath.onGizmoHudControls().length,2);
+   assert.deepEqual(handles.slice(6).map(h=>h.index),[0,2]);
+   const firstOriginal={...a.worldPosition};
+   authoredPath.pathGizmoKnotPositions[0]=new Vec3(NaN,0,0);
+   assert.deepEqual({...a.worldPosition},firstOriginal);
+   authoredPath.pathGizmoKnotPositions[0]=new Vec3(-7,2,1);
+   assert.equal(a.worldPosition.x,-7);
+   authoredPath.pathGizmoKnotPositions[0]=new Vec3(firstOriginal.x,firstOriginal.y,firstOriginal.z);
+   const thirdOriginal={...k2.worldPosition};
+   authoredPath.onGizmoChanged('pathGizmoKnotPositions','begin',2);
+   const originalOrder=authoredPath.knots;
+   authoredPath.knots=[k2,b,a];
+   authoredPath.pathGizmoKnotPositions[2]=new Vec3(6,4,-2);
    assert.deepEqual({...k2.worldPosition},{x:6,y:4,z:-2},
-     'The original indexed Knot is pinned when Road Knot array is reordered during drag');
-   assert.deepEqual({...a.worldPosition},{...firstOriginal},
-     'Reordering the Inspector Knot array must never redirect an active drag');
-   road.gizmoKnotPositions[2]=originalKnot2;
-   road.onGizmoChanged('gizmoKnotPositions','cancel',2);
-   assert.deepEqual({...k2.worldPosition},{...originalKnot2},
-     'Escape restores the original indexed Knot even after Road array reorder');
-   road.knots=reordered;
-   // SDK's active Vec3 proxy must similarly pin Node when active index
-   // changes during the gesture; then release that pin on end/cancel.
-   road.gizmoMultiKnotPoints=false;
-   assert.equal(road.onGizmoHandles().length,6);
-   assert.equal(road.onGizmoHandles()[0].property,'gizmoKnotPosition');
-   assert.deepEqual({...road.gizmoKnotPosition},{...b.worldPosition});
-   const undoPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
-   road.onGizmoChanged('gizmoKnotPosition','begin');
-   road.gizmoKnotIndex=0;
-   road.gizmoKnotPosition=new Vec3(-2.5,1.5,4.25);
-   assert.deepEqual({...b.worldPosition},{x:-2.5,y:1.5,z:4.25},
-     'Gizmos writes real Knot Node positions, not a duplicate Vec3 field');
-   assert.deepEqual({...a.worldPosition},{...firstOriginal},
-     'Switching active index while dragging cannot mutate a different Knot');
-   road.gizmoKnotPosition=undoPosition;
-   road.onGizmoChanged('gizmoKnotPosition','cancel');
-   road.gizmoKnotIndex=1;
-   assert.deepEqual({...b.worldPosition},{...undoPosition},
-     'Gizmos cancel restores Knot Node via the same live proxy setter');
-   road.gizmoKnotIndex=999;
-   assert.equal(road.onGizmoHandles().length,0,'Out-of-range Knot must hide handles');
-   road.gizmoKnotIndex=1;road.gizmoEditKnot=false;
-   assert.equal(road.onGizmoHandles().length,0,'Move handles opt-in only');
-   road.gizmoKnotPosition=new Vec3(90,90,90);
-   assert.deepEqual({...b.worldPosition},{...undoPosition},
-     'Disabled Gizmo setter cannot mutate Knot Node');
-   road.gizmoEditKnot=true;delete globalThis.Gizmos3D;
-   assert.equal(road.onGizmoHandles().length,0,'Missing v3 package must not break Scene');
- }finally{globalThis.Gizmos3D=originalSdk;road.gizmoEditKnot=false;}
+     'Gizmo target pinned across Path Knot reorder');
+   assert.deepEqual({...a.worldPosition},firstOriginal);
+   authoredPath.pathGizmoKnotPositions[2]=new Vec3(thirdOriginal.x,thirdOriginal.y,thirdOriginal.z);
+   authoredPath.onGizmoChanged('pathGizmoKnotPositions','cancel',2);
+   authoredPath.knots=originalOrder;
+ }finally{globalThis.Gizmos3D=originalSdk;}
 
- // Gizmos update must rebuild a temporary preview during dragging,
- // throttle duplicates, force the last preview at end and restore on Escape.
- road.gizmoEditKnot=true;road.gizmoLiveMesh=true;
- road.gizmoMeshIntervalMs=400;road.meshMode=SplineV2MeshMode.Baked;
- road.showSavedMesh();
+ // Path Gizmos update a temporary Road mesh; end/cancel force a rebuild.
+ road.gizmoLiveMesh=true;road.gizmoMeshIntervalMs=400;
+ road.meshMode=SplineV2MeshMode.Baked;road.showSavedMesh();
  const editedPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
- road.onGizmoChanged('gizmoKnotPosition','begin');
- road.gizmoKnotPosition=new Vec3(editedPosition.x+.2,editedPosition.y,editedPosition.z);
- road.onGizmoChanged('gizmoKnotPosition','update');
+ authoredPath.gizmoKnotIndex=1;
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','begin');
+ authoredPath.pathGizmoKnotPosition=new Vec3(editedPosition.x+.2,editedPosition.y,editedPosition.z);
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','update');
  const movingPreview=renderer.mesh;
  assert(movingPreview&&movingPreview!==saved,
-   'Gizmo update should show a temporary Road mesh even in Baked mesh mode');
- road.gizmoKnotPosition=new Vec3(editedPosition.x+.3,editedPosition.y,editedPosition.z);
- road.onGizmoChanged('gizmoKnotPosition','update');
- assert.equal(renderer.mesh,movingPreview,'Live rebuild must be throttled within 400ms');
- road.onGizmoChanged('gizmoKnotPosition','end');
- assert(renderer.mesh!==movingPreview,
-   'Gizmo end must force a final mesh update even within throttle window');
- assert(movingPreview.destroyed,'Replaced transient preview mesh must be released');
- assert.equal(road.bakedMesh,saved,'Live preview never overwrites persisted Baked Mesh');
+   'Path edit must rebuild temporary Road mesh in Baked mode');
+ authoredPath.pathGizmoKnotPosition=new Vec3(editedPosition.x+.3,editedPosition.y,editedPosition.z);
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','update');
+ assert.equal(renderer.mesh,movingPreview,'Road preview must throttle rapid Path edits');
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','end');
+ assert(renderer.mesh!==movingPreview,'Path end forces a final Road mesh');
+ assert(movingPreview.destroyed&&road.bakedMesh===saved);
  const previousValid=renderer.mesh;
- road.onGizmoChanged('gizmoKnotPosition','begin');
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','begin');
  b.setWorldPosition(a.worldPosition);
- road.onGizmoChanged('gizmoKnotPosition','update');
- assert.equal(renderer.mesh,previousValid,
-   'Invalid intermediate Knot position retains last valid rendered mesh');
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','update');
+ assert.equal(renderer.mesh,previousValid,'Invalid intermediate Path keeps last valid Road mesh');
  b.setWorldPosition(editedPosition);
- road.onGizmoChanged('gizmoKnotPosition','cancel');
- assert(renderer.mesh!==previousValid,'Escape must restore and rebuild Road mesh');
+ authoredPath.onGizmoChanged('pathGizmoKnotPosition','cancel');
+ assert(renderer.mesh!==previousValid,'Path Escape rebuilds Road mesh');
 
  // SplinePathV2 is the preferred shared source: one Path, two Roads.
  // Road-local Knots and interpolation are ignored once it is linked.
  const pathNode=new Node('SharedSplinePath');
  const splinePath=pathNode.addComponent(SplinePathV2);
  splinePath.knots=[a,b,k2];splinePath.interpolation=0;splinePath.closed=false;
- road.pathSource=splinePath;road.knots=[];road.interpolation=1;
+ road.pathSource=splinePath;
  assert.equal(road.source().type,'linear',
-   'Road must use the linked SplinePathV2 interpolation, not legacy setting');
+   'Road must read interpolation from the linked SplinePathV2');
  assert.equal(road.source().knots.length,3);
  const otherNode=new Node('SharedRoad2'),otherRenderer=otherNode.addComponent(MeshRenderer);
  const other=otherNode.addComponent(SplineRoadV2);
@@ -282,8 +226,7 @@ try{
  other.rebuildPreview();road.rebuildPreview();
  const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
  assert(originalPrimary&&originalSecondary);
- assert.equal(road.onGizmoHandles().length,0,
-    'With a linked SplinePath, only the Path owns Knot Gizmos');
+ assert(!('onGizmoHandles' in road),'Only Path owns Knot handles');
  const priorSDK=globalThis.Gizmos3D;
  globalThis.Gizmos3D=mockGizmos;
  try{
@@ -318,22 +261,20 @@ try{
        'Path Undo/Restore hook refreshes registered mesh consumers');
  }finally{globalThis.Gizmos3D=priorSDK;}
  other.onDisable();
- road.pathSource=null;road.knots=[a,b,k2];
- road.showSavedMesh();road.gizmoEditKnot=false;generated.length=0;
+ road.pathSource=authoredPath;authoredPath.knots=[a,b,k2];
+ road.showSavedMesh();generated.length=0;
 
  env.EDITOR_NOT_IN_PREVIEW=false;
- assert.equal(road.onGizmoHudControls().length,0,'No Editor HUD in Play');
- assert.equal(road.onGizmoHandles().length,0,'No Gizmos handles when playing');
- const beforePlayMulti={...a.worldPosition};
- road.gizmoKnotPositions[0]=new Vec3(500,500,500);
- assert.deepEqual({...a.worldPosition},beforePlayMulti,
-    'Indexed Knot proxy cannot modify Nodes in Play');
+ assert.equal(authoredPath.onGizmoHudControls().length,0,'No Path HUD in Play');
+ assert.equal(authoredPath.onGizmoHandles().length,0,'No Path handles in Play');
+ const beforePlay={...a.worldPosition};
+ authoredPath.pathGizmoKnotPositions[0]=new Vec3(500,500,500);
+ assert.deepEqual({...a.worldPosition},beforePlay,'Path proxy must not edit in Play');
  const preserved={...b.worldPosition};
- road.gizmoKnotPosition=new Vec3(88,77,66);
- assert.deepEqual({...b.worldPosition},preserved,
-    'Road Gizmo write cannot modify Knot Node during Play');
- road.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
- road.surfaceMode=0;road.interpolation=0;road.sampleStep=1;road.width=4;
+ authoredPath.pathGizmoKnotPosition=new Vec3(88,77,66);
+ assert.deepEqual({...b.worldPosition},preserved,'Path gizmo must not edit in Play');
+ authoredPath.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
+ road.surfaceMode=0;authoredPath.interpolation=0;road.sampleStep=1;road.width=4;
  // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
  road.meshMode=SplineV2MeshMode.Dynamic;road.onEnable();
  assert.equal(generated.length,1);
@@ -470,8 +411,10 @@ try{
   out.worldPosition=new Vec3(Math.sin(angle)*12,0,Math.cos(angle)*12);
   const n=new Node('Arm'+i);n.addComponent(MeshRenderer);
   const arm=n.addComponent(SplineRoadV2);
-  arm.knots=[shared,out];arm.surfaceMode=2;arm.junctionStartTrim=3;
-  arm.sampleStep=.25;arm.interpolation=0;arm.width=4;
+  const armPath=new Node('ArmPath'+i).addComponent(SplinePathV2);
+  armPath.knots=[shared,out];armPath.interpolation=0;
+  arm.pathSource=armPath;arm.surfaceMode=2;arm.junctionStartTrim=3;
+  arm.sampleStep=.25;arm.width=4;
   const link=new JunctionRoadLinkV2();link.road=arm;link.atEnd=false;arms.push(link);
  }
  patch.branches=arms;
