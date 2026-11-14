@@ -21,11 +21,15 @@ export interface SplineGizmoV3MoveOptions {
 }
 export interface SplineGizmoV3Handle {
     property:string;
+    index?:number;
     id?:string;
     visual?:string;
     plane?:string;
     axis?:string;
     space?:string;
+    color?:string;
+    hoverColor?:string;
+    pickSize?:number;
 }
 export interface SplineSceneGizmoV3Backend {
     beginColor(owner:Node,color:Color):void;
@@ -50,6 +54,27 @@ export function buildSplineKnotMoveGizmoV3(property:string):SplineGizmoV3Handle[
     return sdk.move(property,{space:'local',axisSize:66,pickSize:28,
         planeSize:18,planeOffset:14,showPositionLabel:true,
         positionLabelOffset:82});
+}
+/**
+ * Cocos-Gizmos v3 PositionHandles.readField/writeField accepts indexed
+ * Vec3[] descriptors: { property, index, plane, space }. The Road supplies
+ * a non-serialized array Proxy whose numeric write targets a real Knot Node.
+ *
+ * A compact camera-plane point handle is intentional. The active Knot uses
+ * Gizmos3D.move() for XYZ axes and three plane squares, while additional
+ * Knots get one pickable point each.
+ */
+export function buildSplineKnotPointGizmosV3(
+    property:string,indices:ReadonlyArray<number>
+):SplineGizmoV3Handle[] {
+    if(!availableGizmoV3Backend())return [];
+    if(indices.length>32||indices.some(i=>!Number.isSafeInteger(i)||i<0||i>127))
+        throw new Error('Cocos Splines Gizmos v3 invalid indexed Knot handles');
+    return indices.map(index=>({
+        property,index,id:'spline-knot-'+index,
+        visual:'point',plane:'view',space:'local',
+        color:'#ffb84a',hoverColor:'#ffff78',pickSize:24
+    }));
 }
 // Constants only; in particular DO NOT construct Cocos Color at module
 // evaluation, because Play/Baked and headless Editor contexts never draw.
