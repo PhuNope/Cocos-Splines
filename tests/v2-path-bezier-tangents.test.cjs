@@ -271,6 +271,37 @@ try {
    assert.deepEqual(pathComp.getSplineDataV2(consumer).knots.map(k=>k.rollDegrees),
       [35,-10]);
    k0.rollDegrees=0;k1.rollDegrees=0;
+   // Creator Undo/deserializer may replace Knot value objects during
+   // an in-flight gesture: onRestore must discard stale proxy targets.
+   pathComp.gizmoKnotIndex=0;
+   const staleKnot=k0;
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','begin');
+   const revived=new SplineKnotRecordV2();
+   revived.position=new Vec3(2,2,2);
+   const revivedOther=new SplineKnotRecordV2();
+   revivedOther.position=new Vec3(6,0,0);
+   pathComp.knots=[revived,revivedOther];
+   const restoresBefore=calls.length;
+   pathComp.onRestore();
+   assert.equal(calls.length,restoresBefore+2);
+   assert(calls.at(-1)==='Btrue',
+     'Creator restore must force final refresh for all linked generators');
+   pathComp.pathGizmoKnotPosition=new Vec3(3,3,3);
+   assert.deepEqual({...revived.position},{x:3,y:3,z:3});
+   assert.notDeepEqual({...staleKnot.position},{x:3,y:3,z:3},
+     'Restored Path must not write to a stale Knot record');
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
+   const revivedAgain=new SplineKnotRecordV2();
+   revivedAgain.position=new Vec3(4,4,4);
+   pathComp.knots=[revivedAgain,revivedOther];
+   pathComp.onRestore();
+   pathComp.pathGizmoActiveRoll=30;
+   assert.equal(revivedAgain.rollDegrees,30);
+   assert.equal(revived.rollDegrees,0,
+     'Restored Path must not retain old HUD Roll target');
+   // Restore fixture to test runtime guard and topology independently.
+   pathComp.knots=[k0,k1];
+   pathComp.onRestore();
    // Runtime must never let an Editor-only tangent gizmo mutate source.
    env.EDITOR_NOT_IN_PREVIEW=false;
    const snapshot=JSON.stringify(pathComp.knots);
