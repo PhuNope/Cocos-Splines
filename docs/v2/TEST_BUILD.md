@@ -301,3 +301,13 @@ See [SPLINE_PATH_V2.md](./SPLINE_PATH_V2.md). The other v2 generators (Extrude a
 - Verify Inspector **Rebuild Preview / Bake glTF Asset / Bind Imported Mesh** work on each generator, no legacy messages or missing SplineContainer errors. Test save/reopen and Undo/Redo manually.
 
 Full architectural rewrite plan: [REBUILD_BREAKING.md](./REBUILD_BREAKING.md).
+
+
+## Independent MeshGenerator — Road / Extrude / Deform
+
+1. Add one `SplinesV2.SplinePath` to a Node and assign two or more Knot Nodes. Assign the same Path component to **Road**, **Extrude** and **Mesh Deform** generator nodes, each with its own `MeshRenderer`. Existing Road geometry may still use an implicit Knot array for comparison, but Extrude/Deform now **require Path Source**.
+2. Extrude Inspector exposes only source, tube radius/sides/caps/UV axis, mesh mode/materials/Baked Mesh and live preview throttle; there must be **no Road Width/Curb/Junction/Sidewalk or separate Knot array**. Deform Inspector exposes source Mesh, longitudinal mapping, repeat/UV, frame sampling, its own curvature/fillet controls and shared mesh lifecycle.
+3. Rebuild Preview for all three. Drag a Knot using **Path** Gizmos v3; each registered generator should update its own temporary mesh. On Escape/Cancel each should return to the original Path shape. Use `Gizmo V3 Live Mesh=false` on one generator to verify independent opt-out.
+4. Switch each to **Manual** and **Baked** in Play; assert that no geometry generation occurs and persisted mesh references remain visible. In Dynamic Play only the chosen generator builds. Source Mesh Deform must never destroy the user-supplied source Mesh asset.
+5. Bake each explicitly via glTF; UV0/UV2 and material slots must be preserved. Verify change of Extrude radius or Deform repeat invalidates fingerprint. Real Creator 3.8.x Undo/Redo, save/reopen, material grouping and graceful intermediate bends remain manual acceptance gates.
+6. Junction is intentionally still a Road-derived component and will receive its own independent generator in the following step.
