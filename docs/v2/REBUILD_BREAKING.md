@@ -16,7 +16,7 @@
 SplinePath
   Knot / Tangent / curve type / closed / topology
   arc-length cache + parallel-transport frames + distance queries
-  Gizmos v3 edit sessions, native Scene HUD and revision notifications
+  Gizmos edit sessions, native Scene HUD and revision notifications
             |
        Spline consumer graph
   +---------+-----------+------------+-------------------+
@@ -31,7 +31,7 @@ SplinePath
   Temp Scene Preview / glTF Bake / Collider Adapter / Runtime Data
 ```
 
-**Source of truth:** knot transforms belong to the Path; no Road-owned duplicate Knot list. Source-spline revisions invalidate consumers, not editor viewport redraw alone. Handle start/update/end/cancel (Cocos-Gizmos branch `v3`) must yield deterministic preview and correct Escape rollback.
+**Source of truth:** knot transforms belong to the Path; no Road-owned duplicate Knot list. Source-spline revisions invalidate consumers, not editor viewport redraw alone. Handle start/update/end/cancel (Cocos-Gizmos) must yield deterministic preview and correct Escape rollback.
 
 ## Implementation plan / gates
 
@@ -47,11 +47,11 @@ SplinePath
 
 ## Current verified scope
 
-A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads and now **owns its own Gizmos v3 editing handles** and change notifications. Linked Roads hide their duplicate Knot handles. Previous Road-local Knot properties remain in source temporarily but are not required in the new clean authoring workflow. C is implemented for **Road / Extrude / Mesh Deform / Junction**; all four share only common lifecycle, with a follow-up needed to remove the temporary Road-local Knot/Gizmos fallback. D–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
+A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads and now **owns its own Gizmos editing handles** and change notifications. Linked Roads hide their duplicate Knot handles. Previous Road-local Knot properties remain in source temporarily but are not required in the new clean authoring workflow. C is implemented for **Road / Extrude / Mesh Deform / Junction**; all four share only common lifecycle, with a follow-up needed to remove the temporary Road-local Knot/Gizmos fallback. D–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
 
 ## External library references
 
-- **Cocos-Gizmos branch `v3`** is directly accessible and has been inspected for `onGizmoHandles`, `onGizmoChanged`, `Gizmos3D.move`, indexed Vec3 handles and HUD.
+- **Cocos-Gizmos** is directly accessible and has been inspected for `onGizmoHandles`, `onGizmoChanged`, `Gizmos3D.move`, indexed Vec3 handles and HUD.
 - **ToolBuddy.zip** and **SplineArchitect.zip** were supplied earlier in the wider project, but their raw ZIP files are not currently mounted or returned by this conversation's file/library lookup. Do not pretend to have re-read them during this checkpoint. Re-attach them to permit a line-by-line feature extraction, algorithm comparison, and documentation of their reusable ideas; no proprietary source should be copied blindly.
 
 The project deliberately prioritizes safe geometry, independent components, and clean Editor behavior over old-scene compatibility.
