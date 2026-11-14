@@ -20,9 +20,9 @@ import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,
-    buildSplineKnotPointGizmosV3,drawSplineSceneGizmosV3,
-    type SplineGizmoV3Handle} from './SplineGizmoV3Bridge';
+import {availableGizmoBackend,buildSplineKnotMoveGizmos,
+    buildSplineKnotPointGizmos,drawSplineSceneGizmos,
+    type SplineGizmoHandle} from './SplineGizmoBridge';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
@@ -109,21 +109,21 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
     @property({min:.02,max:1,step:.01,tooltip:'Maximum rise/run between adjacent Road sidewalk outer edge vertices.'})
     roadSidewalkMaxEdgeSlope=.35;
     @property({tooltip:'Show bounded spline frame, curb edge and Knot guides in Scene when selected. No mesh generation or runtime draw.'})
-    showSceneGizmosV3=true;
+    showSceneGizmos=true;
     @property({min:8,max:192,step:1,tooltip:'Maximum path guide segments, independent of Road tessellation.'})
-    gizmoV3Steps=48;
+    gizmoSteps=48;
     @property({tooltip:'Show approximate full-width Road border guides around the spline.'})
-    gizmoV3Edges=true;
+    gizmoEdges=true;
     @property({tooltip:'Show Knot markers for the existing editable Knot Nodes.'})
-    gizmoV3Knots=true;
-    @property({tooltip:'Enable Cocos-Gizmos v3 XYZ/plane Move handle for ONE selected Knot Node. Optional alpha; native Node transform handles remain available.'})
-    gizmoV3EditKnot=false;
-    @property({min:0,max:127,step:1,tooltip:'0-based index of the Road Knot to move using the v3 handle.'})
-    gizmoV3KnotIndex=0;
+    gizmoKnots=true;
+    @property({tooltip:'Enable Cocos-Gizmos XYZ/plane Move handle for ONE selected Knot Node. Optional alpha; native Node transform handles remain available.'})
+    gizmoEditKnot=false;
+    @property({min:0,max:127,step:1,tooltip:'0-based index of the Road Knot to move using the Gizmos handle.'})
+    gizmoKnotIndex=0;
     @property({tooltip:'Offer camera-plane point handles for other Road Knots (same underlying Nodes). Active Knot keeps XYZ/plane Move. Optional alpha.'})
-    gizmoV3MultiKnotPoints=false;
+    gizmoMultiKnotPoints=false;
     @property({min:2,max:32,step:1,tooltip:'Maximum number of Knot point handles including active Knot. Limit keeps Editor gizmos responsive.'})
-    gizmoV3PointLimit=16;
+    gizmoPointLimit=16;
 
 
 
@@ -176,7 +176,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
     }
 
     /**
-     * Cocos-Gizmos v3 PositionHandles.readField/writeField directly access
+     * Cocos-Gizmos PositionHandles.readField/writeField directly access
      * target[property] and, for indexed Vec3[], target[property][index].
      * These getters/Proxy writes address the REAL Knot Nodes, never copied
      * serialized positions. SDK drag sessions provide begin/update/end/cancel.
@@ -197,7 +197,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
     private writeGizmoKnot(
         index:number,value:Vec3,property:'gizmoKnotPosition'|'gizmoKnotPositions'
     ):void {
-        if(!EDITOR_NOT_IN_PREVIEW||(!this.gizmoV3EditKnot&&!this._gizmoDragNode)||
+        if(!EDITOR_NOT_IN_PREVIEW||(!this.gizmoEditKnot&&!this._gizmoDragNode)||
            !value||![value.x,value.y,value.z].every(Number.isFinite)||
            !this.node?.isValid)return;
         const knot=this.gizmoNode(index,property);
@@ -207,19 +207,19 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
     }
     /** The 6-axis/plane Move gizmo operates on one selected Knot. */
     public get gizmoKnotPosition():Vec3 {
-        return this.readGizmoKnot(this.gizmoV3KnotIndex,'gizmoKnotPosition');
+        return this.readGizmoKnot(this.gizmoKnotIndex,'gizmoKnotPosition');
     }
     public set gizmoKnotPosition(value:Vec3) {
-        this.writeGizmoKnot(this.gizmoV3KnotIndex,value,'gizmoKnotPosition');
+        this.writeGizmoKnot(this.gizmoKnotIndex,value,'gizmoKnotPosition');
     }
     /**
-     * v3 indexed Vec3[] API. Array.isArray(proxy) === true; setting
+     * Gizmos indexed Vec3[] API. Array.isArray(proxy) === true; setting
      * proxy[i] writes the authoritative Knot Node immediately. The array is
      * transient and NOT a Cocos @property or a second serialized Knot list.
      */
     public get gizmoKnotPositions():Vec3[] {
-        const limit=(Number.isFinite(this.gizmoV3PointLimit)?
-            Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit))):16);
+        const limit=(Number.isFinite(this.gizmoPointLimit)?
+            Math.min(32,Math.max(2,Math.floor(this.gizmoPointLimit))):16);
         const count=Math.min(this.splineKnots().length,limit);
         const values=new Array<Vec3>(count);
         const indexOf=(property:string|symbol):number=>{
@@ -256,7 +256,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
             // Pin the actual Node so changing Inspector index/order mid-gesture
             // cannot redirect updates or the subsequent Escape rollback.
             if(this._gizmoDragNode)return;
-            const targetIndex=property==='gizmoKnotPositions'?index:this.gizmoV3KnotIndex;
+            const targetIndex=property==='gizmoKnotPositions'?index:this.gizmoKnotIndex;
             if(!Number.isSafeInteger(targetIndex)||targetIndex===undefined||
                targetIndex<0)return;
             const knot=this.splineKnots()[targetIndex];
@@ -279,26 +279,26 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
         }
     }
     /** v3 discovers Component callbacks; no registration decorator needed. */
-    public onGizmoHandles():SplineGizmoV3Handle[] {
+    public onGizmoHandles():SplineGizmoHandle[] {
         // A linked SplinePath owns all Knot handles and change sessions.
         // Never expose duplicate Road handles for the same source positions.
         if(this.pathSource)return [];
-        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
-            !this.gizmoV3EditKnot||!this.node?.isValid||
-            !Number.isSafeInteger(this.gizmoV3KnotIndex)||
-            this.gizmoV3KnotIndex<0||
-            !this.splineKnots()[this.gizmoV3KnotIndex]?.isValid)return [];
-        const handles=buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
-        if(!this.gizmoV3MultiKnotPoints||!handles.length)return handles;
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmos||
+            !this.gizmoEditKnot||!this.node?.isValid||
+            !Number.isSafeInteger(this.gizmoKnotIndex)||
+            this.gizmoKnotIndex<0||
+            !this.splineKnots()[this.gizmoKnotIndex]?.isValid)return [];
+        const handles=buildSplineKnotMoveGizmos('gizmoKnotPosition');
+        if(!this.gizmoMultiKnotPoints||!handles.length)return handles;
         const count=Math.min(this.splineKnots().length,
-            Number.isFinite(this.gizmoV3PointLimit)?
-                Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit))):16);
+            Number.isFinite(this.gizmoPointLimit)?
+                Math.min(32,Math.max(2,Math.floor(this.gizmoPointLimit))):16);
         const indexes=Array.from({length:count},(_,i)=>i).filter(i=>
-            i!==this.gizmoV3KnotIndex&&this.splineKnots()[i]?.isValid);
-        return handles.concat(buildSplineKnotPointGizmosV3('gizmoKnotPositions',indexes));
+            i!==this.gizmoKnotIndex&&this.splineKnots()[i]?.isValid);
+        return handles.concat(buildSplineKnotPointGizmos('gizmoKnotPositions',indexes));
     }
     /**
-     * Native Gizmos v3 Scene HUD: select the active Knot without hunting
+     * Native Gizmos Scene HUD: select the active Knot without hunting
      * for Inspector fields, or toggle the compact handles for other Knots.
      * Controls bind only to existing serialized settings, never the Knot proxy.
      */
@@ -307,23 +307,23 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
         min?:number;max?:number;step?:number;order?:number;
     }> {
         if(this.pathSource)return [];
-        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
-            !this.gizmoV3EditKnot||!availableGizmoV3Backend()||
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmos||
+            !this.gizmoEditKnot||!availableGizmoBackend()||
             this.splineKnots().length<2)return [];
         return [{
             type:'slider',id:'spline-v2-active-knot',
-            text:'Active Knot',property:'gizmoV3KnotIndex',
+            text:'Active Knot',property:'gizmoKnotIndex',
             min:0,max:Math.min(this.splineKnots().length-1,127),
             step:1,order:1
         },{
             type:'toggle',id:'spline-v2-multi-points',
-            text:'Other Knots',property:'gizmoV3MultiKnotPoints',order:2
+            text:'Other Knots',property:'gizmoMultiKnotPoints',order:2
         }];
     }
-    /** Selection drawing uses actual global Gizmos3D, installed by Gizmos v3 scene.js. */
+    /** Selection drawing uses actual global Gizmos3D, installed by Gizmos scene.js. */
     public onDrawGizmosSelected():void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
-            !availableGizmoV3Backend())return;
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmos||
+            !availableGizmoBackend())return;
         try{
             const source=this.source();
             const cache=buildSplineCacheV2(source);
@@ -342,7 +342,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
                 }
             }
             const working=fillet?.cache??cache;
-            const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoV3Steps)));
+            const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoSteps)));
             const frames=buildSplineFramesV2(working,{
                 maxStep:Math.max(this.sampleStep,working.length/steps)
             });
@@ -351,9 +351,9 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
                 junctionEndTrim:this.junctionEndTrim
             });
             const guide=buildRoadSceneGuideV2(trimmed,source.knots.map(k=>k.position),
-                totalWidth,{maxSteps:steps,showEdges:this.gizmoV3Edges,
-                    showKnots:this.gizmoV3Knots});
-            drawSplineSceneGizmosV3(this.node,guide);
+                totalWidth,{maxSteps:steps,showEdges:this.gizmoEdges,
+                    showKnots:this.gizmoKnots});
+            drawSplineSceneGizmos(this.node,guide);
         }catch{
             // Gizmos are read-only Editor aids. Invalid/unfinished Roads must
             // never break selection, write serialization or spam Play logs.
