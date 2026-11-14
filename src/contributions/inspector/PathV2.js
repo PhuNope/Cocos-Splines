@@ -9,7 +9,8 @@ const {style,callEditor}=require('./common');
 const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
-    'gizmoRotationMode','gizmoRotationSnap'];
+    'gizmoRotationMode','gizmoRotationSnap',
+    'gizmoShowRollGuide','gizmoRollGuideSize'];
 const $={knots:'.spl-path-knots',items:'.spl-path-items',
     count:'.spl-path-count',add:'.spl-path-add'};
 for(const field of simple)$[field]='.spl-path-'+field;
@@ -17,7 +18,8 @@ const sections=[
  ['Spline',['interpolation','closed']],
  ['Gizmos',['gizmoKnotIndex','gizmoShowPath','gizmoEditKnots',
      'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents',
-     'gizmoRotationMode','gizmoRotationSnap']]
+     'gizmoRotationMode','gizmoRotationSnap',
+     'gizmoShowRollGuide','gizmoRollGuideSize']]
 ];
 const rows=sections.map(([name,fields])=>
     '<details open class="spl-section"><summary>'+name+'</summary>'+
