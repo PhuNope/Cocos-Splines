@@ -242,3 +242,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. Bake glTF cho **từng Road và Junction**, gắn material slot 5, lưu Scene, đóng/mở lại, Play Baked. Sau thay đổi heightmap hoặc cấu hình, phải rebuild/bake lại thủ công; Preview và Baked không cập nhật Terrain khi đang Play.
 
 > **Giới hạn:** hiện chỉ khớp đầu biên tại các Junction được liên kết thủ công. Chưa có network graph/snap tự động, sidewalk liên tục qua giao lộ phức tạp, Boolean nối Terrain, lightmap unwrap production hoặc test chứng nhận Cocos Creator thật. **Không dùng production.**
+
+ 
+## Native Cocos-Gizmos v3 / Road Knot Move (alpha)
+
+1. Install Cocos-Gizmos v3 from [PhuNope/Cocos-Gizmos/v3](https://github.com/PhuNope/Cocos-Gizmos/tree/v3) as a Creator Project or Global extension, enable it and reload the Editor Scene. No `@registerGizmos` decorator, `db://` script import or manual global adapter binding is needed on SplineRoadV2/JunctionPatchV2.
+2. Select a Road and verify read-only center/width/Knot guides. Toggle `Show Scene Gizmos V3`, `Gizmo V3 Edges` and `Gizmo V3 Knots`.
+3. Enable `Gizmo V3 Edit Knot`, choose `Gizmo V3 Knot Index=1` for the second knot. Drag v3's X/Y/Z arrows or XY/XZ/YZ plane squares: check the **original Knot Node** position changes, and spline guides update.
+4. Press Escape while dragging to verify rollback, then commit a drag and test Creator Undo/Redo. **Cross-Node Undo/Redo is not yet certified** because the property edited by Gizmos v3 is a dynamic Vec3 proxy to an external Knot Node. If rollback or Undo fails, turn off `Gizmo V3 Edit Knot` and use native Cocos transform handles on the Knot Node.
+5. Select Junction to verify exact Road trim bars, curb ends. Try missing Cocos-Gizmos: selection should not crash. Play Baked and verify no Gizmos writes or automatic rebuild.
+6. After edits, Rebuild Preview or Bake glTF Asset manually; Gizmos only modify the Knot Node, not existing Baked mesh.
+
+> Development design/API notes: [SCENE_GIZMOS_V3.md](./SCENE_GIZMOS_V3.md)
