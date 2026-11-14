@@ -114,7 +114,7 @@ export class SplinePathV2 extends Component {
     public set pathGizmoKnotPosition(value:Vec3) {
         this.write(this.gizmoKnotIndex,'pathGizmoKnotPosition',value);
     }
-    /** v3 accepts indexed Vec3[]; proxy writes directly to the source Node. */
+    /** Gizmos accepts indexed Vec3[]; proxy writes directly to the source Node. */
     public get pathGizmoKnotPositions():Vec3[] {
         const limit=Number.isFinite(this.gizmoPointLimit)?
             Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
@@ -189,7 +189,7 @@ export class SplinePathV2 extends Component {
             this.notifyPreviewConsumers(this,false);
         }else if((phase==='end'||phase==='cancel')&&
             this._dragProperty===field){
-            // v3 writes the final or rolled-back Knot BEFORE this callback.
+            // Gizmos writes the final or rolled-back Knot BEFORE this callback.
             try{this.notifyPreviewConsumers(this,true);}
             finally{this._dragNode=null;this._dragProperty=null;this._dragIndex=-1;}
         }
