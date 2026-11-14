@@ -1,4 +1,4 @@
-import {evaluateSplineV2,type V3} from './SplineCurves';
+import {evaluateSplineV2,splineSegmentsV2,type SplineDataV2,type V3} from './SplineCurves';
 import {parameterAtCachedDistanceV2,type SplineCacheV2} from './SplineCache';
 export interface SplineFrameV2 {readonly distance:number;readonly parameter:number;readonly position:V3;readonly tangent:V3;readonly right:V3;readonly up:V3;}
 export interface SplineFramesV2 {readonly length:number;readonly frames:ReadonlyArray<SplineFrameV2>;readonly closed:boolean;}
@@ -8,6 +8,8 @@ export interface SplineFramesOptionsV2 {
     readonly maxAngleDegrees?:number;
     /** Maximum midpoint-to-chord distance in local spline units; opt-in. */
     readonly maxChordError?:number;
+    /** Use this source for bank angles when a Road fillet rebuilds its centerline cache. */
+    readonly rollSource?:SplineDataV2;
 }
 const v=(x:number,y:number,z:number):V3=>({x,y,z});
 const add=(a:V3,b:V3):V3=>v(a.x+b.x,a.y+b.y,a.z+b.z);
@@ -35,6 +37,28 @@ function transport(t0:V3,t1:V3,right:V3,up:V3):V3 {
 function frame(distance:number,parameter:number,position:V3,tangent:V3,right:V3):SplineFrameV2 {
     const r=norm(sub(right,mul(tangent,dot(right,tangent))),startRight(tangent,v(0,1,0)));
     return {distance,parameter,position,tangent,right:r,up:norm(cross(tangent,r),v(0,1,0))};
+}
+/** Shortest-arc interpolated Knot roll in normalized spline parameter space. */
+function rollAt(spline:SplineDataV2,parameter:number):number {
+    const segments=splineSegmentsV2(spline);
+    if(segments<=0)return 0;
+    if(spline.closed&&parameter>=1)
+        return spline.knots[0].rollDegrees??0;
+    const t=clamp(parameter,0,1)*segments;
+    const index=Math.min(segments-1,Math.floor(t));
+    const fraction=parameter>=1?1:t-index;
+    const a=spline.knots[index].rollDegrees??0;
+    const b=spline.knots[(index+1)%spline.knots.length].rollDegrees??0;
+    // Resolve the signed shortest angle: +179 to -179 is a +2 deg
+    // transition rather than a nearly complete opposite rotation.
+    const delta=((b-a+540)%360)-180;
+    return a+delta*fraction;
+}
+function applyRoll(f:SplineFrameV2,angleDegrees:number):SplineFrameV2 {
+    if(angleDegrees===0)return f;
+    const angle=angleDegrees*Math.PI/180;
+    return frame(f.distance,f.parameter,f.position,f.tangent,
+        rotate(f.right,f.tangent,Math.sin(angle),Math.cos(angle)));
 }
 function tangentAt(cache:SplineCacheV2,t:number,fallback:V3):V3 {
     const value=evaluateSplineV2(cache.spline,t).tangent;
@@ -95,6 +119,7 @@ export function buildSplineFramesV2(cache:SplineCacheV2,options:SplineFramesOpti
     }
     const frames:SplineFrameV2[]=[];
     let t0=v(0,0,1),right=v(1,0,0),up=v(0,1,0);
+    const rollSource=options.rollSource??cache.spline;
     for(let i=0;i<distances.length;i++){
         const distance=distances[i];
         const parameter=parameterAtCachedDistanceV2(cache,distance);
@@ -102,7 +127,11 @@ export function buildSplineFramesV2(cache:SplineCacheV2,options:SplineFramesOpti
         const tangent=tangentAt(cache,parameter,t0);
         right=i===0?startRight(tangent,options.up??v(0,1,0)):transport(t0,tangent,right,up);
         const f=frame(distance,parameter,sample.position,tangent,right);
-        frames.push(f);t0=tangent;right=f.right;up=f.up;
+        // Transport the unbanked frame so roll is absolute at each
+        // station; carrying a banked right vector would accumulate
+        // the same roll over and over on successive frame samples.
+        frames.push(applyRoll(f,rollAt(rollSource,parameter)));
+        t0=tangent;right=f.right;up=f.up;
     }
     if(cache.spline.closed&&total>1e-12){
         const first=frames[0],last=frames[frames.length-1];
