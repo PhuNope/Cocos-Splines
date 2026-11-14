@@ -112,8 +112,25 @@ try{
  assert.notEqual(JSON.stringify(curvedBezier.positions),JSON.stringify(defaultBezier.positions));
  const bezierBake=road.prepareBake();
  assert.equal(JSON.parse(bezierBake.content).asset.version,'2.0');
- authoredPath.bezierTangents=[];
  authoredPath.interpolation=SplinePathCurveModeV2.Linear;
+ authoredPath.knots=[a,b];authoredPath.gizmoKnotIndex=0;
+ a.rollDegrees=0;b.rollDegrees=0;
+ const unbankedRoad=road.generate().geometry;
+ b.rollDegrees=60;
+ const bankedRoad=road.generate().geometry;
+ assert(bankedRoad.positions.some((n,i)=>i%3===1&&Math.abs(n)>.9),
+   'Nonzero Knot roll must bank the real Road vertices, not only its source data');
+ assert.deepEqual(bankedRoad.uv0,unbankedRoad.uv0,
+   'Banking changes only cross-section orientation, not longitudinal UV phase');
+ assert.notDeepEqual(bankedRoad.positions,unbankedRoad.positions);
+ const bankBake=road.prepareBake();
+ assert.equal(JSON.parse(bankBake.content).asset.version,'2.0');
+ b.rollDegrees=0;
+ const resetRoad=road.generate().geometry;
+ assert(resetRoad.positions.every((n,i)=>i%3!==1||Math.abs(n)<1e-5),
+   'Resetting bank to zero restores a flat generated Road');
+ assert.notEqual(road.prepareBake().fingerprint,bankBake.fingerprint,
+   'Bank edits must invalidate the explicit saved glTF geometry fingerprint');
  env.EDITOR_NOT_IN_PREVIEW=false;
  const continuous=road.generate().geometry;
  road.surfaceMode=1;
