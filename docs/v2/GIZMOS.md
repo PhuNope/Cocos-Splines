@@ -3,13 +3,13 @@
 - **Gizmos SDK:** [PhuNope/Cocos-Gizmos](https://github.com/PhuNope/Cocos-Gizmos/tree/v3), inspected at commit `184ce3ed6bfce429bcce8c795964da276ee82c81`.
 - **Splines:** `PhuNope/Cocos-Splines` branch `v2.0.0`. Test builds only; no tag/release.
 
-## Direct v3 API (not the old Cocos-Gizmos v2 adapter)
+## Gizmos integration API
 
 Cocos-Gizmos installs `globalThis.Gizmos3D` in its **Editor Scene** process in `scene.js`.
 Its `ExecuteGizmos` auto-discovers enabled Components implementing
 `onDrawGizmosSelected` or `onGizmoHandles`. No `@registerGizmos` is required for the Component-hook API.
 Do **not** import legacy `db://assets/CompanyCore/Gizmos/`, `dist/Gizmos3D`, or
-assign `__SplineGizmosV3`. A separately installed v3 extension owns the Editor
+assign a custom global adapter. A separately installed Gizmos extension owns the Editor
 renderer; the Spline scripts have **no hard runtime dependency** on the package.
 
 The optional Spline bridge checks the real Gizmos global only when drawing/handling in
@@ -26,7 +26,7 @@ the Editor and directly invokes
 - **Multi-Knot Points (new, opt-in):** enable `Gizmos Multi Knot Points`. Other Knots get small pickable camera-plane point handles, limited by `Gizmos Point Limit` (2..32, default 16). Native SDK reads `gizmoKnotPositions[index]`, an Array-compatible `Vec3[]` Proxy; writes go to the **existing Knot Node** at that index, not a second serialized vertex array. Active Knot retains all six Move axis/plane handles.
 - **Native Scene HUD:** once `Gizmos Edit Knot` is enabled, `onGizmoHudControls()` exposes an **Active Knot** integer slider and an **Other Knots** toggle. SDK writes only the serialized UI settings; moving handles still writes the Knot Nodes.
 - **Stable drag target:** `onGizmoChanged(begin/end/cancel)` pins the original Knot Node during a gesture. Changing the Inspector active index or reordering the Knot array while dragging does not redirect the ongoing write or its Escape rollback. Editing mode and multi-points remain off by default.
-- The dynamically resolved `gizmoKnotPosition` Vec3 getter/setter and indexed `gizmoKnotPositions[index]` Proxy read and write source **Knot Node world positions**, transformed through the Road's local/world matrices. Neither is a serialized point list. During Escape, v3 writes the rollback Vec3 through the same mapping, restoring the source Node.
+- The dynamically resolved `gizmoKnotPosition` Vec3 getter/setter and indexed `gizmoKnotPositions[index]` Proxy read and write source **Knot Node world positions**, transformed through the Road's local/world matrices. Neither is a serialized point list. During Escape, Gizmos writes the rollback Vec3 through the same mapping, restoring the source Node.
 - **Junction onDrawGizmosSelected:** branch center, exact trimmed Road ring bars and curb endpoints from linked Road profiles; no new geometry and no runtime writes.
 - **Missing Gizmos:** these drawing/handle hooks produce no errors or dependencies when Cocos-Gizmos is absent.
 - **Play:** Editor-only guard prevents Gizmos handles and knot setter writes in Play/Preview.
@@ -36,7 +36,7 @@ the Editor and directly invokes
 
 ## Live Road mesh during Gizmos drag
 
-`SplineRoadV2` now listens to the verified v3 `onGizmoChanged` phases:
+`SplineRoadV2` now listens to the verified `onGizmoChanged` phases:
 - `update`: rebuild **temporary Editor preview** with a throttle, default
   `Gizmos Mesh Interval Ms=100`. No native Editor timer and no Bake.
 - `end` and `cancel`: force a rebuild with the latest position, including
@@ -49,7 +49,7 @@ the Editor and directly invokes
 
 A separately authored [SplinePathV2](./SPLINE_PATH_V2.md) can now serve as
 source for one or more Roads, avoiding Road-owned spline duplication.
-Editor-initialized linked Roads are notified by the source during v3 edits.
+Editor-initialized linked Roads are notified by the source during Gizmos edits.
 Actual Creator 3.8.x drag/picking and cross-Node Undo/Redo remain to be tested.
 
 ## Try it in Creator 3.8.x
@@ -68,6 +68,6 @@ Actual Creator 3.8.x drag/picking and cross-Node Undo/Redo remain to be tested.
 - [Callbacks and undo/cancel lifecycle](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/CALLBACKS.md)
 - [Move API and descriptor semantics](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/MOVE_GIZMO.md)
 - [Editor Scene auto-discovery](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/source/ExecuteGizmos.ts)
-- [Native v3 scene.js global installation](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/scene.js)
+- [Scene global installation](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/scene.js)
 
 Still pending: real Cocos Creator 3.8.x visual certification, native cross-Node Undo/Redo history, 3D tangent controls (current spline Knots have position-only sources), full Sidewalk networking / Terrain Boolean joins.
