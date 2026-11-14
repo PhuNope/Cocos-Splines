@@ -31,7 +31,7 @@ SplinePath
   Temp Scene Preview / glTF Bake / Collider Adapter / Runtime Data
 ```
 
-**Source of truth:** knot transforms belong to the Path; no Road-owned duplicate Knot list. Source-spline revisions invalidate consumers, not editor viewport redraw alone. Handle start/update/end/cancel (Cocos-Gizmos) must yield deterministic preview and correct Escape rollback.
+**Source of truth:** serialized Path-local Vec3 Knot records belong to the Path; no child Knot Nodes or Road-owned duplicate list. Source-spline revisions invalidate consumers, not editor viewport redraw alone. Handle start/update/end/cancel (Cocos-Gizmos) must yield deterministic preview and correct Escape rollback.
 
 ## Implementation plan / gates
 
