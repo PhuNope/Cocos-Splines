@@ -67,6 +67,11 @@ try{
  road.pathSource=authoredPath;road.sampleStep=1;road.width=4;
  assert(!('knots' in road)&&!('interpolation' in road)&&!('closed' in road));
  assert(!('onGizmoHandles' in road)&&!('onGizmoHudControls' in road));
+ const currentPath=road.pathSource;
+ road.pathSource=null;
+ assert.throws(()=>road.generate(),/Assign a SplinePathV2 Path Source/,
+   'Road must reject geometry without its authoritative SplinePath');
+ road.pathSource=currentPath;
  const saved=new Mesh();road.bakedMesh=saved;
  const originalGenerate=road.generate;
  road.generate=()=>{throw new Error('Manual/Baked must never generate');};
