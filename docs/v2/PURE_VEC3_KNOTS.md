@@ -17,6 +17,7 @@ class SplineKnotRecordV2 {
   handleIn: Vec3;        // relative to position
   handleOut: Vec3;       // relative to position
   tension: number;       // Catmull-Rom
+  rollDegrees: number;   // per-Knot bank about travel tangent
 }
 ```
 
@@ -33,7 +34,8 @@ world-space endpoint of each Road's linked Path.
 Add `SplinesV2.SplinePath` to one Node. Its dedicated Inspector offers:
 
 - **Spline**: Interpolation and Closed.
-- **Gizmos**: active Knot, visibility, point limit, editing toggles.
+- **Gizmos**: active Knot, visibility, point limit, editing toggles,
+  and **Rotation Mode** (Knots / Planar2D / Spatial3D) with angle snap.
 - **Vec3 Knots**: numbered editable Knot cards, position and tangent
   properties, and **Select · + After · Duplicate · ↑ · ↓ · Remove** buttons.
 - **+ Add Knot** creates a Knot at the extrapolated end of the spline.
@@ -82,6 +84,16 @@ Select the **Path** Node to edit points; there is no Knot Node to select.
    Both must consume the same Path values, each in its own Node-local space.
 8. Test Creator-native Undo/Redo, Save → Close → Reopen, Scene dirty
    marking, runtime Dynamic and Baked, and 3/4-road Junction end seams.
+
+## Path rotation and per-Knot roll
+
+**Gizmos Rotate** operates around the Path Node origin using the
+SDK's native 2D Z or 3D XYZ rings; it changes the Node Euler transform
+while preserving local Knot coordinates. `Roll Degrees` on each Knot
+changes the generated Road/Extrude/Mesh Deform frame orientation along
+the path. These are separate controls.
+
+See [Rotate & Banking](ROTATE_AND_BANK.md).
 
 ## Limits
 
