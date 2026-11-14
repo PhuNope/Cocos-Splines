@@ -31,6 +31,15 @@ export interface SplineGizmoHandle {
     hoverColor?:string;
     pickSize?:number;
 }
+export interface SplineGizmoRotateOptions {
+    space:'local'|'world';
+    ringSize?:number;
+    pickSize?:number;
+    snap?:number;
+}
+export interface SplineSceneGizmo2DBackend {
+    rotate?(property:string,options?:SplineGizmoRotateOptions):SplineGizmoHandle[];
+}
 export interface SplineSceneGizmoBackend {
     beginColor(owner:Node,color:Color):void;
     drawLine(owner:Node,a:Vec3,b:Vec3):void;
@@ -38,12 +47,36 @@ export interface SplineSceneGizmoBackend {
         sectors?:number,stacks?:number):void;
     /** Move handle factory exposed by Gizmos3D in the Scene process. */
     move?(property:string,options?:SplineGizmoMoveOptions):SplineGizmoHandle[];
+    rotate?(property:string,options?:SplineGizmoRotateOptions):SplineGizmoHandle[];
 }
 export function availableGizmoBackend():SplineSceneGizmoBackend|null {
     if(!EDITOR_NOT_IN_PREVIEW)return null;
     const sdk=(globalThis as unknown as {Gizmos3D?:SplineSceneGizmoBackend}).Gizmos3D;
     return sdk&&typeof sdk.beginColor==='function'&&
         typeof sdk.drawLine==='function'?sdk:null;
+}
+/**
+ * SDK rotation is centered at the SELECTED COMPONENT'S NODE, not at a
+ * virtual Knot in the curve. Bind only to the Path Node's Euler rotation.
+ * Gizmos2D.rotate => Z ring; Gizmos3D.rotate => XYZ rings.
+ * Missing SDK methods cause no handles, not Editor/Play errors.
+ */
+export function buildSplinePathRotateGizmos(
+    property:string,mode:'2d'|'3d',snapDegrees=0
+):SplineGizmoHandle[] {
+    if(!Number.isFinite(snapDegrees)||snapDegrees<0)
+        throw new Error('Rotation snap must be a finite nonnegative angle');
+    const sdk=availableGizmoBackend();
+    if(!sdk)return [];
+    const options:SplineGizmoRotateOptions={space:'local',ringSize:72,pickSize:14,
+        ...(snapDegrees>0?{snap:snapDegrees}:{})};
+    if(mode==='3d')
+        return typeof sdk.rotate==='function'?sdk.rotate(property,options):[];
+    const sdk2d=(globalThis as unknown as {
+        Gizmos2D?:SplineSceneGizmo2DBackend
+    }).Gizmos2D;
+    return typeof sdk2d?.rotate==='function'?
+        sdk2d.rotate(property,options):[];
 }
 /** Gizmos3D.move('Vec3-property',options) provided by Cocos-Gizmos.
  * A missing/older SDK simply offers no handles.
@@ -58,7 +91,7 @@ export function buildSplineKnotMoveGizmos(property:string):SplineGizmoHandle[] {
 /**
  * Cocos-Gizmos PositionHandles.readField/writeField accepts indexed
  * Vec3[] descriptors: { property, index, plane, space }. The Road supplies
- * a non-serialized array Proxy whose numeric write targets a real Knot Node.
+ * a non-serialized array Proxy whose numeric write targets a pure Vec3 Knot record.
  *
  * A compact camera-plane point handle is intentional. The active Knot uses
  * Gizmos3D.move() for XYZ axes and three plane squares, while additional
