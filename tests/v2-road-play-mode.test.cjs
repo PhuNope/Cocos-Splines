@@ -122,7 +122,20 @@ try{
    assert.equal(Array.isArray(road.gizmoKnotPositions),true,
      'v3 PositionHandles.writeField requires a real array-compatible Vec3[]');
    assert.equal(road.gizmoKnotPositions.length,3);
+   const shortKnots=road.knots;
+   const extended=[...shortKnots,...Array.from({length:37},(_,i)=>new Node('ExtraKnot'+i))];
+   road.knots=extended;road.gizmoV3PointLimit=16;
+   assert.equal(road.gizmoKnotPositions.length,16,'Gizmo Proxy caps indexed Knots');
+   assert.equal(road.onGizmoHandles().length,21,'Six active handles + 15 other points');
+   road.gizmoV3PointLimit=NaN;
+   assert.equal(road.gizmoKnotPositions.length,16,
+     'Malformed editor slider value must not allocate an invalid proxy array');
+   assert.equal(road.onGizmoHandles().length,21);
+   road.gizmoV3PointLimit=16;road.knots=shortKnots;
    const firstOriginal=new Vec3(a.worldPosition.x,a.worldPosition.y,a.worldPosition.z);
+   road.gizmoKnotPositions[0]=new Vec3(NaN,0,0);
+   assert.deepEqual({...a.worldPosition},{...firstOriginal},
+     'Non-finite interactive values cannot move scene Knots');
    const pointProxy=road.gizmoKnotPositions;
    pointProxy[0]=new Vec3(-7,2,1);
    assert.deepEqual({...a.worldPosition},{x:-7,y:2,z:1},
