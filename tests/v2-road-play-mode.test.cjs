@@ -259,6 +259,59 @@ try{
     splinePath.onRestore();
     assert(otherRenderer.mesh&&renderer.mesh,
        'Path Undo/Restore hook refreshes registered mesh consumers');
+    // Native Transform / Inspector edit does NOT call onGizmoChanged.
+    // Editor Path update() detects changed Node world transforms and
+    // forces a settled final rebuild after the user stops dragging.
+    const realClock=Date.now;
+    let mockNow=realClock();
+    Date.now=()=>mockNow;
+    try{
+        splinePath.update(0);
+        const firstRoad=renderer.mesh,secondRoad=otherRenderer.mesh;
+        const pos={...b.worldPosition};
+        b.setWorldPosition(new Vec3(pos.x+.45,pos.y,pos.z));
+        mockNow+=70;
+        splinePath.update(0);
+        assert.notEqual(renderer.mesh,firstRoad,
+          'Native Knot Transform must refresh Road preview without Gizmos callback');
+        assert.notEqual(otherRenderer.mesh,secondRoad,
+          'Every registered Road must receive native Path world-transform edits');
+        const during=renderer.mesh;
+        b.setWorldPosition(new Vec3(pos.x+.5,pos.y,pos.z));
+        mockNow+=60;
+        splinePath.update(0);
+        assert.equal(renderer.mesh,during,
+           'Rapid native transform edits must be throttled');
+        mockNow+=200;
+        splinePath.update(0);
+        assert.notEqual(renderer.mesh,during,
+           'Idle native edit must force a settled final Road preview');
+        const afterIdle=renderer.mesh;
+        mockNow+=60;
+        splinePath.update(0);
+        assert.equal(renderer.mesh,afterIdle,
+           'Unchanged Path must never rebuild per Editor tick');
+        b.setWorldPosition(new Vec3(pos.x,pos.y,pos.z));
+        mockNow+=70;
+        splinePath.update(0);
+        mockNow+=200;
+        splinePath.update(0);
+        assert(otherRenderer.mesh&&renderer.mesh,
+           'Restoring Knot by native Undo-like transform remains buildable');
+        const beforePlay=renderer.mesh;
+        env.EDITOR_NOT_IN_PREVIEW=false;
+        b.setWorldPosition(new Vec3(pos.x+.15,pos.y,pos.z));
+        mockNow+=500;
+        splinePath.update(0);
+        assert.equal(renderer.mesh,beforePlay,
+           'Native path polling must never rebuild mesh in Play');
+        env.EDITOR_NOT_IN_PREVIEW=true;
+        b.setWorldPosition(new Vec3(pos.x,pos.y,pos.z));
+        splinePath.onRestore();
+    }finally{
+        Date.now=realClock;
+        env.EDITOR_NOT_IN_PREVIEW=true;
+    }
  }finally{globalThis.Gizmos3D=priorSDK;}
  other.onDisable();
  road.pathSource=authoredPath;authoredPath.knots=[a,b,k2];
