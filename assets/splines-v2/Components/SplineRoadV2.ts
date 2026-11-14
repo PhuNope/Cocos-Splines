@@ -278,7 +278,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
             this._gizmoDragProperty='';
         }
     }
-    /** v3 discovers Component callbacks; no registration decorator needed. */
+    /** Gizmos discovers Component callbacks; no registration decorator needed. */
     public onGizmoHandles():SplineGizmoHandle[] {
         // A linked SplinePath owns all Knot handles and change sessions.
         // Never expose duplicate Road handles for the same source positions.
