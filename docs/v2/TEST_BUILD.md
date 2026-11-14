@@ -48,6 +48,25 @@ See [Pure Vec3 Knots](PURE_VEC3_KNOTS.md) for the custom Inspector.
 
 [Rotate and banking guide](ROTATE_AND_BANK.md).
 
+## Live Roll HUD test (new)
+
+1. Select the Path, set Rotation Mode **Knots**, choose a Knot,
+   and find the **Knot Roll (deg)** slider in the Scene Gizmos HUD.
+   Drag from 0 to +30: the real Road preview must bank.
+2. Press Escape while dragging. The prior bank and mesh must
+   return; no saved Baked asset may change. Release normally and
+   verify the next explicit Bake records the bank change.
+3. Change `Gizmo Knot Index` while a Roll gesture is in progress:
+   only the original Knot must change. Move/Insert/Remove commands
+   must not reorder knots until the drag ends.
+4. Toggle **Roll Guide**. A short orange crossbar and green Up
+   vector should appear at the selected Knot and rotate with the
+   banked frame. Compare guide orientation with Road cross-section.
+5. Hide the SDK or enter Play/Preview: no HUD controls, no
+   Roll write, no Editor warnings or live mesh rebuilds.
+6. Test native Undo/Redo, Scene dirty state, Save/Reopen and
+   cross-property history manually in Creator 3.8.x.
+
 ## Scene and Gizmos: visual tests
 
 - Drag active Knot on Path with XYZ/XY/XZ/YZ Move handles.
