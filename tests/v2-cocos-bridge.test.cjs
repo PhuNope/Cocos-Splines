@@ -62,6 +62,15 @@ try{
  assert.match(inspector.template,/Bind Imported Mesh/i);
  assert.match(inspector.template,/spl-v2-junctionStartTrim/);
  assert.match(inspector.template,/spl-v2-junctionEndTrim/);
+ assert.match(inspector.template,/spl-v2-shortKnotMode/);
+ for(const kind of ['road','junction','extrude','mesh-deform']){
+    const html=inspector.makeV2Inspector(kind).template;
+    assert(!/spl-note|spl-status|role="status"|Mesh generation happens only on request/.test(html),
+      kind+' must NOT render bottom description/log/status in V2 Inspector');
+    assert.match(html,/Rebuild Preview/);
+    assert.match(html,/Bake glTF Asset/);
+ }
+
  const deformInspector=require(path.join(root,'src/contributions/inspector/MeshDeformV2.js'));
  assert.match(deformInspector.template,/spl-v2-sourceMesh/);
  assert.match(deformInspector.template,/spl-v2-repeatCount/);
