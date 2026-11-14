@@ -32,6 +32,31 @@ mouse picking, native Undo history, saving or reimporting .gltf assets.
    read-only centerline/width/trim guides. If Gizmos is absent, geometry
    generation, Preview, Bake and Play still work.
 
+## Bezier tangent authoring (new)
+
+1. On Path set `Interpolation = Bezier`, select an active `Gizmo Knot Index`
+   and keep `Gizmo Edit Tangents = true`. Two colored point handles should
+   appear on the selected Path: **purple Incoming**, **cyan Outgoing**.
+2. Drag one tangent; a `Bezier Tangents` record should appear bound to that
+   exact Knot Node. Reordering Path Knots must not move the tangent record
+   onto a different Knot. Test the Road mesh bends and the texture follows
+   the new curve without UV jumps.
+3. On the tangent record try modes **Free**, **Aligned** and **Mirrored**.
+   Free keeps each side independent; Aligned locks opposite direction but
+   preserves its length; Mirrored locks equal length and opposite direction.
+   **Auto** uses the default one-third-chord controls.
+4. Press Escape during an edit that started in Auto mode. The newly created
+   manual tangent record should disappear. Escape from existing manual
+   tangents must restore mode and both control offsets.
+5. Scale/rotate/translate the Path and a Road Node independently; tangent
+   control positions and Bezier mesh geometry should be correctly mapped
+   into Road local space.
+6. Modify `Bezier Tangents` directly from Inspector, save/reopen Scene,
+   test native Undo/Redo and verify glTF Bake. **Real Cocos Creator
+   3.8.x save/Undo/Redo remains unverified by CI.**
+
+See [Bezier Tangents](BEZIER_TANGENTS.md).
+
 ## Scene and Gizmos: visual tests
 
 - Drag active Knot on Path with XYZ/XY/XZ/YZ Move handles.
