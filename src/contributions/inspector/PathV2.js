@@ -16,7 +16,8 @@ for(const field of simple)$[field]='.spl-path-'+field;
 const sections=[
  ['Spline',['interpolation','closed']],
  ['Gizmos',['gizmoKnotIndex','gizmoShowPath','gizmoEditKnots',
-     'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents']]
+     'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents',
+     'gizmoRotationMode','gizmoRotationSnap']]
 ];
 const rows=sections.map(([name,fields])=>
     '<details open class="spl-section"><summary>'+name+'</summary>'+
