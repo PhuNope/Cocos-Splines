@@ -18,7 +18,8 @@ import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoV3Backend,drawSplineSceneGizmosV3} from './SplineGizmoV3Bridge';
+import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,drawSplineSceneGizmosV3,
+    type SplineGizmoV3Handle} from './SplineGizmoV3Bridge';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
@@ -111,6 +112,10 @@ export class SplineRoadV2 extends Component {
     gizmoV3Edges=true;
     @property({tooltip:'Show Knot markers for the existing editable Knot Nodes.'})
     gizmoV3Knots=true;
+    @property({tooltip:'Enable Cocos-Gizmos v3 XYZ/plane Move handle for ONE selected Knot Node. Optional alpha; native Node transform handles remain available.'})
+    gizmoV3EditKnot=false;
+    @property({min:0,max:127,step:1,tooltip:'0-based index of the Road Knot to move using the v3 handle.'})
+    gizmoV3KnotIndex=0;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
     materials:Material[]=[];
@@ -162,10 +167,37 @@ export class SplineRoadV2 extends Component {
         this._ownedMeshes=[];
     }
     /**
-     * Scene selection preview. Uses the optional Gizmos v3 drawing backend
-     * (or legacy global fallback), never constructs cc.Mesh or logs in Play.
-     * Native Cocos transform handles on the Knot Nodes remain the editor.
+     * Cocos-Gizmos v3 reads and WRITES the named Vec3 property using
+     * Gizmos3D.move; expose a computed proxy of the existing Knot Node.
+     * This avoids duplicating authoritative Knot coordinates into the
+     * Road component's serialized data. Cancel writes the original value
+     * through this same setter; native Undo across the linked Node still
+     * needs visual Creator 3.8.x certification.
      */
+    public get gizmoKnotPosition():Vec3 {
+        const knot=this.knots[this.gizmoV3KnotIndex];
+        if(!EDITOR_NOT_IN_PREVIEW||!knot?.isValid)return new Vec3();
+        const inv=Mat4.invert(new Mat4(),this.node.worldMatrix);
+        return Vec3.transformMat4(new Vec3(),knot.worldPosition,inv);
+    }
+    public set gizmoKnotPosition(value:Vec3) {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoV3EditKnot||
+            !value||![value.x,value.y,value.z].every(Number.isFinite))return;
+        const knot=this.knots[this.gizmoV3KnotIndex];
+        if(!knot?.isValid||!this.node?.isValid)return;
+        const world=Vec3.transformMat4(new Vec3(),value,this.node.worldMatrix);
+        knot.setWorldPosition(world);
+    }
+    /** Cocos-Gizmos v3 auto-discovers this callback; no decorator required. */
+    public onGizmoHandles():SplineGizmoV3Handle[] {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
+            !this.gizmoV3EditKnot||!this.node?.isValid||
+            !Number.isSafeInteger(this.gizmoV3KnotIndex)||
+            this.gizmoV3KnotIndex<0||
+            !this.knots[this.gizmoV3KnotIndex]?.isValid)return [];
+        return buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
+    }
+    /** Selection drawing uses actual global Gizmos3D, installed by Gizmos v3 scene.js. */
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
             !availableGizmoV3Backend())return;
