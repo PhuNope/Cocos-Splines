@@ -1,6 +1,6 @@
 # Cocos Splines v2.0.0 — implementation status
 
-**Updated:** 2026-11-14 (branch `v2.0.0`). This is a **development / test build**, NOT a GitHub Release.
+**Updated:** 2026-11-15 (branch `v2.0.0`). This is a **development / test build**, NOT a GitHub Release.
 
 | Milestone | Implementation | Validation / remaining limit |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
-| 11. Editor production hardening | Partial (independent MeshGenerator alpha) | Clean V2 ZIP; SplinePath owns Gizmos. Road, Extrude and Mesh Deform each inherit independent shared MeshGenerator for Path subscription, preview and Bake (Extrude/Deform/Junction no longer inherit Road). Real Creator/Undo/lightmap/collider and Road-only Knot fallback removal remain. |
+| 11. Editor production hardening | Partial (mandatory SplinePath + native transform watcher alpha) | Four independent MeshGenerators share preview/Bake. Road now requires SplinePath, contains no Knot/interpolation/closed fields or Knot handles. Path owns Gizmos and observes native Knot Transform/Inspector changes with settled preview. Real Creator Undo/Redo, serialization, collider/lightmap remain. |
 
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
@@ -22,7 +22,14 @@
 
 ## Current checkpoint
 
-**Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. All old scenes remain off by default. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
+**Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
+
+## Path-only authoring checkpoint (2026-11-15)
+
+- Road no longer has `knots`, `interpolation`, `closed`, or Road-owned editing handle settings; **Path Source is mandatory**. Junction reads endpoints from linked Roads' Path components.
+- SplinePath owns editable Knot Gizmos. Road retains only read-only centerline/edge/trim guides. The Inspector removes old controls.
+- Path `update()` performs Editor-only, at-most-50ms Knot identity and world-position observation so native Creator Transform and Inspector edits trigger registered mesh generator previews. After 180ms idle it forces a final rebuild. This is covered by mocked Editor and Play tests; real Creator drag timing and Undo/Redo are not yet certified.
+- [SplinePath setup](SPLINE_PATH_V2.md) · [Gizmos](GIZMOS.md).
 
 ## Breaking clean rewrite step (2026-11-14)
 
@@ -39,10 +46,10 @@
 
 ## Latest editor step (2026-11-14)
 
-- `SplinePathV2` may own Knots/interpolation/closed. `SplineRoadV2.pathSource` uses it when linked; Road's previous self-owned Knot fields are still supported when absent.
+- `SplinePathV2` is the only Knot, interpolation and closed source. Road/Extrude/Deform require `pathSource`; Road's previous self-owned Knot fields and Gizmos callbacks have been removed, not hidden.
 - Dragging Cocos-Gizmos handles triggers throttled live **transient** preview updates (default 100 ms). `end`/`cancel` force a final rebuild; invalid in-progress bends leave last valid preview visible. Persisted baked mesh remains unchanged until explicitly rebaked.
 - Multiple Roads registered to the same SplinePath receive Editor live-preview invalidations. Validation is from automated Cocos mocks/geometry regression, not visual Cocos Creator 3.8.x certification.
-- Remaining architecture: adapt Extrude/Mesh Deform, test Node Transform edits from native gizmos, cross-Node Undo/Redo and scene save/reload.
+- Extrude/Mesh Deform/Junction now inherit the common independent `SplineMeshGeneratorV2`. Path watches native Node Transform/Inspector changes and forces a settled mesh after idle; regression pass. Cross-Node Undo/Redo and real Scene save/reopen are not yet certified.
 
 ## Next recommended implementation
 
