@@ -266,3 +266,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. Test Editor Undo/Redo, dirty Scene, Save → Reopen vẫn là **acceptance gate chưa xác nhận**. Nếu Undo không ghi đúng Knot Node khi dùng proxy, tắt Gizmo Edit Knot và dùng native Transform trên Knot Nodes.
 
 Không dùng phần kéo Knot cho production khi chưa xác nhận native Undo/Redo trên Cocos Creator 3.8.x.
+
+
+## Short Knot ConstantWidth — fallback & compact Inspector
+
+1. Dùng **SplineRoadV2** với 3 Knot gần nhau. Ví dụ Road Width = 2, K0=(0,0,0), K1=(0,0,2.236), K2=(-5,0,-1), `Fillet Radius Scale=1.35` (bán kính yêu cầu 1.35). Chọn `Surface Mode=ConstantWidth` và `Short Knot Mode=Auto Continuous` (mặc định).
+2. Rebuild Preview. Nếu cung tròn không khớp khoảng cách Knot, Road **tự chuyển hình học sang Continuous cho lần build đó**, không cắt UV và không bỏ mesh. UV0 phải chạy liên tục dọc spline dù hình học bị thu hẹp gần đoạn cong. Kiểm tra Editor Console chỉ ghi **một cảnh báo** sau thao tác Rebuild; không có đoạn mô tả dài hay khung log ở đáy Inspector.
+3. Chọn `Short Knot Mode=Strict ConstantWidth`: Rebuild phải trả về lỗi rõ ràng (Knot i-j, spacing, radius, required distance), KHÔNG sinh mesh chồng hoặc ép nhỏ bán kính một cách nguy hiểm.
+4. Khi bật `Junction Start Trim`, `Junction End Trim`, hoặc `Road Sidewalk Width>0`, Auto Continuous không còn được phép; cần di chuyển Knot xa hơn, giảm Width, hoặc thiết kế lại Road/Junction để giữ mép trim chính xác.
+5. Lặp với UV Longitudinal Axis **U/V**, thử Road đủ khoảng cách (vẫn ConstantWidth thực sự), mở Editor Console để xem lỗi nút Rebuild / Bake / Check Bake Status. Chạy Manual/Baked Play và kiểm tra không phát sinh authoring log.
+6. Tất cả Inspector V2 (Road, Extrude, Mesh Deform, Junction) chỉ có nhóm thuộc tính và nút tác vụ. Hướng dẫn chuyển sang `docs/v2/TEST_BUILD.md`, không còn phần chữ/log dài phía dưới.
+
+> Đây là fallback chiều rộng thích nghi, **không còn giữ bề rộng Road tuyệt đối trong đoạn cong chật**. Road dùng Junction và sidewalk cần sửa spacing thật sự. Chưa được xác nhận hình ảnh trong Creator 3.8.x.
