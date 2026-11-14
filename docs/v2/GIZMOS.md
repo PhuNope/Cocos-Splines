@@ -12,7 +12,7 @@ component properties, Inspector labels or bridge class names.
 
 | Component | Scene behavior |
 |---|---|
-| `SplinePathV2` | **Editable** XYZ/plane Move handles for one active Knot; optional point handles for other Knots; HUD selects active Knot |
+| `SplinePathV2` | **Editable** XYZ/plane Move handles for one active Knot, optional other Knot points and two Bézier tangent points (purple incoming, cyan outgoing); HUD selects active Knot and controls tangents |
 | `SplineRoadV2` | **Read-only** centerline, approximate road edges and trim bars; has no Knot editing callbacks |
 | `SplineJunctionPatchV2` | **Read-only** junction center, cut rings and optional curb markers |
 | Extrude / Mesh Deform | Mesh previews update from Path; they have no separate Knot handles |
@@ -74,5 +74,4 @@ SDK reference sources:
 [Cocos-Gizmos callbacks](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/CALLBACKS.md) ·
 [Move handles](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/MOVE_GIZMO.md).
 
-Still pending: authored tangent handles, Creator Undo/Redo certification,
-production Junction/Sidewalk terrain joins and advanced mesh colliders.
+Authored Bézier tangent handles and mode controls are now available on Path: [Bezier Tangents](BEZIER_TANGENTS.md). Still pending: Creator Undo/Redo certification, production Junction/Sidewalk terrain joins and advanced mesh colliders.
