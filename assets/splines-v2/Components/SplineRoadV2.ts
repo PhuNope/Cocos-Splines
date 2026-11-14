@@ -1,10 +1,11 @@
 import {
-    _decorator,Component,Node,Mesh,MeshRenderer,Material,Vec3,Mat4,Enum,CCObject,utils,gfx,Terrain
+    _decorator,Node,MeshRenderer,Vec3,Mat4,Enum,Terrain
 } from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
-import {SplinePathV2} from './SplinePathV2';
+import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
+export {SplineV2MeshMode} from './SplineMeshGeneratorV2';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2,roadProfileLayoutV2} from '../geometry/ProfileSweep';
 import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
@@ -13,8 +14,6 @@ import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
 import {buildRoadFilletCacheV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
-import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
-import {exportMeshGltfV2} from '../geometry/GltfExporter';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
@@ -24,7 +23,6 @@ import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,
     type SplineGizmoV3Handle} from './SplineGizmoV3Bridge';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
-export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
@@ -44,9 +42,7 @@ export enum SplineV2RoadTerrainMode {FlatHeight=0,SampleTerrain=1}
 @menu('Cocos Splines V2/Road')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
-export class SplineRoadV2 extends Component {
-    @property({type:SplinePathV2,tooltip:'Preferred shared spline source; when linked, Road reads its Knots/interpolation/closed instead of Road-owned legacy fields.'})
-    pathSource:SplinePathV2|null=null;
+export class SplineRoadV2 extends SplineMeshGeneratorV2 {
     @property({type:[Node],tooltip:'Ordered knot Nodes in world space. Converted into local spline coordinates.'})
     knots:Node[]=[];
     @property({type:Enum(SplineV2CurveMode)}) interpolation=SplineV2CurveMode.Centripetal;
@@ -55,7 +51,7 @@ export class SplineRoadV2 extends Component {
     @property({min:0}) shoulderWidth=0;
     @property({min:0}) curbWidth=0;
     @property({min:0}) curbHeight=0;
-    @property({min:0.01}) sampleStep=.5;
+
     @property({min:0,tooltip:'ConstantWidth Road only. Distance removed from its starting junction endpoint. Match Junction V2 setback.'})
     junctionStartTrim=0;
     @property({min:0,tooltip:'ConstantWidth Road only. Distance removed from its ending junction endpoint. Match Junction V2 setback.'})
@@ -90,7 +86,7 @@ export class SplineRoadV2 extends Component {
     widthSlope=.25;
     @property({tooltip:'Align repeating UV0 texture phase at cut boundaries with the retained Road surface. Does not join lane markings with different directions.'})
     stitchCutUV=true;
-    @property({min:0.01}) uvMetersPerRepeat=5;
+
     @property({tooltip:'Generate independent white centre dashes (material 3) and solid edge lines (material 4). Use plain asphalt without baked-in paint.'})
     generateMarkings=false;
     @property({min:0.01,max:1,step:0.01}) markingLineWidth=.12;
@@ -128,19 +124,15 @@ export class SplineRoadV2 extends Component {
     gizmoV3MultiKnotPoints=false;
     @property({min:2,max:32,step:1,tooltip:'Maximum number of Knot point handles including active Knot. Limit keeps Editor gizmos responsive.'})
     gizmoV3PointLimit=16;
-    @property({tooltip:'Rebuild a temporary mesh preview while dragging Knot Gizmos v3 (Editor-only); never rebakes an asset.'})
-    gizmoV3LiveMesh=true;
-    @property({min:50,max:400,step:10,tooltip:'Throttle preview rebuilds during drag; End/Cancel always rebuild immediately, no auto-bake.'})
-    gizmoV3MeshIntervalMs=100;
-    @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
-    @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
-    materials:Material[]=[];
-    @property({type:Mesh,tooltip:'Drag the imported Mesh subasset of the Bake .gltf here.'})
-    bakedMesh:Mesh|null=null;
-    @property({visible:false}) bakedSourceFingerprint='';
-    @property({visible:false}) bakedSourceUrl='';
-    @property({visible:false}) pendingBakeUrl='';
-    @property({visible:false}) pendingBakeFingerprint='';
+
+
+
+
+
+
+
+
+
     private _lastOverlapReport:RoadOverlapReportV2|null=null;
     private _lastContinuousReport:RoadContinuousReportV2|null=null;
     private _lastFilletReport:RoadFilletReportV2|null=null;
@@ -152,17 +144,17 @@ export class SplineRoadV2 extends Component {
             this.junctionStartTrim<=0&&this.junctionEndTrim<=0&&
             this.roadSidewalkWidth<=0;
     }
-    private _ownedMeshes:Mesh[]=[];
-    private _ownedNodes:Node[]=[];
-    private _primaryMesh:Mesh|null=null;
+
+
+
     // Nonserialized drag target pin. A user can change selected Knot index
     // during a drag; cancellation must restore the ORIGINAL Node, not another.
     private _gizmoDragNode:Node|null=null;
     private _gizmoDragProperty:''|'gizmoKnotPosition'|'gizmoKnotPositions'='';
     private _gizmoDragIndex=-1;
-    private _gizmoLastMeshAt=Number.NEGATIVE_INFINITY;
-    private _registeredPath:SplinePathV2|null=null;
-    private _gizmoPreviewError:unknown=null;
+
+
+
 
     private splineKnots():ReadonlyArray<Node> {
         if(this.pathSource){
@@ -174,80 +166,15 @@ export class SplineRoadV2 extends Component {
     }
     private splineClosed():boolean {return this.pathSource?this.pathSource.closed:this.closed;}
 
-    /** Editing begins on Path: allow the next update to build immediately. */
-    public onSharedSplinePathEditBegin():void {
-        this._gizmoLastMeshAt=Number.NEGATIVE_INFINITY;
-    }
-    /** Other Roads linked to the same source receive this Editor-only signal. */
-    public onSharedSplinePathEdited(force:boolean):void {
-        this.rebuildOnGizmoEdit(force);
-    }
-    private rebuildOnGizmoEdit(force:boolean):void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoV3LiveMesh||!this.node?.isValid)return;
-        const now=Date.now();
-        const interval=Number.isFinite(this.gizmoV3MeshIntervalMs)?
-            Math.min(400,Math.max(50,this.gizmoV3MeshIntervalMs)):100;
-        if(!force&&now-this._gizmoLastMeshAt<interval)return;
-        this._gizmoLastMeshAt=now;
-        try{
-            this.rebuildPreview();
-            this._gizmoPreviewError=null;
-        }catch(error){
-            this._gizmoPreviewError=error;
-            // Preview geometry is built before disposing the previous Mesh.
-            // During drag an invalid intermediate bend is expected; no spam.
-            if(force)console.warn('[Cocos Splines V2] Gizmo preview retained last valid mesh:',error);
-        }
-    }
-    private publishSplineGizmoEdit(force:boolean):void {
-        this.rebuildOnGizmoEdit(force);
-        this.pathSource?.notifyPreviewConsumers(this,force);
-    }
-
-    /** Only runs automatically in Dynamic mode outside the editing scene. */
-    protected onEnable():void {
-        if(!EDITOR_NOT_IN_PREVIEW&&this.meshMode===SplineV2MeshMode.Dynamic)
-            this.rebuildDynamic();
-        else this.showSavedMesh();
-    }
     protected onDisable():void {
         this._gizmoDragNode=null;
-        this._registeredPath?.unregisterPreviewConsumer(this);
-        this._registeredPath=null;
-        this.disposeTransient();
+        super.onDisable();
     }
     protected onDestroy():void {
         this._gizmoDragNode=null;
-        this._registeredPath?.unregisterPreviewConsumer(this);
-        this._registeredPath=null;
-        this.disposeTransient();
+        super.onDestroy();
     }
 
-    private renderer():MeshRenderer {
-        const r=this.getComponent(MeshRenderer);
-        if(!r)throw new Error('SplineRoadV2 requires MeshRenderer');
-        return r;
-    }
-    private applyMaterials(renderer:MeshRenderer):void {
-        for(let i=0;i<this.materials.length;i++)
-            if(this.materials[i])renderer.setSharedMaterial(this.materials[i],i);
-    }
-    /** Manual and Baked modes only read a serialized cc.Mesh reference. */
-    public showSavedMesh():void {
-        this.disposeTransient();
-        const r=this.renderer();
-        r.mesh=this.bakedMesh;
-        this.applyMaterials(r);
-    }
-    private disposeTransient():void {
-        const r=this.getComponent(MeshRenderer);
-        if(r&&this._primaryMesh&&r.mesh===this._primaryMesh)r.mesh=null;
-        this._primaryMesh=null;
-        for(const node of this._ownedNodes)if(node.isValid)node.destroy();
-        this._ownedNodes=[];
-        for(const mesh of this._ownedMeshes)if(mesh.isValid)mesh.destroy();
-        this._ownedMeshes=[];
-    }
     /**
      * Cocos-Gizmos v3 PositionHandles.readField/writeField directly access
      * target[property] and, for indexed Vec3[], target[property][index].
@@ -433,33 +360,22 @@ export class SplineRoadV2 extends Component {
         }
     }
     /**
-     * Shared Path owns Knot data. A Road-local list is supported for existing
-     * v2 Scenes. Both paths evaluate points in this Road Node's local space.
+     * Road-local Node fields remain temporarily for geometry regression
+     * fixtures. Production v2 authoring uses an authoritative SplinePathV2.
      */
     protected source():SplineDataV2 {
-        if(this._registeredPath!==this.pathSource){
-            this._registeredPath?.unregisterPreviewConsumer(this);
-            this._registeredPath=null;
-        }
-        if(this.pathSource){
-            const data=this.pathSource.getSplineDataV2(this.node);
-            if(EDITOR_NOT_IN_PREVIEW){
-                this.pathSource.registerPreviewConsumer(this);
-                this._registeredPath=this.pathSource;
-            }
-            return data;
-        }
+        if(this.pathSource)return super.source();
         if(this.knots.length<2||this.knots.some(k=>!k||!k.isValid))
-            throw new Error('Assign at least two Knot Nodes or link a SplinePathV2 Source');
+            throw new Error('Assign SplinePathV2 Path Source or at least two valid Road Knot Nodes');
         const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
-        const data=this.knots.map(node=>{
+        const knots=this.knots.map(node=>{
             const p=Vec3.transformMat4(new Vec3(),node.worldPosition,inverse);
             return {position:{x:p.x,y:p.y,z:p.z}};
         });
         const type:CurveTypeV2=[
             'linear','bezier','catmull-rom','catmull-rom-centripetal'
         ][this.interpolation] as CurveTypeV2;
-        return {type,closed:this.closed,knots:data};
+        return {type,closed:this.closed,knots};
     }
     /** Editor-only local corner report; no warnings are printed during Play. */
     public inspectCornerRisk():RoadCornerReportV2|null {
@@ -650,77 +566,5 @@ export class SplineRoadV2 extends Component {
             sidewalkStation:this.roadSidewalkWidth>0?
                 (this.uvLongitudinalAxis===SplineV2UVAxis.U?profile[0].uv0.x:profile[0].uv0.y):undefined,
             profile:{vertices:profile,edgeMaterials:layout.edgeMaterials}};
-    }
-    public getCurrentFingerprint():string {
-        const {geometry}=this.generate();
-        return createMeshBuildPlanV2(geometry,{mode:'baked'}).fingerprint;
-    }
-    /**
-     * Call from the Inspector only. Preview geometry is temporary, never
-     * serialized; optional parts are hidden and DontSave in the Editor.
-     */
-    /** Inspector: switch back to the persisted Mesh, disposing temporary preview. */
-    public restoreBakedPreview():void {
-        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Restore saved mesh is Editor-only');
-        this.showSavedMesh();
-    }
-    public rebuildPreview():void {
-        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Editor-only Rebuild is unavailable during Play');
-        this.rebuildTransient();
-    }
-    private rebuildDynamic():void {this.rebuildTransient();}
-    private rebuildTransient():void {
-        const {geometry}=this.generate();
-        const plan=createMeshBuildPlanV2(geometry,{mode:'dynamic'});
-        // Validate geometry before deleting the old renderer mesh.
-        const nextMeshes=plan.parts.map(part=>utils.createMesh({
-            positions:Array.from(part.positions),normals:Array.from(part.normals),
-            tangents:Array.from(part.tangents),uvs:Array.from(part.uv0),
-            indices:Array.from(part.indices),
-            ...(part.uv2?{customAttributes:[{
-                attr:new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD1,gfx.Format.RG32F),
-                values:Array.from(part.uv2)
-            }]}:{})
-        }));
-        const nextNodes:Node[]=[];
-        try{
-            this.disposeTransient();
-            const primary=this.renderer();
-            for(let i=0;i<plan.parts.length;i++){
-                let target=primary;
-                if(i){
-                    const child=new Node('__SplineV2DrawPart_'+i);
-                    if(EDITOR_NOT_IN_PREVIEW)
-                        child.hideFlags=CCObject.Flags.DontSave|CCObject.Flags.HideInHierarchy;
-                    child.setParent(this.node);
-                    target=child.addComponent(MeshRenderer);
-                    nextNodes.push(child);
-                }
-                target.mesh=nextMeshes[i];
-                const material=this.materials[plan.parts[i].materialSlot];
-                if(material)target.setSharedMaterial(material,0);
-            }
-            this._ownedMeshes=nextMeshes;
-            this._ownedNodes=nextNodes;
-            this._primaryMesh=nextMeshes[0]??null;
-        }catch(error){
-            for(const node of nextNodes)if(node.isValid)node.destroy();
-            for(const mesh of nextMeshes)if(mesh.isValid)mesh.destroy();
-            throw error;
-        }
-    }
-    /** Caller must persist the generated .gltf through AssetDB (Editor main). */
-    public prepareBake():{content:string;fingerprint:string;primitiveCount:number} {
-        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Bake is Editor-only');
-        const {geometry}=this.generate();
-        const asset=exportMeshGltfV2(geometry);
-        return {content:asset.json,fingerprint:asset.fingerprint,primitiveCount:asset.primitiveCount};
-    }
-    /** Checks source drift; does NOT rebuild or load mesh in Manual/Baked. */
-    public inspectBake():{stale:boolean;hasMesh:boolean;url:string;fingerprint:string} {
-        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Bake status is Editor-only');
-        const fingerprint=this.getCurrentFingerprint();
-        return {stale:!this.bakedSourceFingerprint||this.bakedSourceFingerprint!==fingerprint,
-            hasMesh:!!this.bakedMesh,url:this.bakedSourceUrl,fingerprint};
     }
 }
