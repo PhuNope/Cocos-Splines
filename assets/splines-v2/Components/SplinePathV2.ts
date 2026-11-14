@@ -98,6 +98,11 @@ export class SplinePathV2 extends Component {
                 });
                 // Avoid an identical zero-length adjacent segment.
                 next.position=vec(add(next.position,{x:1,y:0,z:0}));
+            }else if(operation==='insert'&&index<count-1){
+                // Inserting inside an existing segment creates a real
+                // midpoint, not a displaced Knot at the far end of the Path.
+                next.position=vec(scale(add(this.knots[index].position,
+                    this.knots[index+1].position),.5));
             }else if(count){
                 const last=this.knots[count-1].position;
                 const prev=this.knots[Math.max(0,count-2)].position;
