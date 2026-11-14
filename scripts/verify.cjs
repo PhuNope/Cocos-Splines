@@ -29,4 +29,7 @@ checkRel('assets/splines-v2/Components/SplineMeshDeformV2.ts');
 checkRel('assets/splines-v2/Components/SplineMeshDeformV2.ts.meta');
 checkRel('assets/splines-v2/Components/SplineJunctionPatchV2.ts');
 checkRel('assets/splines-v2/Components/SplineJunctionPatchV2.ts.meta');
+checkRel('assets/splines-v2/geometry/SplineRoadNetworkV2.ts');
+checkRel('assets/splines-v2/geometry/SplineRoadNetworkV2.ts.meta');
+checkRel('src/v2/PathEndpointSnapDump.js');
 console.log('VERIFY PASS: Editor manifest, scripts, asset DB and UUID metadata.');
