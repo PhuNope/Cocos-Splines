@@ -3,30 +3,53 @@ import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {type SceneGuideDataV2,type SceneGuideGroupV2} from '../geometry/SceneGizmoGuideV2';
 
 /**
- * Non-invasive bridge for separately installed Gizmos3D SDKs.
- * We DO NOT import a third-party 'db://...' asset: the Spline extension
- * must still compile and run for users without that vendor package.
- *
- * The integrator may supply __SplineGizmosV3 matching the methods below.
- * Existing Gizmos3D globals remain a compatible fallback. Specific Gizmos
- * v3 SDK registration/decorators require its actual API package to verify.
+ * Cocos-Gizmos v3 (PhuNope/Cocos-Gizmos, branch v3) integration.
+ * Its scene.js installs globalThis.Gizmos3D in the Editor Scene process
+ * and automatically discovers Component onDrawGizmosSelected/onGizmoHandles.
+ * NO decorator, direct package import or vendor mount is necessary.
+ * Do not access this object when Editor Scene Gizmos is unavailable.
  */
+export interface SplineGizmoV3MoveOptions {
+    space:'local'|'world';
+    axisSize?:number;
+    pickSize?:number;
+    planeSize?:number;
+    planeOffset?:number;
+    showPositionLabel?:boolean;
+    positionLabelOffset?:number;
+    snap?:number;
+}
+export interface SplineGizmoV3Handle {
+    property:string;
+    id?:string;
+    visual?:string;
+    plane?:string;
+    axis?:string;
+    space?:string;
+}
 export interface SplineSceneGizmoV3Backend {
     beginColor(owner:Node,color:Color):void;
     drawLine(owner:Node,a:Vec3,b:Vec3):void;
     drawSphere?(owner:Node,p:Vec3,radius:number,wire?:boolean,
         sectors?:number,stacks?:number):void;
+    /** New v3 descriptor factory, bundled with Gizmos3D in Scene process. */
+    move?(property:string,options?:SplineGizmoV3MoveOptions):SplineGizmoV3Handle[];
 }
 export function availableGizmoV3Backend():SplineSceneGizmoV3Backend|null {
     if(!EDITOR_NOT_IN_PREVIEW)return null;
-    const host=globalThis as unknown as {
-        __SplineGizmosV3?:SplineSceneGizmoV3Backend;
-        Gizmos3D?:SplineSceneGizmoV3Backend;
-    };
-    for(const candidate of [host.__SplineGizmosV3,host.Gizmos3D])
-        if(candidate&&typeof candidate.beginColor==='function'&&
-            typeof candidate.drawLine==='function')return candidate;
-    return null;
+    const sdk=(globalThis as unknown as {Gizmos3D?:SplineSceneGizmoV3Backend}).Gizmos3D;
+    return sdk&&typeof sdk.beginColor==='function'&&
+        typeof sdk.drawLine==='function'?sdk:null;
+}
+/** Actual Gizmos3D.move('Vec3-property',options) from Cocos-Gizmos v3.
+ * A missing/older SDK simply offers no handles.
+ */
+export function buildSplineKnotMoveGizmoV3(property:string):SplineGizmoV3Handle[] {
+    const sdk=availableGizmoV3Backend();
+    if(!sdk||typeof sdk.move!=='function')return [];
+    return sdk.move(property,{space:'local',axisSize:66,pickSize:28,
+        planeSize:18,planeOffset:14,showPositionLabel:true,
+        positionLabelOffset:82});
 }
 // Constants only; in particular DO NOT construct Cocos Color at module
 // evaluation, because Play/Baked and headless Editor contexts never draw.
