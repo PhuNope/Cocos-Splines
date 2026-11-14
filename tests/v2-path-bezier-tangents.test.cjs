@@ -19,7 +19,10 @@ try {
  class Vec3 {
    constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
    static transformMat4(out,v,m){
-     out.x=v.x*m.sx+m.tx;out.y=v.y*m.sy+m.ty;out.z=v.z*m.sz+m.tz;return out;
+     const angle=m.rz||0,c=Math.cos(angle),s=Math.sin(angle);
+     out.x=(v.x*c-v.y*s)*m.sx+m.tx;
+     out.y=(v.x*s+v.y*c)*m.sy+m.ty;
+     out.z=v.z*m.sz+m.tz;return out;
    }
  }
  class Mat4 {
@@ -33,7 +36,16 @@ try {
  class Color{constructor(r,g,b,a=255){Object.assign(this,{r,g,b,a});}}
  class Component{}
  class Node{
-   constructor(name){this.name=name;this.isValid=true;this.components=[];this.worldPosition=new Vec3();this.worldMatrix=new Mat4();}
+   constructor(name){
+     this.name=name;this.isValid=true;this.components=[];
+     this.worldPosition=new Vec3();this.worldMatrix=new Mat4();
+     this._euler=new Vec3();
+   }
+   get eulerAngles(){return this._euler;}
+   set eulerAngles(v){
+     this._euler=new Vec3(v.x,v.y,v.z);
+     this.worldMatrix.rz=v.z*Math.PI/180;
+   }
    addComponent(Type){const v=new Type();v.node=this;this.components.push(v);return v;}
    setWorldPosition(p){this.worldPosition=new Vec3(p.x,p.y,p.z);}
  }
@@ -46,10 +58,10 @@ try {
    if(id==='cc/env')return env;
    return original.apply(this,arguments);
  };
- let SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,SplineKnotRecordV2,evaluateSplineV2;
+ let SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,SplineKnotRecordV2,SplinePathRotationModeV2,evaluateSplineV2;
  try{
    ({SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,
-     SplineKnotRecordV2}=require(path.join(dir,'Components/SplinePathV2.js')));
+     SplineKnotRecordV2,SplinePathRotationModeV2}=require(path.join(dir,'Components/SplinePathV2.js')));
    ({evaluateSplineV2}=require(path.join(dir,'core/SplineCurves.js')));
  }finally{Module._load=original;}
  const eq=(a,b,e=1e-5)=>assert(Math.abs(a-b)<=e,`expected ${a} ~ ${b}`);
@@ -76,12 +88,20 @@ try {
    onSharedSplinePathEdited(force){calls.push('B'+force);}};
  pathComp.registerPreviewConsumer(consumerA);pathComp.registerPreviewConsumer(consumerB);
  const originalGizmos=globalThis.Gizmos3D;
+ const originalGizmos2D=globalThis.Gizmos2D;
  const colors=[],lines=[];
  globalThis.Gizmos3D={beginColor:(owner,color)=>colors.push(color),
    drawLine:(owner,a,b)=>lines.push({a:{...a},b:{...b}}),
    drawSphere:()=>{},move:(property,opts)=>Array.from({length:6},(_,i)=>({
      id:property+i,property,space:opts.space,visual:'axis',plane:'xy'
+   })),
+   rotate:(property,opts)=>['x','y','z'].map(axis=>({
+     property,axis,visual:'rotation',snap:opts.snap,space:opts.space
    }))};
+ globalThis.Gizmos2D={
+   rotate:(property,opts)=>[{property,axis:'z',visual:'rotation',
+     snap:opts.snap,space:opts.space}]
+ };
  try{
    const hs=pathComp.onGizmoHandles();
    assert.equal(hs.length,9,'6 move, 1 other Knot and two tangent points');
@@ -165,6 +185,47 @@ try {
      assert.equal(calls.at(-2),'Atrue');
      assert.equal(calls.at(-1),'Btrue');
    }finally{Date.now=realDate;}
+   // Rotation presets use native SDK descriptors around the selected
+   // Path Node. They must never pretend to pivot about a non-Node Knot.
+   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Planar2D;
+   pathComp.gizmoRotationSnap=15;
+   assert.deepEqual(pathComp.onGizmoHandles().map(h=>h.axis),['z']);
+   assert(pathComp.onGizmoHandles().every(h=>h.snap===15));
+   assert.equal(pathComp.pathGizmoRotationEuler.z,0);
+   const beforeRotate=pathComp.getKnotWorldPosition(1);
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','begin');
+   pathComp.pathGizmoRotationEuler=new Vec3(90,60,90);
+   assert.deepEqual({...pathNode.eulerAngles},{x:0,y:0,z:90},
+       '2D Rotate only modifies Path Node Z Euler');
+   assert.notDeepEqual({...pathComp.getKnotWorldPosition(1)},{...beforeRotate});
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','update');
+   assert(calls.includes('Afalse')&&calls.includes('Bfalse'));
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','cancel');
+   assert.deepEqual({...pathNode.eulerAngles},{x:0,y:0,z:0},
+       'Escape restores the entire Path Node Euler value');
+   assert.deepEqual({...pathComp.getKnotWorldPosition(1)},{...beforeRotate});
+   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Spatial3D;
+   pathComp.gizmoRotationSnap=0;
+   assert.deepEqual(pathComp.onGizmoHandles().map(h=>h.axis),['x','y','z']);
+   assert(pathComp.onGizmoHandles().every(h=>h.snap===undefined));
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','begin');
+   pathComp.pathGizmoRotationEuler=new Vec3(10,20,30);
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','end');
+   assert.deepEqual({...pathNode.eulerAngles},{x:10,y:20,z:30});
+   assert(calls.at(-1)==='Btrue','3D rotation end forces final consumer preview');
+   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Planar2D;
+   pathComp.pathGizmoRotationEuler=new Vec3(99,99,40);
+   assert.deepEqual({...pathNode.eulerAngles},{x:10,y:20,z:40},
+       '2D rotates Z while preserving existing 3D X/Y Euler');
+   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Knots;
+   assert(pathComp.onGizmoHandles().some(h=>h.property==='pathGizmoKnotPosition'));
+   pathNode.eulerAngles=new Vec3();
+   // Roll lives on the Knot value, not Node rotation; changing it must
+   // reach every mesh consumer through the Path source snapshot.
+   k0.rollDegrees=35;k1.rollDegrees=-10;
+   assert.deepEqual(pathComp.getSplineDataV2(consumer).knots.map(k=>k.rollDegrees),
+      [35,-10]);
+   k0.rollDegrees=0;k1.rollDegrees=0;
    // Runtime must never let an Editor-only tangent gizmo mutate source.
    env.EDITOR_NOT_IN_PREVIEW=false;
    const snapshot=JSON.stringify(pathComp.knots);
@@ -175,6 +236,7 @@ try {
    env.EDITOR_NOT_IN_PREVIEW=true;
  }finally{
    globalThis.Gizmos3D=originalGizmos;
+   globalThis.Gizmos2D=originalGizmos2D;
    env.EDITOR_NOT_IN_PREVIEW=true;
    pathComp.unregisterPreviewConsumer(consumerA);
    pathComp.unregisterPreviewConsumer(consumerB);
