@@ -20,7 +20,7 @@ const {ccclass,property}=_decorator;
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 @ccclass('SplinesV2.MeshGeneratorBase')
 export abstract class SplineMeshGeneratorV2 extends Component {
-    @property({type:SplinePathV2,tooltip:'Required shared spline source: Path owns Knot Nodes, interpolation and Gizmos handles.'})
+    @property({type:SplinePathV2,tooltip:'Required shared spline source: Path owns serialized Vec3 Knot records, interpolation and Gizmos editing.'})
     pathSource:SplinePathV2|null=null;
     @property({min:0.01,tooltip:'Maximum frame step for generated path-following geometry.'})
     sampleStep=.5;
@@ -97,6 +97,28 @@ export abstract class SplineMeshGeneratorV2 extends Component {
         if(!EDITOR_NOT_IN_PREVIEW&&this.meshMode===SplineV2MeshMode.Dynamic)
             this.rebuildDynamic();
         else this.showSavedMesh();
+    }
+    /**
+     * A restored generator may point at a different Path after Ctrl+Z or
+     * Scene reload. Rebind its source subscription and refresh its
+     * temporary preview without changing the saved Mesh asset.
+     */
+    public onRestore():void {
+        if(!EDITOR_NOT_IN_PREVIEW)return;
+        this.unlinkPathPreviewConsumer();
+        if(!this.node?.isValid)return;
+        if(!this.pathSource||!this.gizmoLiveMesh){
+            this.showSavedMesh();
+            return;
+        }
+        try{
+            this.rebuildPreview();
+            this._gizmoPreviewError=null;
+        }catch(error){
+            // An unfinished Path during Undo should not destroy the last
+            // valid temporary preview or spam the Editor Console.
+            this._gizmoPreviewError=error;
+        }
     }
     protected onDisable():void {
         this.unlinkPathPreviewConsumer();
