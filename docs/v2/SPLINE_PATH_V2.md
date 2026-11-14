@@ -40,7 +40,7 @@ re-open before deleting old serialized references.
   glTF Bake, and no background timers.
 - During drag, builds are throttled; end/cancel always force a final build.
   Invalid temporary geometry does not delete last valid preview.
-- All three generators **Road, Extrude and MeshDeform** inherit the current base `SplineRoadV2.source()` and can read `pathSource`, but Extrude/Deform still inherit many Road-specific fields. Eliminating that inheritance is part of the next clean rebuild stage. Junction remains linked through its Road branches.
+- Road, Extrude and MeshDeform now each inherit **SplineMeshGeneratorV2**, which owns Path subscription, live preview, transient mesh allocation, materials and Bake. **Extrude and MeshDeform no longer inherit Road**, nor Road width/curb/sidewalk/trim settings. The Path is required for standalone Extrude/Deform. Road still has temporary legacy Knot fallback solely to protect existing geometry regressions. Junction remains coupled to Road branches and will be separated in the next refactor.
 - Undo/Redo on original **Knot Nodes** and save/reopen handling need real
   Creator 3.8.x visual/manual verification. Gizmos v3's change snapshot
   belongs to the Road's computed proxy, not the Node being changed.
