@@ -75,7 +75,30 @@ function refreshV2Path(uuid){
         return {ok:false,error:String(error instanceof Error?error.message:error)};
     }
 }
+/**
+ * Read-only proposal: no edits, no implicit mesh rebuilds. All mutation
+ * happens in the extension main process via Creator recordable properties.
+ */
+function planV2JunctionAutoTrim(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planAutomaticTrimsV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,plan:c.planAutomaticTrimsV2()};
+    });
+}
+/** Called after serialized Road trims have been committed by Editor. */
+function refreshV2JunctionAutoTrim(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planAutomaticTrimsV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        // Reading a plan also rejects broken links before changing previews.
+        const plan=c.planAutomaticTrimsV2();
+        for(const link of c.branches)link.road.rebuildPreview();
+        c.rebuildPreview();
+        return {ok:true,branchCount:plan.branches.length};
+    });
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
-    inspectV2RoadBake,refreshV2Path};
+    inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim};
 exports.load=function(){};
 exports.unload=function(){};
