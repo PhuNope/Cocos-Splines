@@ -15,6 +15,8 @@
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
 | 11. Editor production hardening | Partial (multi-Knot Gizmos v3 alpha) | Verified Cocos-Gizmos v3 global move/indexed Vec3[] handles: active Knot XYZ/plane, bounded optional other-Knot points, HUD Knot selector, Node-pin rollback regression. Real Creator 3.8.x, native cross-Node Undo history, collider/lightmap work remain. |
+
+**Editor UX fix (2026-11-14):** Spline V2 custom Inspectors no longer show the giant bottom explanation/status log. Button errors and the explicit ConstantWidth fallback notice go to the Editor Console. For a tight 3-Knot ConstantWidth Road that cannot fit its requested tangent radius, the default `Short Knot Mode = Auto Continuous` rebuilds a single continuous UV strip with locally adaptive width instead of failing. `Strict ConstantWidth` preserves the fit error. Auto fallback is **disabled when Junction Start/End Trim or Road Sidewalk is enabled**, because those require a fixed-width seam. Real Creator viewport validation remains pending.
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
 ## Current checkpoint
