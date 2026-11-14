@@ -57,6 +57,7 @@ try{
   ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));
   ({SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
  finally{Module._load=originalLoad;}
+ const {SplinePathV2}=require(path.join(temp,'Components/SplinePathV2.js'));
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
  const a=new Node('K0'),b=new Node('K1');
  b.worldPosition=new Vec3(0,0,10);
@@ -235,6 +236,66 @@ try{
    road.gizmoV3EditKnot=true;delete globalThis.Gizmos3D;
    assert.equal(road.onGizmoHandles().length,0,'Missing v3 package must not break Scene');
  }finally{globalThis.Gizmos3D=originalSdk;road.gizmoV3EditKnot=false;}
+
+ // Gizmos v3 update must rebuild a temporary preview during dragging,
+ // throttle duplicates, force the last preview at end and restore on Escape.
+ road.gizmoV3EditKnot=true;road.gizmoV3LiveMesh=true;
+ road.gizmoV3MeshIntervalMs=400;road.meshMode=SplineV2MeshMode.Baked;
+ road.showSavedMesh();
+ const editedPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
+ road.onGizmoChanged('gizmoKnotPosition','begin');
+ road.gizmoKnotPosition=new Vec3(editedPosition.x+.2,editedPosition.y,editedPosition.z);
+ road.onGizmoChanged('gizmoKnotPosition','update');
+ const movingPreview=renderer.mesh;
+ assert(movingPreview&&movingPreview!==saved,
+   'Gizmo update should show a temporary Road mesh even in Baked mesh mode');
+ road.gizmoKnotPosition=new Vec3(editedPosition.x+.3,editedPosition.y,editedPosition.z);
+ road.onGizmoChanged('gizmoKnotPosition','update');
+ assert.equal(renderer.mesh,movingPreview,'Live rebuild must be throttled within 400ms');
+ road.onGizmoChanged('gizmoKnotPosition','end');
+ assert(renderer.mesh!==movingPreview,
+   'Gizmo end must force a final mesh update even within throttle window');
+ assert(movingPreview.destroyed,'Replaced transient preview mesh must be released');
+ assert.equal(road.bakedMesh,saved,'Live preview never overwrites persisted Baked Mesh');
+ const previousValid=renderer.mesh;
+ road.onGizmoChanged('gizmoKnotPosition','begin');
+ b.setWorldPosition(a.worldPosition);
+ road.onGizmoChanged('gizmoKnotPosition','update');
+ assert.equal(renderer.mesh,previousValid,
+   'Invalid intermediate Knot position retains last valid rendered mesh');
+ b.setWorldPosition(editedPosition);
+ road.onGizmoChanged('gizmoKnotPosition','cancel');
+ assert(renderer.mesh!==previousValid,'Escape must restore and rebuild Road mesh');
+
+ // SplinePathV2 is the preferred shared source: one Path, two Roads.
+ // Road-local Knots and interpolation are ignored once it is linked.
+ const pathNode=new Node('SharedSplinePath');
+ const path=pathNode.addComponent(SplinePathV2);
+ path.knots=[a,b,k2];path.interpolation=0;path.closed=false;
+ road.pathSource=path;road.knots=[];road.interpolation=1;
+ assert.equal(road.source().type,'linear',
+   'Road must use the linked SplinePathV2 interpolation, not legacy setting');
+ assert.equal(road.source().knots.length,3);
+ const otherNode=new Node('SharedRoad2'),otherRenderer=otherNode.addComponent(MeshRenderer);
+ const other=otherNode.addComponent(SplineRoadV2);
+ other.pathSource=path;other.surfaceMode=0;other.sampleStep=.5;other.width=1.5;
+ other.rebuildPreview();road.rebuildPreview();
+ const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
+ assert(originalPrimary&&originalSecondary);
+ road.onGizmoChanged('gizmoKnotPosition','begin');
+ road.gizmoKnotPosition=new Vec3(editedPosition.x+.4,editedPosition.y,editedPosition.z);
+ road.onGizmoChanged('gizmoKnotPosition','update');
+ assert.notEqual(renderer.mesh,originalPrimary,
+    'Source Road must rebuild when a shared Path Knot is moved');
+ assert.notEqual(otherRenderer.mesh,originalSecondary,
+    'Other linked Road must receive the shared Path preview notification');
+ road.gizmoKnotPosition=editedPosition;
+ road.onGizmoChanged('gizmoKnotPosition','cancel');
+ assert(otherRenderer.mesh&&renderer.mesh,'Cancel must rebuild both Roads');
+ other.onDisable();
+ road.pathSource=null;road.knots=[a,b,k2];
+ road.showSavedMesh();road.gizmoV3EditKnot=false;generated.length=0;
+
  env.EDITOR_NOT_IN_PREVIEW=false;
  assert.equal(road.onGizmoHudControls().length,0,'No Editor HUD in Play');
  assert.equal(road.onGizmoHandles().length,0,'No Gizmos handles when playing');
