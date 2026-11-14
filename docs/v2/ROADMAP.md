@@ -65,13 +65,13 @@
 
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
 - [x] Read-only selected Scene Gizmo guides for v2 Road/Junction: bounded curve/border/trim/curb visualization via optional SDK drawing interface; no new mesh or Play work, regression tests.
-- [x] Integrate Cocos-Gizmos v3 branch source: native global Gizmos3D on Scene process; Component onDrawGizmosSelected/onGizmoHandles auto-discovered without a decorator. Add opt-in Road Knot XYZ/plane move() from live Knot-node Vec3 proxy with begin/update/end/cancel rollback tests.
-- [x] Optional Gizmos v3 multi-Knot pickable points via its native indexed Vec3[] descriptor API, bound to live non-serialized source Knot Nodes, with drag-node pin and Escape rollback regression. Active XYZ handle and HUD index slider; gizmo allocation bounded 32.
-- [x] Gizmos v3 live Road mesh preview: throttle transient rebuild during `onGizmoChanged(update)`, force end/cancel, keep prior mesh on invalid geometry, do not Bake or generate in Play; regression.
+- [x] Integrate Cocos-Gizmos branch source: native global Gizmos3D on Scene process; Component onDrawGizmosSelected/onGizmoHandles auto-discovered without a decorator. Add opt-in Road Knot XYZ/plane move() from live Knot-node Vec3 proxy with begin/update/end/cancel rollback tests.
+- [x] Optional Gizmos multi-Knot pickable points via its native indexed Vec3[] descriptor API, bound to live non-serialized source Knot Nodes, with drag-node pin and Escape rollback regression. Active XYZ handle and HUD index slider; gizmo allocation bounded 32.
+- [x] Gizmos live Road mesh preview: throttle transient rebuild during `onGizmoChanged(update)`, force end/cancel, keep prior mesh on invalid geometry, do not Bake or generate in Play; regression.
 - [x] Introduce `SplinePathV2` authored path-source Component and opt-in `SplineRoadV2.pathSource`; linked Roads read shared Knots/interpolation/closed and get editor-only preview notifications. Legacy Road-owned Node arrays remain compatible; no UUID migration.
 - [ ] Migrate Extrude/MeshDeform and generic Gizmos to the shared path consumer/source architecture; validate native Creator Undo/Redo, editor transforms, save/reopen and external Knot transform editing.
 
-- [ ] Certify v3 Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
+- [ ] Certify Gizmos Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
 
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
