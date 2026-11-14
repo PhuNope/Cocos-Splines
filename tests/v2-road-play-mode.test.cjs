@@ -282,16 +282,41 @@ try{
  other.rebuildPreview();road.rebuildPreview();
  const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
  assert(originalPrimary&&originalSecondary);
- road.onGizmoChanged('gizmoKnotPosition','begin');
- road.gizmoKnotPosition=new Vec3(editedPosition.x+.4,editedPosition.y,editedPosition.z);
- road.onGizmoChanged('gizmoKnotPosition','update');
- assert.notEqual(renderer.mesh,originalPrimary,
-    'Source Road must rebuild when a shared Path Knot is moved');
- assert.notEqual(otherRenderer.mesh,originalSecondary,
-    'Other linked Road must receive the shared Path preview notification');
- road.gizmoKnotPosition=editedPosition;
- road.onGizmoChanged('gizmoKnotPosition','cancel');
- assert(otherRenderer.mesh&&renderer.mesh,'Cancel must rebuild both Roads');
+ assert.equal(road.onGizmoHandles().length,0,
+    'With a linked SplinePath, only the Path owns Knot Gizmos');
+ const priorSDK=globalThis.Gizmos3D;
+ globalThis.Gizmos3D=mockV3;
+ try{
+    splinePath.gizmoKnotIndex=1;
+    const pathHandles=splinePath.onGizmoHandles();
+    assert.equal(pathHandles.length,8,'SplinePath owns six XYZ/plane + two point handles');
+    assert(pathHandles.some(h=>h.property==='pathGizmoKnotPosition'));
+    assert.deepEqual(pathHandles.slice(6).map(h=>h.index),[0,2]);
+    assert.equal(splinePath.onGizmoHudControls().length,2);
+    splinePath.onGizmoChanged('pathGizmoKnotPosition','begin');
+    splinePath.pathGizmoKnotPosition=new Vec3(
+        editedPosition.x+.4,editedPosition.y,editedPosition.z);
+    splinePath.onGizmoChanged('pathGizmoKnotPosition','update');
+    assert.notEqual(renderer.mesh,originalPrimary,
+        'SplinePath Knot update must rebuild registered Road preview');
+    assert.notEqual(otherRenderer.mesh,originalSecondary,
+        'SplinePath must invalidate every registered consumer');
+    splinePath.pathGizmoKnotPosition=editedPosition;
+    const previewBeforeCancel=renderer.mesh;
+    splinePath.onGizmoChanged('pathGizmoKnotPosition','cancel');
+    assert(renderer.mesh!==previewBeforeCancel,'Escape restores Road mesh from Path');
+    assert.deepEqual({...b.worldPosition},{...editedPosition});
+    assert(otherRenderer.mesh&&renderer.mesh);
+    const point=splinePath.pathGizmoKnotPositions;
+    assert.equal(Array.isArray(point),true);
+    const originalFirst={...a.worldPosition};
+    point[0]=new Vec3(-8,0,0);
+    assert.equal(a.worldPosition.x,-8);
+    point[0]=new Vec3(originalFirst.x,originalFirst.y,originalFirst.z);
+    splinePath.onRestore();
+    assert(otherRenderer.mesh&&renderer.mesh,
+       'Path Undo/Restore hook refreshes registered mesh consumers');
+ }finally{globalThis.Gizmos3D=priorSDK;}
  other.onDisable();
  road.pathSource=null;road.knots=[a,b,k2];
  road.showSavedMesh();road.gizmoV3EditKnot=false;generated.length=0;
