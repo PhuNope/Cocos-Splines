@@ -33,8 +33,10 @@ function makeV2Inspector(kind='road'){
         tube?
         [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
-        [['Road and cross-section',['knots','interpolation','closed','width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
-         ['Road Scene Gizmos',['showSceneGizmosV3','gizmoV3Steps','gizmoV3Edges','gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex','gizmoV3MultiKnotPoints','gizmoV3PointLimit']],
+        [['Spline source',['pathSource','knots','interpolation','closed']],
+         ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
+         ['Road Scene Gizmos',['showSceneGizmosV3','gizmoV3Steps','gizmoV3Edges','gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex','gizmoV3MultiKnotPoints','gizmoV3PointLimit',
+             'gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
          ['Road sidewalk (optional, material 5)',['roadSidewalkWidth','roadSidewalkTerrainMode',
              'roadSidewalkTerrainSource','roadSidewalkTerrainHeightOffset',
              'roadSidewalkMaxCrossSlope','roadSidewalkMaxEdgeSlope']],
@@ -45,7 +47,8 @@ function makeV2Inspector(kind='road'){
         `<details open class="spl-section"><summary>${title}</summary>`+
         props.map(name=>{
             selectors[name]='.spl-v2-'+name;
-            return `<div class="spl-row"><ui-prop type="dump" class="spl-prop spl-v2-${name}"></ui-prop></div>`;
+            selectors['row_'+name]='.spl-v2-row-'+name;
+            return `<div class="spl-row spl-v2-row-${name}"><ui-prop type="dump" class="spl-prop spl-v2-${name}"></ui-prop></div>`;
         }).join('')+'</details>'
     ).join('');
     return {
@@ -63,8 +66,12 @@ function makeV2Inspector(kind='road'){
         </div>`,
         $:selectors,
         update(dump){
+            const hasPath=!!dump?.value?.pathSource?.value;
             for(const field of names){
                 const prop=dump?.value?.[field];
+                const row=this.$['row_'+field];
+                if(row)row.hidden=!prop||(hasPath&&
+                    ['knots','interpolation','closed'].includes(field));
                 if(prop&&this.$[field])this.$[field].render(prop);
             }
         },
