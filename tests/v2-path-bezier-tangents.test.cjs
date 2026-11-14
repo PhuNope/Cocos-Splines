@@ -46,18 +46,18 @@ try {
    if(id==='cc/env')return env;
    return original.apply(this,arguments);
  };
- let SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,SplineBezierTangentV2,evaluateSplineV2;
+ let SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,SplineKnotRecordV2,evaluateSplineV2;
  try{
    ({SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,
-     SplineBezierTangentV2}=require(path.join(dir,'Components/SplinePathV2.js')));
+     SplineKnotRecordV2}=require(path.join(dir,'Components/SplinePathV2.js')));
    ({evaluateSplineV2}=require(path.join(dir,'core/SplineCurves.js')));
  }finally{Module._load=original;}
  const eq=(a,b,e=1e-5)=>assert(Math.abs(a-b)<=e,`expected ${a} ~ ${b}`);
  const pathNode=new Node('AuthoritativePath'),consumer=new Node('Road');
  pathNode.worldMatrix.sx=2;pathNode.worldMatrix.sy=2;pathNode.worldMatrix.tx=10;
  consumer.worldMatrix.tx=-2;
- const k0=new Node('K0'),k1=new Node('K1');
- k0.worldPosition=new Vec3(10,0,0);k1.worldPosition=new Vec3(22,0,0);
+ const k0=new SplineKnotRecordV2(),k1=new SplineKnotRecordV2();
+ k0.position=new Vec3(0,0,0);k1.position=new Vec3(6,0,0);
  const pathComp=pathNode.addComponent(SplinePathV2);
  pathComp.knots=[k0,k1];pathComp.interpolation=SplinePathCurveModeV2.Bezier;
  // Auto tangents exactly match core's natural 1/3 chord fallback.
@@ -97,14 +97,14 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentOut','begin');
    assert(calls.includes('startA')&&calls.includes('startB'));
    pathComp.pathGizmoTangentOut=new Vec3(2,3,0);
-   assert.equal(pathComp.bezierTangents.length,1);
-   assert.equal(pathComp.bezierTangents[0].mode,SplineBezierTangentModeV2.Free);
+   assert.equal(pathComp.knots.length,2);
+   assert.equal(k0.mode,SplineBezierTangentModeV2.Free);
    pathComp.onGizmoChanged('pathGizmoTangentOut','update');
    assert(calls.includes('Afalse')&&calls.includes('Bfalse'));
    pathComp.pathGizmoTangentOut=new Vec3(2,0,0);
    pathComp.onGizmoChanged('pathGizmoTangentOut','cancel');
-   assert.equal(pathComp.bezierTangents.length,0,
-     'Escape restores the absence of an authored tangent record');
+   assert.equal(k0.mode,SplineBezierTangentModeV2.Auto,
+     'Escape restores Auto tangent behavior without creating another record');
    assert.equal(pathComp.getSplineDataV2(consumer).knots[0].handleOut,undefined);
    assert(calls.includes('Atrue')&&calls.includes('Btrue'));
    // Commit explicit tangents and verify actual core Bezier math in
@@ -116,7 +116,8 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentIn','begin');
    pathComp.pathGizmoTangentIn=new Vec3(4,3,0);
    pathComp.onGizmoChanged('pathGizmoTangentIn','end');
-   assert.equal(pathComp.bezierTangents.length,2);
+   assert.equal(k0.mode,SplineBezierTangentModeV2.Free);
+   assert.equal(k1.mode,SplineBezierTangentModeV2.Free);
    const shaped=pathComp.getSplineDataV2(consumer);
    assert.deepEqual(shaped.knots[0].handleOut,{x:4,y:6,z:0});
    assert.deepEqual(shaped.knots[1].handleIn,{x:-4,y:6,z:0});
@@ -130,10 +131,10 @@ try {
    // Aligned retains the opposite length and flips its direction.
    pathComp.setBezierTangentMode(0,SplineBezierTangentModeV2.Aligned);
    pathComp.gizmoKnotIndex=0;
-   const oppositeBefore=pathComp.bezierTangents[0].handleIn;
+   const oppositeBefore=k0.handleIn;
    const lenBefore=Math.hypot(oppositeBefore.x,oppositeBefore.y,oppositeBefore.z);
    pathComp.pathGizmoTangentOut=new Vec3(1,4,0);
-   const aligned=pathComp.bezierTangents[0];
+   const aligned=k0;
    eq(Math.hypot(aligned.handleIn.x,aligned.handleIn.y,aligned.handleIn.z),lenBefore);
    eq(aligned.handleIn.x*aligned.handleOut.y-aligned.handleIn.y*aligned.handleOut.x,0);
    assert(aligned.handleIn.x*aligned.handleOut.x+
@@ -143,23 +144,21 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentOut','begin');
    const savedIn={...aligned.handleIn},savedOut={...aligned.handleOut};
    pathComp.pathGizmoTangentOut=new Vec3(1,5,0);
-   eq(pathComp.bezierTangents[0].handleIn.y,
-      -pathComp.bezierTangents[0].handleOut.y);
+   eq(k0.handleIn.y,-k0.handleOut.y);
    pathComp.onGizmoChanged('pathGizmoTangentOut','cancel');
    assert.deepEqual({...aligned.handleIn},savedIn);
    assert.deepEqual({...aligned.handleOut},savedOut);
    assert.equal(aligned.mode,SplineBezierTangentModeV2.Mirrored);
    // Duplicated control records must reject ambiguous authoring.
-   const duplicate=new SplineBezierTangentV2();duplicate.knot=k0;
-   pathComp.bezierTangents.push(duplicate);
-   assert.throws(()=>pathComp.getSplineDataV2(consumer),/duplicate/i);
-   pathComp.bezierTangents.pop();
+   pathComp.knots.push(k0);
+   assert.throws(()=>pathComp.getSplineDataV2(consumer),/not be reused/i);
+   pathComp.knots.pop();
    // Inspector mutations are observed without Gizmos callbacks.
    const realDate=Date.now;let now=realDate();Date.now=()=>now;
    try{
      pathComp.update(0);
      const before=calls.length;
-     pathComp.bezierTangents[0].handleIn.x+=.5;
+     k0.handleIn.x+=.5;
      now+=70;pathComp.update(0);
      assert(calls.length>before&&calls.includes('Afalse'));
      now+=190;pathComp.update(0);
@@ -168,10 +167,10 @@ try {
    }finally{Date.now=realDate;}
    // Runtime must never let an Editor-only tangent gizmo mutate source.
    env.EDITOR_NOT_IN_PREVIEW=false;
-   const snapshot=JSON.stringify(pathComp.bezierTangents);
+   const snapshot=JSON.stringify(pathComp.knots);
    pathComp.pathGizmoTangentOut=new Vec3(100,0,0);
    pathComp.onGizmoChanged('pathGizmoTangentOut','update');
-   assert.equal(JSON.stringify(pathComp.bezierTangents),snapshot);
+   assert.equal(JSON.stringify(pathComp.knots),snapshot);
    assert.equal(pathComp.onGizmoHandles().length,0);
    env.EDITOR_NOT_IN_PREVIEW=true;
  }finally{
