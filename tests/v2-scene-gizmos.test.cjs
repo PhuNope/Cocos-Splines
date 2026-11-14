@@ -117,14 +117,19 @@ try{
  const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
  const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),'utf8');
  assert.match(road,/public onDrawGizmosSelected\(\):void/);
+ assert(!/\bpublic onGizmoHandles\(/.test(road),'Road cannot own Knot handles');
+ assert(!/\b(?:knots:Node\[\]|interpolation=|closed=false)\b/.test(road),
+   'Road cannot own Path source fields');
+ const pathSource=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplinePathV2.ts'),'utf8');
+ assert.match(pathSource,/public onGizmoHandles\(/);
+ assert.match(pathSource,/public onGizmoChanged\(/);
  assert.match(junction,/public onDrawGizmosSelected\(\):void/);
  assert.match(road,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showSceneGizmos/);
  assert.match(junction,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showJunctionSceneGizmos/);
  assert.match(junction,/link\.road\.sampleJunctionEndV2/);
  const native=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  for(const field of ['showSceneGizmos','gizmoSteps','gizmoEdges',
-     'gizmoKnots','gizmoEditKnot','gizmoKnotIndex',
-     'gizmoMultiKnotPoints','gizmoPointLimit','showJunctionSceneGizmos','gizmoJunctionCurbs'])
+     'showJunctionSceneGizmos','gizmoJunctionCurbs'])
       assert(native.makeV2Inspector?native.makeV2Inspector.toString().includes(field):
          fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8').includes(field));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoBridge.ts.meta')));
