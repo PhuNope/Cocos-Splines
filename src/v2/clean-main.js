@@ -130,11 +130,13 @@ async function editV2Path(operation,index){
             if(value===false)
                 throw new Error('Knot data changed but active Knot selection failed');
         }
-        // Transform-dependent preview work is a separate, nonserialized
-        // operation after Creator's recorded property edit has completed.
-        const refreshed=await scene('refreshV2Path',uuid);
-        if(!refreshed?.ok)
-            throw new Error(refreshed?.error||'Path preview refresh failed');
+        // Only topology changes invalidate geometry. An active-Knot
+        // selection changes the Scene handles but must NOT rebuild meshes.
+        if(plan.field==='knots'){
+            const refreshed=await scene('refreshV2Path',uuid);
+            if(!refreshed?.ok)
+                throw new Error(refreshed?.error||'Path preview refresh failed');
+        }
         return {ok:true,index:plan.index,count:plan.count};
     }catch(e){return fail('edit path',e);}
 }
