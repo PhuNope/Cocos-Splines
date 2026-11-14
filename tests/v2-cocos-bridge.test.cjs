@@ -72,8 +72,8 @@ try{
  assert.match(inspector.template,/spl-v2-junctionStartTrim/);
  assert.match(inspector.template,/spl-v2-junctionEndTrim/);
  assert.match(inspector.template,/spl-v2-pathSource/);
- assert.match(inspector.template,/spl-v2-gizmoV3LiveMesh/);
- assert.match(inspector.template,/spl-v2-gizmoV3MeshIntervalMs/);
+ assert.match(inspector.template,/spl-v2-gizmoLiveMesh/);
+ assert.match(inspector.template,/spl-v2-gizmoMeshIntervalMs/);
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplinePathV2.ts.meta')));
  assert.match(inspector.template,/spl-v2-shortKnotMode/);
  for(const kind of ['road','junction','extrude','mesh-deform']){
