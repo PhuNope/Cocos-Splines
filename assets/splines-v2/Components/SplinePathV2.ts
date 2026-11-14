@@ -414,7 +414,8 @@ export class SplinePathV2 extends Component {
     }
     public set pathGizmoActiveRoll(value:number) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
-           !Number.isFinite(value)||value< -180||value>180)return;
+           !Number.isFinite(value)||value< -180||value>180||
+           ((this._dragKnot||this._rotationDragging)&&!this._hudRollKnot))return;
         const knot=this._hudRollKnot??this.knots[this.gizmoKnotIndex];
         if(!knot)return;
         knot.rollDegrees=value;
