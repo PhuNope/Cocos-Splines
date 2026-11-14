@@ -1,6 +1,7 @@
 import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {SplineRoadV2} from './SplineRoadV2';
+import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
@@ -39,14 +40,16 @@ export enum JunctionCurbCornerModeV2 {RadialLegacy=0,RoundedContinuous=1}
 export enum JunctionTerrainEdgeModeV2 {FlatHeight=0,SampleTerrain=1}
 /**
  * Flat 3- or 4-way junction bridging genuine trimmed Road endpoints.
- * Inherits the v2 Manual/Baked/Dynamic lifecycle, glTF Bake and UV2 handling.
- * Never automatically changes another Road's serialization or its trim.
+ * Independent Junction mesh generator, not a Road subclass.
+ * Shares the MeshGenerator preview/Bake lifecycle without Road width,
+ * Knot, surface mode, fillet, sidewalk or Gizmo editing properties.
+ * Reads only explicitly linked Road end rings; never changes Road data.
  */
 @ccclass('SplinesV2.JunctionPatch')
 @menu('Cocos Splines V2/Junction Patch')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
-export class SplineJunctionPatchV2 extends SplineRoadV2 {
+export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     @property({type:[JunctionRoadLinkV2],tooltip:'Three or four Road links sharing one junction center.'})
     branches:JunctionRoadLinkV2[]=[];
     @property({type:Enum(JunctionUVModeV2),tooltip:'Matched Repeat uses original trimmed Road edge UV0 modulo whole tiles; projected uses world XZ UV.'})
@@ -161,7 +164,7 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
         const entries:JunctionRoadBranchV2[]=this.branches.map((link,index)=>{
             const road=link?.road;
             if(!road||!road.node?.isValid)throw new Error('Junction V2 Road link '+index+' is missing');
-            if(road===this||seen.has(road))throw new Error('Junction V2 cannot link a Road twice');
+            if(seen.has(road))throw new Error('Junction V2 cannot link a Road twice');
             seen.add(road);
             const edge=road.sampleJunctionEndV2(!!link.atEnd);
             return {endpoint:local(edge.endpoint),
