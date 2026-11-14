@@ -290,3 +290,14 @@ Không dùng phần kéo Knot cho production khi chưa xác nhận native Undo/R
 6. Reopen Scene and test native Knot Transform tool, multi-Node Undo/Redo and shared path reattachment. These are **manual Editor acceptance gates**, not yet validated by CI.
 
 See [SPLINE_PATH_V2.md](./SPLINE_PATH_V2.md). The other v2 generators (Extrude and Mesh Deform) do not yet consume SplinePathV2.
+
+
+## Clean breaking V2 package — no legacy assets or UUID
+
+- **Do not install this alongside the previous 0.9.x extension** under the same package identifier. Use a fresh Creator 3.8.x project or disable/uninstall the old extension first.
+- The test ZIP excludes `assets/splines`, legacy `.meta` files, old Inspector registrations and legacy menus. Only new `SplinesV2.*` components are available. Existing legacy Scenes are **not compatible** and are **not automatically migrated**.
+- Add `SplinesV2.SplinePath` to a Node and author Knot Nodes. Add `SplinesV2.SplineRoad` to a second Node, assign **Path Source**. The Path handles Gizmos v3 editing; no Road-owned duplicate Knot handles are shown when linked. Drag with Cocos-Gizmos v3 and confirm Road preview rebuilding.
+- Test Extrude / Mesh Deform linked to the Path too; their **shared path reading** works but they still inherit Road component internals pending consumer-base extraction.
+- Verify Inspector **Rebuild Preview / Bake glTF Asset / Bind Imported Mesh** work on each generator, no legacy messages or missing SplineContainer errors. Test save/reopen and Undo/Redo manually.
+
+Full architectural rewrite plan: [REBUILD_BREAKING.md](./REBUILD_BREAKING.md).
