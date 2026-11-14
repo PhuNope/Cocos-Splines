@@ -47,11 +47,14 @@ export abstract class SplineMeshGeneratorV2 extends Component {
     private _registeredPath:SplinePathV2|null=null;
     private _gizmoPreviewError:unknown=null;
 
+    /** Forget the previous Path when a generator is relinked or unlinked. */
+    protected unlinkPathPreviewConsumer():void {
+        this._registeredPath?.unregisterPreviewConsumer(this);
+        this._registeredPath=null;
+    }
     protected source():SplineDataV2 {
-        if(this._registeredPath!==this.pathSource){
-            this._registeredPath?.unregisterPreviewConsumer(this);
-            this._registeredPath=null;
-        }
+        if(this._registeredPath!==this.pathSource)
+            this.unlinkPathPreviewConsumer();
         if(!this.pathSource)
             throw new Error('Assign a SplinePathV2 Path Source before generating geometry');
         const source=this.pathSource.getSplineDataV2(this.node);
@@ -96,13 +99,11 @@ export abstract class SplineMeshGeneratorV2 extends Component {
         else this.showSavedMesh();
     }
     protected onDisable():void {
-        this._registeredPath?.unregisterPreviewConsumer(this);
-        this._registeredPath=null;
+        this.unlinkPathPreviewConsumer();
         this.disposeTransient();
     }
     protected onDestroy():void {
-        this._registeredPath?.unregisterPreviewConsumer(this);
-        this._registeredPath=null;
+        this.unlinkPathPreviewConsumer();
         this.disposeTransient();
     }
 
