@@ -31,7 +31,8 @@ copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
 copy('src/v2/clean-scene.js','dist/v2/clean-scene.js');
 copy('dist/v2/EditorAssetBind.js');
-for(const name of ['common','RoadV2','ExtrudeV2','MeshDeformV2','JunctionV2'])
+copy('src/v2/inspector-common-clean.js','dist/contributions/inspector/common.js');
+for(const name of ['RoadV2','ExtrudeV2','MeshDeformV2','JunctionV2'])
     copy('dist/contributions/inspector/'+name+'.js');
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 pkg.version=version;
@@ -84,7 +85,7 @@ assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
 assert(!fs.existsSync(path.join(target,'assets/splines.meta')),
     'Legacy asset UUID metadata must NOT ship');
-assert(!fs.existsSync(path.join(target,'dist/main.js'))||
+assert(!fs.existsSync(path.join(target,'dist/main.js'))&&
        !fs.existsSync(path.join(target,'dist/scene.js')),
     'Legacy Editor entrypoints must NOT ship');
 assert(Object.keys(pkg.contributions.inspector.section.node).every(n=>
