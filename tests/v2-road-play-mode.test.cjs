@@ -430,6 +430,25 @@ try{
  deform.repeatCount=2;
  assert.equal(deform.inspectBake().stale,true);
  assert(!dAsset.destroyed);
+ // Shared SplinePath must invalidate independent generator types using the
+ // same authoring source: neither generator inherits Road or its Knot list.
+ extrude.rebuildPreview();deform.rebuildPreview();
+ const tubeBefore=extrudeRenderer.mesh,deformBefore=deformRenderer.mesh;
+ assert(tubeBefore&&deformBefore);
+ const pathStart={...b.worldPosition};
+ b.setWorldPosition(new Vec3(pathStart.x+.3,pathStart.y,pathStart.z));
+ generatorPath.onRestore();
+ assert.notEqual(extrudeRenderer.mesh,tubeBefore,
+    'Shared Path invalidation must rebuild the standalone Extrude preview');
+ assert.notEqual(deformRenderer.mesh,deformBefore,
+    'Shared Path invalidation must rebuild the standalone Mesh Deform preview');
+ assert.equal(extrude.bakedMesh,saved);
+ assert.equal(deform.bakedMesh,saved);
+ assert(!dAsset.destroyed,'Mesh Deform preview must not destroy source geometry');
+ b.setWorldPosition(new Vec3(pathStart.x,pathStart.y,pathStart.z));
+ generatorPath.onRestore();
+ extrude.onDisable();deform.onDisable();
+ assert(!saved.destroyed);
  // Junction Patch must preserve Manual/Baked runtime gate and use exactly
  // the Road's trimmed end ring, with no hidden runtime mesh generation.
  const patchNode=new Node('JunctionV2'),patchRenderer=patchNode.addComponent(MeshRenderer);
