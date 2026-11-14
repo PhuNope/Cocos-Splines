@@ -14,7 +14,7 @@
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
-| 11. Editor production hardening | Partial (independent MeshGenerator alpha) | Clean V2 ZIP; SplinePath owns Gizmos v3. Road, Extrude and Mesh Deform each inherit independent shared MeshGenerator for Path subscription, preview and Bake (Extrude/Deform/Junction no longer inherit Road). Real Creator/Undo/lightmap/collider and Road-only Knot fallback removal remain. |
+| 11. Editor production hardening | Partial (independent MeshGenerator alpha) | Clean V2 ZIP; SplinePath owns Gizmos. Road, Extrude and Mesh Deform each inherit independent shared MeshGenerator for Path subscription, preview and Bake (Extrude/Deform/Junction no longer inherit Road). Real Creator/Undo/lightmap/collider and Road-only Knot fallback removal remain. |
 
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
@@ -27,14 +27,14 @@
 ## Breaking clean rewrite step (2026-11-14)
 
 - The user explicitly authorized dropping legacy `Splines.*`, old component UUID/meta and compatibility/migration code. **The packaged test ZIP** now contains only `assets/splines-v2` and v2-only Editor entrypoints/Inspector/actions, with a self-contained bundle smoke test.
-- `SplinePathV2` is now the owning Gizmos v3 edit target. Linked `SplineRoadV2` hides its old Knot handles and receives Path editor updates via registered consumers. The Path has its own Scene HUD and indexed multi-Knot points.
+- `SplinePathV2` is now the owning Gizmos edit target. Linked `SplineRoadV2` hides its old Knot handles and receives Path editor updates via registered consumers. The Path has its own Scene HUD and indexed multi-Knot points.
 - The repository still contains historical 0.9.x sources for reference, and the rewritten pure geometry modules are retained. Do not mistake a clean package for completion of all roadmap milestones. Actual Creator 3.8.x Undo/Redo/visual validation is outstanding.
 - [Breaking rewrite charter / implementation plan](REBUILD_BREAKING.md).
 
 ## Latest editor step (2026-11-14)
 
 - `SplinePathV2` may own Knots/interpolation/closed. `SplineRoadV2.pathSource` uses it when linked; Road's previous self-owned Knot fields are still supported when absent.
-- Dragging Cocos-Gizmos v3 handles triggers throttled live **transient** preview updates (default 100 ms). `end`/`cancel` force a final rebuild; invalid in-progress bends leave last valid preview visible. Persisted baked mesh remains unchanged until explicitly rebaked.
+- Dragging Cocos-Gizmos handles triggers throttled live **transient** preview updates (default 100 ms). `end`/`cancel` force a final rebuild; invalid in-progress bends leave last valid preview visible. Persisted baked mesh remains unchanged until explicitly rebaked.
 - Multiple Roads registered to the same SplinePath receive Editor live-preview invalidations. Validation is from automated Cocos mocks/geometry regression, not visual Cocos Creator 3.8.x certification.
 - Remaining architecture: adapt Extrude/Mesh Deform, test Node Transform edits from native gizmos, cross-Node Undo/Redo and scene save/reload.
 
