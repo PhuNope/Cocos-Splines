@@ -1,5 +1,5 @@
 import {
-    _decorator,MeshRenderer,Vec3,Enum,Terrain
+    _decorator,MeshRenderer,Vec3,Mat4,Enum,Terrain
 } from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
