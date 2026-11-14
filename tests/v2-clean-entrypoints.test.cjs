@@ -57,8 +57,8 @@ try{
  const scene=require(path.join(root,'src/v2/clean-scene.js'));
  const keys=Object.keys(scene.methods).sort();
  assert.deepEqual(keys,[
-  'inspectV2RoadBake','prepareV2RoadBake','rebuildV2Road',
-  'refreshV2Path','restoreV2RoadBaked']);
+  'inspectV2RoadBake','planV2JunctionAutoTrim','prepareV2RoadBake','rebuildV2Road',
+  'refreshV2JunctionAutoTrim','refreshV2Path','restoreV2RoadBaked']);
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
  assert.equal(scene.methods.prepareV2RoadBake('road-node').componentIndex,0);
@@ -110,8 +110,8 @@ try{
    }}
   };
   assert.deepEqual(Object.keys(main.methods).sort(),[
-   'bakeV2Road','bindV2RoadMesh','checkV2RoadBake','editV2Path',
-   'rebuildV2Road','restoreV2RoadBaked']);
+   'applyV2JunctionAutoTrim','bakeV2Road','bindV2RoadMesh','checkV2RoadBake','editV2Path',
+   'planV2JunctionAutoTrim','rebuildV2Road','restoreV2RoadBaked']);
   assert.equal((await main.methods.rebuildV2Road()).ok,true);
   assert.equal((await main.methods.checkV2RoadBake()).ok,true);
   assert.equal((await main.methods.restoreV2RoadBaked()).ok,true);
