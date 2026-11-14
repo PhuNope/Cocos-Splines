@@ -236,6 +236,7 @@ function rebuildV2Road(uuid){
     try{
         component.rebuildPreview();
         const risk=component.inspectCornerRisk?.();
+        const shortKnotFallback=component.getShortKnotFallback?.()||null;
         const junction=component.inspectJunction?.();
         const overlap=risk?.overlapReport;
         const continuous=risk?.continuousReport;
@@ -268,8 +269,9 @@ function rebuildV2Road(uuid){
             ?' Overlap resolver reached its safety limit; original surface retained.':'')+
             (risk?.potentialOverlapPairs
             ?' '+risk.potentialOverlapPairs+' close centreline pairs detected; inspect nonplanar crossings visually.':'');
-        return {ok:true,cornerRisk:risk||null,
-            message:'V2 preview rebuilt (temporary; not saved into the scene).'+warn};
+        return {ok:true,cornerRisk:risk||null,shortKnotFallback,
+            message:'V2 preview rebuilt (temporary; not saved into the scene).'+warn+
+                (shortKnotFallback?' Auto Continuous fallback: the inside Road width was adapted; Knot spacing is too short for the requested ConstantWidth radius.':'')};
     }
     catch(e){return {ok:false,error:String(e)};}
 }
