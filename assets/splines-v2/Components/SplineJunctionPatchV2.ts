@@ -1,8 +1,8 @@
-import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain} from 'cc';
+import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain,director} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {SplineRoadV2} from './SplineRoadV2';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
-import {planJunctionEndpointSnapV2} from '../geometry/SplineRoadNetworkV2';
+import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -223,6 +223,40 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                 expectedLocal:{x:source.position.x,y:source.position.y,z:source.position.z},
                 targetLocal:{x:target.x,y:target.y,z:target.z}};
         })};
+    }
+    /** Read-only Scene Road adjacency scan. Does not auto-link components. */
+    public inspectRoadNetworkV2(){
+        if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Road Network is Editor-only');
+        const root=director.getScene();
+        if(!root)throw new Error('No active Cocos Scene for Network scan');
+        const candidates:RoadNetworkCandidateV2[]=[];
+        const skipped:Array<{roadId:string;reason:string}>=[];
+        const stack=[root];
+        let visits=0;
+        while(stack.length){
+            const node=stack.pop()!;
+            if(++visits>10000)throw new Error('Network scan exceeded 10000 Scene Nodes');
+            for(const child of node.children)stack.push(child);
+            const comps=(node as unknown as {components:unknown[]}).components||[];
+            for(const candidate of comps){
+                if(!(candidate instanceof SplineRoadV2))continue;
+                if(candidates.length+skipped.length>=256)
+                    throw new Error('Network scan exceeded 256 Roads');
+                try{
+                    if(!candidate.pathSource?.node?.isValid)
+                        throw new Error('Missing Path Source');
+                    candidates.push({...candidate.junctionAutoTrimCandidateV2(node.uuid),
+                        pathId:candidate.pathSource.node.uuid});
+                }catch(error){
+                    skipped.push({roadId:node.uuid,
+                        reason:String(error instanceof Error?error.message:error)});
+                }
+            }
+        }
+        return {...buildSplineRoadNetworkV2(candidates,{
+            maxDistance:this.endpointTolerance,
+            maxHeightDelta:this.flatTolerance
+        }),scannedRoads:candidates.length+skipped.length,skipped};
     }
     public inspectCornerRisk():null{return null;}
     public inspectJunction():(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null{return this._lastJunctionReport;}
