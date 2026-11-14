@@ -349,6 +349,9 @@ export class SplineRoadV2 extends Component {
     }
     /** v3 discovers Component callbacks; no registration decorator needed. */
     public onGizmoHandles():SplineGizmoV3Handle[] {
+        // A linked SplinePath owns all Knot handles and change sessions.
+        // Never expose duplicate Road handles for the same source positions.
+        if(this.pathSource)return [];
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
             !this.gizmoV3EditKnot||!this.node?.isValid||
             !Number.isSafeInteger(this.gizmoV3KnotIndex)||
@@ -372,6 +375,7 @@ export class SplineRoadV2 extends Component {
         type:'slider'|'toggle';id:string;text:string;property:string;
         min?:number;max?:number;step?:number;order?:number;
     }> {
+        if(this.pathSource)return [];
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
             !this.gizmoV3EditKnot||!availableGizmoV3Backend()||
             this.splineKnots().length<2)return [];
