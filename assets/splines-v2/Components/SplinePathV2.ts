@@ -1,6 +1,6 @@
 import {_decorator,Component,Node,Mat4,Vec3,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
+import {type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
@@ -14,11 +14,44 @@ const {ccclass,property,executeInEditMode,menu}=_decorator;
 export enum SplinePathCurveModeV2 {
     Linear=0,Bezier=1,CatmullRom=2,Centripetal=3
 }
+/**
+ * Knot-relative handle offsets live in Path-local units. Authored entries
+ * refer to Knot Nodes rather than indices, so reordering never swaps
+ * tangent controls between unrelated Knots.
+ */
+export enum SplineBezierTangentModeV2 {
+    Auto=0,Free=1,Aligned=2,Mirrored=3
+}
+@ccclass('SplinesV2.BezierTangent')
+export class SplineBezierTangentV2 {
+    @property({type:Node}) knot:Node|null=null;
+    @property({type:Enum(SplineBezierTangentModeV2)})
+    mode=SplineBezierTangentModeV2.Auto;
+    @property({type:Vec3,tooltip:'Incoming relative handle offset in Path-local units.'})
+    handleIn=new Vec3(-1,0,0);
+    @property({type:Vec3,tooltip:'Outgoing relative handle offset in Path-local units.'})
+    handleOut=new Vec3(1,0,0);
+}
+type TangentSide='in'|'out';
+type TangentSnapshot={
+    knot:Node;hadEntry:boolean;
+    originalMode:SplineBezierTangentModeV2;
+    originalIn:Vec3;originalOut:Vec3;
+};
+const sub=(a:V3,b:V3):V3=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
+const add=(a:V3,b:V3):V3=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z});
+const scale=(a:V3,k:number):V3=>({x:a.x*k,y:a.y*k,z:a.z*k});
+const len=(a:V3):number=>Math.hypot(a.x,a.y,a.z);
+const finite=(a:V3):boolean=>[a.x,a.y,a.z].every(Number.isFinite);
+const vec=(a:V3):Vec3=>new Vec3(a.x,a.y,a.z);
+
 interface SplinePreviewConsumerV2 {
     onSharedSplinePathEdited(force:boolean):void;
     onSharedSplinePathEditBegin?():void;
 }
-type PathGizmoProperty='pathGizmoKnotPosition'|'pathGizmoKnotPositions';
+type PathGizmoProperty=
+    'pathGizmoKnotPosition'|'pathGizmoKnotPositions'|
+    'pathGizmoTangentIn'|'pathGizmoTangentOut';
 
 @ccclass('SplinesV2.SplinePath')
 @menu('Cocos Splines V2/Path')
@@ -30,6 +63,9 @@ export class SplinePathV2 extends Component {
     interpolation=SplinePathCurveModeV2.Centripetal;
     @property({tooltip:'Connect the last Knot to the first Knot.'})
     closed=false;
+    @property({type:[SplineBezierTangentV2],
+        tooltip:'Optional per-Knot Bezier tangents keyed to Knot Nodes (not array indices). Auto uses default chord controls.'})
+    bezierTangents:SplineBezierTangentV2[]=[];
 
     @property({tooltip:'Draw spline curve and Knot markers when Path is selected (Gizmos installed).'})
     gizmoShowPath=true;
@@ -41,12 +77,15 @@ export class SplinePathV2 extends Component {
     gizmoMultiKnotPoints=true;
     @property({min:2,max:32,step:1})
     gizmoPointLimit=16;
+    @property({tooltip:'Show editable incoming/outgoing Bezier tangent handles for the active Knot.'})
+    gizmoEditTangents=true;
 
     // Editor-only and NEVER serialized, no redundant Knot coordinates.
     private _previewConsumers=new Set<SplinePreviewConsumerV2>();
     private _dragNode:Node|null=null;
     private _dragIndex=-1;
     private _dragProperty:PathGizmoProperty|null=null;
+    private _tangentDragSnapshot:TangentSnapshot|null=null;
     // Editor Transform Tool / Inspector edits do not invoke Gizmos callbacks.
     // Watch the source Knot world transforms and notify consumers with a
     // lightweight, bounded signature (no mesh generation on Path itself).
@@ -68,7 +107,16 @@ export class SplinePathV2 extends Component {
             const p=node.worldPosition;
             return identity+':'+p.x+','+p.y+','+p.z;
         });
-        return this.interpolation+'|'+Number(this.closed)+'|'+nodes.join(';');
+        const tangents=this.bezierTangents.map(t=>{
+            if(!t)return 'missing';
+            const k=t.knot;
+            const id=k?this._knotIds.get(k)??'unknown':'none';
+            return id+':'+t.mode+':'+
+                [t.handleIn?.x,t.handleIn?.y,t.handleIn?.z,
+                 t.handleOut?.x,t.handleOut?.y,t.handleOut?.z].join(',');
+        });
+        return this.interpolation+'|'+Number(this.closed)+'|'+nodes.join(';')+
+            '|tan:'+tangents.join(';');
     }
 
     /**
@@ -127,11 +175,13 @@ export class SplinePathV2 extends Component {
     }
     protected onDisable():void {
         this._dragNode=null;this._dragProperty=null;
+        this._tangentDragSnapshot=null;
         this._observedSource=null;
         this._needsFinalPreview=false;
     }
     protected onDestroy():void {
         this._dragNode=null;this._dragProperty=null;
+        this._tangentDragSnapshot=null;
         this._previewConsumers.clear();
     }
 
