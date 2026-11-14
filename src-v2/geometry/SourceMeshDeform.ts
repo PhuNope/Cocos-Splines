@@ -1,4 +1,5 @@
 import {type SplineCacheV2} from '../core/SplineCache';
+import {type SplineDataV2} from '../core/SplineCurves';
 import {buildSplineFramesV2,frameAtDistanceV2,type SplineFramesOptionsV2} from '../core/SplineFrames';
 import {buildMeshV2,type MeshDataV2,type Vec3MeshV2,type Vec4MeshV2,type Vec2MeshV2} from './MeshData';
 
@@ -20,6 +21,8 @@ export interface MeshDeformOptionsV2 {
     readonly maxFrameStep?:number;
     readonly maxAngleDegrees?:number;
     readonly maxChordError?:number;
+    /** Roll values from original Path when ConstantWidth builds a fillet. */
+    readonly rollSource?:SplineDataV2;
 }
 export interface MeshDeformReportV2 {
     readonly sourceVertexCount:number;
@@ -72,7 +75,8 @@ export function deformSourceMeshV2(cache:SplineCacheV2,source:MeshDataV2,
     const uvSpan=uvMax-uvMin;
     const frameOptions:SplineFramesOptionsV2={
         maxStep:step,maxAngleDegrees:options.maxAngleDegrees,
-        maxChordError:options.maxChordError
+        maxChordError:options.maxChordError,
+        rollSource:options.rollSource
     };
     const table=buildSplineFramesV2(cache,frameOptions);
     const positions:Vec3MeshV2[]=[],normals:Vec3MeshV2[]=[],tangents:Vec4MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[];
