@@ -22,6 +22,21 @@ export class SplinePathV2 extends Component {
     @property({tooltip:'Connect the last Knot to the first Knot.'})
     closed=false;
 
+    // Ephemeral Editor preview subscribers, not serialized on SplinePathV2.
+    private _previewConsumers=new Set<{onSharedSplinePathEdited(force:boolean):void}>();
+    public registerPreviewConsumer(consumer:{onSharedSplinePathEdited(force:boolean):void}):void {
+        this._previewConsumers.add(consumer);
+    }
+    public unregisterPreviewConsumer(consumer:{onSharedSplinePathEdited(force:boolean):void}):void {
+        this._previewConsumers.delete(consumer);
+    }
+    public notifyPreviewConsumers(origin:unknown,force:boolean):void {
+        for(const consumer of this._previewConsumers) {
+            if(consumer===origin)continue;
+            consumer.onSharedSplinePathEdited(force);
+        }
+    }
+    protected onDestroy():void {this._previewConsumers.clear();}
     public getKnotNodes():ReadonlyArray<Node> {return this.knots;}
 
     public getSplineDataV2(consumer:Node):SplineDataV2 {
