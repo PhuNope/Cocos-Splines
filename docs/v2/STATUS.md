@@ -31,6 +31,12 @@
 - The repository still contains historical 0.9.x sources for reference, and the rewritten pure geometry modules are retained. Do not mistake a clean package for completion of all roadmap milestones. Actual Creator 3.8.x Undo/Redo/visual validation is outstanding.
 - [Breaking rewrite charter / implementation plan](REBUILD_BREAKING.md).
 
+## Gizmos naming cleanup (2026-11-15)
+
+- Use the plain name **Gizmos** in Inspector labels/tooltips, source identifiers and documentation. The SDK implementation version is not presented as part of the Spline authoring API.
+- Rename public `gizmoV3*` fields to `gizmo*`, `showSceneGizmosV3` to `showSceneGizmos`, and the bridge to `SplineGizmoBridge.ts`. The regression ensures no version-branded Gizmos identifiers appear in Spline v2 components/Inspector.
+- Keep `Gizmos3D` exactly as the vendor's Scene API global; changing that externally defined name would break integration. This is an intentional breaking rename in the alpha branch, with no legacy alias or old metadata in the clean ZIP.
+
 ## Latest editor step (2026-11-14)
 
 - `SplinePathV2` may own Knots/interpolation/closed. `SplineRoadV2.pathSource` uses it when linked; Road's previous self-owned Knot fields are still supported when absent.
