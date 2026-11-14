@@ -66,7 +66,7 @@ fs.writeFileSync(path.join(target,'README.md'),
     '2. Add SplinesV2.SplineRoad / SplineExtrude / SplineMeshDeform, link Path Source.\n'+
     '3. Add SplinesV2.JunctionPatch and linked Roads if needed.\n'+
     '4. In Inspector use Rebuild Preview, Bake glTF Asset and Bind Imported Mesh.\n'+
-    '5. Enable Cocos-Gizmos v3 separately for Scene editing.\n\n'+
+    '5. Enable Cocos-Gizmos separately for Scene editing.\n\n'+
     '**This is a test artifact, not a release. Existing legacy scenes are not supported.**\n'+
     'Full instructions: docs/v2/TEST_BUILD.md and docs/v2/REBUILD_BREAKING.md.\n','utf8');
 const assertFile=rel=>assert(fs.statSync(path.join(target,rel)).isFile(),
