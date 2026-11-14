@@ -12,50 +12,23 @@ Automated regression and green GitHub Actions verify the built code and
 headless Cocos mocks, **not** actual Scene/Inspector rendering,
 mouse picking, native Undo history, saving or reimporting .gltf assets.
 
-## Setup — all generators require SplinePath
+## Setup — Pure Vec3 Path
 
-1. Create a Node `Path`; add `SplinesV2.SplinePath`.
-2. Create at least 3 Knot Nodes and assign them to Path's **Knots** array
-   in order. Pick **Interpolation** (Linear or Centripetal recommended)
-   and **Closed** on this Path component.
-3. Create `Road` Node with `MeshRenderer` and `SplinesV2.SplineRoad`.
-   Drag the **SplinePath component** into Road's **Path Source**.
-   Road must **not** have its own Knots, Interpolation, Closed, or
-   editable Knot handles/point controls.
-4. Configure Road Width, Shoulder, Curb, UV axis, Surface Mode and
-   Short Knot Mode. Click **Rebuild Preview**.
-5. Add another Road or Extrude/Mesh Deform and assign the same Path Source.
-   Each consumer has independent geometry and material settings. Rebuild
-   once to register its Editor preview subscription.
-6. Optionally install [Cocos-Gizmos](https://github.com/PhuNope/Cocos-Gizmos).
-   Select **Path** for editing handles and HUD. Selecting Road only draws
-   read-only centerline/width/trim guides. If Gizmos is absent, geometry
-   generation, Preview, Bake and Play still work.
+1. Create one Node `SplinePath` with `SplinesV2.SplinePath`.
+2. Open the custom Path Inspector; add Knot records, enter `Vec3`
+   positions `(0,0,0)`, `(0,0,10)`, `(10,0,10)` and configure
+   Closed/Interpolation, tangent modes and tension.
+3. Reorder, Duplicate, Insert After, Select and Remove Knot cards.
+   **No child Knot Nodes should be added to Scene Hierarchy**.
+4. Create `SplineRoadV2` + MeshRenderer, assign Path Source and Rebuild.
+   Test a shared Path with two Roads, Extrude and Mesh Deform.
+5. With Gizmos installed, select **Path** and drag an active Vec3 Knot
+   or one of the secondary points. Check that the generated mesh follows
+   and Escape restores its original value-record data.
+6. Move the **Path Node** itself and confirm all consumer meshes move
+   with its world transform.
 
-## Bezier tangent authoring (new)
-
-1. On Path set `Interpolation = Bezier`, select an active `Gizmo Knot Index`
-   and keep `Gizmo Edit Tangents = true`. Two colored point handles should
-   appear on the selected Path: **purple Incoming**, **cyan Outgoing**.
-2. Drag one tangent; a `Bezier Tangents` record should appear bound to that
-   exact Knot Node. Reordering Path Knots must not move the tangent record
-   onto a different Knot. Test the Road mesh bends and the texture follows
-   the new curve without UV jumps.
-3. On the tangent record try modes **Free**, **Aligned** and **Mirrored**.
-   Free keeps each side independent; Aligned locks opposite direction but
-   preserves its length; Mirrored locks equal length and opposite direction.
-   **Auto** uses the default one-third-chord controls.
-4. Press Escape during an edit that started in Auto mode. The newly created
-   manual tangent record should disappear. Escape from existing manual
-   tangents must restore mode and both control offsets.
-5. Scale/rotate/translate the Path and a Road Node independently; tangent
-   control positions and Bezier mesh geometry should be correctly mapped
-   into Road local space.
-6. Modify `Bezier Tangents` directly from Inspector, save/reopen Scene,
-   test native Undo/Redo and verify glTF Bake. **Real Cocos Creator
-   3.8.x save/Undo/Redo remains unverified by CI.**
-
-See [Bezier Tangents](BEZIER_TANGENTS.md).
+See [Pure Vec3 Knots](PURE_VEC3_KNOTS.md) for the custom Inspector.
 
 ## Scene and Gizmos: visual tests
 
