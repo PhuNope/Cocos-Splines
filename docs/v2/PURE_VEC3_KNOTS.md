@@ -42,14 +42,16 @@ Add `SplinesV2.SplinePath` to one Node. Its dedicated Inspector offers:
 - A collapsible **Raw Knot Data** field remains available as a fallback
   for native Cocos array property editing.
 
-The buttons send a command to the extension's Scene process and request a
-Scene snapshot; native `ui-prop` edits the record values. Removing the
+The buttons now query Creator's typed component dump and commit a
+single **recordable `scene.set-property` update** of the Knot array.
+Selecting the active Knot is non-recorded and does not rebuild meshes.
+Native `ui-prop` continues to edit record values. Removing the
 last two required Knots is blocked. Duplicate inserts a shifted copy to
 avoid a zero-length adjacent segment. The current Knot selection also
 drives the Gizmos handles and HUD.
 
-**Cocos Creator 3.8.x Undo/Redo with these custom topology buttons and
-nested property dumps is a manual acceptance gate**; CI mocks verify
+**Cocos Creator 3.8.x Undo/Redo with these native-recorded topology buttons
+and nested property dumps remains a manual acceptance gate**; CI mocks verify
 command routing and data mutation, not Editor history transactions.
 
 ## Gizmos and previews
