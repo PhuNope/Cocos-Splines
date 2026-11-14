@@ -6,7 +6,7 @@ import {type MeshDataV2} from '../geometry/MeshData';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 
-const {property}=_decorator;
+const {ccclass,property}=_decorator;
 
 /**
  * Mesh generator contract. Geometry subclasses own ONLY their shape options.
@@ -18,6 +18,7 @@ const {property}=_decorator;
  * Manual/Baked mode. All temp render parts are nonserialized in Editor.
  */
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
+@ccclass('SplinesV2.MeshGeneratorBase')
 export abstract class SplineMeshGeneratorV2 extends Component {
     @property({type:SplinePathV2,tooltip:'Required shared spline source: Path owns Knot Nodes, interpolation and Gizmos handles.'})
     pathSource:SplinePathV2|null=null;
