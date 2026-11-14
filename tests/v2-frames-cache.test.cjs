@@ -35,5 +35,41 @@ const c=buildSplineCacheV2({type,closed:rand()>.5,knots:ks},{tolerance:.02,maxDe
 assert(Number.isFinite(c.length));const f=buildSplineFramesV2(c,{maxStep:Math.max(.08,c.length/64)});
 f.frames.forEach(check);for(let j=0;j<8;j++)check(frameAtDistanceV2(c,f,rand()*c.length));
 }}
-console.log('V2 FRAMES/CACHE PASS: S-curve, helix, loop seam and 320 seeded fuzz splines');
+// Roll/banking is an absolute orientation at each station; it must not
+// accumulate when the sampler creates more frames or repeats end rings.
+const bankSource={type:'linear',closed:false,knots:[
+  k(0,0,0,{rollDegrees:0}),k(0,0,10,{rollDegrees:90})
+]};
+const bankCache=buildSplineCacheV2(bankSource);
+const rolled=buildSplineFramesV2(bankCache,{maxStep:.5});
+const noBank=buildSplineFramesV2(buildSplineCacheV2({
+ type:'linear',closed:false,knots:[k(0,0,0),k(0,0,10)]}),{maxStep:.5});
+near(noBank.frames.at(-1).right.y,0);
+near(rolled.frames[0].right.y,0);
+near(rolled.frames[Math.floor(rolled.frames.length/2)].right.y,Math.SQRT1_2,.025);
+near(rolled.frames.at(-1).right.y,1,.001);
+rolled.frames.forEach(check);
+const coarse=buildSplineFramesV2(bankCache,{maxStep:2});
+near(coarse.frames.at(-1).right.y,1,.001);
+const interpolated=frameAtDistanceV2(bankCache,rolled,bankCache.length*.25);
+near(interpolated.right.y,Math.sin(Math.PI/8),.03);
+assert.throws(()=>buildSplineCacheV2({type:'linear',closed:false,
+ knots:[k(0,0,0,{rollDegrees:Infinity}),k(0,0,10)]}),/Non-finite/);
+assert.throws(()=>buildSplineCacheV2({type:'linear',closed:false,
+ knots:[k(0,0,0,{rollDegrees:181}),k(0,0,10)]}),/Non-finite/);
+// A fillet can replace the path curve while the bank values are still
+// taken from the original authoring path by rollSource.
+const banklessCache=buildSplineCacheV2({type:'linear',closed:false,
+ knots:[k(0,0,0),k(0,0,10)]});
+const forwarded=buildSplineFramesV2(banklessCache,{maxStep:1,rollSource:bankSource});
+near(forwarded.frames.at(-1).right.y,1,.001);
+const bankRing={type:'linear',closed:true,knots:[
+ k(0,0,0,{rollDegrees:179}),k(10,0,0,{rollDegrees:-179}),
+ k(10,0,10,{rollDegrees:179}),k(0,0,10,{rollDegrees:-179})
+]};
+const closeFrames=buildSplineFramesV2(buildSplineCacheV2(bankRing),{maxStep:1});
+closeFrames.frames.forEach(check);
+near(dot(closeFrames.frames[0].right,closeFrames.frames.at(-1).right),1,1e-8);
+
+console.log('V2 FRAMES/CACHE PASS: S-curve, helix, loop seam and 320 seeded fuzz splines, roll/banking, bank fillet, closed seam');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
