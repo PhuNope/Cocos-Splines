@@ -71,7 +71,8 @@ export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
             normal:gfx.AttributeName.ATTR_NORMAL,
             tangent:gfx.AttributeName.ATTR_TANGENT
         });
-        let cache=buildSplineCacheV2(this.source());
+        const pathData=this.source();
+        let cache=buildSplineCacheV2(pathData);
         if(this.surfaceMode===SplineV2SurfaceMode.ConstantWidth){
             const halfWidth=this.sourceLongitudinalAxis===SplineV2DeformSourceAxis.Z
                 ?(source.max.x-source.min.x)*.5
@@ -92,6 +93,7 @@ export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
             centerLateral:this.centerSourceLateral,
             verticalOffset:this.deformVerticalOffset,
             maxFrameStep:this.sampleStep,
+            rollSource:pathData,
             ...(this.adaptiveSampling&&this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth?{
                 maxAngleDegrees:this.maxTurnAngleDegrees,
                 maxChordError:this.maxChordError
