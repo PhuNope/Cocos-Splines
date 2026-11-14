@@ -65,11 +65,12 @@
 
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
 - [x] Read-only selected Scene Gizmo guides for v2 Road/Junction: bounded curve/border/trim/curb visualization via optional SDK drawing interface; no new mesh or Play work, regression tests.
-- [x] Integrate Cocos-Gizmos branch source: native global Gizmos3D on Scene process; Component onDrawGizmosSelected/onGizmoHandles auto-discovered without a decorator. Add opt-in Road Knot XYZ/plane move() from live Knot-node Vec3 proxy with begin/update/end/cancel rollback tests.
+- [x] Integrate Gizmos SDK drawing callbacks and Move handles on `SplinePathV2`; Road/Junction draw **read-only** geometry guides. Path owns begin/update/end/cancel and indexed Knot rollback, with no Road-owned handle or position proxy.
 - [x] Optional Gizmos multi-Knot pickable points via its native indexed Vec3[] descriptor API, bound to live non-serialized source Knot Nodes, with drag-node pin and Escape rollback regression. Active XYZ handle and HUD index slider; gizmo allocation bounded 32.
 - [x] Gizmos live Road mesh preview: throttle transient rebuild during `onGizmoChanged(update)`, force end/cancel, keep prior mesh on invalid geometry, do not Bake or generate in Play; regression.
-- [x] Introduce `SplinePathV2` authored path-source Component and opt-in `SplineRoadV2.pathSource`; linked Roads read shared Knots/interpolation/closed and get editor-only preview notifications. Legacy Road-owned Node arrays remain compatible; no UUID migration.
-- [ ] Migrate Extrude/MeshDeform and generic Gizmos to the shared path consumer/source architecture; validate native Creator Undo/Redo, editor transforms, save/reopen and external Knot transform editing.
+- [x] Enforce **required SplinePath source** on Road, Extrude and Mesh Deform. Road no longer serializes Knots/interpolation/closed or exposes active Knot Gizmos/HUD. Junction samples Road end rings through each Road's linked Path. Clean test ZIP has no legacy script/UUID requirement.
+- [x] Share `SplineMeshGeneratorV2` lifecycle across independent Road, Extrude, Mesh Deform and Junction. Path subscribes previews and **observes native Knot Transform/Inspector edits** at bounded Editor tick rate; settle forces the final mesh after idle. Regression covers two linked Roads, Play guard and throttled rebuild.
+- [ ] Certify native Creator Undo/Redo, scene save/reopen, cross-Node Gizmos transaction rollback and real gizmo picking (mocks alone are insufficient).
 
 - [ ] Certify Gizmos Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
 
