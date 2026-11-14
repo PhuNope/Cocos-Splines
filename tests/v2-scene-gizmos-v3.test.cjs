@@ -66,7 +66,7 @@ try{
  };
  try{
     const {drawSplineSceneGizmosV3,availableGizmoV3Backend,
-        buildSplineKnotMoveGizmoV3}=require(
+        buildSplineKnotMoveGizmoV3,buildSplineKnotPointGizmosV3}=require(
         path.join(tmp,'Components/SplineGizmoV3Bridge.js'));
     const node={isValid:true,worldMatrix:{tx:10,ty:20,tz:30}};
     const old=globalThis.Gizmos3D;
@@ -74,6 +74,7 @@ try{
       delete globalThis.Gizmos3D;
       assert.equal(availableGizmoV3Backend(),null,'Cocos-Gizmos v3 is optional');
       assert.deepEqual(buildSplineKnotMoveGizmoV3('gizmoKnotPosition'),[]);
+      assert.deepEqual(buildSplineKnotPointGizmosV3('gizmoKnotPositions',[0,1]),[]);
       assert.equal(drawSplineSceneGizmosV3(node,guide),0);
       const calls=[],v3={beginColor:(owner,color)=>calls.push({t:'color',owner,color}),
         drawLine:(owner,a,b)=>calls.push({t:'line',owner,a:{...a},b:{...b}}),
@@ -85,6 +86,13 @@ try{
         }};
       globalThis.Gizmos3D=v3;
       assert.equal(availableGizmoV3Backend(),v3,'Actual global installed by Gizmos v3 scene.js');
+      const none=buildSplineKnotPointGizmosV3('gizmoKnotPositions',[0,2]);
+      assert.equal(none.length,2);
+      assert.deepEqual(none.map(h=>h.index),[0,2]);
+      assert(none.every(h=>h.property==='gizmoKnotPositions'&&h.plane==='view'&&
+        h.space==='local'&&h.visual==='point'&&h.pickSize===24));
+      assert.throws(()=>buildSplineKnotPointGizmosV3('gizmoKnotPositions',[-1]),
+        /invalid indexed Knot/);
       const move=buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
       assert.equal(move.length,6,'Gizmos v3 move generates XYZ+three plane descriptors');
       assert(move.every(h=>h.property==='gizmoKnotPosition'));
@@ -115,10 +123,11 @@ try{
  assert.match(junction,/link\.road\.sampleJunctionEndV2/);
  const native=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  for(const field of ['showSceneGizmosV3','gizmoV3Steps','gizmoV3Edges',
-     'gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex','showJunctionSceneGizmosV3','gizmoV3JunctionCurbs'])
+     'gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex',
+     'gizmoV3MultiKnotPoints','gizmoV3PointLimit','showJunctionSceneGizmosV3','gizmoV3JunctionCurbs'])
       assert(native.makeV2Inspector?native.makeV2Inspector.toString().includes(field):
          fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8').includes(field));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoV3Bridge.ts.meta')));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/geometry/SceneGizmoGuideV2.ts.meta')));
- console.log('V2 SCENE GIZMOS NATIVE V3 PASS: bounded guides, exact Cocos-Gizmos global + move descriptors, world draw, Editor gating.');
+ console.log('V2 SCENE GIZMOS NATIVE V3 PASS: bounded guides, global move/indexed point descriptors, world draw, Editor gating.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
