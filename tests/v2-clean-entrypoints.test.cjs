@@ -20,17 +20,28 @@ const road={
   getShortKnotFallback(){return null;}
 };
 const node={uuid:'road-node',components:[road],children:[]};
+const knot=(x,y,z)=>({position:{x,y,z},mode:0,
+  handleIn:{x:-1,y:0,z:0},handleOut:{x:1,y:0,z:0},tension:0,rollDegrees:0});
 const pathComponent={
-  className:'SplinesV2.SplinePath',knots:[{position:{x:0,y:0,z:0}},{position:{x:0,y:0,z:5}}],
-  gizmoKnotIndex:0,
-  editKnot(operation,index){
-    if(operation==='add'){this.knots.push({position:{x:0,y:0,z:10}});}
-    else if(operation==='remove'){if(this.knots.length<=2)throw Error('Spline requires at least two Knots');this.knots.splice(index,1);}
-    else if(operation==='duplicate')this.knots.splice(index+1,0,{...this.knots[index]});
-    this.gizmoKnotIndex=this.knots.length-1;
-    return this.gizmoKnotIndex;
-  }
+  className:'SplinesV2.SplinePath',
+  knots:[knot(0,0,0),knot(0,0,5)],gizmoKnotIndex:0,restores:0,
+  onRestore(){this.restores++;}
 };
+const wrap=(type,value)=>({type,value});
+const knotDump=k=>wrap('SplinesV2.Knot',{position:wrap('cc.Vec3',k.position),
+  mode:wrap('Enum',k.mode),handleIn:wrap('cc.Vec3',k.handleIn),
+  handleOut:wrap('cc.Vec3',k.handleOut),tension:wrap('Float',k.tension),
+  rollDegrees:wrap('Float',k.rollDegrees)});
+const nodeDump=()=>({__comps__:[
+ {type:'cc.MeshRenderer',value:{}},
+ {type:'SplinesV2.SplinePath',value:{
+  interpolation:wrap('Enum',3),
+  gizmoKnotIndex:wrap('Integer',pathComponent.gizmoKnotIndex),
+  knots:{type:'Array',isArray:true,elementTypeData:knotDump(knot(0,0,0)),
+    value:pathComponent.knots.map(knotDump)}
+ }}]});
+const updates=[];
+
 const pathNode={uuid:'path-node',components:[pathComponent],children:[]};
 const sceneNode={uuid:'scene',components:[],children:[node,pathNode]};
 const originalLoad=Module._load;
@@ -46,8 +57,8 @@ try{
  const scene=require(path.join(root,'src/v2/clean-scene.js'));
  const keys=Object.keys(scene.methods).sort();
  assert.deepEqual(keys,[
-  'editV2Path','inspectV2RoadBake','prepareV2RoadBake',
-  'rebuildV2Road','restoreV2RoadBaked']);
+  'inspectV2RoadBake','prepareV2RoadBake','rebuildV2Road',
+  'refreshV2Path','restoreV2RoadBaked']);
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
  assert.equal(scene.methods.prepareV2RoadBake('road-node').componentIndex,0);
@@ -55,11 +66,11 @@ try{
  assert.equal(scene.methods.restoreV2RoadBaked('road-node').ok,true);
  assert.equal(road.restore,1);
  assert.equal(scene.methods.rebuildV2Road('missing').ok,false);
- assert.equal(scene.methods.editV2Path('path-node','add',0).ok,true);
- assert.equal(pathComponent.knots.length,3);
- assert.equal(scene.methods.editV2Path('path-node','select',1).index,1);
- assert.equal(scene.methods.editV2Path('path-node','remove',2).ok,true);
- assert.equal(scene.methods.editV2Path('path-node','remove',1).ok,false);
+ assert.equal(scene.methods.refreshV2Path('path-node').ok,true);
+ assert.equal(pathComponent.restores,1);
+ assert.equal(scene.methods.refreshV2Path('missing').ok,false);
+ assert.equal(pathComponent.knots.length,2,
+   'Scene refresh must never mutate serialized Knot geometry');
  const oldEditor=globalThis.Editor;
  let selectedUuid='road-node';
  try{
@@ -70,7 +81,29 @@ try{
       if(channel==='scene'&&method==='execute-scene-script')
        return scene.methods[payload.method](...payload.args);
       if(channel==='scene'&&method==='snapshot')return true;
-      if(channel==='scene'&&method==='set-property')return true;
+      if(channel==='scene'&&method==='query-node'){
+        if(payload!=='path-node')throw Error('Wrong dump target');
+        return nodeDump();
+      }
+      if(channel==='scene'&&method==='set-property'){
+        updates.push(payload);
+        if(payload.uuid==='path-node'&&payload.path==='__comps__.1.knots'){
+          assert.equal(payload.record,true);
+          pathComponent.knots=payload.dump.value.map(entry=>({
+            position:{...entry.value.position.value},
+            mode:entry.value.mode.value,
+            handleIn:{...entry.value.handleIn.value},
+            handleOut:{...entry.value.handleOut.value},
+            tension:entry.value.tension.value,
+            rollDegrees:entry.value.rollDegrees.value
+          }));
+        }else if(payload.uuid==='path-node'&&
+                  payload.path==='__comps__.1.gizmoKnotIndex'){
+          assert.equal(payload.record,false);
+          pathComponent.gizmoKnotIndex=payload.dump.value;
+        }
+        return true;
+      }
       if(channel==='asset-db'&&method==='query-asset-info')
        return {uuid:'existing-gltf'};
       throw Error('Unexpected Editor operation '+channel+':'+method);
@@ -83,11 +116,30 @@ try{
   assert.equal((await main.methods.checkV2RoadBake()).ok,true);
   assert.equal((await main.methods.restoreV2RoadBaked()).ok,true);
   selectedUuid='path-node';
+  const before=JSON.stringify(pathComponent.knots);
+  const previousRestoreCount=pathComponent.restores;
   assert.equal((await main.methods.editV2Path('add',0)).ok,true);
+  assert.equal(pathComponent.knots.length,3);
+  assert.equal(pathComponent.knots[2].position.z,10);
   assert.equal((await main.methods.editV2Path('select',1)).ok,true);
+  assert.equal(pathComponent.gizmoKnotIndex,1);
+  assert.equal((await main.methods.editV2Path('duplicate',1)).ok,true);
+  assert.equal(pathComponent.knots.length,4);
+  assert.equal((await main.methods.editV2Path('up',2)).ok,true);
+  assert.equal((await main.methods.editV2Path('down',1)).ok,true);
+  assert.equal((await main.methods.editV2Path('remove',3)).ok,true);
   assert.equal((await main.methods.editV2Path('remove',2)).ok,true);
+  assert.equal(pathComponent.knots.length,2);
   assert.equal((await main.methods.editV2Path('remove',1)).ok,false);
   assert.equal((await main.methods.editV2Path('bogus',0)).ok,false);
+  assert.equal(JSON.stringify(pathComponent.knots),before);
+  assert.equal(updates.filter(v=>v.path.endsWith('.knots')).length,6);
+  assert(updates.filter(v=>v.path.endsWith('.knots')).every(v=>v.record),
+    'Creator records all Knot array mutations as editable Undo entries');
+  assert(updates.filter(v=>v.path.endsWith('.gizmoKnotIndex')).every(v=>!v.record),
+    'Changing active editor selection is not a separate undoable change');
+  assert(pathComponent.restores>previousRestoreCount,
+    'Each edit asks Scene to resynchronize generator previews');
   selectedUuid='road-node';
   assert(calls.filter(c=>c.method==='execute-scene-script').every(c=>
    !/Splines\.Spline/.test(JSON.stringify(c.payload))),
@@ -120,6 +172,7 @@ try{
  assert(fs.existsSync(path.join(installed,'assets/splines-v2/Components/SplinePathV2.ts')));
  assert(fs.existsSync(path.join(installed,'dist/contributions/inspector/PathV2.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/EditorAssetBind.js')));
+ assert(fs.existsSync(path.join(installed,'dist/v2/PathV2Dump.js')));
 }finally{
  fs.rmSync(path.join(root,'test-build'),{recursive:true,force:true});
 }
