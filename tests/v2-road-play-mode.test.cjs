@@ -133,7 +133,7 @@ try{
    }
  }
  road.shortKnotMode=1;
- assert.throws(()=>road.generate(),/Knot 0-1 spacing 2\\.236 is too short for radius 1\\.350/,
+ assert.throws(()=>road.generate(),/Knot 0-1 spacing 2[.]236 is too short for radius 1[.]350/,
     'Strict ConstantWidth must preserve safe failure');
  road.shortKnotMode=0;
  road.junctionStartTrim=1;
