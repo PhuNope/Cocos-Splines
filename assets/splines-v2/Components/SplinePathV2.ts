@@ -47,9 +47,68 @@ export class SplinePathV2 extends Component {
     private _dragNode:Node|null=null;
     private _dragIndex=-1;
     private _dragProperty:PathGizmoProperty|null=null;
+    // Editor Transform Tool / Inspector edits do not invoke Gizmos callbacks.
+    // Watch the source Knot world transforms and notify consumers with a
+    // lightweight, bounded signature (no mesh generation on Path itself).
+    private _observedSource:string|null=null;
+    private _lastSourceScanAt=Number.NEGATIVE_INFINITY;
+    private _lastSourceChangeAt=Number.NEGATIVE_INFINITY;
+    private _needsFinalPreview=false;
+    private _knotIds=new WeakMap<Node,number>();
+    private _nextKnotId=1;
+
+    private sourceSignature():string {
+        const nodes=this.knots.map(node=>{
+            if(!node?.isValid)return 'invalid';
+            let identity=this._knotIds.get(node);
+            if(!identity){
+                identity=this._nextKnotId++;
+                this._knotIds.set(node,identity);
+            }
+            const p=node.worldPosition;
+            return identity+':'+p.x+','+p.y+','+p.z;
+        });
+        return this.interpolation+'|'+Number(this.closed)+'|'+nodes.join(';');
+    }
+
+    /**
+     * Runs only with @executeInEditMode and an active Scene Editor.
+     * Native Transform handles, Inspector edits, Knot reordering, and Undo
+     * can change the Path without firing onGizmoChanged.
+     * An idle reconciliation forces the final mesh after drag stops, even
+     * when earlier preview updates were throttled.
+     */
+    protected update(_dt:number):void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
+           this._previewConsumers.size===0)return;
+        const now=Date.now();
+        if(now-this._lastSourceScanAt<50)return;
+        this._lastSourceScanAt=now;
+        const signature=this.sourceSignature();
+        if(this._observedSource===null){
+            this._observedSource=signature;
+            return;
+        }
+        if(signature!==this._observedSource){
+            this._observedSource=signature;
+            this._lastSourceChangeAt=now;
+            this._needsFinalPreview=true;
+            // A Path-owned drag already publishes its own update callback.
+            if(!this._dragNode)this.notifyPreviewConsumers(this,false);
+        }else if(this._needsFinalPreview&&!this._dragNode&&
+                 now-this._lastSourceChangeAt>=180){
+            this._needsFinalPreview=false;
+            this.notifyPreviewConsumers(this,true);
+        }
+    }
 
     public getKnotNodes():ReadonlyArray<Node>{return this.knots;}
     public registerPreviewConsumer(consumer:SplinePreviewConsumerV2):void {
+        if(this._previewConsumers.size===0){
+            this._observedSource=this.sourceSignature();
+            this._lastSourceScanAt=Number.NEGATIVE_INFINITY;
+            this._needsFinalPreview=false;
+        }
         this._previewConsumers.add(consumer);
     }
     public unregisterPreviewConsumer(consumer:SplinePreviewConsumerV2):void {
@@ -62,6 +121,8 @@ export class SplinePathV2 extends Component {
     }
     protected onDisable():void {
         this._dragNode=null;this._dragProperty=null;
+        this._observedSource=null;
+        this._needsFinalPreview=false;
     }
     protected onDestroy():void {
         this._dragNode=null;this._dragProperty=null;
@@ -191,7 +252,11 @@ export class SplinePathV2 extends Component {
             this._dragProperty===field){
             // Gizmos writes the final or rolled-back Knot BEFORE this callback.
             try{this.notifyPreviewConsumers(this,true);}
-            finally{this._dragNode=null;this._dragProperty=null;this._dragIndex=-1;}
+            finally{
+                this._observedSource=this.sourceSignature();
+                this._needsFinalPreview=false;
+                this._dragNode=null;this._dragProperty=null;this._dragIndex=-1;
+            }
         }
     }
     public onDrawGizmosSelected():void {
@@ -214,6 +279,9 @@ export class SplinePathV2 extends Component {
         }
     }
     public onRestore():void {
-        if(EDITOR_NOT_IN_PREVIEW)this.notifyPreviewConsumers(this,true);
+        if(!EDITOR_NOT_IN_PREVIEW)return;
+        this._observedSource=this.sourceSignature();
+        this._needsFinalPreview=false;
+        this.notifyPreviewConsumers(this,true);
     }
 }
