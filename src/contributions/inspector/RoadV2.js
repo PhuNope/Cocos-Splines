@@ -38,9 +38,9 @@ function makeV2Inspector(kind='road'){
          ['Tube profile',['radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
-        [['Spline source',['pathSource','knots','interpolation','closed']],
+        [['Spline source',['pathSource']],
          ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
-         ['Road Scene Gizmos',['showSceneGizmos','gizmoSteps','gizmoEdges','gizmoKnots','gizmoEditKnot','gizmoKnotIndex','gizmoMultiKnotPoints','gizmoPointLimit',
+         ['Road Gizmos',['showSceneGizmos','gizmoSteps','gizmoEdges',
              'gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Road sidewalk (optional, material 5)',['roadSidewalkWidth','roadSidewalkTerrainMode',
              'roadSidewalkTerrainSource','roadSidewalkTerrainHeightOffset',
@@ -71,12 +71,10 @@ function makeV2Inspector(kind='road'){
         </div>`,
         $:selectors,
         update(dump){
-            const hasPath=!!dump?.value?.pathSource?.value;
             for(const field of names){
                 const prop=dump?.value?.[field];
                 const row=this.$['row_'+field];
-                if(row)row.hidden=!prop||(hasPath&&
-                    ['knots','interpolation','closed'].includes(field));
+                if(row)row.hidden=!prop;
                 if(prop&&this.$[field])this.$[field].render(prop);
             }
         },
