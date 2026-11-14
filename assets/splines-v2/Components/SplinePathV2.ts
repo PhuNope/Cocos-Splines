@@ -538,6 +538,7 @@ export class SplinePathV2 extends Component {
                 source.knots.map(k=>k.position),0,{
                     maxSteps:64,showEdges:false,showKnots:true});
             const knot=this.knots[this.gizmoKnotIndex];
+            const k=knot;
             const lines=[...guide.lines],dots=[...guide.dots];
             if(this.interpolation===SplinePathCurveModeV2.Bezier&&
                 this.gizmoEditTangents&&k){
