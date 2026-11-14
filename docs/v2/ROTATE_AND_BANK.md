@@ -70,6 +70,34 @@ A banked Junction with crosswalks, sidewalk edges or Terrain joins
 requires separate geometric acceptance: banking does not edit the
 underlying Terrain or automatically produce accessible pedestrian ramps.
 
+## Live Knot Roll editing in the Scene HUD
+
+Select the Path Node, set **Gizmos Rotation Mode = Knots** and choose
+**Gizmo Knot Index**. The Gizmos HUD now exposes a
+**Knot Roll (deg)** slider ranging from -180 to +180 in 1° increments.
+The slider edits the selected Knot's actual `rollDegrees` record, not
+a separate unsaved or Road-local bank value.
+
+- Move the HUD slider to rebuild all linked temporary mesh previews.
+- Release to force a final preview, or press **Escape** to restore the
+  exact value saved at mouse-down.
+- While dragging, the target Knot record is pinned even if the active
+  Knot selector changes elsewhere.
+- A **Roll Guide** toggle controls a small cross-section indicator
+  on the selected Knot (orange = right/crossbar, green = Up).
+- **Gizmo Show Roll Guide** and **Gizmo Roll Guide Size** also appear
+  in the Path Inspector. The guide uses the sampled banked frame at
+  the Knot's exact segment boundary, not a rounded frame-table index.
+- A secondary Path transform rotation or topology edit is blocked
+  while the Roll HUD gesture is active. Manual/Baked assets are never
+  silently overwritten by these Editor previews.
+
+This HUD slider is the interactive alternative to typing Roll Degrees
+on the Knot card. The third-party SDK provides one Undo edit session
+for the slider; **native Creator Undo/Redo and serialization still
+require an actual Editor smoke test** because the edited field is a
+computed proxy onto a nested Knot record.
+
 ## Creator test checklist
 
 1. Create a Path with three Vec3 Knots and a linked Road.
