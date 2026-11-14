@@ -7,6 +7,7 @@
 const NAME='cocos-splines';
 const {bindWhenImported}=require('./EditorAssetBind');
 const {planPathEditDump}=require('./PathV2Dump');
+const {planEndpointSnapDump}=require('./PathEndpointSnapDump');
 const selected=()=>Editor.Selection.getSelected('node')||[];
 async function scene(method,uuid,...args){
     return Editor.Message.request('scene','execute-scene-script',{
@@ -186,7 +187,73 @@ async function applyV2JunctionAutoTrim(){
         return {ok:true,changed:changes.length,plan:proposal.plan};
     }catch(e){return fail('apply Junction trims',e);}
 }
+async function planV2JunctionEndpointSnap(){
+    try{
+        const result=await scene('planV2JunctionEndpointSnap',currentNode());
+        if(!result?.ok)throw new Error(result?.error||'Junction Endpoint Snap plan rejected');
+        return result;
+    }catch(e){return fail('check Endpoint Snap',e);}
+}
+async function inspectV2RoadNetwork(){
+    try{
+        const result=await scene('inspectV2RoadNetwork',currentNode());
+        if(!result?.ok)throw new Error(result?.error||'Road Network scan failed');
+        return result;
+    }catch(e){return fail('inspect Road Network',e);}
+}
+/**
+ * Two-phase serialized Knot edit. Verify EVERY Path dump before the FIRST
+ * record:true write; preserve tangents, Roll, custom record metadata.
+ * Each distinct Path is a native undoable edit (not a global transaction).
+ */
+async function applyV2JunctionEndpointSnap(){
+    let changed=0,junctionUuid;
+    try{
+        junctionUuid=currentNode();
+        const result=await scene('planV2JunctionEndpointSnap',junctionUuid);
+        if(!result?.ok)throw new Error(result?.error||'Junction Endpoint Snap plan rejected');
+        const links=result.plan?.branches;
+        if(!Array.isArray(links)||(links.length!==3&&links.length!==4))
+            throw new Error('Invalid Endpoint Snap proposal');
+        const checked=[];
+        const seen=new Set();
+        for(const branch of links){
+            if(typeof branch.pathUuid!=='string'||!branch.pathUuid||
+               seen.has(branch.pathUuid))
+                throw new Error('Endpoint Snap requires a unique Path for each Road');
+            seen.add(branch.pathUuid);
+            const dump=await Editor.Message.request('scene','query-node',branch.pathUuid);
+            const commit=planEndpointSnapDump(dump,branch);
+            checked.push(commit);
+        }
+        for(const commit of checked){
+            if(commit.noOp)continue;
+            const accepted=await Editor.Message.request('scene','set-property',{
+                uuid:commit.pathUuid,
+                path:'__comps__.'+commit.componentIndex+'.knots',
+                dump:commit.dump,record:commit.record
+            });
+            if(accepted===false)
+                throw new Error('Creator rejected a Path Knot edit ('+commit.pathUuid+')');
+            changed++;
+        }
+        if(changed){
+            const refreshed=await scene('refreshV2JunctionEndpointSnap',junctionUuid);
+            if(!refreshed?.ok)
+                throw new Error(refreshed?.error||'Knot edits saved but Preview could not refresh');
+            return {ok:true,changed,plan:result.plan,warnings:refreshed.warnings||[]};
+        }
+        return {ok:true,changed:0,plan:result.plan,warnings:[]};
+    }catch(e){
+        const detail=String(e instanceof Error?e.message:e);
+        // Native Creator history retains any successful earlier Path writes;
+        // never silently claim an all-or-nothing transaction.
+        return fail('apply Endpoint Snap',new Error(
+            detail+(changed?' ('+changed+' Path edits were recorded; Undo each or inspect Scene)':'')));
+    }
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
-    bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim};
+    bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
+    planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork};
 exports.load=function(){};
 exports.unload=function(){};
