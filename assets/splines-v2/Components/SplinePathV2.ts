@@ -578,9 +578,21 @@ export class SplinePathV2 extends Component {
             // Incomplete Path is normal while authoring. Never spam logs.
         }
     }
+    /**
+     * Creator Undo/Redo and serialized Scene reload may replace CCClass Knot
+     * record objects. Discard any stale in-flight proxy targets before
+     * rebuilding temporary meshes from the restored serialized Path.
+     */
     public onRestore():void {
         if(!EDITOR_NOT_IN_PREVIEW)return;
-        this._observed=this.signature();this._needsFinal=false;
+        this._dragKnot=null;this._dragProperty=null;
+        this._dragSnapshot=null;this._dragIndex=-1;
+        this._rotationDragging=false;this._rotationStart=null;
+        this._hudRollKnot=null;this._hudRollStart=0;
+        this._lastScan=Number.NEGATIVE_INFINITY;
+        this._lastChange=Number.NEGATIVE_INFINITY;
+        this._observed=this.signature();
+        this._needsFinal=false;
         this.notifyPreviewConsumers(this,true);
     }
 }
