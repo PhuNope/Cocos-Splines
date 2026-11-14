@@ -59,7 +59,7 @@ try{
  assert(generator.includes('else this.showSavedMesh();'),'Manual/Baked must restore saved Mesh');
  assert(generator.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor-only Bake guard');
  assert(component.includes('extends SplineMeshGeneratorV2'),'Road must use shared Mesh lifecycle');
- for(const kind of ['SplineExtrudeV2','SplineMeshDeformV2']){
+ for(const kind of ['SplineExtrudeV2','SplineMeshDeformV2','SplineJunctionPatchV2']){
    const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+kind+'.ts'),'utf8');
    assert(source.includes('extends SplineMeshGeneratorV2'),
       kind+' must use shared generator, not Road inheritance');
