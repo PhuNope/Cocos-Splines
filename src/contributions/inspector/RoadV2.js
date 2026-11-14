@@ -22,7 +22,7 @@ function makeV2Inspector(kind='road'){
     const junction=kind==='junction';
     const fields=junction?
         [['Junction branches',['branches','junctionUVMode','junctionUVBlend','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
-         ['Junction Scene Gizmos',['showJunctionSceneGizmosV3','gizmoV3JunctionCurbs']],
+         ['Junction Scene Gizmos',['showJunctionSceneGizmos','gizmoJunctionCurbs']],
          ['Junction markings',['generateJunctionMarkings','generateStopBars','generateCrosswalks','markingLift',
              'stopBarWidth','stopBarSetback','zebraStripeLength','zebraGap','zebraStartSetback',
              'zebraStripeCount','markingLateralInset','turnGuides','guideLineWidth']],
@@ -31,17 +31,17 @@ function makeV2Inspector(kind='road'){
         [['Spline Source',['pathSource']],
          ['Mesh deformation',['sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset']],
          ['Sampling & fillets',['sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','filletArcAngleDegrees','filletChordError']],
-         ['Live Editor mesh',['gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
+         ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         tube?
         [['Spline Source',['pathSource']],
          ['Tube profile',['radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
-         ['Live Editor mesh',['gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
+         ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         [['Spline source',['pathSource','knots','interpolation','closed']],
          ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
-         ['Road Scene Gizmos',['showSceneGizmosV3','gizmoV3Steps','gizmoV3Edges','gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex','gizmoV3MultiKnotPoints','gizmoV3PointLimit',
-             'gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
+         ['Road Scene Gizmos',['showSceneGizmos','gizmoSteps','gizmoEdges','gizmoKnots','gizmoEditKnot','gizmoKnotIndex','gizmoMultiKnotPoints','gizmoPointLimit',
+             'gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Road sidewalk (optional, material 5)',['roadSidewalkWidth','roadSidewalkTerrainMode',
              'roadSidewalkTerrainSource','roadSidewalkTerrainHeightOffset',
              'roadSidewalkMaxCrossSlope','roadSidewalkMaxEdgeSlope']],
