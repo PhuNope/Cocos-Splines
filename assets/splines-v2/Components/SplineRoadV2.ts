@@ -5,6 +5,8 @@ import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
+import {SplineV2UVAxis,SplineV2SurfaceMode} from './SplineGeometrySettingsV2';
+export {SplineV2UVAxis,SplineV2SurfaceMode} from './SplineGeometrySettingsV2';
 export {SplineV2MeshMode} from './SplineMeshGeneratorV2';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2,roadProfileLayoutV2} from '../geometry/ProfileSweep';
@@ -24,10 +26,8 @@ import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
-export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
-export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1,ConstantWidth=2}
 /** Only applies to ConstantWidth when a segment cannot fit its required fillet. */
 export enum SplineV2ShortKnotMode {AutoContinuous=0,StrictConstantWidth=1}
 export enum SplineV2RoadTerrainMode {FlatHeight=0,SampleTerrain=1}
