@@ -74,6 +74,7 @@
 - [x] Replace `SplinePathV2` Knot Nodes with pure, Path-local serializable `Vec3` Knot records; move tangent modes into each record; make Road/Junction consume correctly transformed world endpoints; add Path-only custom Inspector and topology commands.
 - [x] Integrate native Gizmos 2D Z and 3D XYZ Rotate presets on selected Path Node, angle snap and Escape rollback, without misrepresenting the Node-origin SDK ring as a Knot pivot.
 - [x] Serialize per-Knot Roll Degrees and interpolate shortest signed roll on rotation-minimizing frames. Preserve bank values in the immutable cache and through Road and Mesh Deform fillet sampling; add Road mesh/UV/Bake and seam regression.
+- [x] Expose live per-Knot bank via native Gizmos HUD roll slider: pin record during drag, throttle linked previews, force End/Cancel, Escape rollback and guard Play/runtime. Draw banked Right/Up cross-section guide on the exact Knot station; headless regression.
 - [ ] Certify native Creator Undo/Redo, scene save/reopen, cross-Node Gizmos transaction rollback and real gizmo picking (mocks alone are insufficient).
 
 - [ ] Certify Gizmos Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
