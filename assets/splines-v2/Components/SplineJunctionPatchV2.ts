@@ -5,7 +5,7 @@ import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoV3Backend,drawSplineSceneGizmosV3} from './SplineGizmoV3Bridge';
+import {availableGizmoBackend,drawSplineSceneGizmos} from './SplineGizmoBridge';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
@@ -113,14 +113,14 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     turnGuides:JunctionTurnGuideV2[]=[];
     @property({min:.02,max:.6,step:.01}) guideLineWidth=.10;
     @property({tooltip:'Show read-only junction center, trimmed Road rings and curb end guides when selected.'})
-    showJunctionSceneGizmosV3=true;
+    showJunctionSceneGizmos=true;
     @property({tooltip:'Include curb profile end markers in the Junction selection guides.'})
-    gizmoV3JunctionCurbs=true;
+    gizmoJunctionCurbs=true;
     private _lastJunctionReport:(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null=null;
     /** Selected-only read-only authoring visualization. Never paints runtime geometry. */
     public onDrawGizmosSelected():void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmosV3||
-            !availableGizmoV3Backend()||this.branches.length<3||
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmos||
+            !availableGizmoBackend()||this.branches.length<3||
             this.branches.length>4)return;
         try{
             const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
@@ -143,8 +143,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                         }))}}:{})};
             });
             const guide=buildJunctionSceneGuideV2(entries,{
-                showCurb:this.gizmoV3JunctionCurbs});
-            drawSplineSceneGizmosV3(this.node,guide);
+                showCurb:this.gizmoJunctionCurbs});
+            drawSplineSceneGizmos(this.node,guide);
         }catch{
             // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
             // Gizmos never mutate Nodes, meshes or the saved Scene.
