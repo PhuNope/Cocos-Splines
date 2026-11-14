@@ -59,7 +59,30 @@ function inspectV2RoadBake(uuid){
             junctionReport:c.inspectJunction?.()||null};
     });
 }
+/**
+ * Scene-only Knot topology edit. No Node per Knot.
+ * Main process snapshots the action for Creator editor history.
+ */
+function editV2Path(uuid,operation,index){
+    const node=locate(uuid),{js}=require('cc');
+    const path=node?.components?.find(c=>js.getClassName(c)==='SplinesV2.SplinePath');
+    if(!path)return {ok:false,error:'Select a SplinesV2.SplinePath Node'};
+    try{
+        if(operation==='select'){
+            if(!Number.isSafeInteger(index)||index<0||index>=path.knots.length)
+                throw new Error('Invalid selected Knot');
+            path.gizmoKnotIndex=index;
+            return {ok:true,index,count:path.knots.length};
+        }
+        if(!['add','insert','duplicate','remove','up','down'].includes(operation))
+            throw new Error('Unsupported Path topology command');
+        const selected=path.editKnot(operation,index);
+        return {ok:true,index:selected,count:path.knots.length};
+    }catch(error){
+        return {ok:false,error:String(error instanceof Error?error.message:error)};
+    }
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
-    inspectV2RoadBake};
+    inspectV2RoadBake,editV2Path};
 exports.load=function(){};
 exports.unload=function(){};
