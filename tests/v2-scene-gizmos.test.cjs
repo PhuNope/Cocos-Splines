@@ -133,14 +133,14 @@ try{
  for(const part of ['SplinePathV2','SplineRoadV2','SplineJunctionPatchV2',
     'SplineMeshGeneratorV2','SplineGizmoBridge']){
     const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+part+'.ts'),'utf8');
-    assert(!/(?:gizmoV3|GizmoV3|GizmosV3|Gizmos v3)/i.test(source),
+    assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(source),
        part+' must not expose version-tagged Gizmos symbols');
  }
  const ui=fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8');
- assert(!/(?:gizmoV3|GizmoV3|GizmosV3|Gizmos v3)/i.test(ui),
+ assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(ui),
     'Inspector must not present version-specific Gizmos labels');
- assert(!fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoV3Bridge.ts')),
-    'Old version-named Gizmos bridge must not ship');
+ assert.deepEqual(fs.readdirSync(path.join(root,'assets/splines-v2/Components')).filter(n=>/^SplineGizmo.*Bridge\.ts$/.test(n)),['SplineGizmoBridge.ts'],
+    'Only one non-versioned Gizmos bridge must ship');
 
  console.log('V2 SCENE GIZMOS BRIDGE PASS: bounded guides, global move/indexed point descriptors, world draw, Editor gating.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
