@@ -147,22 +147,22 @@ try{
  road.knots.forEach((k,i)=>{k.worldPosition=oldPositions[i];});
  road.width=4;road.sampleStep=.25;road.interpolation=3;
  road.uvLongitudinalAxis=0;road.shortKnotMode=0;
- // Native Cocos-Gizmos v3: scene.js supplies global Gizmos3D;
+ // Native Cocos-Gizmos: scene.js supplies global Gizmos3D;
  // Gizmos3D.move reads/writes the Road's live Knot proxy Vec3.
  const originalSdk=globalThis.Gizmos3D;
- const mockV3={beginColor:()=>{},drawLine:()=>{},
+ const mockGizmos={beginColor:()=>{},drawLine:()=>{},
    move:(property,options)=>Array.from({length:6},(_,i)=>({
      property,id:'move-'+i,visual:i<3?'axis':'plane',plane:'xy',
      space:options.space}))};
- globalThis.Gizmos3D=mockV3;
+ globalThis.Gizmos3D=mockGizmos;
  try{
-   road.gizmoV3EditKnot=true;road.gizmoV3KnotIndex=1;
-   road.gizmoV3MultiKnotPoints=true;road.gizmoV3PointLimit=16;
+   road.gizmoEditKnot=true;road.gizmoKnotIndex=1;
+   road.gizmoMultiKnotPoints=true;road.gizmoPointLimit=16;
    const multiHandles=road.onGizmoHandles();
    assert.equal(multiHandles.length,8,'6 active move handles + 2 independent Knot points');
    const hud=road.onGizmoHudControls();
    assert.equal(hud.length,2);
-   assert.deepEqual(hud.map(x=>x.property),['gizmoV3KnotIndex','gizmoV3MultiKnotPoints']);
+   assert.deepEqual(hud.map(x=>x.property),['gizmoKnotIndex','gizmoMultiKnotPoints']);
    assert.equal(hud[0].max,2,'HUD slider must use current Knot count');
    assert.equal(hud[0].step,1);
    assert.deepEqual(multiHandles.slice(6).map(h=>h.index),[0,2]);
@@ -172,14 +172,14 @@ try{
    assert.equal(road.gizmoKnotPositions.length,3);
    const shortKnots=road.knots;
    const extended=[...shortKnots,...Array.from({length:37},(_,i)=>new Node('ExtraKnot'+i))];
-   road.knots=extended;road.gizmoV3PointLimit=16;
+   road.knots=extended;road.gizmoPointLimit=16;
    assert.equal(road.gizmoKnotPositions.length,16,'Gizmo Proxy caps indexed Knots');
    assert.equal(road.onGizmoHandles().length,21,'Six active handles + 15 other points');
-   road.gizmoV3PointLimit=NaN;
+   road.gizmoPointLimit=NaN;
    assert.equal(road.gizmoKnotPositions.length,16,
      'Malformed editor slider value must not allocate an invalid proxy array');
    assert.equal(road.onGizmoHandles().length,21);
-   road.gizmoV3PointLimit=16;road.knots=shortKnots;
+   road.gizmoPointLimit=16;road.knots=shortKnots;
    const firstOriginal=new Vec3(a.worldPosition.x,a.worldPosition.y,a.worldPosition.z);
    road.gizmoKnotPositions[0]=new Vec3(NaN,0,0);
    assert.deepEqual({...a.worldPosition},{...firstOriginal},
@@ -209,38 +209,38 @@ try{
    road.knots=reordered;
    // SDK's active Vec3 proxy must similarly pin Node when active index
    // changes during the gesture; then release that pin on end/cancel.
-   road.gizmoV3MultiKnotPoints=false;
+   road.gizmoMultiKnotPoints=false;
    assert.equal(road.onGizmoHandles().length,6);
    assert.equal(road.onGizmoHandles()[0].property,'gizmoKnotPosition');
    assert.deepEqual({...road.gizmoKnotPosition},{...b.worldPosition});
    const undoPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
    road.onGizmoChanged('gizmoKnotPosition','begin');
-   road.gizmoV3KnotIndex=0;
+   road.gizmoKnotIndex=0;
    road.gizmoKnotPosition=new Vec3(-2.5,1.5,4.25);
    assert.deepEqual({...b.worldPosition},{x:-2.5,y:1.5,z:4.25},
-     'Gizmos v3 writes real Knot Node positions, not a duplicate Vec3 field');
+     'Gizmos writes real Knot Node positions, not a duplicate Vec3 field');
    assert.deepEqual({...a.worldPosition},{...firstOriginal},
      'Switching active index while dragging cannot mutate a different Knot');
    road.gizmoKnotPosition=undoPosition;
    road.onGizmoChanged('gizmoKnotPosition','cancel');
-   road.gizmoV3KnotIndex=1;
+   road.gizmoKnotIndex=1;
    assert.deepEqual({...b.worldPosition},{...undoPosition},
      'Gizmos cancel restores Knot Node via the same live proxy setter');
-   road.gizmoV3KnotIndex=999;
+   road.gizmoKnotIndex=999;
    assert.equal(road.onGizmoHandles().length,0,'Out-of-range Knot must hide handles');
-   road.gizmoV3KnotIndex=1;road.gizmoV3EditKnot=false;
+   road.gizmoKnotIndex=1;road.gizmoEditKnot=false;
    assert.equal(road.onGizmoHandles().length,0,'Move handles opt-in only');
    road.gizmoKnotPosition=new Vec3(90,90,90);
    assert.deepEqual({...b.worldPosition},{...undoPosition},
      'Disabled Gizmo setter cannot mutate Knot Node');
-   road.gizmoV3EditKnot=true;delete globalThis.Gizmos3D;
+   road.gizmoEditKnot=true;delete globalThis.Gizmos3D;
    assert.equal(road.onGizmoHandles().length,0,'Missing v3 package must not break Scene');
- }finally{globalThis.Gizmos3D=originalSdk;road.gizmoV3EditKnot=false;}
+ }finally{globalThis.Gizmos3D=originalSdk;road.gizmoEditKnot=false;}
 
- // Gizmos v3 update must rebuild a temporary preview during dragging,
+ // Gizmos update must rebuild a temporary preview during dragging,
  // throttle duplicates, force the last preview at end and restore on Escape.
- road.gizmoV3EditKnot=true;road.gizmoV3LiveMesh=true;
- road.gizmoV3MeshIntervalMs=400;road.meshMode=SplineV2MeshMode.Baked;
+ road.gizmoEditKnot=true;road.gizmoLiveMesh=true;
+ road.gizmoMeshIntervalMs=400;road.meshMode=SplineV2MeshMode.Baked;
  road.showSavedMesh();
  const editedPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
  road.onGizmoChanged('gizmoKnotPosition','begin');
@@ -285,7 +285,7 @@ try{
  assert.equal(road.onGizmoHandles().length,0,
     'With a linked SplinePath, only the Path owns Knot Gizmos');
  const priorSDK=globalThis.Gizmos3D;
- globalThis.Gizmos3D=mockV3;
+ globalThis.Gizmos3D=mockGizmos;
  try{
     splinePath.gizmoKnotIndex=1;
     const pathHandles=splinePath.onGizmoHandles();
@@ -319,7 +319,7 @@ try{
  }finally{globalThis.Gizmos3D=priorSDK;}
  other.onDisable();
  road.pathSource=null;road.knots=[a,b,k2];
- road.showSavedMesh();road.gizmoV3EditKnot=false;generated.length=0;
+ road.showSavedMesh();road.gizmoEditKnot=false;generated.length=0;
 
  env.EDITOR_NOT_IN_PREVIEW=false;
  assert.equal(road.onGizmoHudControls().length,0,'No Editor HUD in Play');
