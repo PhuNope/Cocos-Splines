@@ -28,7 +28,7 @@ function makeV2Inspector(kind='road'){
              'zebraStripeCount','markingLateralInset','turnGuides','guideLineWidth']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         deform?
-        [['Path and deformation',['knots','interpolation','closed','sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset','sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','filletArcAngleDegrees','filletChordError']],
+        [['Path and deformation',['knots','interpolation','closed','sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset','sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         tube?
         [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
