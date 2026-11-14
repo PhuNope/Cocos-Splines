@@ -12,6 +12,8 @@ export interface SplineKnotV2 {
     readonly handleOut?:V3;
     /** Per-knot Catmull-Rom tension, clamped to [0,1]. 0 = smooth, 1 = flat. */
     readonly tension?:number;
+    /** Optional signed cross-section bank about the travel tangent, degrees. */
+    readonly rollDegrees?:number;
 }
 export type CurveTypeV2='linear'|'bezier'|'catmull-rom'|'catmull-rom-centripetal';
 export interface SplineDataV2 {
@@ -41,7 +43,9 @@ export function validateSplineV2(s:SplineDataV2):void {
     if(s.knots.length<2)throw new Error('Spline requires at least two knots');
     if(typeof s.closed!=='boolean')throw new Error('closed must be boolean');
     for(const knot of s.knots){
-        if(!finiteV(knot.position)|| (knot.handleIn&&!finiteV(knot.handleIn))|| (knot.handleOut&&!finiteV(knot.handleOut)) || (knot.tension!==undefined&&!Number.isFinite(knot.tension)))
+        if(!finiteV(knot.position)|| (knot.handleIn&&!finiteV(knot.handleIn))|| (knot.handleOut&&!finiteV(knot.handleOut)) || (knot.tension!==undefined&&!Number.isFinite(knot.tension))||
+            (knot.rollDegrees!==undefined&&
+                (!Number.isFinite(knot.rollDegrees)||Math.abs(knot.rollDegrees)>180)))
             throw new Error('Non-finite spline knot data');
     }
 }
