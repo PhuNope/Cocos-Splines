@@ -10,7 +10,7 @@ import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClea
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
-import {buildRoadFilletCacheV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
+import {buildRoadFilletCacheV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
@@ -29,6 +29,8 @@ export enum SplineV2UVAxis {V=0,U=1}
 export enum SplineV2UVCrossMode {Legacy=0,Physical=1}
 export enum SplineV2RoadCornerMode {JoinAndTrim=0,Legacy=1}
 export enum SplineV2SurfaceMode {Continuous=0,ClipOverlaps=1,ConstantWidth=2}
+/** Only applies to ConstantWidth when a segment cannot fit its required fillet. */
+export enum SplineV2ShortKnotMode {AutoContinuous=0,StrictConstantWidth=1}
 export enum SplineV2RoadTerrainMode {FlatHeight=0,SampleTerrain=1}
 /**
  * v2 road-strip integration prototype. Never writes editor-only warnings in
@@ -73,6 +75,8 @@ export class SplineRoadV2 extends Component {
     surfaceMode=SplineV2SurfaceMode.ConstantWidth;
     @property({min:1.02,max:6,step:.05,tooltip:'Minimum circular turn radius = full half-width (including shoulder/curb) times this factor. Larger values need more knot spacing.'})
     filletRadiusScale=1.35;
+    @property({type:Enum(SplineV2ShortKnotMode),tooltip:'Auto Continuous: preserve seamless UV by smoothly adapting width only if a ConstantWidth fillet cannot fit nearby Knots. Strict: report the spacing error. Junction Trim and Road Sidewalk never auto-fallback.'})
+    shortKnotMode=SplineV2ShortKnotMode.AutoContinuous;
     @property({min:0.5,max:45,step:.5,tooltip:'Maximum angle for each tangent Bezier fillet segment in degrees.'})
     filletArcAngleDegrees=4;
     @property({min:.001,max:1,step:.005,tooltip:'Maximum sagitta/chord approximation error of rounded corners.'})
@@ -133,6 +137,14 @@ export class SplineRoadV2 extends Component {
     private _lastOverlapReport:RoadOverlapReportV2|null=null;
     private _lastContinuousReport:RoadContinuousReportV2|null=null;
     private _lastFilletReport:RoadFilletReportV2|null=null;
+    private _lastShortKnotFallback:string|null=null;
+    /** Only reported after a successful rebuild; not serialized or shown under Inspector. */
+    public getShortKnotFallback():string|null{return this._lastShortKnotFallback;}
+    private canAutoContinuousShortKnot():boolean {
+        return this.shortKnotMode===SplineV2ShortKnotMode.AutoContinuous&&
+            this.junctionStartTrim<=0&&this.junctionEndTrim<=0&&
+            this.roadSidewalkWidth<=0;
+    }
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -318,13 +330,19 @@ export class SplineRoadV2 extends Component {
             const source=this.source();
             const cache=buildSplineCacheV2(source);
             const totalWidth=this.width*.5+this.shoulderWidth+this.curbWidth;
-            const fillet=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?
-                buildRoadFilletCacheV2(cache,totalWidth,{
+            let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
+            if(this.surfaceMode===SplineV2SurfaceMode.ConstantWidth){
+                try{fillet=buildRoadFilletCacheV2(cache,totalWidth,{
                     minimumRadiusScale:this.filletRadiusScale,
                     maxArcAngleDegrees:this.filletArcAngleDegrees,
                     maxArcChordError:this.filletChordError,
                     maxArcStep:this.sampleStep
-                }):null;
+                });}
+                catch(error){
+                    if(!(error instanceof RoadFilletSpacingErrorV2)||
+                       !this.canAutoContinuousShortKnot())throw error;
+                }
+            }
             const working=fillet?.cache??cache;
             const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoV3Steps)));
             const frames=buildSplineFramesV2(working,{
@@ -362,10 +380,20 @@ export class SplineRoadV2 extends Component {
     public inspectCornerRisk():RoadCornerReportV2|null {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
-        const fillet=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?buildRoadFilletCacheV2(cache,
-            this.width*.5+this.shoulderWidth+this.curbWidth,{minimumRadiusScale:this.filletRadiusScale,
-            maxArcAngleDegrees:this.filletArcAngleDegrees,maxArcChordError:this.filletChordError,
-            maxArcStep:this.sampleStep}):null;
+        let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
+        if(this.surfaceMode===SplineV2SurfaceMode.ConstantWidth){
+            try{fillet=buildRoadFilletCacheV2(cache,
+                this.width*.5+this.shoulderWidth+this.curbWidth,{
+                    minimumRadiusScale:this.filletRadiusScale,
+                    maxArcAngleDegrees:this.filletArcAngleDegrees,
+                    maxArcChordError:this.filletChordError,
+                    maxArcStep:this.sampleStep
+                });}
+            catch(error){
+                if(!(error instanceof RoadFilletSpacingErrorV2)||
+                   !this.canAutoContinuousShortKnot())throw error;
+            }
+        }
         const testedCache=fillet?.cache??cache;
         const frameTable=buildSplineFramesV2(testedCache,{maxStep:this.sampleStep,
             ...(this.adaptiveSampling&&!fillet?{
@@ -399,6 +427,7 @@ export class SplineRoadV2 extends Component {
         this._lastOverlapReport=null;
         this._lastContinuousReport=null;
         this._lastFilletReport=null;
+        this._lastShortKnotFallback=null;
         const onOverlapReport=(report:RoadOverlapReportV2):void=>{this._lastOverlapReport=report;};
         const onContinuousReport=(report:RoadContinuousReportV2):void=>{this._lastContinuousReport=report;};
         const onFilletReport=(report:RoadFilletReportV2):void=>{this._lastFilletReport=report;};
@@ -406,19 +435,37 @@ export class SplineRoadV2 extends Component {
             maxArcAngleDegrees:this.filletArcAngleDegrees,maxArcChordError:this.filletChordError,onFilletReport};
         const surfaceMode=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?'fillet' as const:
             this.surfaceMode===SplineV2SurfaceMode.Continuous?'continuous' as const:'clip' as const;
-        const geometry=this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
+        const makeRoad=(mode:'fillet'|'continuous'|'clip')=>
+            this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
                 uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
-                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,...roadSampling,...filletSettings,...corners
+                onContinuousReport,surfaceMode:mode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
+                ...roadSampling,...filletSettings,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
                 resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
-                onContinuousReport,surfaceMode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
+                onContinuousReport,surfaceMode:mode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
                 ...roadSampling,...filletSettings,...corners
             });
+        let geometry:ReturnType<typeof buildRoadStripV2>;
+        try{geometry=makeRoad(surfaceMode);}
+        catch(error){
+            if(surfaceMode!=='fillet'||
+               !(error instanceof RoadFilletSpacingErrorV2)||
+               !this.canAutoContinuousShortKnot())throw error;
+            // A radius smaller than the road half-width could fold the inside
+            // mesh. Use the proven one-strip Continuous width solver instead.
+            // No triangle clipping; UV0/UV2 remain continuous along the Road.
+            this._lastFilletReport=null;
+            geometry=makeRoad('continuous');
+            if(this._lastContinuousReport?.impossibleCrossings||
+               this._lastContinuousReport?.hitSafetyLimit)
+                throw new Error('Constant Width Road auto Continuous cannot resolve this crossing safely; move Knots apart or reduce Width');
+            this._lastShortKnotFallback=error.message;
+        }
 
         if(this.roadSidewalkWidth<=0)return {geometry};
         if(this.closed||this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth)
