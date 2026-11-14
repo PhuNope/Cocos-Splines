@@ -64,7 +64,8 @@
 
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
 - [x] Read-only selected Scene Gizmo guides for v2 Road/Junction: bounded curve/border/trim/curb visualization via optional SDK drawing interface; no new mesh or Play work, regression tests.
-- [ ] Bind/validate actual Gizmos v3.0 SDK registration and drag handles/Undo in Creator after obtaining vendor v3 API; current adapter is opt-in compatibility only.
+- [x] Integrate Cocos-Gizmos v3 branch source: native global Gizmos3D on Scene process; Component onDrawGizmosSelected/onGizmoHandles auto-discovered without a decorator. Add opt-in Road Knot XYZ/plane move() from live Knot-node Vec3 proxy with begin/update/end/cancel rollback tests.
+- [ ] Certify v3 Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
 
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
