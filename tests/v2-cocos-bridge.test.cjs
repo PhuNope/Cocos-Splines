@@ -54,9 +54,18 @@ try{
    assert(fs.existsSync(asset+'.meta'),name+' missing import metadata');
  }
  const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
- assert(component.includes('this.meshMode===SplineV2MeshMode.Dynamic'),'No Dynamic gate');
- assert(component.includes('else this.showSavedMesh();'),'Manual/Baked should restore saved Mesh');
- assert(component.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor bake guard');
+ const generator=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineMeshGeneratorV2.ts'),'utf8');
+ assert(generator.includes('this.meshMode===SplineV2MeshMode.Dynamic'),'No shared Dynamic gate');
+ assert(generator.includes('else this.showSavedMesh();'),'Manual/Baked must restore saved Mesh');
+ assert(generator.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor-only Bake guard');
+ assert(component.includes('extends SplineMeshGeneratorV2'),'Road must use shared Mesh lifecycle');
+ for(const kind of ['SplineExtrudeV2','SplineMeshDeformV2']){
+   const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+kind+'.ts'),'utf8');
+   assert(source.includes('extends SplineMeshGeneratorV2'),
+      kind+' must use shared generator, not Road inheritance');
+   assert(!source.includes('extends SplineRoadV2'));
+ }
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta')));
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert.match(inspector.template,/Rebuild preview/i);assert.match(inspector.template,/Bake glTF asset/i);
  assert.match(inspector.template,/Bind Imported Mesh/i);
