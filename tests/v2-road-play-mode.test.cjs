@@ -453,6 +453,11 @@ try{
  // the Road's trimmed end ring, with no hidden runtime mesh generation.
  const patchNode=new Node('JunctionV2'),patchRenderer=patchNode.addComponent(MeshRenderer);
  const patch=patchNode.addComponent(SplineJunctionPatchV2);
+ assert(patch instanceof SplineMeshGeneratorV2);
+ assert(!(patch instanceof SplineRoadV2),'Junction must not inherit Road');
+ assert.equal('width' in patch,false,'Junction must not inherit Road width');
+ assert.equal('knots' in patch,false,'Junction must not own Road Knot nodes');
+ assert.equal('roadSidewalkWidth' in patch,false);
  patch.meshMode=SplineV2MeshMode.Baked;patch.bakedMesh=saved;
  const savedCount=generated.length;
  env.EDITOR_NOT_IN_PREVIEW=false;
