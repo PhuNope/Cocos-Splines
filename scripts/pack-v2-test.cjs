@@ -34,6 +34,7 @@ copy('dist/v2/EditorAssetBind.js');
 copy('src/v2/inspector-common-clean.js','dist/contributions/inspector/common.js');
 for(const name of ['RoadV2','ExtrudeV2','MeshDeformV2','JunctionV2'])
     copy('dist/contributions/inspector/'+name+'.js');
+copy('src/contributions/inspector/PathV2.js','dist/contributions/inspector/PathV2.js');
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 pkg.version=version;
 pkg.description='Clean BREAKING V2 development test extension for Cocos Creator 3.8.x';
@@ -46,9 +47,11 @@ pkg.contributions={
         'restore-v2-road-baked':{methods:['restoreV2RoadBaked']},
         'check-v2-road-bake':{methods:['checkV2RoadBake']},
         'bake-v2-road':{methods:['bakeV2Road']},
-        'bind-v2-road-mesh':{methods:['bindV2RoadMesh']}
+        'bind-v2-road-mesh':{methods:['bindV2RoadMesh']},
+        'edit-v2-path':{methods:['editV2Path']}
     },
     inspector:{section:{node:{
+        'SplinesV2.SplinePath':'./dist/contributions/inspector/PathV2.js',
         'SplinesV2.SplineRoad':'./dist/contributions/inspector/RoadV2.js',
         'SplinesV2.SplineExtrude':'./dist/contributions/inspector/ExtrudeV2.js',
         'SplinesV2.SplineMeshDeform':'./dist/contributions/inspector/MeshDeformV2.js',
@@ -62,7 +65,7 @@ fs.writeFileSync(path.join(target,'package.json'),
 fs.writeFileSync(path.join(target,'README.md'),
     '# Cocos Splines '+version+' (breaking test build)\n\n'+
     'Only SplinesV2 components are shipped. No old Splines.SplineContainer, legacy assets, legacy .meta, legacy menus, or scene migration.\n\n'+
-    '1. Add SplinesV2.SplinePath to a Node and author Knot Node references.\n'+
+    '1. Add SplinesV2.SplinePath and edit pure Vec3 Knot records in its custom Inspector.\n'+
     '2. Add SplinesV2.SplineRoad / SplineExtrude / SplineMeshDeform, link Path Source.\n'+
     '3. Add SplinesV2.JunctionPatch and linked Roads if needed.\n'+
     '4. In Inspector use Rebuild Preview, Bake glTF Asset and Bind Imported Mesh.\n'+
@@ -75,6 +78,7 @@ for(const rel of [
  'dist/v2/clean-main.js','dist/v2/clean-scene.js',
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePathV2.ts',
+ 'dist/contributions/inspector/PathV2.js',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta',
  'assets/splines-v2/Components/SplineGeometrySettingsV2.ts',
