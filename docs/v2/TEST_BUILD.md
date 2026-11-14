@@ -244,22 +244,22 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 > **Giới hạn:** hiện chỉ khớp đầu biên tại các Junction được liên kết thủ công. Chưa có network graph/snap tự động, sidewalk liên tục qua giao lộ phức tạp, Boolean nối Terrain, lightmap unwrap production hoặc test chứng nhận Cocos Creator thật. **Không dùng production.**
 
  
-## Native Cocos-Gizmos v3 / Road Knot Move (alpha)
+## Native Cocos-Gizmos / Road Knot Move (alpha)
 
-1. Install Cocos-Gizmos v3 from [PhuNope/Cocos-Gizmos/v3](https://github.com/PhuNope/Cocos-Gizmos/tree/v3) as a Creator Project or Global extension, enable it and reload the Editor Scene. No `@registerGizmos` decorator, `db://` script import or manual global adapter binding is needed on SplineRoadV2/JunctionPatchV2.
-2. Select a Road and verify read-only center/width/Knot guides. Toggle `Show Scene Gizmos V3`, `Gizmo V3 Edges` and `Gizmo V3 Knots`.
-3. Enable `Gizmo V3 Edit Knot`, choose `Gizmo V3 Knot Index=1` for the second knot. Drag v3's X/Y/Z arrows or XY/XZ/YZ plane squares: check the **original Knot Node** position changes, and spline guides update.
-4. Press Escape while dragging to verify rollback, then commit a drag and test Creator Undo/Redo. **Cross-Node Undo/Redo is not yet certified** because the property edited by Gizmos v3 is a dynamic Vec3 proxy to an external Knot Node. If rollback or Undo fails, turn off `Gizmo V3 Edit Knot` and use native Cocos transform handles on the Knot Node.
+1. Install Cocos-Gizmos from [PhuNope/Cocos-Gizmos/v3](https://github.com/PhuNope/Cocos-Gizmos/tree/v3) as a Creator Project or Global extension, enable it and reload the Editor Scene. No `@registerGizmos` decorator, `db://` script import or manual global adapter binding is needed on SplineRoadV2/JunctionPatchV2.
+2. Select a Road and verify read-only center/width/Knot guides. Toggle `Show Scene Gizmos`, `Gizmos Edges` and `Gizmos Knots`.
+3. Enable `Gizmos Edit Knot`, choose `Gizmos Knot Index=1` for the second knot. Drag the SDK's X/Y/Z arrows or XY/XZ/YZ plane squares: check the **original Knot Node** position changes, and spline guides update.
+4. Press Escape while dragging to verify rollback, then commit a drag and test Creator Undo/Redo. **Cross-Node Undo/Redo is not yet certified** because the property edited by Gizmos is a dynamic Vec3 proxy to an external Knot Node. If rollback or Undo fails, turn off `Gizmos Edit Knot` and use native Cocos transform handles on the Knot Node.
 5. Select Junction to verify exact Road trim bars, curb ends. Try missing Cocos-Gizmos: selection should not crash. Play Baked and verify no Gizmos writes or automatic rebuild.
 6. After edits, Rebuild Preview or Bake glTF Asset manually; Gizmos only modify the Knot Node, not existing Baked mesh.
 
-> Development design/API notes: [SCENE_GIZMOS_V3.md](./SCENE_GIZMOS_V3.md)
+> Development design/API notes: [GIZMOS.md](./GIZMOS.md)
 
 
-## Gizmos v3 — Multi-Knot handles / HUD (alpha)
+## Gizmos — Multi-Knot handles / HUD (alpha)
 
-1. Bật Cocos-Gizmos `v3` trong Creator Editor, chọn Road với ít nhất 3 Knot. Bật `Show Scene Gizmos V3` và `Gizmo V3 Edit Knot`.
-2. Bật `Gizmo V3 Multi Knot Points`, đặt `Gizmo V3 Point Limit = 16`. Knot chủ động vẫn có mũi tên XYZ / ô XY/XZ/YZ. Các Knot khác xuất hiện các point handle nhỏ, chỉ có một mặt phẳng kéo theo camera.
+1. Bật Cocos-Gizmos trong Creator Editor, chọn Road với ít nhất 3 Knot. Bật `Show Scene Gizmos` và `Gizmos Edit Knot`.
+2. Bật `Gizmos Multi Knot Points`, đặt `Gizmos Point Limit = 16`. Knot chủ động vẫn có mũi tên XYZ / ô XY/XZ/YZ. Các Knot khác xuất hiện các point handle nhỏ, chỉ có một mặt phẳng kéo theo camera.
 3. Dùng HUD **Active Knot** để đổi index và **Other Knots** để bật/tắt point handles. Kéo một point không chủ động rồi kiểm tra Node gốc được đổi worldPosition, không tạo thêm Knot/điểm serialized.
 4. Kéo rồi **Escape** để hoàn nguyên. Thử đổi index qua Inspector/HUD trong lúc đang kéo hoặc đảo thứ tự `knots`; thao tác vẫn phải tác động đúng Node gốc được khóa ở đầu phiên kéo.
 5. Thử 3, 16, 40 Knot để kiểm tra giới hạn số handles; vào Play/Preview và kiểm tra proxy không ghi vào Node. Sau khi đổi Knot phải Rebuild/Bake lại thủ công.
@@ -283,10 +283,10 @@ Không dùng phần kéo Knot cho production khi chưa xác nhận native Undo/R
 ## SplinePathV2 + live Road Gizmo mesh rebuild
 
 1. Add **SplinesV2.SplinePath** to a Node, assign its 3 Knot Nodes. Create a separate **SplinesV2.SplineRoad** Node and set **Path Source** to that Path Component; its legacy Knots/interpolation/closed controls should be hidden.
-2. Set Road `Gizmo V3 Live Mesh=true` (default) and `Gizmo V3 Mesh Interval Ms=100`. Enable `Gizmo V3 Edit Knot`, select Road, drag X/Y/Z or a secondary Knot point. Watch **Road mesh visually follow the handle** without pressing Rebuild.
+2. Set Road `Gizmos Live Mesh=true` (default) and `Gizmos Mesh Interval Ms=100`. Enable `Gizmos Edit Knot`, select Road, drag X/Y/Z or a secondary Knot point. Watch **Road mesh visually follow the handle** without pressing Rebuild.
 3. Press Escape: the Knot **and temporary Road mesh** should return to their original shape. On mouse-up the final preview must match the final Knot position. Test sharp bends crossing invalid spacing: last valid mesh remains shown, final error goes once to Editor Console.
 4. Assign the same Path Source to a second Road and rebuild both once. Drag from the first Road: **both registered Road previews** should update; neither writes the saved Baked Mesh.
-5. Disable `Gizmo V3 Live Mesh` to stop incremental updates; the explicit Rebuild button must still work. Switch Manual/Baked and enter Play: Gizmo callbacks must never update mesh or log authoring warnings.
+5. Disable `Gizmos Live Mesh` to stop incremental updates; the explicit Rebuild button must still work. Switch Manual/Baked and enter Play: Gizmo callbacks must never update mesh or log authoring warnings.
 6. Reopen Scene and test native Knot Transform tool, multi-Node Undo/Redo and shared path reattachment. These are **manual Editor acceptance gates**, not yet validated by CI.
 
 See [SPLINE_PATH_V2.md](./SPLINE_PATH_V2.md). The other v2 generators (Extrude and Mesh Deform) do not yet consume SplinePathV2.
@@ -296,7 +296,7 @@ See [SPLINE_PATH_V2.md](./SPLINE_PATH_V2.md). The other v2 generators (Extrude a
 
 - **Do not install this alongside the previous 0.9.x extension** under the same package identifier. Use a fresh Creator 3.8.x project or disable/uninstall the old extension first.
 - The test ZIP excludes `assets/splines`, legacy `.meta` files, old Inspector registrations and legacy menus. Only new `SplinesV2.*` components are available. Existing legacy Scenes are **not compatible** and are **not automatically migrated**.
-- Add `SplinesV2.SplinePath` to a Node and author Knot Nodes. Add `SplinesV2.SplineRoad` to a second Node, assign **Path Source**. The Path handles Gizmos v3 editing; no Road-owned duplicate Knot handles are shown when linked. Drag with Cocos-Gizmos v3 and confirm Road preview rebuilding.
+- Add `SplinesV2.SplinePath` to a Node and author Knot Nodes. Add `SplinesV2.SplineRoad` to a second Node, assign **Path Source**. The Path handles Gizmos editing; no Road-owned duplicate Knot handles are shown when linked. Drag with Cocos-Gizmos and confirm Road preview rebuilding.
 - Test Extrude / Mesh Deform linked to the Path too; their **shared path reading** works but they still inherit Road component internals pending consumer-base extraction.
 - Verify Inspector **Rebuild Preview / Bake glTF Asset / Bind Imported Mesh** work on each generator, no legacy messages or missing SplineContainer errors. Test save/reopen and Undo/Redo manually.
 
@@ -307,7 +307,7 @@ Full architectural rewrite plan: [REBUILD_BREAKING.md](./REBUILD_BREAKING.md).
 
 1. Add one `SplinesV2.SplinePath` to a Node and assign two or more Knot Nodes. Assign the same Path component to **Road**, **Extrude** and **Mesh Deform** generator nodes, each with its own `MeshRenderer`. Existing Road geometry may still use an implicit Knot array for comparison, but Extrude/Deform now **require Path Source**.
 2. Extrude Inspector exposes only source, tube radius/sides/caps/UV axis, mesh mode/materials/Baked Mesh and live preview throttle; there must be **no Road Width/Curb/Junction/Sidewalk or separate Knot array**. Deform Inspector exposes source Mesh, longitudinal mapping, repeat/UV, frame sampling, its own curvature/fillet controls and shared mesh lifecycle.
-3. Rebuild Preview for all three. Drag a Knot using **Path** Gizmos v3; each registered generator should update its own temporary mesh. On Escape/Cancel each should return to the original Path shape. Use `Gizmo V3 Live Mesh=false` on one generator to verify independent opt-out.
+3. Rebuild Preview for all three. Drag a Knot using **Path** Gizmos; each registered generator should update its own temporary mesh. On Escape/Cancel each should return to the original Path shape. Use `Gizmos Live Mesh=false` on one generator to verify independent opt-out.
 4. Switch each to **Manual** and **Baked** in Play; assert that no geometry generation occurs and persisted mesh references remain visible. In Dynamic Play only the chosen generator builds. Source Mesh Deform must never destroy the user-supplied source Mesh asset.
 5. Bake each explicitly via glTF; UV0/UV2 and material slots must be preserved. Verify change of Extrude radius or Deform repeat invalidates fingerprint. Real Creator 3.8.x Undo/Redo, save/reopen, material grouping and graceful intermediate bends remain manual acceptance gates.
 6. Junction now independently inherits `SplineMeshGeneratorV2`, with no Road width/Knot/sidewalk settings. Link 3/4 trimmed Roads in `Branches`, verify UV-matched road rings, marking submeshes, Baked behavior and geometry diagnostics.
