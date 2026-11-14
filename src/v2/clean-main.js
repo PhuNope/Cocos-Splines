@@ -140,7 +140,53 @@ async function editV2Path(operation,index){
         return {ok:true,index:plan.index,count:plan.count};
     }catch(e){return fail('edit path',e);}
 }
+async function planV2JunctionAutoTrim(){
+    try{
+        const result=await scene('planV2JunctionAutoTrim',currentNode());
+        if(!result?.ok)throw new Error(result?.error||'Junction trim plan rejected');
+        console.info('[Cocos Splines V2] Read-only Junction Auto Trim proposal:',result.plan);
+        return result;
+    }catch(e){return fail('plan Junction trims',e);}
+}
+/**
+ * No implicit snapping or Knot edits. Recheck the complete topology before
+ * committing any property, so most invalid requests cannot partially apply.
+ * Cocos records each changed Road property in native history.
+ */
+async function applyV2JunctionAutoTrim(){
+    try{
+        const junctionUuid=currentNode();
+        const proposal=await scene('planV2JunctionAutoTrim',junctionUuid);
+        if(!proposal?.ok)throw new Error(proposal?.error||'Junction trim plan rejected');
+        const branches=proposal.plan?.branches;
+        if(!Array.isArray(branches)||(branches.length!==3&&branches.length!==4))
+            throw new Error('Invalid Junction trim plan');
+        const changes=branches.filter(b=>Math.abs(b.trim-b.currentTrim)>1e-5);
+        // Confirm all addresses/values before the first serialized write.
+        for(const branch of changes){
+            if(typeof branch.nodeUuid!=='string'||!branch.nodeUuid||
+               !Number.isInteger(branch.componentIndex)||branch.componentIndex<0||
+               !Number.isFinite(branch.trim)||branch.trim<=0)
+                throw new Error('Invalid Road component or planned trim');
+        }
+        for(const branch of changes){
+            const prop=branch.atEnd?'junctionEndTrim':'junctionStartTrim';
+            const accepted=await Editor.Message.request('scene','set-property',{
+                uuid:branch.nodeUuid,
+                path:'__comps__.'+branch.componentIndex+'.'+prop,
+                dump:{type:'Float',value:branch.trim},
+                record:true
+            });
+            if(accepted===false)throw new Error('Creator rejected '+prop+' on Road '+branch.roadId);
+        }
+        if(changes.length){
+            const refreshed=await scene('refreshV2JunctionAutoTrim',junctionUuid);
+            if(!refreshed?.ok)throw new Error(refreshed?.error||'Road trims saved but preview refresh failed');
+        }
+        return {ok:true,changed:changes.length,plan:proposal.plan};
+    }catch(e){return fail('apply Junction trims',e);}
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
-    bindV2RoadMesh,bakeV2Road,editV2Path};
+    bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim};
 exports.load=function(){};
 exports.unload=function(){};
