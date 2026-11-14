@@ -24,6 +24,22 @@
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
 
+## Path Rotate and per-Knot banking checkpoint (2026-11-15)
+
+- Path Inspector now exposes `Gizmos Rotation Mode`: Knots, Planar2D
+  (native Z ring) or Spatial3D (native XYZ rings). The underlying SDK
+  centers rotation on the selected Path Node, not an individual Knot;
+  Euler updates and Escape restore use Cocos Creator Node rotation.
+- A serialized `Roll Degrees` value per pure Vec3 Knot is passed into
+  the immutable SplineCache and shortest-arc interpolated onto
+  rotation-minimizing frames. Road, Extrude and Mesh Deform use the
+  banked cross-section; original Path roll survives Road/Deform fillets.
+- Regression covers 2D/3D descriptor shapes, snap, Path Euler
+  cancellation, banked Road mesh/UV/Bake, closed seam and no frame
+  accumulation. Creator Scene interaction, accessibility/sidewalk
+  geometry and native Undo/Redo still require verification.
+- [Rotate/Bank authoring](ROTATE_AND_BANK.md).
+
 ## Pure Vec3 Knot / custom Inspector checkpoint (2026-11-15)
 
 - `SplinePathV2.knots` now holds pure serialized `SplineKnotRecordV2[]`
