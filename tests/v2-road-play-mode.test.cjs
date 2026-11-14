@@ -279,6 +279,23 @@ try{
  const other=otherNode.addComponent(SplineRoadV2);
  other.pathSource=splinePath;other.surfaceMode=0;other.sampleStep=.5;other.width=1.5;
  other.rebuildPreview();road.rebuildPreview();
+ const previewBeforeUndo=renderer.mesh;
+ road.onRestore();
+ assert.notEqual(renderer.mesh,previewBeforeUndo,
+   'Generator Undo Restore must resubscribe Path and rebuild transient mesh');
+ assert.equal(road.bakedMesh,saved,
+   'Generator undo must never overwrite the persistent Baked Mesh asset');
+ const beforeRemoveLink=renderer.mesh;
+ road.pathSource=null;
+ road.onRestore();
+ assert.equal(renderer.mesh,saved,
+   'Generator Undo removing Path restores saved Mesh and releases the preview');
+ assert(beforeRemoveLink.destroyed,
+   'Discarded transient mesh should be released during Path unlink');
+ road.pathSource=splinePath;
+ road.onRestore();
+ assert(renderer.mesh&&renderer.mesh!==saved,
+   'Generator Undo restoring Path Source must regenerate Scene preview');
  const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
  assert(originalPrimary&&originalSecondary);
  assert(!('onGizmoHandles' in road),'Only Path owns Knot handles');
