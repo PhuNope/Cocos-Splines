@@ -109,10 +109,54 @@ try {
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
-   assert.equal(pathComp.onGizmoHudControls().length,3);
+   assert.equal(pathComp.onGizmoHudControls().length,5);
+   const rollHud=pathComp.onGizmoHudControls().find(x=>x.property==='pathGizmoActiveRoll');
+   assert.deepEqual({min:rollHud.min,max:rollHud.max,step:rollHud.step},
+     {min:-180,max:180,step:1});
    pathComp.onDrawGizmosSelected();
    assert(lines.length>2,'Selected Bezier Path draws tangent control segments');
    assert(colors.some(c=>c.r===181&&c.g===140),'incoming control has distinct color');
+   assert(colors.some(c=>c.r===255&&c.g===174),
+     'Selected Knot roll right vector should draw as orange crossbar');
+   assert(colors.some(c=>c.r===115&&c.g===255),
+     'Selected Knot roll up vector should draw in green');
+   const baseGuideLines=lines.length;
+   pathComp.gizmoShowRollGuide=false;
+   lines.length=0;
+   pathComp.onDrawGizmosSelected();
+   assert.equal(lines.length,baseGuideLines-2,
+     'Disabling the bank guide should remove exactly two visual guide lines');
+   pathComp.gizmoShowRollGuide=true;
+   const rollCallsBefore=calls.length;
+   pathComp.gizmoKnotIndex=0;
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
+   assert.throws(()=>pathComp.editKnot('duplicate',0),/during a Gizmos drag/,
+     'Path topology must remain stable during a HUD roll gesture');
+   pathComp.pathGizmoActiveRoll=35;
+   assert.equal(k0.rollDegrees,35);
+   pathComp.gizmoKnotIndex=1;
+   assert.equal(pathComp.pathGizmoActiveRoll,35,
+     'HUD slider pins Knot identity despite Inspector index changes');
+   pathComp.pathGizmoActiveRoll=40;
+   assert.equal(k0.rollDegrees,40);
+   assert.equal(k1.rollDegrees,0);
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','update',40);
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','cancel',0);
+   assert.equal(k0.rollDegrees,0,'Escape restores original bank');
+   assert.equal(k1.rollDegrees,0,'Escape never modifies another Knot');
+   assert(calls.length>rollCallsBefore&&calls.at(-1)==='Btrue');
+   pathComp.gizmoKnotIndex=0;
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
+   pathComp.pathGizmoActiveRoll=-22;
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','update',-22);
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','end',-22);
+   assert.equal(k0.rollDegrees,-22,'HUD End commits bank to actual Knot');
+   assert.equal(pathComp.getSplineDataV2(consumer).knots[0].rollDegrees,-22);
+   pathComp.pathGizmoActiveRoll=181;
+   assert.equal(k0.rollDegrees,-22,'HUD roll rejects out-of-range values');
+   pathComp.pathGizmoActiveRoll=-Infinity;
+   assert.equal(k0.rollDegrees,-22,'HUD roll rejects nonfinite values');
+   k0.rollDegrees=0;
    // Editing a missing Auto entry materializes a manual pair; Cancel
    // must remove the newly-created record (restoring Auto semantics).
    pathComp.onGizmoChanged('pathGizmoTangentOut','begin');
@@ -230,6 +274,11 @@ try {
    // Runtime must never let an Editor-only tangent gizmo mutate source.
    env.EDITOR_NOT_IN_PREVIEW=false;
    const snapshot=JSON.stringify(pathComp.knots);
+   pathComp.pathGizmoActiveRoll=60;
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',60);
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','update',60);
+   assert.equal(JSON.stringify(pathComp.knots),snapshot,
+     'HUD bank edits are disabled in Play');
    pathComp.pathGizmoTangentOut=new Vec3(100,0,0);
    pathComp.onGizmoChanged('pathGizmoTangentOut','update');
    assert.equal(JSON.stringify(pathComp.knots),snapshot);
