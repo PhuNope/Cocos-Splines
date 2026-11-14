@@ -30,6 +30,24 @@ mouse picking, native Undo history, saving or reimporting .gltf assets.
 
 See [Pure Vec3 Knots](PURE_VEC3_KNOTS.md) for the custom Inspector.
 
+## 2D/3D Rotate and per-Knot banking (new)
+
+1. In Path Inspector set `Gizmos Rotation Mode` to `Planar2D`.
+   Confirm one Z rotation ring around the **Path Node origin**; set snap
+   to 15 degrees, drag it, then Escape to restore Path Euler angles.
+2. Select `Spatial3D`. Confirm three X/Y/Z rotation rings and that
+   XZ Roads can turn around Y. Every linked mesh preview must follow
+   Path Node rotation, with End/Cancel forcing the final frame.
+3. Return to `Knots`, edit the **Roll Degrees** of Knot 0/1/2
+   (try 0, +30, -30) in the Inspector. A Road cross-section should bank
+   smoothly, Extrude/Deform orientation should change and UV0/UV2
+   should remain valid. Try a closed loop and a curved fillet.
+4. Explicitly Bake and inspect fingerprints. Runtime Manual/Baked must
+   not regenerate a mesh or emit Editor warnings. Reopen the Scene and
+   test native Undo/Redo: CI cannot certify these Editor interactions.
+
+[Rotate and banking guide](ROTATE_AND_BANK.md).
+
 ## Scene and Gizmos: visual tests
 
 - Drag active Knot on Path with XYZ/XY/XZ/YZ Move handles.
