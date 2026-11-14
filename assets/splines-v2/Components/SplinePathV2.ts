@@ -144,10 +144,13 @@ export class SplinePathV2 extends Component {
             matrix.m00,matrix.m01,matrix.m02,matrix.m04,matrix.m05,matrix.m06,
             matrix.m08,matrix.m09,matrix.m10,matrix.m12,matrix.m13,matrix.m14
         ].join(','):'';
-        return [this.interpolation,Number(this.closed),transform,...this.knots.map(k=>
-            k?[...Object.values(k.position??{}),k.mode,
-                ...Object.values(k.handleIn??{}),...Object.values(k.handleOut??{}),
-                k.tension].join(','):'invalid')].join('|');
+        const point=(p:V3|undefined)=>p?
+            [p.x,p.y,p.z].join(','):'invalid';
+        return [this.interpolation,Number(this.closed),transform,
+            ...this.knots.map(k=>k?
+                [point(k.position),k.mode,point(k.handleIn),
+                    point(k.handleOut),k.tension].join(':'):'invalid')
+        ].join('|');
     }
     protected update(_dt:number):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||this._consumers.size===0)return;
