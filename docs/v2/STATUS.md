@@ -24,6 +24,25 @@
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
 
+## Editor Undo-ready Knot topology checkpoint (2026-11-15)
+
+- Custom Path Inspector Add/Insert/Duplicate/Remove/Move buttons now
+  plan pure **Creator IProperty/CCClass dumps** and commit the entire
+  Knot record array once via `scene.set-property(record:true)`.
+  This replaces direct Scene Script mutation plus post-mutation snapshot
+  for authored topology; all position, tangent and Roll fields are copied.
+- Active Knot selection is a separate non-recorded property change; it
+  does **not** rebuild all linked generator previews.
+- `SplinePathV2.onRestore()` drops stale Gizmos/HUD drag targets after
+  Undo/reload and forces linked temporary previews. Generators can
+  rebind a restored Path Source on their `onRestore()`, dispose stale
+  temporary meshes and retain their saved Baked Mesh.
+- CI covers typed array-dump mutations and simulated history replay,
+  Editor message wiring, restored record identities and generator
+  relinking. **Actual Creator history/dirty/Prefab, Scene reopen and
+  computed-proxy Gizmos Undo/Redo remain uncertified.**
+- [Editor Undo workflow and acceptance](EDITOR_UNDO_WORKFLOW.md).
+
 ## Interactive Roll HUD and bank guide checkpoint (2026-11-15)
 
 - Path's Gizmos HUD now has a signed -180..180° **Knot Roll** slider
