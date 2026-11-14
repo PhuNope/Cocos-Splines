@@ -125,7 +125,7 @@ async function editV2Path(operation,index){
             const value=await Editor.Message.request('scene','set-property',{
                 uuid,
                 path:'__comps__.'+plan.componentIndex+'.gizmoKnotIndex',
-                dump:{type:'Integer',value:selected},record:false
+                dump:plan.selectionDump,record:false
             });
             if(value===false)
                 throw new Error('Knot data changed but active Knot selection failed');
