@@ -130,3 +130,10 @@
 ## Non-negotiable release gate
 
 Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without explicit user confirmation. Emit Editor-only warnings, never noisy runtime authoring logs. No automatic migration of legacy UUIDs/scenes.
+
+## Junction Auto Trim planner (2026-11-15)
+
+- Added a read-only world-space 3-/4-way branch scanner and per-Road safe trim proposal, based on nearest open Path endpoint, sampled endpoint direction, adjacent arm angles, Road+curb half-width, minimum cut allowance and remaining length.
+- Junction Inspector now has **Check Auto Trim** and **Apply Auto Trim**. Check reports the proposal to the Editor Console, not a persistent bottom log; Apply uses Creator `scene.set-property(record:true)` on each Road's existing Start/End Trim field, then rebuilds only temporary previews. Baked assets and Vec3 Knot records are untouched.
+- Strictly rejects duplicate Roads, mismatched `At End`, disconnected or vertically separated endpoints, ambiguous endpoint selections, collinear/near-parallel coincident arms, too-short Roads, non-unit Road scale and invalid values. This is not endpoint snapping or a network graph/Boolean mesh solver.
+- Headless unit test covers 3-/4-way plans, randomized branch order, reversed end attachments and invalid cases. **Creator native Undo grouping, real gizmo/Inspector interaction and material seam certification remain pending.**
