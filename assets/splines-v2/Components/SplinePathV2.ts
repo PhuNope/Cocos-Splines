@@ -320,8 +320,8 @@ export class SplinePathV2 extends Component {
            !finite(value))return;
         if(this.gizmoRotationMode===SplinePathRotationModeV2.Planar2D){
             const original=this.node.eulerAngles;
-            this.node.eulerAngles=new Vec3(original.x,original.y,value.z);
-        }else this.node.eulerAngles=vec(value);
+            this.node.setRotationFromEuler(new Vec3(original.x,original.y,value.z));
+        }else this.node.setRotationFromEuler(vec(value));
     }
     private read(index:number,field:PathGizmoProperty):Vec3 {
         const k=this.knotAt(index,field);
@@ -424,7 +424,7 @@ export class SplinePathV2 extends Component {
             }else if((phase==='end'||phase==='cancel')&&this._rotationDragging){
                 try{
                     if(phase==='cancel'&&this._rotationStart&&this.node?.isValid)
-                        this.node.eulerAngles=vec(this._rotationStart);
+                        this.node.setRotationFromEuler(vec(this._rotationStart));
                     this.notifyPreviewConsumers(this,true);
                 }finally{
                     this._rotationDragging=false;this._rotationStart=null;
