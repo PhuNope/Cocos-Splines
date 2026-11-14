@@ -57,9 +57,21 @@ try{
   ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));
   ({SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
  finally{Module._load=originalLoad;}
- const {SplinePathV2}=require(path.join(temp,'Components/SplinePathV2.js'));
+ const {SplinePathV2,SplineKnotRecordV2}=require(path.join(temp,'Components/SplinePathV2.js'));
+ // Regression fixtures now use pure serialized Knot records. The worldPosition
+ // alias below keeps historical coordinate assertions readable in this mock;
+ // it is NOT a Node and the real SplinePath never creates Knot Nodes.
+ const knot=(x=0,y=0,z=0)=>{
+   const k=new SplineKnotRecordV2();k.position=new Vec3(x,y,z);
+   Object.defineProperty(k,'worldPosition',{
+     get(){return this.position;},
+     set(v){this.position=new Vec3(v.x,v.y,v.z);}
+   });
+   k.setWorldPosition=v=>{k.worldPosition=v;};
+   return k;
+ };
  const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
- const a=new Node('K0'),b=new Node('K1');
+ const a=knot(),b=knot();
  b.worldPosition=new Vec3(0,0,10);
  const authoredNode=new Node('AuthoredPath');
  const authoredPath=authoredNode.addComponent(SplinePathV2);
@@ -115,7 +127,7 @@ try{
  road.generateMarkings=false;
  // Constant Width Fillet must be selectable from the actual Cocos component.
  const originalKnots=authoredPath.knots,originalA=a.worldPosition,originalB=b.worldPosition;
- const k2=new Node('K2');
+ const k2=knot();
  a.worldPosition=new Vec3(-1.701,0,-7.206);
  b.worldPosition=new Vec3(-3.869,0,3.72);
  k2.worldPosition=new Vec3(5.82,0,4.347);
