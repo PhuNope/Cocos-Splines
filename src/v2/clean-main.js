@@ -7,9 +7,9 @@
 const NAME='cocos-splines';
 const {bindWhenImported}=require('./EditorAssetBind');
 const selected=()=>Editor.Selection.getSelected('node')||[];
-async function scene(method,uuid){
+async function scene(method,uuid,...args){
     return Editor.Message.request('scene','execute-scene-script',{
-        name:NAME,method,args:[uuid]
+        name:NAME,method,args:[uuid,...args]
     });
 }
 function currentNode(){
@@ -100,7 +100,18 @@ async function bakeV2Road(){
             primitiveCount:output.primitiveCount};
     }catch(e){return fail('bake',e);}
 }
+async function editV2Path(operation,index){
+    try{
+        const allowed=['add','insert','duplicate','remove','up','down','select'];
+        if(!allowed.includes(operation)||!Number.isSafeInteger(index)||index<0)
+            throw new Error('Invalid Path editing command');
+        const result=await scene('editV2Path',currentNode(),operation,index);
+        if(!result?.ok)throw new Error(result?.error||'Path operation failed');
+        await snapshot();
+        return result;
+    }catch(e){return fail('edit path',e);}
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
-    bindV2RoadMesh,bakeV2Road};
+    bindV2RoadMesh,bakeV2Road,editV2Path};
 exports.load=function(){};
 exports.unload=function(){};
