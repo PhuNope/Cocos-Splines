@@ -366,9 +366,18 @@ try{
  assert(generated[2].destroyed,'Old temporary preview must be destroyed');
  road.onDisable();assert(generated[2].destroyed);
  assert.equal(saved.destroyed,false);
+ const generatorSourceNode=new Node('GeneratorPathV2');
+ const generatorPath=generatorSourceNode.addComponent(SplinePathV2);
+ generatorPath.knots=[a,b];generatorPath.interpolation=0;generatorPath.closed=false;
+ const {SplineMeshGeneratorV2}=require(path.join(temp,'Components/SplineMeshGeneratorV2.js'));
  const extrudeNode=new Node('ExtrudeV2'),extrudeRenderer=extrudeNode.addComponent(MeshRenderer);
  const extrude=extrudeNode.addComponent(SplineExtrudeV2);
- extrude.knots=[a,b];extrude.interpolation=0;extrude.sampleStep=1;extrude.radius=.75;
+ assert(extrude instanceof SplineMeshGeneratorV2);
+ assert(!(extrude instanceof SplineRoadV2));
+ assert.equal('knots' in extrude,false,'Extrude has no duplicated Knot list');
+ assert.equal('width' in extrude,false,'Extrude must not inherit Road width/curb settings');
+ assert.equal('junctionStartTrim' in extrude,false);
+ extrude.pathSource=generatorPath;extrude.sampleStep=1;extrude.radius=.75;
  extrude.uvLongitudinalAxis=1;
  extrude.sides=8;extrude.capEnds=true;extrude.bakedMesh=saved;
  const countBefore=generated.length;
@@ -386,7 +395,12 @@ try{
  // geometry, and transient previews must not destroy the source Mesh.
  const deformNode=new Node('SourceDeformV2'),deformRenderer=deformNode.addComponent(MeshRenderer);
  const deform=deformNode.addComponent(SplineMeshDeformV2);
- deform.knots=[a,b];deform.interpolation=0;deform.sampleStep=.5;
+ assert(deform instanceof SplineMeshGeneratorV2);
+ assert(!(deform instanceof SplineRoadV2));
+ assert.equal('knots' in deform,false,'Deform has no Knot list');
+ assert.equal('width' in deform,false);
+ assert.equal('roadSidewalkWidth' in deform,false);
+ deform.pathSource=generatorPath;deform.sampleStep=.5;
  deform.surfaceMode=2;deform.meshMode=SplineV2MeshMode.Baked;deform.bakedMesh=saved;
  const dAsset=new Mesh();
  dAsset.attributes={
