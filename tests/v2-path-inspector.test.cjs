@@ -9,7 +9,7 @@ assert.match(inspector.template,/spl-path-add/);
 for(const operation of ['add','insert','duplicate','remove','up','down','select'])
     assert(inspector.update.toString().includes(operation)||
         fs.readFileSync(path.join(root,'src/contributions/inspector/PathV2.js'),'utf8')
-            .includes("button('"+operation+"'"),
+            .includes(operation==='add'?"action('add'":"button('"+operation+"'"),
         'Missing Inspector Knot action: '+operation);
 const rendered={},bindings={};
 const ui=()=>({render(v){rendered[v?.name||'unnamed']=v;}});
