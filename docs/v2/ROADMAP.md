@@ -72,6 +72,8 @@
 - [x] Share `SplineMeshGeneratorV2` lifecycle across independent Road, Extrude, Mesh Deform and Junction. Path subscribes previews and **observes native Knot Transform/Inspector edits** at bounded Editor tick rate; settle forces the final mesh after idle. Regression covers two linked Roads, Play guard and throttled rebuild.
 - [x] Path Bézier tangents in serialized Knot records: Auto, Free, Aligned, Mirrored modes, Path-local In/Out point handles, separate colored guide rails, Path→generator transforms, Escape snapshot restoration and Road Bake regression.
 - [x] Replace `SplinePathV2` Knot Nodes with pure, Path-local serializable `Vec3` Knot records; move tangent modes into each record; make Road/Junction consume correctly transformed world endpoints; add Path-only custom Inspector and topology commands.
+- [x] Integrate native Gizmos 2D Z and 3D XYZ Rotate presets on selected Path Node, angle snap and Escape rollback, without misrepresenting the Node-origin SDK ring as a Knot pivot.
+- [x] Serialize per-Knot Roll Degrees and interpolate shortest signed roll on rotation-minimizing frames. Preserve bank values in the immutable cache and through Road and Mesh Deform fillet sampling; add Road mesh/UV/Bake and seam regression.
 - [ ] Certify native Creator Undo/Redo, scene save/reopen, cross-Node Gizmos transaction rollback and real gizmo picking (mocks alone are insufficient).
 
 - [ ] Certify Gizmos Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
