@@ -41,7 +41,7 @@
 
 ## Bézier tangent authoring checkpoint (2026-11-15)
 
-- `SplinePathV2` now serializes `bezierTangents` entries keyed to Knot Nodes (not indices), with Auto/Free/Aligned/Mirrored modes and visible In/Out tangent point handles (selected Path only).
+- `SplinePathV2` now stores tangent data directly inside each serialized Vec3 Knot record, with Auto/Free/Aligned/Mirrored modes and visible In/Out handles (selected Path only).
 - Handles are relative to each Knot in Path-local coordinates and are transformed correctly into each generator's local mesh coordinates; changes affect actual Road geometry, UV tessellation and explicit glTF Bake.
 - Gizmos begin/update/end/cancel supports an explicit tangent-state snapshot. Escape removes newly-created manual records when returning to Auto, or restores the prior mode and offsets, so a canceled drag does not silently freeze future tangents.
 - CI covers consumer conversion, modes, reorder, invalid duplicates, Play guard, Editor Inspector watcher, Path-to-Road bake and transient previews. Native Creator Undo/Redo, save/reopen and real mouse picking remain **manual acceptance gates**. [Guide](BEZIER_TANGENTS.md).
