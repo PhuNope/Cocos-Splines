@@ -18,7 +18,8 @@ import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,drawSplineSceneGizmosV3,
+import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,
+    buildSplineKnotPointGizmosV3,drawSplineSceneGizmosV3,
     type SplineGizmoV3Handle} from './SplineGizmoV3Bridge';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
@@ -116,6 +117,10 @@ export class SplineRoadV2 extends Component {
     gizmoV3EditKnot=false;
     @property({min:0,max:127,step:1,tooltip:'0-based index of the Road Knot to move using the v3 handle.'})
     gizmoV3KnotIndex=0;
+    @property({tooltip:'Offer camera-plane point handles for other Road Knots (same underlying Nodes). Active Knot keeps XYZ/plane Move. Optional alpha.'})
+    gizmoV3MultiKnotPoints=false;
+    @property({min:2,max:32,step:1,tooltip:'Maximum number of Knot point handles including active Knot. Limit keeps Editor gizmos responsive.'})
+    gizmoV3PointLimit=16;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
     materials:Material[]=[];
@@ -131,6 +136,11 @@ export class SplineRoadV2 extends Component {
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
+    // Nonserialized drag target pin. A user can change selected Knot index
+    // during a drag; cancellation must restore the ORIGINAL Node, not another.
+    private _gizmoDragNode:Node|null=null;
+    private _gizmoDragProperty:''|'gizmoKnotPosition'|'gizmoKnotPositions'='';
+    private _gizmoDragIndex=-1;
 
     /** Only runs automatically in Dynamic mode outside the editing scene. */
     protected onEnable():void {
@@ -138,8 +148,8 @@ export class SplineRoadV2 extends Component {
             this.rebuildDynamic();
         else this.showSavedMesh();
     }
-    protected onDisable():void {this.disposeTransient();}
-    protected onDestroy():void {this.disposeTransient();}
+    protected onDisable():void {this._gizmoDragNode=null;this.disposeTransient();}
+    protected onDestroy():void {this._gizmoDragNode=null;this.disposeTransient();}
 
     private renderer():MeshRenderer {
         const r=this.getComponent(MeshRenderer);
@@ -167,35 +177,114 @@ export class SplineRoadV2 extends Component {
         this._ownedMeshes=[];
     }
     /**
-     * Cocos-Gizmos v3 reads and WRITES the named Vec3 property using
-     * Gizmos3D.move; expose a computed proxy of the existing Knot Node.
-     * This avoids duplicating authoritative Knot coordinates into the
-     * Road component's serialized data. Cancel writes the original value
-     * through this same setter; native Undo across the linked Node still
-     * needs visual Creator 3.8.x certification.
+     * Cocos-Gizmos v3 PositionHandles.readField/writeField directly access
+     * target[property] and, for indexed Vec3[], target[property][index].
+     * These getters/Proxy writes address the REAL Knot Nodes, never copied
+     * serialized positions. SDK drag sessions provide begin/update/end/cancel.
      */
-    public get gizmoKnotPosition():Vec3 {
-        const knot=this.knots[this.gizmoV3KnotIndex];
-        if(!EDITOR_NOT_IN_PREVIEW||!knot?.isValid)return new Vec3();
+    private gizmoNode(index:number,property:'gizmoKnotPosition'|'gizmoKnotPositions'):Node|null {
+        if(this._gizmoDragNode&&this._gizmoDragProperty===property)
+            return (property==='gizmoKnotPosition'||this._gizmoDragIndex===index)?
+                this._gizmoDragNode:null;
+        return Number.isSafeInteger(index)&&index>=0?this.knots[index]??null:null;
+    }
+    private readGizmoKnot(index:number,property:'gizmoKnotPosition'|'gizmoKnotPositions'):Vec3 {
+        const knot=this.gizmoNode(index,property);
+        if(!EDITOR_NOT_IN_PREVIEW||!knot?.isValid||!this.node?.isValid)
+            return new Vec3();
         const inv=Mat4.invert(new Mat4(),this.node.worldMatrix);
         return Vec3.transformMat4(new Vec3(),knot.worldPosition,inv);
     }
-    public set gizmoKnotPosition(value:Vec3) {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoV3EditKnot||
-            !value||![value.x,value.y,value.z].every(Number.isFinite))return;
-        const knot=this.knots[this.gizmoV3KnotIndex];
-        if(!knot?.isValid||!this.node?.isValid)return;
+    private writeGizmoKnot(
+        index:number,value:Vec3,property:'gizmoKnotPosition'|'gizmoKnotPositions'
+    ):void {
+        if(!EDITOR_NOT_IN_PREVIEW||(!this.gizmoV3EditKnot&&!this._gizmoDragNode)||
+           !value||![value.x,value.y,value.z].every(Number.isFinite)||
+           !this.node?.isValid)return;
+        const knot=this.gizmoNode(index,property);
+        if(!knot?.isValid)return;
         const world=Vec3.transformMat4(new Vec3(),value,this.node.worldMatrix);
         knot.setWorldPosition(world);
     }
-    /** Cocos-Gizmos v3 auto-discovers this callback; no decorator required. */
+    /** The 6-axis/plane Move gizmo operates on one selected Knot. */
+    public get gizmoKnotPosition():Vec3 {
+        return this.readGizmoKnot(this.gizmoV3KnotIndex,'gizmoKnotPosition');
+    }
+    public set gizmoKnotPosition(value:Vec3) {
+        this.writeGizmoKnot(this.gizmoV3KnotIndex,value,'gizmoKnotPosition');
+    }
+    /**
+     * v3 indexed Vec3[] API. Array.isArray(proxy) === true; setting
+     * proxy[i] writes the authoritative Knot Node immediately. The array is
+     * transient and NOT a Cocos @property or a second serialized Knot list.
+     */
+    public get gizmoKnotPositions():Vec3[] {
+        const limit=Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit)));
+        const count=Math.min(this.knots.length,limit);
+        const values=new Array<Vec3>(count);
+        const indexOf=(property:string|symbol):number=>{
+            if(typeof property!=='string'||!/^(0|[1-9][0-9]*)$/.test(property))return -1;
+            const index=Number(property);
+            return Number.isSafeInteger(index)&&index>=0&&index<count?index:-1;
+        };
+        return new Proxy(values,{
+            get:(target,property,receiver)=>{
+                const index=indexOf(property);
+                return index>=0?this.readGizmoKnot(index,'gizmoKnotPositions'):
+                    Reflect.get(target,property,receiver);
+            },
+            set:(target,property,value,receiver)=>{
+                const index=indexOf(property);
+                if(index>=0){
+                    this.writeGizmoKnot(index,value,'gizmoKnotPositions');
+                    return true;
+                }
+                // No implicit array growth or silent additional Knot creation.
+                if(typeof property==='string'&&/^(0|[1-9][0-9]*)$/.test(property))
+                    return false;
+                return Reflect.set(target,property,value,receiver);
+            }
+        });
+    }
+    /** SDK calls this after its own snapshot/rollback, including Escape. */
+    public onGizmoChanged(
+        property:string,phase:'begin'|'update'|'end'|'cancel',index?:number
+    ):void {
+        if(!EDITOR_NOT_IN_PREVIEW||
+           (property!=='gizmoKnotPosition'&&property!=='gizmoKnotPositions'))return;
+        if(phase==='begin'){
+            // Pin the actual Node so changing Inspector index/order mid-gesture
+            // cannot redirect updates or the subsequent Escape rollback.
+            if(this._gizmoDragNode)return;
+            const targetIndex=property==='gizmoKnotPositions'?index:this.gizmoV3KnotIndex;
+            if(!Number.isSafeInteger(targetIndex)||targetIndex===undefined||
+               targetIndex<0)return;
+            const knot=this.knots[targetIndex];
+            if(!knot?.isValid)return;
+            this._gizmoDragNode=knot;
+            this._gizmoDragIndex=targetIndex;
+            this._gizmoDragProperty=property;
+        }else if((phase==='end'||phase==='cancel')&&
+                 this._gizmoDragProperty===property){
+            this._gizmoDragNode=null;
+            this._gizmoDragIndex=-1;
+            this._gizmoDragProperty='';
+        }
+    }
+    /** v3 discovers Component callbacks; no registration decorator needed. */
     public onGizmoHandles():SplineGizmoV3Handle[] {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
             !this.gizmoV3EditKnot||!this.node?.isValid||
             !Number.isSafeInteger(this.gizmoV3KnotIndex)||
             this.gizmoV3KnotIndex<0||
             !this.knots[this.gizmoV3KnotIndex]?.isValid)return [];
-        return buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
+        const handles=buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
+        if(!this.gizmoV3MultiKnotPoints||!handles.length)return handles;
+        const count=Math.min(this.knots.length,32,
+            Math.max(2,Math.floor(this.gizmoV3PointLimit)));
+        const indexes=Array.from({length:count},(_,i)=>i).filter(i=>
+            i!==this.gizmoV3KnotIndex&&this.knots[i]?.isValid);
+        return handles.concat(buildSplineKnotPointGizmosV3('gizmoKnotPositions',indexes));
     }
     /** Selection drawing uses actual global Gizmos3D, installed by Gizmos v3 scene.js. */
     public onDrawGizmosSelected():void {
