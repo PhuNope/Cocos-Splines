@@ -32,7 +32,8 @@ export function buildSplineCacheV2(source:SplineDataV2,options:SplineCacheOption
             position:copyV(k.position),
             ...(k.handleIn?{handleIn:copyV(k.handleIn)}:{}),
             ...(k.handleOut?{handleOut:copyV(k.handleOut)}:{}),
-            ...(k.tension===undefined?{}:{tension:k.tension})
+            ...(k.tension===undefined?{}:{tension:k.tension}),
+            ...(k.rollDegrees===undefined?{}:{rollDegrees:k.rollDegrees})
         })))
     });
     const table=buildSplineLengthV2(spline,options.tolerance,options.maxDepth);
