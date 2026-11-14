@@ -14,7 +14,7 @@
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
-| 11. Editor production hardening | Partial (independent MeshGenerator alpha) | Clean V2 ZIP; SplinePath owns Gizmos v3. Road, Extrude and Mesh Deform each inherit independent shared MeshGenerator for Path subscription, preview and Bake (Extrude/Deform no longer inherit Road). Junction inheritance and real Creator/Undo/lightmap/collider remain. |
+| 11. Editor production hardening | Partial (independent MeshGenerator alpha) | Clean V2 ZIP; SplinePath owns Gizmos v3. Road, Extrude and Mesh Deform each inherit independent shared MeshGenerator for Path subscription, preview and Bake (Extrude/Deform/Junction no longer inherit Road). Real Creator/Undo/lightmap/collider and Road-only Knot fallback removal remain. |
 
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
