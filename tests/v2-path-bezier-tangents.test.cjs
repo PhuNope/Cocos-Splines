@@ -179,5 +179,33 @@ try {
    pathComp.unregisterPreviewConsumer(consumerA);
    pathComp.unregisterPreviewConsumer(consumerB);
  }
- console.log('V2 BEZIER TANGENTS PASS: local/world transforms, modes, stable Knot binding, Gizmos/Cancel, Inspector watcher, Play safety.');
+ // Custom Inspector topology operations act only on pure Vec3 records.
+ // No Node for Knot storage, no independent per-Node tangent components.
+ assert(pathComp.knots.every(k=>k instanceof SplineKnotRecordV2&&!(k instanceof Node)));
+ assert.deepEqual({...pathComp.getKnotWorldPosition(1)},{x:22,y:0,z:0});
+ const between=pathComp.editKnot('insert',0);
+ assert.equal(between,1);
+ assert.deepEqual({...pathComp.knots[1].position},{x:3,y:0,z:0},
+   'Insert After chooses midpoint of local segment');
+ const same=pathComp.knots[1];
+ assert.equal(pathComp.editKnot('up',1),0);
+ assert.strictEqual(pathComp.knots[0],same,'Move Up preserves whole Knot record');
+ assert.equal(pathComp.editKnot('down',0),1);
+ assert.strictEqual(pathComp.knots[1],same);
+ assert.equal(pathComp.editKnot('duplicate',1),2);
+ assert.notStrictEqual(pathComp.knots[2],same);
+ assert.equal(pathComp.knots[2].position.x,same.position.x+1,
+   'Duplicate offsets its position and avoids a degenerate zero-length segment');
+ assert.equal(pathComp.editKnot('remove',2),2);
+ assert.equal(pathComp.editKnot('remove',1),1);
+ assert.throws(()=>pathComp.editKnot('remove',1),/at least two/);
+ assert.equal(pathComp.editKnot('add',0),2);
+ assert.deepEqual({...pathComp.knots[2].position},{x:12,y:0,z:0},
+   'Add extrapolates last Path segment in local coordinates');
+ assert.throws(()=>pathComp.editKnot('bad',0),/Unknown/);
+ env.EDITOR_NOT_IN_PREVIEW=false;
+ assert.throws(()=>pathComp.editKnot('add',0),/Editor-only/);
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ assert.equal(pathComp.knots.length,3);
+ console.log('V2 PURE VEC3 KNOTS & BEZIER PASS: local/world transforms, modes, stable Knot binding, Gizmos/Cancel, Inspector watcher, Play safety.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
