@@ -7,7 +7,7 @@ import {type JunctionRoadBranchV2} from './JunctionPatchV2';
  * external Gizmos SDK. All positions are LOCAL to the owning Cocos Node.
  * The drawing bridge transforms to world, does not alter serialized Knots.
  */
-export type SceneGuideGroupV2='center'|'edge'|'knot'|'trim'|'junction'|'curb';
+export type SceneGuideGroupV2='center'|'edge'|'knot'|'trim'|'junction'|'curb'|'tangent-in'|'tangent-out';
 export interface SceneGuideLineV2 {
     readonly a:V3;readonly b:V3;readonly group:SceneGuideGroupV2;
 }
