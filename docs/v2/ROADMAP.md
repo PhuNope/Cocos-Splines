@@ -63,6 +63,9 @@
 - [x] Opt-in Junction "Join Road Sidewalks" (alpha): match Road/Junction apron outer endpoints in XYZ using source curb lateral direction and matched UV0 U-phase modulo whole Repeat tiles; reject unmatched widths/Terrain modes, absent source stations and scaled nodes. 3-/4-way real-Road geometry tests; no automatic network graph/CSG.
 
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
+- [x] Read-only selected Scene Gizmo guides for v2 Road/Junction: bounded curve/border/trim/curb visualization via optional SDK drawing interface; no new mesh or Play work, regression tests.
+- [ ] Bind/validate actual Gizmos v3.0 SDK registration and drag handles/Undo in Creator after obtaining vendor v3 API; current adapter is opt-in compatibility only.
+
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
 - [ ] Traffic-aware arrows, route rules, lane graph and signal/priority logic.
