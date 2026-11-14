@@ -33,16 +33,16 @@ See [Pure Vec3 Knots](PURE_VEC3_KNOTS.md) for the custom Inspector.
 ## Scene and Gizmos: visual tests
 
 - Drag active Knot on Path with XYZ/XY/XZ/YZ Move handles.
-  Test a secondary Knot point. The underlying Knot Node world position
-  must change, not a duplicate Road property.
+  Test a secondary Knot point. The underlying Path-local Knot record
+  position must change, not a duplicate Road property.
 - **While dragging**, Road preview must follow at a bounded update rate
   (default `gizmoMeshIntervalMs=100`). On mouse-up it must match the
   final Knot position. Press **Escape** mid-drag: Knot and preview return
   to the prior shape, without destroying the saved Baked Mesh.
-- **Native Transform Tool test:** directly select an ordinary Knot Node,
-  move it using Creator's default Transform handles, then stop. Path's
-  Editor watcher should notice the world transform (scan interval
-  ≥ 50ms) and force a settled preview after 180ms without changes.
+- **Inspector and Path Transform test:** edit a Knot Vec3 value directly
+  in the custom Inspector; then move the whole Path Node with Creator's
+  Transform Tool. The Editor watcher should detect both, update consumers
+  and force a settled preview after 180ms without further changes.
 - Also reorder Path Knots or change interpolation in Path Inspector;
   registered Road previews should update, or show an Editor-only error if
   the authored geometry is invalid. A previously valid preview should
