@@ -84,7 +84,8 @@
 - [ ] Full city sidewalk Boolean/outer perimeter, crossing/terrain seams, and banked Junction ramps; real Cocos Creator 3.8.x save/reimport certification.
 - [x] Junction paint geometry: stop bars, zebra crossings and explicit visual turning guides (not automatic lane topology).
 - [ ] Traffic-aware arrows, route rules, lane graph and signal/priority logic.
-- [ ] Automated trim management and multi-road endpoint snapping; current authoring is explicit per Road.
+- [x] Experimental read-only three-/four-way Junction Auto Trim planner (world-space endpoint matching, curvature-aware directions, angle/width/remaining-length budgets), Creator-recorded Apply action and Inspector Check/Apply buttons. No Knot changes, no automatic snapping, no Boolean mesh union.
+- [ ] Automated multi-road endpoint snapping, network adjacency graph, grouped native Creator Undo certification and Junction mesh Boolean resolution.
 
 - [x] Junction Markings v2 alpha: optional white stop bars, white zebra stripes, explicit curved turn-guide routes, separate slot 3/4, UV0/UV2, glTF Bake.
 - [x] Per-branch paint eligibility and Inspector controls; paint placement validated inside flat Junction polygon.
