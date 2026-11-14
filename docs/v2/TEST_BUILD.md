@@ -278,3 +278,15 @@ Không dùng phần kéo Knot cho production khi chưa xác nhận native Undo/R
 6. Tất cả Inspector V2 (Road, Extrude, Mesh Deform, Junction) chỉ có nhóm thuộc tính và nút tác vụ. Hướng dẫn chuyển sang `docs/v2/TEST_BUILD.md`, không còn phần chữ/log dài phía dưới.
 
 > Đây là fallback chiều rộng thích nghi, **không còn giữ bề rộng Road tuyệt đối trong đoạn cong chật**. Road dùng Junction và sidewalk cần sửa spacing thật sự. Chưa được xác nhận hình ảnh trong Creator 3.8.x.
+
+
+## SplinePathV2 + live Road Gizmo mesh rebuild
+
+1. Add **SplinesV2.SplinePath** to a Node, assign its 3 Knot Nodes. Create a separate **SplinesV2.SplineRoad** Node and set **Path Source** to that Path Component; its legacy Knots/interpolation/closed controls should be hidden.
+2. Set Road `Gizmo V3 Live Mesh=true` (default) and `Gizmo V3 Mesh Interval Ms=100`. Enable `Gizmo V3 Edit Knot`, select Road, drag X/Y/Z or a secondary Knot point. Watch **Road mesh visually follow the handle** without pressing Rebuild.
+3. Press Escape: the Knot **and temporary Road mesh** should return to their original shape. On mouse-up the final preview must match the final Knot position. Test sharp bends crossing invalid spacing: last valid mesh remains shown, final error goes once to Editor Console.
+4. Assign the same Path Source to a second Road and rebuild both once. Drag from the first Road: **both registered Road previews** should update; neither writes the saved Baked Mesh.
+5. Disable `Gizmo V3 Live Mesh` to stop incremental updates; the explicit Rebuild button must still work. Switch Manual/Baked and enter Play: Gizmo callbacks must never update mesh or log authoring warnings.
+6. Reopen Scene and test native Knot Transform tool, multi-Node Undo/Redo and shared path reattachment. These are **manual Editor acceptance gates**, not yet validated by CI.
+
+See [SPLINE_PATH_V2.md](./SPLINE_PATH_V2.md). The other v2 generators (Extrude and Mesh Deform) do not yet consume SplinePathV2.
