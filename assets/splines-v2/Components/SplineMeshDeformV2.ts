@@ -3,7 +3,8 @@ import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildRoadFilletCacheV2} from '../geometry/RoadFillet';
 import {readSourceMeshV2} from '../geometry/SourceMeshRead';
 import {deformSourceMeshV2,type MeshDeformReportV2} from '../geometry/SourceMeshDeform';
-import {SplineRoadV2,SplineV2SurfaceMode} from './SplineRoadV2';
+import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
+import {SplineV2SurfaceMode} from './SplineGeometrySettingsV2';
 
 const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
 export enum SplineV2DeformSourceAxis {Z=0,X=1}
@@ -20,7 +21,21 @@ export enum SplineV2DeformUVAxis {V=0,U=1}
 @menu('Cocos Splines V2/Mesh Source Deformer')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
-export class SplineMeshDeformV2 extends SplineRoadV2 {
+export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
+    @property({tooltip:'Adaptive sampling for source geometry deformation.'})
+    adaptiveSampling=true;
+    @property({min:1,max:90,step:1})
+    maxTurnAngleDegrees=6;
+    @property({min:.001,max:1,step:.005})
+    maxChordError=.03;
+    @property({type:Enum(SplineV2SurfaceMode),tooltip:'ConstantWidth inserts a fillet into the sampling curve; Continuous/ClipOverlaps use the original curve.'})
+    surfaceMode=SplineV2SurfaceMode.Continuous;
+    @property({min:1.02,max:6,step:.05})
+    filletRadiusScale=1.35;
+    @property({min:.5,max:45,step:.5})
+    filletArcAngleDegrees=4;
+    @property({min:.001,max:1,step:.005})
+    filletChordError=.015;
     @property({type:Mesh,tooltip:'Imported Mesh with authored UV0 (and optional UV2). Source asset is never modified.'})
     sourceMesh:Mesh|null=null;
     @property({type:Enum(SplineV2DeformSourceAxis),tooltip:'Local axis along the authored source mesh length: Z or X.'})
