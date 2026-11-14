@@ -70,6 +70,7 @@
 - [x] Gizmos live Road mesh preview: throttle transient rebuild during `onGizmoChanged(update)`, force end/cancel, keep prior mesh on invalid geometry, do not Bake or generate in Play; regression.
 - [x] Enforce **required SplinePath source** on Road, Extrude and Mesh Deform. Road no longer serializes Knots/interpolation/closed or exposes active Knot Gizmos/HUD. Junction samples Road end rings through each Road's linked Path. Clean test ZIP has no legacy script/UUID requirement.
 - [x] Share `SplineMeshGeneratorV2` lifecycle across independent Road, Extrude, Mesh Deform and Junction. Path subscribes previews and **observes native Knot Transform/Inspector edits** at bounded Editor tick rate; settle forces the final mesh after idle. Regression covers two linked Roads, Play guard and throttled rebuild.
+- [x] Path Bézier tangents keyed to Knot Node identity: Auto, Free, Aligned, Mirrored modes, Path-local In/Out point handles, separate colored guide rails, Path→generator transforms, Escape snapshot restoration and Road Bake regression.
 - [ ] Certify native Creator Undo/Redo, scene save/reopen, cross-Node Gizmos transaction rollback and real gizmo picking (mocks alone are insufficient).
 
 - [ ] Certify Gizmos Knot drag, cross-Node Undo/Redo, gizmo picking, save/reopen, material and viewport rendering in real Creator 3.8.x. No verified production certification yet.
