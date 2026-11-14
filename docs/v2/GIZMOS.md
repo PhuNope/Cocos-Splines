@@ -28,6 +28,21 @@ without installing the Gizmos SDK: missing drawing/handle APIs produce
 no preview calls, not runtime errors. Color construction occurs only
 during Editor draw, not on module import.
 
+## Path Rotate (2D / 3D)
+
+The bridge now delegates rotation to the SDK's native
+`Gizmos2D.rotate()` and `Gizmos3D.rotate()` descriptors. Path Inspector
+**Gizmos Rotation Mode** selects Knots (normal point editing),
+Planar2D (Z ring on the Path Node) or Spatial3D (X/Y/Z rings on the
+Path Node). **Gizmos Rotation Snap** controls angular snap in degrees,
+with 0 indicating continuous rotation.
+
+Rotation affects the entire Path Node transform, not an individual
+Vec3 Knot. **The SDK places rotation rings at the selected Node origin**;
+it does not provide a per-Knot pivot option. Escape restores the Node's
+previous rotation, and linked mesh previews rebuild. See the
+[Rotate and banking guide](ROTATE_AND_BANK.md) for examples.
+
 ## Rebuild lifecycle
 
 A Path edit writes the **serialized Vec3 Knot record**, not a Scene
