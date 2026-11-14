@@ -493,10 +493,10 @@ try{
  env.EDITOR_NOT_IN_PREVIEW=false;
  patch.onEnable();assert.equal(generated.length,savedCount);
  assert.equal(patchRenderer.mesh,saved,'Junction Baked Play must not generate geometry');
- const shared=new Node('CommonKnot');
+ const shared=knot();
  const arms=[];
  for(let i=0;i<3;i++){
-  const angle=2*Math.PI*i/3,out=new Node('ArmEnd'+i);
+  const angle=2*Math.PI*i/3,out=knot();
   out.worldPosition=new Vec3(Math.sin(angle)*12,0,Math.cos(angle)*12);
   const n=new Node('Arm'+i);n.addComponent(MeshRenderer);
   const arm=n.addComponent(SplineRoadV2);
