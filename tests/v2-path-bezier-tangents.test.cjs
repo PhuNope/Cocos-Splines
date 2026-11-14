@@ -46,6 +46,7 @@ try {
      this._euler=new Vec3(v.x,v.y,v.z);
      this.worldMatrix.rz=v.z*Math.PI/180;
    }
+   setRotationFromEuler(v){this.eulerAngles=v;}
    addComponent(Type){const v=new Type();v.node=this;this.components.push(v);return v;}
    setWorldPosition(p){this.worldPosition=new Vec3(p.x,p.y,p.z);}
  }
