@@ -34,6 +34,24 @@ the Editor and directly invokes
 
 **Important:** Gizmos v3's drag command groups begin/update/end/cancel for the bound property. Here that property is a live proxy to a **different Node**, so complete native cross-Node Undo/Redo integration must be verified in the actual Cocos Creator 3.8.x Editor. The automated test validates get/write/rollback and no-Play writes, not Undo history.
 
+## Live Road mesh during Gizmos v3 drag
+
+`SplineRoadV2` now listens to the verified v3 `onGizmoChanged` phases:
+- `update`: rebuild **temporary Editor preview** with a throttle, default
+  `Gizmo V3 Mesh Interval Ms=100`. No native Editor timer and no Bake.
+- `end` and `cancel`: force a rebuild with the latest position, including
+  rollback after Escape; previous temporary parts are disposed after validation.
+- Intermediate invalid corners/duplicate Knots are caught without flooding
+  the Editor Console. Last valid preview remains visible; a failed final
+  rebuild emits a single Editor warning.
+- `Gizmo V3 Live Mesh` can disable this behavior. Runtime Manual/Baked
+  never rebuild because of Gizmos. A Baked asset is never replaced on drag.
+
+A separately authored [SplinePathV2](./SPLINE_PATH_V2.md) can now serve as
+source for one or more Roads, avoiding Road-owned spline duplication.
+Editor-initialized linked Roads are notified by the source during v3 edits.
+Actual Creator 3.8.x drag/picking and cross-Node Undo/Redo remain to be tested.
+
 ## Try it in Creator 3.8.x
 
 1. Install/enable **Cocos-Gizmos v3** and **Cocos-Splines v2.0.0 Test Build** in a disposable Creator project (Project extension preferred to Global for repeatable setup). Refresh the Scene.
