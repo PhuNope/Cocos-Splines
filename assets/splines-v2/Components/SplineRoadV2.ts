@@ -461,8 +461,11 @@ export class SplineRoadV2 extends Component {
             // No triangle clipping; UV0/UV2 remain continuous along the Road.
             this._lastFilletReport=null;
             geometry=makeRoad('continuous');
-            if(this._lastContinuousReport?.impossibleCrossings||
-               this._lastContinuousReport?.hitSafetyLimit)
+            // onContinuousReport executes inside makeRoad(). A type
+            // assertion is needed because TS does not track callback side
+            // effects on class fields across the synchronous builder call.
+            const fitted=this._lastContinuousReport as RoadContinuousReportV2|null;
+            if(fitted?.impossibleCrossings||fitted?.hitSafetyLimit)
                 throw new Error('Constant Width Road auto Continuous cannot resolve this crossing safely; move Knots apart or reduce Width');
             this._lastShortKnotFallback=error.message;
         }
