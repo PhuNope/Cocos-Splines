@@ -254,3 +254,15 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
 6. After edits, Rebuild Preview or Bake glTF Asset manually; Gizmos only modify the Knot Node, not existing Baked mesh.
 
 > Development design/API notes: [SCENE_GIZMOS_V3.md](./SCENE_GIZMOS_V3.md)
+
+
+## Gizmos v3 — Multi-Knot handles / HUD (alpha)
+
+1. Bật Cocos-Gizmos `v3` trong Creator Editor, chọn Road với ít nhất 3 Knot. Bật `Show Scene Gizmos V3` và `Gizmo V3 Edit Knot`.
+2. Bật `Gizmo V3 Multi Knot Points`, đặt `Gizmo V3 Point Limit = 16`. Knot chủ động vẫn có mũi tên XYZ / ô XY/XZ/YZ. Các Knot khác xuất hiện các point handle nhỏ, chỉ có một mặt phẳng kéo theo camera.
+3. Dùng HUD **Active Knot** để đổi index và **Other Knots** để bật/tắt point handles. Kéo một point không chủ động rồi kiểm tra Node gốc được đổi worldPosition, không tạo thêm Knot/điểm serialized.
+4. Kéo rồi **Escape** để hoàn nguyên. Thử đổi index qua Inspector/HUD trong lúc đang kéo hoặc đảo thứ tự `knots`; thao tác vẫn phải tác động đúng Node gốc được khóa ở đầu phiên kéo.
+5. Thử 3, 16, 40 Knot để kiểm tra giới hạn số handles; vào Play/Preview và kiểm tra proxy không ghi vào Node. Sau khi đổi Knot phải Rebuild/Bake lại thủ công.
+6. Test Editor Undo/Redo, dirty Scene, Save → Reopen vẫn là **acceptance gate chưa xác nhận**. Nếu Undo không ghi đúng Knot Node khi dùng proxy, tắt Gizmo Edit Knot và dùng native Transform trên Knot Nodes.
+
+Không dùng phần kéo Knot cho production khi chưa xác nhận native Undo/Redo trên Cocos Creator 3.8.x.
