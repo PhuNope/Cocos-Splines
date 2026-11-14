@@ -37,9 +37,9 @@ export abstract class SplineMeshGeneratorV2 extends Component {
     @property({visible:false}) pendingBakeUrl='';
     @property({visible:false}) pendingBakeFingerprint='';
     @property({tooltip:'Rebuild temporary Scene mesh on Path Gizmos updates, never auto-Bake.'})
-    gizmoV3LiveMesh=true;
+    gizmoLiveMesh=true;
     @property({min:50,max:400,step:10,tooltip:'Minimum milliseconds between Path Gizmos preview rebuilds; End/Cancel always forces one.'})
-    gizmoV3MeshIntervalMs=100;
+    gizmoMeshIntervalMs=100;
     private _ownedMeshes:Mesh[]=[];
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
@@ -73,10 +73,10 @@ export abstract class SplineMeshGeneratorV2 extends Component {
         this.rebuildOnGizmoEdit(force);
     }
     protected rebuildOnGizmoEdit(force:boolean):void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoV3LiveMesh||!this.node?.isValid)return;
+        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoLiveMesh||!this.node?.isValid)return;
         const now=Date.now();
-        const interval=Number.isFinite(this.gizmoV3MeshIntervalMs)?
-            Math.min(400,Math.max(50,this.gizmoV3MeshIntervalMs)):100;
+        const interval=Number.isFinite(this.gizmoMeshIntervalMs)?
+            Math.min(400,Math.max(50,this.gizmoMeshIntervalMs)):100;
         if(!force&&now-this._gizmoLastMeshAt<interval)return;
         this._gizmoLastMeshAt=now;
         try{
