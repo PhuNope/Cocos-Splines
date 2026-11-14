@@ -39,7 +39,7 @@ SplinePath
 |---|---|---|
 | A. Clean installable extension | New main/scene entrypoints, no old assets/meta/menus/Inspector registrations | ZIP unpack has no `assets/splines`, no `Splines.*` classes in manifest; clean action smoke |
 | B. Authoritative Path & Gizmos | Move knots, topology, tangent controls, change tracking and gizmo ownership to Path | Road/Extrude/Deform get the identical path snapshot; Undo/Cancel and delta notifications tested |
-| C. Independent mesh generators | Remove inheritance `Extrude extends Road` and `MeshDeform extends Road`; add common MeshGenerator/BuildCoordinator | Consumer-specific properties only; same mesh pipeline and Bake; no hidden geometry generation in Play |
+| C. Independent mesh generators | **Implemented** for Road, Extrude, Mesh Deform: common `SplineMeshGeneratorV2` source/preview/render/Bake, no Extrude/Deform inheritance from Road. Junction still inherits Road temporarily. | Shared Path invalidation, UV0/UV2 glTF, Manual/Baked runtime gate, mesh disposal regression; real Creator verification pending |
 | D. Road geometry modernization | Stable constant-width fillets, adaptive continuous fallback, source mesh bending, no overlapping/folded triangles, continuous UV U/V | Exact three-knot and hairpin regression, seams and UV0/UV2, glTF checks |
 | E. Junction & terrain networking | Road trim, exact profile and material seams, sidewalk boundaries, Terrain adapter, markings, lane graph | 3/4-way + elevation/crossfall tests, no cracks or inversions, real Creator Scene smoke |
 | F. Editor production readiness | Scene Gizmos, direct Node Transform, Undo/Redo, save/reopen, collider, UV2/lightmap, recipe demos | Cocos Creator 3.8.x visual/manual validation |
@@ -47,7 +47,7 @@ SplinePath
 
 ## Current verified scope
 
-A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads and now **owns its own Gizmos v3 editing handles** and change notifications. Linked Roads hide their duplicate Knot handles. Previous Road-local Knot properties remain in source temporarily but are not required in the new clean authoring workflow. C–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
+A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads and now **owns its own Gizmos v3 editing handles** and change notifications. Linked Roads hide their duplicate Knot handles. Previous Road-local Knot properties remain in source temporarily but are not required in the new clean authoring workflow. C is implemented for **Road / Extrude / Mesh Deform**, with a follow-up needed to split Junction from Road and remove temporary Road-local Knot/Gizmos fallback. D–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
 
 ## External library references
 
