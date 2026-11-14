@@ -28,13 +28,15 @@ export function availableGizmoV3Backend():SplineSceneGizmoV3Backend|null {
             typeof candidate.drawLine==='function')return candidate;
     return null;
 }
-const palette:Record<SceneGuideGroupV2,Color>={
-    center:new Color(65,205,250,255),
-    edge:new Color(66,216,127,255),
-    knot:new Color(255,180,55,255),
-    trim:new Color(255,120,75,255),
-    junction:new Color(65,190,245,255),
-    curb:new Color(239,215,90,255)
+// Constants only; in particular DO NOT construct Cocos Color at module
+// evaluation, because Play/Baked and headless Editor contexts never draw.
+const palette:Record<SceneGuideGroupV2,readonly [number,number,number]>={
+    center:[65,205,250],edge:[66,216,127],knot:[255,180,55],
+    trim:[255,120,75],junction:[65,190,245],curb:[239,215,90]
+};
+const color=(group:SceneGuideGroupV2):Color=>{
+    const rgb=palette[group];
+    return new Color(rgb[0],rgb[1],rgb[2],255);
 };
 const isPoint=(p:{x:number;y:number;z:number})=>
     [p.x,p.y,p.z].every(Number.isFinite);
@@ -48,14 +50,14 @@ export function drawSplineSceneGizmosV3(owner:Node,guide:SceneGuideDataV2,
         Vec3.transformMat4(new Vec3(),new Vec3(p.x,p.y,p.z),matrix);
     for(const part of guide.lines.slice(0,600)){
         if(!isPoint(part.a)||!isPoint(part.b))continue;
-        backend.beginColor(owner,palette[part.group]);
+        backend.beginColor(owner,color(part.group));
         backend.drawLine(owner,world(part.a),world(part.b));
         calls++;
     }
     if(typeof backend.drawSphere==='function')
         for(const part of guide.dots.slice(0,128)){
             if(!isPoint(part.at)||!Number.isFinite(part.radius)||part.radius<=0)continue;
-            backend.beginColor(owner,palette[part.group]);
+            backend.beginColor(owner,color(part.group));
             backend.drawSphere(owner,world(part.at),part.radius,true,8,6);
             calls++;
         }
