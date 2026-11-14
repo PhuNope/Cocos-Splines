@@ -278,7 +278,7 @@ export class SplinePathV2 extends Component {
             if(k.mode===SplineBezierTangentModeV2.Auto)return {position,tension};
             const toRelative=(offset:V3):V3=>{
                 const control=Vec3.transformMat4(new Vec3(),
-                    add(k.position,offset),this.node.worldMatrix);
+                    vec(add(k.position,offset)),this.node.worldMatrix);
                 const target=Vec3.transformMat4(new Vec3(),control,inverse);
                 return sub(target,position);
             };
