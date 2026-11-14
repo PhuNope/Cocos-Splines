@@ -90,11 +90,17 @@ export class SplinePathV2 extends Component {
             return;
         }
         if(signature!==this._observedSource){
+            const firstChange=!this._needsFinalPreview;
             this._observedSource=signature;
             this._lastSourceChangeAt=now;
             this._needsFinalPreview=true;
             // A Path-owned drag already publishes its own update callback.
-            if(!this._dragNode)this.notifyPreviewConsumers(this,false);
+            if(!this._dragNode){
+                if(firstChange)
+                    for(const consumer of this._previewConsumers)
+                        consumer.onSharedSplinePathEditBegin?.();
+                this.notifyPreviewConsumers(this,false);
+            }
         }else if(this._needsFinalPreview&&!this._dragNode&&
                  now-this._lastSourceChangeAt>=180){
             this._needsFinalPreview=false;
