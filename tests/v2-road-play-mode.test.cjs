@@ -112,6 +112,11 @@ try{
    road.gizmoV3MultiKnotPoints=true;road.gizmoV3PointLimit=16;
    const multiHandles=road.onGizmoHandles();
    assert.equal(multiHandles.length,8,'6 active move handles + 2 independent Knot points');
+   const hud=road.onGizmoHudControls();
+   assert.equal(hud.length,2);
+   assert.deepEqual(hud.map(x=>x.property),['gizmoV3KnotIndex','gizmoV3MultiKnotPoints']);
+   assert.equal(hud[0].max,2,'HUD slider must use current Knot count');
+   assert.equal(hud[0].step,1);
    assert.deepEqual(multiHandles.slice(6).map(h=>h.index),[0,2]);
    assert(multiHandles.slice(6).every(h=>h.property==='gizmoKnotPositions'));
    assert.equal(Array.isArray(road.gizmoKnotPositions),true,
@@ -171,6 +176,7 @@ try{
    assert.equal(road.onGizmoHandles().length,0,'Missing v3 package must not break Scene');
  }finally{globalThis.Gizmos3D=originalSdk;road.gizmoV3EditKnot=false;}
  env.EDITOR_NOT_IN_PREVIEW=false;
+ assert.equal(road.onGizmoHudControls().length,0,'No Editor HUD in Play');
  assert.equal(road.onGizmoHandles().length,0,'No Gizmos handles when playing');
  const beforePlayMulti={...a.worldPosition};
  road.gizmoKnotPositions[0]=new Vec3(500,500,500);
