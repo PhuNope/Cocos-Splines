@@ -44,7 +44,7 @@ declare module 'cc' {
         uuid:string;name:string;isValid:boolean;hideFlags:number;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;eulerAngles:Vec3;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
         addComponent<T>(c:new (...args:any[])=>T):T;
-        setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
+        setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setRotationFromEuler(v:Vec3):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
         emit(event:string,payload?:any):void;
         destroy():void;
     }
