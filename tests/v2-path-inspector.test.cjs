@@ -25,7 +25,8 @@ const $={items,count,add,knots:ui()};
 for(const name of ['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
-    'gizmoRotationMode','gizmoRotationSnap'])$[name]=ui();
+    'gizmoRotationMode','gizmoRotationSnap',
+    'gizmoShowRollGuide','gizmoRollGuideSize'])$[name]=ui();
 const fake={$, _cardCount:undefined,_cardSelected:undefined};
 const entry=(i)=>({name:'Knot'+i,value:{
     position:{value:{x:i,y:0,z:5*i}},
