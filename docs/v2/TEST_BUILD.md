@@ -246,7 +246,7 @@ Unsupported still: banked/uphill junctions, closed sidewalk perimeter, curb acce
  
 ## Native Cocos-Gizmos / Road Knot Move (alpha)
 
-1. Install Cocos-Gizmos from [PhuNope/Cocos-Gizmos/v3](https://github.com/PhuNope/Cocos-Gizmos/tree/v3) as a Creator Project or Global extension, enable it and reload the Editor Scene. No `@registerGizmos` decorator, `db://` script import or manual global adapter binding is needed on SplineRoadV2/JunctionPatchV2.
+1. Install Cocos-Gizmos from [Cocos-Gizmos](https://github.com/PhuNope/Cocos-Gizmos/tree/v3) as a Creator Project or Global extension, enable it and reload the Editor Scene. No `@registerGizmos` decorator, `db://` script import or manual global adapter binding is needed on SplineRoadV2/JunctionPatchV2.
 2. Select a Road and verify read-only center/width/Knot guides. Toggle `Show Scene Gizmos`, `Gizmos Edges` and `Gizmos Knots`.
 3. Enable `Gizmos Edit Knot`, choose `Gizmos Knot Index=1` for the second knot. Drag the SDK's X/Y/Z arrows or XY/XZ/YZ plane squares: check the **original Knot Node** position changes, and spline guides update.
 4. Press Escape while dragging to verify rollback, then commit a drag and test Creator Undo/Redo. **Cross-Node Undo/Redo is not yet certified** because the property edited by Gizmos is a dynamic Vec3 proxy to an external Knot Node. If rollback or Undo fails, turn off `Gizmos Edit Knot` and use native Cocos transform handles on the Knot Node.
