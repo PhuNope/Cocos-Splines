@@ -14,7 +14,7 @@
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
-| 11. Editor production hardening | Partial (Gizmos live mesh + shared path alpha) | Gizmos v3 onGizmoChanged update/end/cancel triggers throttled temporary Road rebuild with invalid-mesh preservation; SplinePathV2 reusable source can feed multiple registered Roads. Legacy paths remain. Real Creator/Undo/Redo certification and Extrude/Deform migration remain. |
+| 11. Editor production hardening | Partial (clean V2 bundle + Path-owned Gizmos alpha) | Standalone test ZIP excludes legacy assets/meta/menus and uses V2-only Editor main/scene. SplinePathV2 owns Knot handles and feeds linked Road/Extrude/Deform source() with registered Road live previews. Real Creator/Undo, consumer inheritance refactor, collider/lightmap work remain. |
 
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
@@ -23,6 +23,13 @@
 ## Current checkpoint
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. All old scenes remain off by default. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
+
+## Breaking clean rewrite step (2026-11-14)
+
+- The user explicitly authorized dropping legacy `Splines.*`, old component UUID/meta and compatibility/migration code. **The packaged test ZIP** now contains only `assets/splines-v2` and v2-only Editor entrypoints/Inspector/actions, with a self-contained bundle smoke test.
+- `SplinePathV2` is now the owning Gizmos v3 edit target. Linked `SplineRoadV2` hides its old Knot handles and receives Path editor updates via registered consumers. The Path has its own Scene HUD and indexed multi-Knot points.
+- The repository still contains historical 0.9.x sources for reference, and the rewritten pure geometry modules are retained. Do not mistake a clean package for completion of all roadmap milestones. Actual Creator 3.8.x Undo/Redo/visual validation is outstanding.
+- [Breaking rewrite charter / implementation plan](REBUILD_BREAKING.md).
 
 ## Latest editor step (2026-11-14)
 
