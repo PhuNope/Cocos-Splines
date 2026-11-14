@@ -10,6 +10,10 @@ async function dispatchV2(inspector,action){
         console.warn('[Cocos Splines V2] '+String(result.error||'Editor action failed'));
     }else if(result?.shortKnotFallback){
         console.warn('[Cocos Splines V2] Short Knot: ConstantWidth cannot fit; generated a seamless Continuous Road with adaptive width. '+result.shortKnotFallback);
+    }else if(action==='plan-v2-junction-auto-trim'&&result?.ok){
+        console.info('[Cocos Splines V2] Junction Auto Trim proposal:',result.plan);
+    }else if(action==='apply-v2-junction-auto-trim'&&result?.ok){
+        console.info('[Cocos Splines V2] Applied '+result.changed+' Road trims; Baked assets unchanged');
     }else if(action==='check-v2-road-bake'&&result?.ok){
         console.info('[Cocos Splines V2] Bake status:',result);
     }
@@ -48,6 +52,7 @@ function makeV2Inspector(kind='road'){
          ['Materials and persistence',['meshMode','materials','bakedMesh']]];
     const names=fields.flatMap(g=>g[1]);
     const selectors={preview:'.spl-v2-preview',restore:'.spl-v2-restore',bake:'.spl-v2-bake',bind:'.spl-v2-bind',inspect:'.spl-v2-inspect'};
+    if(junction){selectors.autoTrimPlan='.spl-v2-autotrim-plan';selectors.autoTrimApply='.spl-v2-autotrim-apply';}
     const sections=fields.map(([title,props])=>
         `<details open class="spl-section"><summary>${title}</summary>`+
         props.map(name=>{
@@ -61,6 +66,7 @@ function makeV2Inspector(kind='road'){
         template:`<div class="spl-inspector">
           <div class="spl-header"><strong>∿ Spline ${tube?'Extrude':deform?'Mesh Deform':junction?'Junction Patch':'Road'} V2</strong></div>
           ${sections}
+          ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-autotrim-plan">Check Auto Trim</button><button type="button" class="spl-btn spl-v2-autotrim-apply">Apply Auto Trim</button></div>':''}
           <div class="spl-btns">
             <button type="button" class="spl-btn spl-v2-preview">↻ Rebuild Preview</button>
             <button type="button" class="spl-btn spl-v2-restore">↩ Show Baked Mesh</button>
@@ -84,6 +90,10 @@ function makeV2Inspector(kind='road'){
             this.$.bake.addEventListener('click',()=>void dispatchV2(this,'bake-v2-road'));
             this.$.bind.addEventListener('click',()=>void dispatchV2(this,'bind-v2-road-mesh'));
             this.$.inspect.addEventListener('click',()=>void dispatchV2(this,'check-v2-road-bake'));
+            if(junction){
+                this.$.autoTrimPlan.addEventListener('click',()=>void dispatchV2(this,'plan-v2-junction-auto-trim'));
+                this.$.autoTrimApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-auto-trim'));
+            }
         }
     };
 }
