@@ -270,15 +270,15 @@ try{
  // SplinePathV2 is the preferred shared source: one Path, two Roads.
  // Road-local Knots and interpolation are ignored once it is linked.
  const pathNode=new Node('SharedSplinePath');
- const path=pathNode.addComponent(SplinePathV2);
- path.knots=[a,b,k2];path.interpolation=0;path.closed=false;
- road.pathSource=path;road.knots=[];road.interpolation=1;
+ const splinePath=pathNode.addComponent(SplinePathV2);
+ splinePath.knots=[a,b,k2];splinePath.interpolation=0;splinePath.closed=false;
+ road.pathSource=splinePath;road.knots=[];road.interpolation=1;
  assert.equal(road.source().type,'linear',
    'Road must use the linked SplinePathV2 interpolation, not legacy setting');
  assert.equal(road.source().knots.length,3);
  const otherNode=new Node('SharedRoad2'),otherRenderer=otherNode.addComponent(MeshRenderer);
  const other=otherNode.addComponent(SplineRoadV2);
- other.pathSource=path;other.surfaceMode=0;other.sampleStep=.5;other.width=1.5;
+ other.pathSource=splinePath;other.surfaceMode=0;other.sampleStep=.5;other.width=1.5;
  other.rebuildPreview();road.rebuildPreview();
  const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
  assert(originalPrimary&&originalSecondary);
