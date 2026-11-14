@@ -16,6 +16,9 @@ import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
 import {exportMeshGltfV2} from '../geometry/GltfExporter';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
+import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
+import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
+import {availableGizmoV3Backend,drawSplineSceneGizmosV3} from './SplineGizmoV3Bridge';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
@@ -100,6 +103,14 @@ export class SplineRoadV2 extends Component {
     roadSidewalkMaxCrossSlope=.35;
     @property({min:.02,max:1,step:.01,tooltip:'Maximum rise/run between adjacent Road sidewalk outer edge vertices.'})
     roadSidewalkMaxEdgeSlope=.35;
+    @property({tooltip:'Show bounded spline frame, curb edge and Knot guides in Scene when selected. No mesh generation or runtime draw.'})
+    showSceneGizmosV3=true;
+    @property({min:8,max:192,step:1,tooltip:'Maximum path guide segments, independent of Road tessellation.'})
+    gizmoV3Steps=48;
+    @property({tooltip:'Show approximate full-width Road border guides around the spline.'})
+    gizmoV3Edges=true;
+    @property({tooltip:'Show Knot markers for the existing editable Knot Nodes.'})
+    gizmoV3Knots=true;
     @property({type:Enum(SplineV2MeshMode)}) meshMode=SplineV2MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared materials by materialSlot (this road uses slot 0).'})
     materials:Material[]=[];
@@ -149,6 +160,43 @@ export class SplineRoadV2 extends Component {
         this._ownedNodes=[];
         for(const mesh of this._ownedMeshes)if(mesh.isValid)mesh.destroy();
         this._ownedMeshes=[];
+    }
+    /**
+     * Scene selection preview. Uses the optional Gizmos v3 drawing backend
+     * (or legacy global fallback), never constructs cc.Mesh or logs in Play.
+     * Native Cocos transform handles on the Knot Nodes remain the editor.
+     */
+    public onDrawGizmosSelected():void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
+            !availableGizmoV3Backend())return;
+        try{
+            const source=this.source();
+            const cache=buildSplineCacheV2(source);
+            const totalWidth=this.width*.5+this.shoulderWidth+this.curbWidth;
+            const fillet=this.surfaceMode===SplineV2SurfaceMode.ConstantWidth?
+                buildRoadFilletCacheV2(cache,totalWidth,{
+                    minimumRadiusScale:this.filletRadiusScale,
+                    maxArcAngleDegrees:this.filletArcAngleDegrees,
+                    maxArcChordError:this.filletChordError,
+                    maxArcStep:this.sampleStep
+                }):null;
+            const working=fillet?.cache??cache;
+            const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoV3Steps)));
+            const frames=buildSplineFramesV2(working,{
+                maxStep:Math.max(this.sampleStep,working.length/steps)
+            });
+            const trimmed=trimmedRoadFramesV2(working,frames,{
+                junctionStartTrim:this.junctionStartTrim,
+                junctionEndTrim:this.junctionEndTrim
+            });
+            const guide=buildRoadSceneGuideV2(trimmed,source.knots.map(k=>k.position),
+                totalWidth,{maxSteps:steps,showEdges:this.gizmoV3Edges,
+                    showKnots:this.gizmoV3Knots});
+            drawSplineSceneGizmosV3(this.node,guide);
+        }catch{
+            // Gizmos are read-only Editor aids. Invalid/unfinished Roads must
+            // never break selection, write serialization or spam Play logs.
+        }
     }
     /** No dependency on legacy SplineContainer or serialized UUIDs. */
     protected source():SplineDataV2 {
