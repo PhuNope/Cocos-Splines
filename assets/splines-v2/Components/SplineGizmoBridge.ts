@@ -116,7 +116,8 @@ export function buildSplineKnotPointGizmos(
 const palette:Record<SceneGuideGroupV2,readonly [number,number,number]>={
     center:[65,205,250],edge:[66,216,127],knot:[255,180,55],
     trim:[255,120,75],junction:[65,190,245],curb:[239,215,90],
-    'tangent-in':[181,140,255],'tangent-out':[72,216,230]
+    'tangent-in':[181,140,255],'tangent-out':[72,216,230],
+    'bank-right':[255,174,70],'bank-up':[115,255,145]
 };
 const color=(group:SceneGuideGroupV2):Color=>{
     const rgb=palette[group];
