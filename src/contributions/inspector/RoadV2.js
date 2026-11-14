@@ -28,10 +28,15 @@ function makeV2Inspector(kind='road'){
              'zebraStripeCount','markingLateralInset','turnGuides','guideLineWidth']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         deform?
-        [['Path and deformation',['knots','interpolation','closed','sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset','sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','filletArcAngleDegrees','filletChordError']],
+        [['Spline Source',['pathSource']],
+         ['Mesh deformation',['sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset']],
+         ['Sampling & fillets',['sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','filletArcAngleDegrees','filletChordError']],
+         ['Live Editor mesh',['gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         tube?
-        [['Path and tube',['knots','interpolation','closed','radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
+        [['Spline Source',['pathSource']],
+         ['Tube profile',['radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
+         ['Live Editor mesh',['gizmoV3LiveMesh','gizmoV3MeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         [['Spline source',['pathSource','knots','interpolation','closed']],
          ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
