@@ -8,6 +8,7 @@
 
 - The ordered `Knot Nodes` list and each Knot's world-space transform.
 - Interpolation (Linear / Bezier / Catmull-Rom / Centripetal) and `closed`.
+- Optional Bezier tangent controls per Knot, stable across Knot order changes.
 - Gizmos handles, point handles and an active-Knot HUD.
 - Editor-only change observation and preview invalidation for mesh consumers.
 
@@ -53,10 +54,8 @@ and third-party Gizmos picking require manual validation.
 
 - A `SplineRoadV2` with **no Path Source** intentionally cannot build. Old
   Road-local Knot fields and editor handle compatibility are removed.
-- The Path stores only position Knot Nodes today; full editable Bezier tangent
-  handles and banking controls are not implemented.
-- Bezier interpolation may require additional tangent authoring. For a new
-  Road, prefer Linear or Centripetal until tangent handling is completed.
+- The Path now supports **authored Bézier tangents** bound to Knot Node identities, with Auto/Free/Aligned/Mirrored modes, Gizmos point handles and serialized local offsets. [Full tangent guide](BEZIER_TANGENTS.md).
+- Per-Knot roll/banking, higher-order tangent constraints, and real Creator Undo/Redo certification remain pending.
 - Every generator must be **explicitly rebaked** to update its imported glTF
   Mesh asset. Live preview never silently changes a baked asset.
 - Invalid temporary geometry retains the last valid preview instead of
