@@ -43,6 +43,19 @@ it does not provide a per-Knot pivot option. Escape restores the Node's
 previous rotation, and linked mesh previews rebuild. See the
 [Rotate and banking guide](ROTATE_AND_BANK.md) for examples.
 
+## Scene Roll editing
+
+In **Knots** mode the selected Path exposes a native HUD
+**Knot Roll (deg)** slider. It directly edits the pure Vec3 Knot
+record's bank angle, drives real Road/Extrude/Deform mesh rebuilds,
+and supports Escape restoring its saved angle. The selected Knot
+guide shows an orange crossbar for the banked Right vector and a
+green Up vector, both sampled at the Knot's spline distance.
+
+The display and size can be configured using `Gizmo Show Roll Guide`
+and `Gizmo Roll Guide Size` in the Path Inspector; the HUD has a
+`Roll Guide` toggle. See [Rotate and banking](ROTATE_AND_BANK.md).
+
 ## Rebuild lifecycle
 
 A Path edit writes the **serialized Vec3 Knot record**, not a Scene
