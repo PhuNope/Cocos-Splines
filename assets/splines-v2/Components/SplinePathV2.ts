@@ -16,6 +16,7 @@ export enum SplinePathCurveModeV2 {
 }
 interface SplinePreviewConsumerV2 {
     onSharedSplinePathEdited(force:boolean):void;
+    onSharedSplinePathEditBegin?():void;
 }
 type PathGizmoProperty='pathGizmoKnotPosition'|'pathGizmoKnotPositions';
 
@@ -180,6 +181,10 @@ export class SplinePathV2 extends Component {
             const knot=this.knots[i];
             if(!knot?.isValid)return;
             this._dragNode=knot;this._dragProperty=field;this._dragIndex=i;
+            // Start a new gesture with a fresh preview throttle budget for
+            // every consumer, even if another Road drag just ended.
+            for(const consumer of this._previewConsumers)
+                consumer.onSharedSplinePathEditBegin?.();
         }else if(phase==='update'&&this._dragProperty===field){
             this.notifyPreviewConsumers(this,false);
         }else if((phase==='end'||phase==='cancel')&&
