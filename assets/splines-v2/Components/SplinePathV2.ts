@@ -2,7 +2,7 @@ import {_decorator,Component,Node,Mat4,Vec3,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
-import {buildSplineFramesV2} from '../core/SplineFrames';
+import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
 import {availableGizmoBackend,buildSplineKnotMoveGizmos,
     buildSplineKnotPointGizmos,buildSplinePathRotateGizmos,drawSplineSceneGizmos,
@@ -72,6 +72,11 @@ export class SplinePathV2 extends Component {
     @property() gizmoMultiKnotPoints=true;
     @property({min:2,max:32,step:1}) gizmoPointLimit=16;
     @property() gizmoEditTangents=true;
+    @property({tooltip:'Show the selected Knot bank cross-section and up vector in the Scene.'})
+    gizmoShowRollGuide=true;
+    @property({min:.1,max:20,step:.1,
+        tooltip:'Half-width of the selected Knot roll guide in Path-local units.'})
+    gizmoRollGuideSize=2;
     @property({type:Enum(SplinePathRotationModeV2),
         tooltip:'Knots: edit points. Planar2D: rotate the Path Node around Z. Spatial3D: rotate the Path Node around XYZ.'})
     gizmoRotationMode=SplinePathRotationModeV2.Knots;
@@ -86,6 +91,8 @@ export class SplinePathV2 extends Component {
     private _dragSnapshot:DragSnapshot|null=null;
     private _rotationDragging=false;
     private _rotationStart:Vec3|null=null;
+    private _hudRollKnot:SplineKnotRecordV2|null=null;
+    private _hudRollStart=0;
     private _observed:string|null=null;
     private _lastScan=Number.NEGATIVE_INFINITY;
     private _lastChange=Number.NEGATIVE_INFINITY;
@@ -97,7 +104,8 @@ export class SplinePathV2 extends Component {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Knot editing is Editor-only');
         if(!Number.isSafeInteger(index)||index<0||index>Math.max(0,this.knots.length))
             throw new Error('Invalid Knot index');
-        if(this._dragKnot)throw new Error('Cannot change Knot topology during a Gizmos drag');
+        if(this._dragKnot||this._hudRollKnot||this._rotationDragging)
+            throw new Error('Cannot change Knot topology during a Gizmos drag');
         const count=this.knots.length;
         if(operation==='add'||operation==='insert'||operation==='duplicate'){
             if(count>=128)throw new Error('SplinePath supports at most 128 Knots');
@@ -175,12 +183,13 @@ export class SplinePathV2 extends Component {
         if(signature!==this._observed){
             const first=!this._needsFinal;
             this._observed=signature;this._needsFinal=true;this._lastChange=now;
-            if(!this._dragKnot){
+            if(!this._dragKnot&&!this._hudRollKnot&&!this._rotationDragging){
                 if(first)for(const consumer of this._consumers)
                     consumer.onSharedSplinePathEditBegin?.();
                 this.notifyPreviewConsumers(this,false);
             }
-        }else if(this._needsFinal&&!this._dragKnot&&now-this._lastChange>=180){
+        }else if(this._needsFinal&&!this._dragKnot&&!this._hudRollKnot&&
+                  !this._rotationDragging&&now-this._lastChange>=180){
             this._needsFinal=false;
             this.notifyPreviewConsumers(this,true);
         }
@@ -200,6 +209,7 @@ export class SplinePathV2 extends Component {
     protected onDisable():void {
         this._dragKnot=null;this._dragProperty=null;this._dragSnapshot=null;
         this._rotationDragging=false;this._rotationStart=null;
+        this._hudRollKnot=null;this._hudRollStart=0;
         this._observed=null;this._needsFinal=false;
     }
     protected onDestroy():void {
@@ -392,6 +402,49 @@ export class SplinePathV2 extends Component {
         }
         return handles;
     }
+    /**
+     * SDK HUD sliders require a scalar property on the Component. This
+     * computed proxy targets the selected, serialized Vec3 Knot record.
+     * During a gesture, the record identity stays pinned even if the
+     * user changes gizmoKnotIndex elsewhere in the Inspector.
+     */
+    public get pathGizmoActiveRoll():number {
+        const knot=this._hudRollKnot??this.knots[this.gizmoKnotIndex];
+        return knot&&Number.isFinite(knot.rollDegrees)?knot.rollDegrees:0;
+    }
+    public set pathGizmoActiveRoll(value:number) {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
+           !Number.isFinite(value)||value< -180||value>180)return;
+        const knot=this._hudRollKnot??this.knots[this.gizmoKnotIndex];
+        if(!knot)return;
+        knot.rollDegrees=value;
+    }
+    public onGizmoHudChanged(
+        name:string,phase:'begin'|'update'|'end'|'cancel',_value:number|boolean
+    ):void {
+        if(!EDITOR_NOT_IN_PREVIEW||name!=='pathGizmoActiveRoll')return;
+        if(phase==='begin'){
+            if(this._hudRollKnot||this._dragKnot||this._rotationDragging)return;
+            const knot=this.knots[this.gizmoKnotIndex];
+            if(!knot)return;
+            this._hudRollKnot=knot;
+            this._hudRollStart=knot.rollDegrees;
+            for(const consumer of this._consumers)
+                consumer.onSharedSplinePathEditBegin?.();
+        }else if(phase==='update'&&this._hudRollKnot){
+            this.notifyPreviewConsumers(this,false);
+        }else if((phase==='end'||phase==='cancel')&&this._hudRollKnot){
+            try{
+                if(phase==='cancel')
+                    this._hudRollKnot.rollDegrees=this._hudRollStart;
+                this.notifyPreviewConsumers(this,true);
+            }finally{
+                this._hudRollKnot=null;
+                this._observed=this.signature();
+                this._needsFinal=false;
+            }
+        }
+    }
     public onGizmoHudControls():Array<{
         type:'slider'|'toggle';id:string;text:string;property:string;
         min?:number;max?:number;step?:number;order?:number;
@@ -406,7 +459,11 @@ export class SplinePathV2 extends Component {
                 property:'gizmoMultiKnotPoints',order:2},
             ...(this.interpolation===SplinePathCurveModeV2.Bezier?
                 [{type:'toggle' as const,id:'path-tangent-handles',
-                    text:'Tangents',property:'gizmoEditTangents',order:3}]:[])
+                    text:'Tangents',property:'gizmoEditTangents',order:3}]:[]),
+            {type:'slider',id:'path-knot-roll',text:'Knot Roll (deg)',
+                property:'pathGizmoActiveRoll',min:-180,max:180,step:1,order:4},
+            {type:'toggle',id:'path-roll-guide',text:'Roll Guide',
+                property:'gizmoShowRollGuide',order:5}
         ];
     }
     public onGizmoChanged(name:string,phase:'begin'|'update'|'end'|'cancel',
@@ -480,19 +537,41 @@ export class SplinePathV2 extends Component {
             const guide=buildRoadSceneGuideV2(frames.frames,
                 source.knots.map(k=>k.position),0,{
                     maxSteps:64,showEdges:false,showKnots:true});
+            const knot=this.knots[this.gizmoKnotIndex];
+            const lines=[...guide.lines],dots=[...guide.dots];
             if(this.interpolation===SplinePathCurveModeV2.Bezier&&
-                this.gizmoEditTangents&&this.knots[this.gizmoKnotIndex]){
-                const k=this.knots[this.gizmoKnotIndex];
+                this.gizmoEditTangents&&k){
                 const tangentIn=add(k.position,this.tangentOffset(k,'in'));
                 const tangentOut=add(k.position,this.tangentOffset(k,'out'));
-                drawSplineSceneGizmos(this.node,{
-                    lines:[...guide.lines,
-                        {a:k.position,b:tangentIn,group:'tangent-in'},
-                        {a:k.position,b:tangentOut,group:'tangent-out'}],
-                    dots:[...guide.dots,
-                        {at:tangentIn,radius:.13,group:'tangent-in'},
-                        {at:tangentOut,radius:.13,group:'tangent-out'}]});
-            }else drawSplineSceneGizmos(this.node,guide);
+                lines.push(
+                    {a:k.position,b:tangentIn,group:'tangent-in'},
+                    {a:k.position,b:tangentOut,group:'tangent-out'});
+                dots.push(
+                    {at:tangentIn,radius:.13,group:'tangent-in'},
+                    {at:tangentOut,radius:.13,group:'tangent-out'});
+            }
+            if(this.gizmoShowRollGuide&&k&&
+                Number.isFinite(this.gizmoRollGuideSize)&&
+                this.gizmoRollGuideSize>=.1&&this.gizmoRollGuideSize<=20){
+                // The knot distance is an ORIGINAL segment boundary, not
+                // the nearest sampled frame index. frameAtDistance correctly
+                // samples the banked frame at the exact authored Knot.
+                const distance=this.gizmoKnotIndex<cache.segments.length?
+                    cache.segments[this.gizmoKnotIndex].startDistance:cache.length;
+                const f=frameAtDistanceV2(cache,frames,distance);
+                const half=this.gizmoRollGuideSize;
+                const left=sub(f.position,scale(f.right,half));
+                const right=add(f.position,scale(f.right,half));
+                const up=add(f.position,scale(f.up,half*.65));
+                lines.push(
+                    {a:left,b:right,group:'bank-right'},
+                    {a:f.position,b:up,group:'bank-up'});
+                dots.push(
+                    {at:left,radius:.11,group:'bank-right'},
+                    {at:right,radius:.11,group:'bank-right'},
+                    {at:up,radius:.12,group:'bank-up'});
+            }
+            drawSplineSceneGizmos(this.node,{lines,dots});
         }catch{
             // Incomplete Path is normal while authoring. Never spam logs.
         }
