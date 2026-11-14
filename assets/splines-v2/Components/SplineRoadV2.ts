@@ -174,6 +174,10 @@ export class SplineRoadV2 extends Component {
     }
     private splineClosed():boolean {return this.pathSource?this.pathSource.closed:this.closed;}
 
+    /** Editing begins on Path: allow the next update to build immediately. */
+    public onSharedSplinePathEditBegin():void {
+        this._gizmoLastMeshAt=Number.NEGATIVE_INFINITY;
+    }
     /** Other Roads linked to the same source receive this Editor-only signal. */
     public onSharedSplinePathEdited(force:boolean):void {
         this.rebuildOnGizmoEdit(force);
