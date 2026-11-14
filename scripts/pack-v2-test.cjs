@@ -49,7 +49,9 @@ pkg.contributions={
         'check-v2-road-bake':{methods:['checkV2RoadBake']},
         'bake-v2-road':{methods:['bakeV2Road']},
         'bind-v2-road-mesh':{methods:['bindV2RoadMesh']},
-        'edit-v2-path':{methods:['editV2Path']}
+        'edit-v2-path':{methods:['editV2Path']},
+        'plan-v2-junction-auto-trim':{methods:['planV2JunctionAutoTrim']},
+        'apply-v2-junction-auto-trim':{methods:['applyV2JunctionAutoTrim']}
     },
     inspector:{section:{node:{
         'SplinesV2.SplinePath':'./dist/contributions/inspector/PathV2.js',
@@ -89,7 +91,9 @@ for(const rel of [
  'assets/splines-v2/Components/SplineMeshDeformV2.ts',
  'assets/splines-v2/Components/SplineExtrudeV2.ts',
  'assets/splines-v2/Components/SplineJunctionPatchV2.ts',
- 'assets/splines-v2/geometry/RoadFillet.ts'
+ 'assets/splines-v2/geometry/RoadFillet.ts',
+ 'assets/splines-v2/geometry/JunctionAutoTrimV2.ts',
+ 'assets/splines-v2/geometry/JunctionAutoTrimV2.ts.meta'
 ])assertFile(rel);
 assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
