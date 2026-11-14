@@ -38,6 +38,7 @@ declare module 'cc' {
         static invert(out:Mat4,a:Mat4):Mat4;
     }
     export class CCObject { static Flags:{DontSave:number;HideInHierarchy:number}; }
+    export const director:{getScene():Node|null};
     export class Node {
         constructor(name?:string);
         parent:Node|null;worldPosition:Vec3;
