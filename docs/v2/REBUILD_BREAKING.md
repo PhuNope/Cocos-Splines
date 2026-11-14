@@ -47,7 +47,7 @@ SplinePath
 
 ## Current verified scope
 
-A is implemented at the **clean package/Editor entrypoint** level. B now has **one mandatory SplinePathV2 source** for Road, Extrude and Mesh Deform; Road no longer owns Knot fields, interpolation, closed, or editing handles. Path Gizmos and native Node Transform/Inspector observation notify registered consumers, including a forced settled mesh rebuild after idle. C is implemented across the four independent Road, Extrude, Mesh Deform and Junction generators. Remaining work: full authored tangent/roll handles, real Creator Undo/Redo/serialization, road-sidewalk and terrain geometry certification, lane network and release gates. CI is not real Scene Editor acceptance.
+A is implemented at the **clean package/Editor entrypoint** level. B now has **one mandatory SplinePathV2 source** for Road, Extrude and Mesh Deform; Road no longer owns Knot fields, interpolation, closed, or editing handles. Path Gizmos and native Node Transform/Inspector observation notify registered consumers, including a forced settled mesh rebuild after idle. C is implemented across the four independent Road, Extrude, Mesh Deform and Junction generators. Per-Knot authored Bézier tangent handles and Auto/Free/Aligned/Mirrored modes now exist; remaining work: per-Knot roll/banking, real Creator Undo/Redo/serialization, road-sidewalk and terrain geometry certification, lane network and release gates. CI is not real Scene Editor acceptance.
 
 ## External library references
 
