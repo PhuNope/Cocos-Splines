@@ -33,6 +33,7 @@ try{
   addComponent(cls){const c=new cls();c.node=this;this.components.push(c);return c;}
   getComponent(cls){return this.components.find(c=>c instanceof cls)??null;}
   setParent(parent){this.parent=parent;parent.children.push(this);}
+  setWorldPosition(point){this.worldPosition=new Vec3(point.x,point.y,point.z);}
   destroy(){this.isValid=false;for(const c of this.components)if(c.mesh)c.mesh=null;this.children=[];}
  }
  const passthrough=()=>cls=>cls;
@@ -98,7 +99,42 @@ try{
  const filletStatus=road.inspectCornerRisk();
  assert.equal(filletStatus.filletReport.filletedCorners,1);
  assert(filletStatus.filletReport.minimumRadius>2);
+ // Native Cocos-Gizmos v3: scene.js supplies global Gizmos3D;
+ // Gizmos3D.move reads/writes the Road's live Knot proxy Vec3.
+ const originalSdk=globalThis.Gizmos3D;
+ const mockV3={beginColor:()=>{},drawLine:()=>{},
+   move:(property,options)=>Array.from({length:6},(_,i)=>({
+     property,id:'move-'+i,visual:i<3?'axis':'plane',plane:'xy',
+     space:options.space}))};
+ globalThis.Gizmos3D=mockV3;
+ try{
+   road.gizmoV3EditKnot=true;road.gizmoV3KnotIndex=1;
+   assert.equal(road.onGizmoHandles().length,6);
+   assert.equal(road.onGizmoHandles()[0].property,'gizmoKnotPosition');
+   assert.deepEqual({...road.gizmoKnotPosition},{...b.worldPosition});
+   const undoPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
+   road.gizmoKnotPosition=new Vec3(-2.5,1.5,4.25);
+   assert.deepEqual({...b.worldPosition},{x:-2.5,y:1.5,z:4.25},
+     'Gizmos v3 writes real Knot Node positions, not a duplicate Vec3 field');
+   road.gizmoKnotPosition=undoPosition;
+   assert.deepEqual({...b.worldPosition},{...undoPosition},
+     'Gizmos cancel restores Knot Node via the same live proxy setter');
+   road.gizmoV3KnotIndex=999;
+   assert.equal(road.onGizmoHandles().length,0,'Out-of-range Knot must hide handles');
+   road.gizmoV3KnotIndex=1;road.gizmoV3EditKnot=false;
+   assert.equal(road.onGizmoHandles().length,0,'Move handles opt-in only');
+   road.gizmoKnotPosition=new Vec3(90,90,90);
+   assert.deepEqual({...b.worldPosition},{...undoPosition},
+     'Disabled Gizmo setter cannot mutate Knot Node');
+   road.gizmoV3EditKnot=true;delete globalThis.Gizmos3D;
+   assert.equal(road.onGizmoHandles().length,0,'Missing v3 package must not break Scene');
+ }finally{globalThis.Gizmos3D=originalSdk;road.gizmoV3EditKnot=false;}
  env.EDITOR_NOT_IN_PREVIEW=false;
+ assert.equal(road.onGizmoHandles().length,0,'No Gizmos handles when playing');
+ const preserved={...b.worldPosition};
+ road.gizmoKnotPosition=new Vec3(88,77,66);
+ assert.deepEqual({...b.worldPosition},preserved,
+    'Road Gizmo write cannot modify Knot Node during Play');
  road.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
  road.surfaceMode=0;road.interpolation=0;road.sampleStep=1;road.width=4;
  // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
