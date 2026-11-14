@@ -153,7 +153,8 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
             const working=fillet?.cache??cache;
             const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoSteps)));
             const frames=buildSplineFramesV2(working,{
-                maxStep:Math.max(this.sampleStep,working.length/steps)
+                maxStep:Math.max(this.sampleStep,working.length/steps),
+                rollSource:source
             });
             const trimmed=trimmedRoadFramesV2(working,frames,{
                 junctionStartTrim:this.junctionStartTrim,
@@ -188,6 +189,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
         }
         const testedCache=fillet?.cache??cache;
         const frameTable=buildSplineFramesV2(testedCache,{maxStep:this.sampleStep,
+            rollSource:cache.spline,
             ...(this.adaptiveSampling&&!fillet?{
                 maxAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError
             }:{})});
