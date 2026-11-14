@@ -202,3 +202,11 @@ warnings must never spam the runtime console.
 
 See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 [Path](SPLINE_PATH_V2.md), [Gizmos](GIZMOS.md).
+
+## Junction Auto Trim (experimental)
+
+1. Link exactly three or four different open ConstantWidth Roads; point their Path endpoints at the Junction Node center. Set `At End` correctly on each Junction Branch. Roads must have unit scale and enough length for the full cross-section.
+2. Select Junction Patch and click **Check Auto Trim**. Read the proposed Start/End trims, branch angles and any validation warnings in the Editor Console. No scene data is changed by Check.
+3. Click **Apply Auto Trim**. Verify `junctionStartTrim` / `junctionEndTrim` fields update on the relevant Roads and both Road/Junction temporary mesh previews rebuild. No Knot movement occurs; saved Baked Mesh assets are preserved until explicit rebake.
+4. Test Junction 3-/4-way, Road curves/rotations, disconnected endpoints, mismatched `At End`, short arms and Undo/Redo. Each Road trim is recorded as an Editor property mutation; a *single grouped native Undo* is not guaranteed and must be certified in Creator 3.8.x.
+5. Bake Roads and Junction separately only after confirming actual texture seams/curbs in the Creator Scene. The planner does not guarantee legal traffic turn radii, lane topology, Terrain CSG or full network stitching.
