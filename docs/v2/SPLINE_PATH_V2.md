@@ -1,51 +1,68 @@
-# SplinePathV2 — reusable spline source (alpha)
+# SplinePathV2 — one authoritative spline source
 
-**Branch:** `v2.0.0` test-only. No tag/release.
+**Development branch:** `v2.0.0`. Clean breaking test build; no legacy UUID migration, tag, or Release.
 
-## Why this exists
+## Design
 
-Before this checkpoint, each `SplineRoadV2` serialized its own
-`knots: Node[]`, interpolation and closed flag. This was an intentional
-independent v2 prototype, avoiding dependencies/UUID migration from legacy
-`SplineContainer`. However it combined spline authoring and mesh generation,
-making data-sharing and gizmo preview synchronization difficult.
+`SplinesV2.SplinePath` is the **only** component that owns:
 
-`SplinePathV2` is now the **authoritative source** when linked. It stores
-the ordered Knot Node references, interpolation and closed flag. The Road
-only controls width, profile, material, fillet, UV, sidewalk and bake.
-World-space Knot positions are sampled into **each consumer's local space**
-on demand; coordinates are NOT duplicated into Road or a generated array.
+- The ordered `Knot Nodes` list and each Knot's world-space transform.
+- Interpolation (Linear / Bezier / Catmull-Rom / Centripetal) and `closed`.
+- Gizmos handles, point handles and an active-Knot HUD.
+- Editor-only change observation and preview invalidation for mesh consumers.
 
-## Creator 3.8.x usage
+`SplinesV2.SplineRoad` does **not** have `knots`, `interpolation`,
+`closed`, or Knot editing handles anymore. Its `pathSource` reference is
+required. Tube/Extrude and Mesh Deform also consume `SplinePathV2`, with a
+shared `SplineMeshGeneratorV2` for Preview, Bake and Mesh lifetime.
 
-1. Create a Node `RoadPath` and add `SplinesV2.SplinePath` using **Add Component**. Put 3 Knot Nodes in its `Knots` array and select interpolation/closed there.
-2. Create a Road Node with `SplinesV2.SplineRoad`, `MeshRenderer`, assign `RoadPath`'s `SplinePathV2` component to the Road Inspector **Path Source**.
-3. Road's legacy Knot/interpolation/closed controls are hidden when Path Source is assigned, to avoid displaying two conflicting authorities.
-4. Select **SplinePathV2** (not Road) to edit source Knots. The Path now owns `gizmoEditKnots`, `gizmoKnotIndex`, `gizmoMultiKnotPoints` and its Gizmos Scene HUD; a Road linked to this Path suppresses its own duplicate Knot handles. In the Road Inspector keep `Gizmos Live Mesh=true` (default).
-5. Each Path-owned Gizmos `update` updates the **temporary preview mesh** at most once per `Gizmos Mesh Interval Ms` (default 100ms, 50–400). **End/Cancel always rebuild**, so Escape restores the source Knot and the displayed Road together.
-6. If a Knot travels through invalid geometry, the last valid transient preview remains visible. The final failed rebuild logs **one Editor warning**; fix Knot spacing / Road width and rebuild. The Baked Mesh asset remains unchanged until an explicit Bake.
-7. Optional: assign that **same SplinePathV2** to multiple Roads. Roads that have generated their geometry in the Editor register as preview consumers. Changing a Knot with a linked Road's Gizmos triggers preview updates on all registered Roads. This does not guarantee automatically updating roads that were never initialized in the Scene Editor.
+Junction connects Road end-ring profiles through explicit linked branches;
+it does not duplicate any Knot collection or inherit Road geometry fields.
 
-### Existing v2 scenes
+## How to author
 
-All Road-local Knot references remain valid when `Path Source` is unset.
-Nothing auto-migrates or deletes existing serialized fields. To migrate,
-create a `SplinePathV2`, copy the Knot node references, interpolation and
-closed settings, then link it. Test Junction endpoint trims and saved scene
-re-open before deleting old serialized references.
+1. Create a Node named `RoadPath`, add `SplinesV2.SplinePath`.
+2. Create child Knot Nodes and assign them to the Path's **Knots** array in order. Change `Interpolation` and `Closed` **on the Path**.
+3. Create a separate Road Node with `MeshRenderer` and `SplinesV2.SplineRoad`. Drag the Path component into **Path Source**. Configure Width, Curb, Shoulder, UV axis and Road settings.
+4. Use Road **Rebuild Preview** once. If Cocos-Gizmos is installed, select **Path** to move its active Knot or any other visible point handle; Road has only read-only centerline/edge/trim guides.
+5. Mesh preview follows the Knot during the edit (default: 100ms throttled). End/Cancel/Escape forces the final Road preview, and **the saved Baked Mesh asset is untouched** until you explicitly Bake again.
+6. Link the same Path to any other Road, Extrude, or Mesh Deform generators to reuse the authored source. Each generator must be rebuilt once in the Editor to subscribe as a live preview consumer.
 
-### Restrictions / verification
+The read-only scene guides and the actual edit handles are deliberately separate:
+**Path edits**, **Road/Extrude/Deform/Junction consume and render**.
 
-- Editor-only incremental rebuild; **no runtime Gizmos**, no implicit
-  glTF Bake, and no background timers.
-- During drag, builds are throttled; end/cancel always force a final build.
-  Invalid temporary geometry does not delete last valid preview.
-- Road, Extrude and MeshDeform now each inherit **SplineMeshGeneratorV2**, which owns Path subscription, live preview, transient mesh allocation, materials and Bake. **Extrude and MeshDeform no longer inherit Road**, nor Road width/curb/sidewalk/trim settings. The Path is required for standalone Extrude/Deform. Road still has temporary legacy Knot fallback solely to protect existing geometry regressions. Junction now also inherits the common MeshGenerator directly and only refers to Roads through explicit branch links. It does not have Road Knot, curb, width or filament fields. Its branch network is a separate geometry dependency, not a Path consumer.
-- Undo/Redo on original **Knot Nodes** and save/reopen handling need real
-  Creator 3.8.x visual/manual verification. Gizmos's change snapshot
-  belongs to the Road's computed proxy, not the Node being changed.
-- Interpolation `Bezier` expects authoring handles in the spline data;
-  position-only Knot Nodes are not a full Bezier tangent editor. For normal
-  Roads choose Linear or Centripetal and use existing fillet mode.
+## Native Transform / Inspector / Undo
 
-See [Scene Gizmos integration](./GIZMOS.md).
+Directly moving a Knot Node using Cocos Creator's own Transform Tool does
+not invoke the external Gizmos callbacks. Therefore Path has an Editor-only
+`update()` signature watcher: it samples ordered Node identities, world
+positions, interpolation and closed at most once every 50ms. On changes, it
+notifies registered consumers. After at least 180ms without another change,
+it **forces the final preview** even if a live rebuild was throttled.
+
+This watcher never creates mesh assets, never starts background timers and
+never runs while playing. Path's `onRestore()` also forces a preview refresh
+after an Editor undo-like restore.
+
+**CI proves the source and callback behavior with Cocos mocks**, including
+native-style Node transform changes and multiple linked Roads. Actual
+Creator 3.8.x Scene editor timing, native Undo/Redo transactions, save/reopen
+and third-party Gizmos picking require manual validation.
+
+## Important restrictions
+
+- A `SplineRoadV2` with **no Path Source** intentionally cannot build. Old
+  Road-local Knot fields and editor handle compatibility are removed.
+- The Path stores only position Knot Nodes today; full editable Bezier tangent
+  handles and banking controls are not implemented.
+- Bezier interpolation may require additional tangent authoring. For a new
+  Road, prefer Linear or Centripetal until tangent handling is completed.
+- Every generator must be **explicitly rebaked** to update its imported glTF
+  Mesh asset. Live preview never silently changes a baked asset.
+- Invalid temporary geometry retains the last valid preview instead of
+  deleting mesh or writing to the Scene. Final invalid geometry may emit one
+  Editor-only warning.
+
+Related: [Gizmos integration](GIZMOS.md),
+[Breaking rebuild charter](REBUILD_BREAKING.md),
+[Creator acceptance tests](TEST_BUILD.md).
