@@ -109,14 +109,55 @@ try{
  globalThis.Gizmos3D=mockV3;
  try{
    road.gizmoV3EditKnot=true;road.gizmoV3KnotIndex=1;
+   road.gizmoV3MultiKnotPoints=true;road.gizmoV3PointLimit=16;
+   const multiHandles=road.onGizmoHandles();
+   assert.equal(multiHandles.length,8,'6 active move handles + 2 independent Knot points');
+   assert.deepEqual(multiHandles.slice(6).map(h=>h.index),[0,2]);
+   assert(multiHandles.slice(6).every(h=>h.property==='gizmoKnotPositions'));
+   assert.equal(Array.isArray(road.gizmoKnotPositions),true,
+     'v3 PositionHandles.writeField requires a real array-compatible Vec3[]');
+   assert.equal(road.gizmoKnotPositions.length,3);
+   const firstOriginal=new Vec3(a.worldPosition.x,a.worldPosition.y,a.worldPosition.z);
+   const pointProxy=road.gizmoKnotPositions;
+   pointProxy[0]=new Vec3(-7,2,1);
+   assert.deepEqual({...a.worldPosition},{x:-7,y:2,z:1},
+     'Indexed v3 point write must move original Knot Node immediately');
+   pointProxy[0]=firstOriginal;
+   assert.deepEqual({...a.worldPosition},{...firstOriginal},
+     'v3 indexed point rollback via writeField must restore Node');
+   // The SDK notifies begin AFTER snapshot and BEFORE any update, then
+   // invokes writeField(snapshot) BEFORE the cancel callback.
+   const originalKnot2=new Vec3(k2.worldPosition.x,k2.worldPosition.y,k2.worldPosition.z);
+   road.onGizmoChanged('gizmoKnotPositions','begin',2);
+   const reordered=road.knots;
+   road.knots=[k2,b,a];
+   road.gizmoKnotPositions[2]=new Vec3(6,4,-2);
+   assert.deepEqual({...k2.worldPosition},{x:6,y:4,z:-2},
+     'The original indexed Knot is pinned when Road Knot array is reordered during drag');
+   assert.deepEqual({...a.worldPosition},{...firstOriginal},
+     'Reordering the Inspector Knot array must never redirect an active drag');
+   road.gizmoKnotPositions[2]=originalKnot2;
+   road.onGizmoChanged('gizmoKnotPositions','cancel',2);
+   assert.deepEqual({...k2.worldPosition},{...originalKnot2},
+     'Escape restores the original indexed Knot even after Road array reorder');
+   road.knots=reordered;
+   // SDK's active Vec3 proxy must similarly pin Node when active index
+   // changes during the gesture; then release that pin on end/cancel.
+   road.gizmoV3MultiKnotPoints=false;
    assert.equal(road.onGizmoHandles().length,6);
    assert.equal(road.onGizmoHandles()[0].property,'gizmoKnotPosition');
    assert.deepEqual({...road.gizmoKnotPosition},{...b.worldPosition});
    const undoPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
+   road.onGizmoChanged('gizmoKnotPosition','begin');
+   road.gizmoV3KnotIndex=0;
    road.gizmoKnotPosition=new Vec3(-2.5,1.5,4.25);
    assert.deepEqual({...b.worldPosition},{x:-2.5,y:1.5,z:4.25},
      'Gizmos v3 writes real Knot Node positions, not a duplicate Vec3 field');
+   assert.deepEqual({...a.worldPosition},{...firstOriginal},
+     'Switching active index while dragging cannot mutate a different Knot');
    road.gizmoKnotPosition=undoPosition;
+   road.onGizmoChanged('gizmoKnotPosition','cancel');
+   road.gizmoV3KnotIndex=1;
    assert.deepEqual({...b.worldPosition},{...undoPosition},
      'Gizmos cancel restores Knot Node via the same live proxy setter');
    road.gizmoV3KnotIndex=999;
@@ -131,6 +172,10 @@ try{
  }finally{globalThis.Gizmos3D=originalSdk;road.gizmoV3EditKnot=false;}
  env.EDITOR_NOT_IN_PREVIEW=false;
  assert.equal(road.onGizmoHandles().length,0,'No Gizmos handles when playing');
+ const beforePlayMulti={...a.worldPosition};
+ road.gizmoKnotPositions[0]=new Vec3(500,500,500);
+ assert.deepEqual({...a.worldPosition},beforePlayMulti,
+    'Indexed Knot proxy cannot modify Nodes in Play');
  const preserved={...b.worldPosition};
  road.gizmoKnotPosition=new Vec3(88,77,66);
  assert.deepEqual({...b.worldPosition},preserved,
