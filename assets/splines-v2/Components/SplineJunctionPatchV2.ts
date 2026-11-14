@@ -1,6 +1,7 @@
 import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {SplineRoadV2} from './SplineRoadV2';
+import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -149,6 +150,30 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
             // Gizmos never mutate Nodes, meshes or the saved Scene.
         }
+    }
+    /**
+     * Safe proposal only. Never moves Knot Nodes, writes Road trims or
+     * creates meshes. Caller must commit values through Creator property
+     * history and then explicitly refresh the temporary mesh previews.
+     */
+    public planAutomaticTrimsV2(){
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Junction Auto Trim is Editor-only');
+        const roads=this.branches.map((link,index)=>{
+            if(!link?.road?.node?.isValid)
+                throw new Error('Missing Junction Road branch '+index);
+            return link.road.junctionAutoTrimCandidateV2(link.road.node.uuid);
+        });
+        const plan=planJunctionAutoTrimV2(roads,{
+            center:this.node.worldPosition,
+            endpointTolerance:this.endpointTolerance,
+            heightTolerance:this.flatTolerance
+        });
+        return {...plan,branches:plan.branches.map((branch,index)=>{
+            const road=this.branches[index].road!;
+            return {...branch,nodeUuid:road.node.uuid,
+                componentIndex:road.node.components.indexOf(road)};
+        })};
     }
     public inspectCornerRisk():null{return null;}
     public inspectJunction():(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null{return this._lastJunctionReport;}
