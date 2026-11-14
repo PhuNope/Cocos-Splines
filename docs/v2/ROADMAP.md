@@ -91,3 +91,13 @@
 - [x] Per-branch paint eligibility and Inspector controls; paint placement validated inside flat Junction polygon.
 - [ ] Lane arrows, vehicle lane graphs and rule-aware traffic control; turn guides currently visual-only explicit pairs.
 - [ ] Visually verify paints/materials, scene save/reimport and winding in actual Cocos Creator 3.8.x Editor.
+
+## Scene Network & Endpoint Snap alpha (2026-11-15)
+
+- [x] Pure, Cocos-independent Road endpoint proximity graph: stable hubs with strict all-pairs tolerances (no transitive chain merging), detects 2-/3-/4-way linked endpoints without changing nodes.
+- [x] Bounded Editor Scene scan up to 256 candidate Roads / 10000 Nodes, skipping unsupported or incomplete Road Paths with diagnostics only on explicit **Check Road Network**.
+- [x] Junction **Check Endpoint Snap**: preflight 3/4 distinct Roads and distinct Path sources, explicit At End, max displacement, elevation tolerance, adjacent endpoint direction, finite values; target is Junction Node world center transformed into each Path-local Vec3.
+- [x] **Apply Endpoint Snap**: Creator recorded typed Knot CCClass array dumps, preserves tangent modes/offsets, Roll and custom metadata, no-op skip, per-Path preview refresh, baked Mesh unchanged.
+- [x] Planner/test dump history replay regressions and clean test bundle wiring.
+- [ ] Native Creator Undo/Redo per Path + Prefab override certification, Scene Save/Reopen, real SDK Gizmos and painted material seam validation. **Multiple Paths are separate Undo entries**, not one atomic transaction.
+- [ ] Automatic connection assignment/graph serialization, collision-safe multi-Junction consensus, horizontal tangent alignment, shared-Path fan-out resolution, 3D banked intersection topology and junction-aware lane routing.
