@@ -58,6 +58,7 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
     const table=buildSplineFramesV2(workingCache,{maxStep:step,
+        rollSource:cache.spline,
         ...(options.adaptiveSampling&&mode!=='fillet'?{
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
         }:{})});
