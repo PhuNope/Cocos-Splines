@@ -254,6 +254,7 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
     const fullFrames=buildSplineFramesV2(workingCache,{maxStep:options.step??.5,
+        rollSource:cache.spline,
         ...(options.adaptiveSampling&&mode!=='fillet'?{
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
         }:{})});
