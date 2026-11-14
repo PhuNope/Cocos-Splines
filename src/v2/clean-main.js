@@ -6,6 +6,7 @@
  */
 const NAME='cocos-splines';
 const {bindWhenImported}=require('./EditorAssetBind');
+const {planPathEditDump}=require('./PathV2Dump');
 const selected=()=>Editor.Selection.getSelected('node')||[];
 async function scene(method,uuid,...args){
     return Editor.Message.request('scene','execute-scene-script',{
@@ -102,13 +103,39 @@ async function bakeV2Road(){
 }
 async function editV2Path(operation,index){
     try{
-        const allowed=['add','insert','duplicate','remove','up','down','select'];
-        if(!allowed.includes(operation)||!Number.isSafeInteger(index)||index<0)
-            throw new Error('Invalid Path editing command');
-        const result=await scene('editV2Path',currentNode(),operation,index);
-        if(!result?.ok)throw new Error(result?.error||'Path operation failed');
-        await snapshot();
-        return result;
+        const uuid=currentNode();
+        // Creator owns serialization, prefab overrides and Undo history.
+        // Never mutate the live CCClass array through execute-scene-script
+        // and then take a snapshot: the pre-edit value may already be lost.
+        const root=await Editor.Message.request('scene','query-node',uuid);
+        const plan=planPathEditDump(root,operation,index);
+        if(plan.noOp)return {ok:true,index:plan.index,count:plan.count,noOp:true};
+        const accepted=await Editor.Message.request('scene','set-property',{
+            uuid,
+            path:'__comps__.'+plan.componentIndex+'.'+plan.field,
+            dump:plan.dump,
+            record:plan.record
+        });
+        if(accepted===false)
+            throw new Error('Creator rejected the Path property edit');
+        // Topology edits must also move the Scene active-index selector.
+        // This intentionally does not create a second Undo step.
+        if(plan.field==='knots'){
+            const selected=plan.index;
+            const value=await Editor.Message.request('scene','set-property',{
+                uuid,
+                path:'__comps__.'+plan.componentIndex+'.gizmoKnotIndex',
+                dump:{type:'Integer',value:selected},record:false
+            });
+            if(value===false)
+                throw new Error('Knot data changed but active Knot selection failed');
+        }
+        // Transform-dependent preview work is a separate, nonserialized
+        // operation after Creator's recorded property edit has completed.
+        const refreshed=await scene('refreshV2Path',uuid);
+        if(!refreshed?.ok)
+            throw new Error(refreshed?.error||'Path preview refresh failed');
+        return {ok:true,index:plan.index,count:plan.count};
     }catch(e){return fail('edit path',e);}
 }
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
