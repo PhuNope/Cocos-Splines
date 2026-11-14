@@ -29,6 +29,7 @@ copy('assets/splines-v2.meta');
 copy('assets/splines-v2');
 copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
+copy('src/v2/PathV2Dump.js','dist/v2/PathV2Dump.js');
 copy('src/v2/clean-scene.js','dist/v2/clean-scene.js');
 copy('dist/v2/EditorAssetBind.js');
 copy('src/v2/inspector-common-clean.js','dist/contributions/inspector/common.js');
@@ -78,6 +79,7 @@ for(const rel of [
  'dist/v2/clean-main.js','dist/v2/clean-scene.js',
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePathV2.ts',
+ 'dist/v2/PathV2Dump.js',
  'dist/contributions/inspector/PathV2.js',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta',
