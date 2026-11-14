@@ -331,9 +331,11 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
             return {position:{x:world.x,y:world.y,z:world.z},
                 uv0:{x:mesh.uv0[2*i],y:mesh.uv0[2*i+1]}};
         };
-        const sourceKnots=this.pathSource?.getKnotNodes();
-        const endpoint=sourceKnots?.[atEnd?sourceKnots.length-1:0]?.worldPosition;
-        if(!endpoint)throw new Error('Junction V2 requires a valid Road endpoint Knot');
+        const sourceKnots=this.pathSource?.getKnotPositions();
+        if(!this.pathSource||!sourceKnots?.length)
+            throw new Error('Junction V2 requires a SplinePath with valid Vec3 Knots');
+        const endpoint=this.pathSource.getKnotWorldPosition(
+            atEnd?sourceKnots.length-1:0);
         if(!layout)return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
             left:vertex(start),middle:vertex(start+1),right:vertex(start+2)};
         const edges=layout.edgeMaterials.length;
