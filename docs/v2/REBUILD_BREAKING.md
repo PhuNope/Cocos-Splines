@@ -47,7 +47,7 @@ SplinePath
 
 ## Current verified scope
 
-A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads, while older Road-local Knot controls remain in the code temporarily and a Road still owns edit handles. C–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
+A is implemented at the **packaging and Editor entrypoint level**, with automated tests. B is partially implemented: `SplinePathV2` can feed linked Roads and now **owns its own Gizmos v3 editing handles** and change notifications. Linked Roads hide their duplicate Knot handles. Previous Road-local Knot properties remain in source temporarily but are not required in the new clean authoring workflow. C–F are not completed by the clean ZIP. It is **not** yet a full redesign of all geometry features.
 
 ## External library references
 
