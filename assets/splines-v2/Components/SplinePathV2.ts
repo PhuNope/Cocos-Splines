@@ -345,7 +345,7 @@ export class SplinePathV2 extends Component {
 
     private knotAt(index:number,field:PathGizmoProperty):Node|null {
         if(this._dragNode&&this._dragProperty===field)
-            return field==='pathGizmoKnotPosition'||index===this._dragIndex?
+            return field!=='pathGizmoKnotPositions'||index===this._dragIndex?
                 this._dragNode:null;
         return Number.isSafeInteger(index)&&index>=0?this.knots[index]??null:null;
     }
@@ -403,12 +403,26 @@ export class SplinePathV2 extends Component {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
             !this.node?.isValid||!this.knots[this.gizmoKnotIndex]?.isValid)return [];
         const active=buildSplineKnotMoveGizmos('pathGizmoKnotPosition');
-        if(!active.length||!this.gizmoMultiKnotPoints)return active;
-        const limit=Number.isFinite(this.gizmoPointLimit)?
-            Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
-        const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
-            .filter(i=>i!==this.gizmoKnotIndex&&this.knots[i]?.isValid);
-        return active.concat(buildSplineKnotPointGizmos('pathGizmoKnotPositions',indices));
+        if(!active.length)return [];
+        const handles=[...active];
+        if(this.gizmoMultiKnotPoints){
+            const limit=Number.isFinite(this.gizmoPointLimit)?
+                Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
+            const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
+                .filter(i=>i!==this.gizmoKnotIndex&&this.knots[i]?.isValid);
+            handles.push(...buildSplineKnotPointGizmos('pathGizmoKnotPositions',indices));
+        }
+        if(this.interpolation===SplinePathCurveModeV2.Bezier&&this.gizmoEditTangents){
+            handles.push(
+                {id:'path-tangent-in',property:'pathGizmoTangentIn',
+                    visual:'point',plane:'view',space:'local',
+                    color:'#b58cff',hoverColor:'#fff269',pickSize:24},
+                {id:'path-tangent-out',property:'pathGizmoTangentOut',
+                    visual:'point',plane:'view',space:'local',
+                    color:'#48d8e6',hoverColor:'#fff269',pickSize:24}
+            );
+        }
+        return handles;
     }
     public onGizmoHudControls():Array<{
         type:'slider'|'toggle';id:string;text:string;property:string;
@@ -421,14 +435,18 @@ export class SplinePathV2 extends Component {
                 property:'gizmoKnotIndex',min:0,
                 max:Math.min(this.knots.length-1,127),step:1,order:1},
             {type:'toggle',id:'path-other-knots',text:'Other Knots',
-                property:'gizmoMultiKnotPoints',order:2}
+                property:'gizmoMultiKnotPoints',order:2},
+            ...(this.interpolation===SplinePathCurveModeV2.Bezier?
+                [{type:'toggle' as const,id:'path-tangent-handles',
+                    text:'Tangents',property:'gizmoEditTangents',order:3}]:[])
         ];
     }
     public onGizmoChanged(
         name:string,phase:'begin'|'update'|'end'|'cancel',index?:number
     ):void {
         if(!EDITOR_NOT_IN_PREVIEW||
-           (name!=='pathGizmoKnotPosition'&&name!=='pathGizmoKnotPositions'))
+           (name!=='pathGizmoKnotPosition'&&name!=='pathGizmoKnotPositions'&&
+            name!=='pathGizmoTangentIn'&&name!=='pathGizmoTangentOut'))
             return;
         const field=name as PathGizmoProperty;
         if(phase==='begin'){
@@ -438,6 +456,15 @@ export class SplinePathV2 extends Component {
             const knot=this.knots[i];
             if(!knot?.isValid)return;
             this._dragNode=knot;this._dragProperty=field;this._dragIndex=i;
+            if(field==='pathGizmoTangentIn'||field==='pathGizmoTangentOut'){
+                const entry=this.tangentEntry(knot);
+                this._tangentDragSnapshot={
+                    knot,hadEntry:!!entry,
+                    originalMode:entry?.mode??SplineBezierTangentModeV2.Auto,
+                    originalIn:entry?vec(entry.handleIn):new Vec3(),
+                    originalOut:entry?vec(entry.handleOut):new Vec3()
+                };
+            }
             // Start a new gesture with a fresh preview throttle budget for
             // every consumer, even if another Road drag just ended.
             for(const consumer of this._previewConsumers)
@@ -446,11 +473,26 @@ export class SplinePathV2 extends Component {
             this.notifyPreviewConsumers(this,false);
         }else if((phase==='end'||phase==='cancel')&&
             this._dragProperty===field){
-            // Gizmos writes the final or rolled-back Knot BEFORE this callback.
-            try{this.notifyPreviewConsumers(this,true);}
-            finally{
+            // Gizmos restores the proxy before Cancel. Materializing an
+            // Auto tangent during the drag must also be undone: restoring
+            // only its Vec3 would leave a permanently frozen Free handle.
+            try{
+                if(phase==='cancel'&&this._tangentDragSnapshot){
+                    const snap=this._tangentDragSnapshot;
+                    const entry=this.tangentEntry(snap.knot);
+                    if(!snap.hadEntry){
+                        if(entry)this.bezierTangents.splice(this.bezierTangents.indexOf(entry),1);
+                    }else if(entry){
+                        entry.mode=snap.originalMode;
+                        entry.handleIn=vec(snap.originalIn);
+                        entry.handleOut=vec(snap.originalOut);
+                    }
+                }
+                this.notifyPreviewConsumers(this,true);
+            }finally{
                 this._observedSource=this.sourceSignature();
                 this._needsFinalPreview=false;
+                this._tangentDragSnapshot=null;
                 this._dragNode=null;this._dragProperty=null;this._dragIndex=-1;
             }
         }
@@ -469,7 +511,19 @@ export class SplinePathV2 extends Component {
                 table.frames,source.knots.map(k=>k.position),0,{
                     maxSteps:64,showEdges:false,showKnots:true
                 });
-            drawSplineSceneGizmos(this.node,guide);
+            if(this.interpolation===SplinePathCurveModeV2.Bezier&&
+               this.gizmoEditTangents&&this.knots[this.gizmoKnotIndex]?.isValid){
+                const knot=this.knotPathPosition(this.knots[this.gizmoKnotIndex]);
+                const incoming=this.readTangent('in');
+                const outgoing=this.readTangent('out');
+                const lines=[...guide.lines,
+                    {a:knot,b:incoming,group:'tangent-in' as const},
+                    {a:knot,b:outgoing,group:'tangent-out' as const}];
+                const dots=[...guide.dots,
+                    {at:incoming,radius:.13,group:'tangent-in' as const},
+                    {at:outgoing,radius:.13,group:'tangent-out' as const}];
+                drawSplineSceneGizmos(this.node,{lines,dots});
+            }else drawSplineSceneGizmos(this.node,guide);
         }catch{
             // Incomplete Path is normal while authoring; do not log per frame.
         }
