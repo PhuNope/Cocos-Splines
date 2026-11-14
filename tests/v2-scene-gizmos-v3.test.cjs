@@ -65,32 +65,46 @@ try{
     return originalLoad.apply(this,arguments);
  };
  try{
-    const {drawSplineSceneGizmosV3,availableGizmoV3Backend}=require(
+    const {drawSplineSceneGizmosV3,availableGizmoV3Backend,
+        buildSplineKnotMoveGizmoV3}=require(
         path.join(tmp,'Components/SplineGizmoV3Bridge.js'));
     const node={isValid:true,worldMatrix:{tx:10,ty:20,tz:30}};
-    const old=globalThis.Gizmos3D,oldV3=globalThis.__SplineGizmosV3;
+    const old=globalThis.Gizmos3D;
     try{
-      delete globalThis.Gizmos3D;delete globalThis.__SplineGizmosV3;
-      assert.equal(availableGizmoV3Backend(),null,'SDK is optional');
+      delete globalThis.Gizmos3D;
+      assert.equal(availableGizmoV3Backend(),null,'Cocos-Gizmos v3 is optional');
+      assert.deepEqual(buildSplineKnotMoveGizmoV3('gizmoKnotPosition'),[]);
       assert.equal(drawSplineSceneGizmosV3(node,guide),0);
       const calls=[],v3={beginColor:(owner,color)=>calls.push({t:'color',owner,color}),
         drawLine:(owner,a,b)=>calls.push({t:'line',owner,a:{...a},b:{...b}}),
-        drawSphere:(owner,p,r)=>calls.push({t:'sphere',owner,p:{...p},r})};
-      globalThis.__SplineGizmosV3=v3;
+        drawSphere:(owner,p,r)=>calls.push({t:'sphere',owner,p:{...p},r}),
+        move:(property,options)=>{
+          calls.push({t:'move',property,options});
+          return Array.from({length:6},(_,i)=>({id:'handle-'+i,property,
+            visual:i<3?'axis':'plane',space:options.space,plane:'xy'}));
+        }};
+      globalThis.Gizmos3D=v3;
+      assert.equal(availableGizmoV3Backend(),v3,'Actual global installed by Gizmos v3 scene.js');
+      const move=buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
+      assert.equal(move.length,6,'Gizmos v3 move generates XYZ+three plane descriptors');
+      assert(move.every(h=>h.property==='gizmoKnotPosition'));
+      const moveCall=calls.find(x=>x.t==='move');
+      assert.equal(moveCall.options.space,'local');
+      assert.equal(moveCall.options.pickSize,28);
       const rendered=drawSplineSceneGizmosV3(node,guide);
       assert.equal(rendered,guide.lines.length+guide.dots.length);
       const first=calls.find(x=>x.t==='line');
       assert(Math.abs(first.a.x-(guide.lines[0].a.x+10))<1e-8);
       assert(Math.abs(first.a.z-(guide.lines[0].a.z+30))<1e-8);
       assert(calls.some(x=>x.t==='sphere'));
-      assert(calls.every(x=>x.owner===node));
-      globalThis.__SplineGizmosV3={beginColor:()=>{},drawLine:null};
+      assert(calls.every(x=>x.t==='move'||x.owner===node));
+      globalThis.Gizmos3D={beginColor:()=>{},drawLine:null};
       assert.equal(availableGizmoV3Backend(),null,'Malformed SDK must fail safely');
+      assert.deepEqual(buildSplineKnotMoveGizmoV3('gizmoKnotPosition'),[]);
       globalThis.Gizmos3D=v3;
-      assert.equal(availableGizmoV3Backend(),v3,'Legacy adapter fallback');
       assert.equal(drawSplineSceneGizmosV3({...node,isValid:false},guide),0);
       assert.equal(drawSplineSceneGizmosV3(node,{lines:[...guide.lines,...guide.lines,...guide.lines,...guide.lines],dots:[...guide.dots,...guide.dots]}),600+6);
-    }finally{globalThis.Gizmos3D=old;globalThis.__SplineGizmosV3=oldV3;}
+    }finally{globalThis.Gizmos3D=old;}
  }finally{Module._load=originalLoad;}
  const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
  const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),'utf8');
@@ -101,10 +115,10 @@ try{
  assert.match(junction,/link\.road\.sampleJunctionEndV2/);
  const native=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  for(const field of ['showSceneGizmosV3','gizmoV3Steps','gizmoV3Edges',
-     'gizmoV3Knots','showJunctionSceneGizmosV3','gizmoV3JunctionCurbs'])
+     'gizmoV3Knots','gizmoV3EditKnot','gizmoV3KnotIndex','showJunctionSceneGizmosV3','gizmoV3JunctionCurbs'])
       assert(native.makeV2Inspector?native.makeV2Inspector.toString().includes(field):
          fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8').includes(field));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoV3Bridge.ts.meta')));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/geometry/SceneGizmoGuideV2.ts.meta')));
- console.log('V2 SCENE GIZMOS V3 BRIDGE PASS: bounded Road/Junction guides, world transforms, SDK fallback, no mutation and Editor gating.');
+ console.log('V2 SCENE GIZMOS NATIVE V3 PASS: bounded guides, exact Cocos-Gizmos global + move descriptors, world draw, Editor gating.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
