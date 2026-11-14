@@ -12,6 +12,25 @@ Automated regression and green GitHub Actions verify the built code and
 headless Cocos mocks, **not** actual Scene/Inspector rendering,
 mouse picking, native Undo history, saving or reimporting .gltf assets.
 
+## Editor Undo/Redo hardening test
+
+- Add/Insert After/Duplicate/Remove/Up/Down Knots through the custom
+  Inspector; each operation should appear as **one** Undo step.
+  Use Ctrl+Z and Ctrl+Shift+Z after each operation and verify every
+  record's position, tangent mode/offsets, tension and Roll.
+- **Select** a different active Knot: this should change Gizmos
+  handles without generating a new Road preview or a new Undo step.
+- Save and reopen the Scene, then edit a Knot again; a previously
+  held Gizmos/HUD drag target must never point to the old serialized
+  Knot record. Check Prefab override semantics separately.
+- Change Road's Path Source from Path A to B; undo and redo. Confirm
+  the Road preview relinks and its Baked Mesh asset remains unchanged.
+- Native Gizmos position/tangent/roll computed-proxy Undo history
+  still needs **real Creator 3.8.x certification**; mock history
+  replay does not verify Scene's native Undo stack.
+
+[Detailed Undo acceptance steps](EDITOR_UNDO_WORKFLOW.md).
+
 ## Setup — Pure Vec3 Path
 
 1. Create one Node `SplinePath` with `SplinesV2.SplinePath`.
