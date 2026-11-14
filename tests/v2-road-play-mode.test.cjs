@@ -84,6 +84,25 @@ try{
  road.generate=originalGenerate;
  road.surfaceMode=0;
  assert.equal(road.adaptiveSampling,true);
+ // Authored Bezier controls must flow all the way from Path into the
+ // real Road tessellation, not merely into a standalone core evaluator.
+ const {SplinePathCurveModeV2}=require(path.join(temp,'Components/SplinePathV2.js'));
+ authoredPath.interpolation=SplinePathCurveModeV2.Bezier;
+ authoredPath.gizmoKnotIndex=0;
+ const defaultBezier=road.generate().geometry;
+ assert(defaultBezier.positions.every((n,i)=>i%3!==1||Math.abs(n)<1e-5),
+    'Auto Bezier tangents preserve a straight source Road');
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ authoredPath.pathGizmoTangentOut=new Vec3(0,4,3);
+ const curvedBezier=road.generate().geometry;
+ assert(curvedBezier.positions.some((n,i)=>i%3===1&&n>1),
+    'Manual Bezier tangent must bend the actual Road mesh in Y');
+ assert.notEqual(JSON.stringify(curvedBezier.positions),JSON.stringify(defaultBezier.positions));
+ const bezierBake=road.prepareBake();
+ assert.equal(JSON.parse(bezierBake.content).asset.version,'2.0');
+ authoredPath.bezierTangents=[];
+ authoredPath.interpolation=SplinePathCurveModeV2.Linear;
+ env.EDITOR_NOT_IN_PREVIEW=false;
  const continuous=road.generate().geometry;
  road.surfaceMode=1;
  const clipped=road.generate().geometry;
