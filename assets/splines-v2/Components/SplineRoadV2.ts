@@ -286,6 +286,28 @@ export class SplineRoadV2 extends Component {
             i!==this.gizmoV3KnotIndex&&this.knots[i]?.isValid);
         return handles.concat(buildSplineKnotPointGizmosV3('gizmoKnotPositions',indexes));
     }
+    /**
+     * Native Gizmos v3 Scene HUD: select the active Knot without hunting
+     * for Inspector fields, or toggle the compact handles for other Knots.
+     * Controls bind only to existing serialized settings, never the Knot proxy.
+     */
+    public onGizmoHudControls():Array<{
+        type:'slider'|'toggle';id:string;text:string;property:string;
+        min?:number;max?:number;step?:number;order?:number;
+    }> {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
+            !this.gizmoV3EditKnot||!availableGizmoV3Backend()||
+            this.knots.length<2)return [];
+        return [{
+            type:'slider',id:'spline-v2-active-knot',
+            text:'Active Knot',property:'gizmoV3KnotIndex',
+            min:0,max:Math.min(this.knots.length-1,127),
+            step:1,order:1
+        },{
+            type:'toggle',id:'spline-v2-multi-points',
+            text:'Other Knots',property:'gizmoV3MultiKnotPoints',order:2
+        }];
+    }
     /** Selection drawing uses actual global Gizmos3D, installed by Gizmos v3 scene.js. */
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmosV3||
