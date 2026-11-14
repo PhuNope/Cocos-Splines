@@ -99,6 +99,53 @@ try{
  const filletStatus=road.inspectCornerRisk();
  assert.equal(filletStatus.filletReport.filletedCorners,1);
  assert(filletStatus.filletReport.minimumRadius>2);
+ // Regression from Editor: Knot 0-1 distance = sqrt(5) = 2.236,
+ // fillet minimum radius = 1.35, and a sharp bend requires >2.236.
+ // Old default ConstantWidth threw and produced no visible Road.
+ const oldPositions=road.knots.map(k=>new Vec3(k.worldPosition.x,k.worldPosition.y,k.worldPosition.z));
+ a.worldPosition=new Vec3(0,0,0);
+ b.worldPosition=new Vec3(0,0,Math.sqrt(5));
+ k2.worldPosition=new Vec3(-5,0,Math.sqrt(5)-3.236);
+ road.width=2;road.sampleStep=.2;road.interpolation=0;road.surfaceMode=2;
+ road.shortKnotMode=0;road.resolvePlanarOverlaps=true;
+ for(const uvAxis of [0,1]){
+   road.uvLongitudinalAxis=uvAxis;
+   const auto=road.generate().geometry;
+   assert(auto.triangleCount>0,'Auto Continuous must generate a valid Road');
+   assert(auto.positions.every(Number.isFinite)&&auto.uv0.every(Number.isFinite));
+   assert(auto.uv2.every(Number.isFinite));
+   assert(road.getShortKnotFallback()?.includes('spacing 2.236'));
+   assert(road.getShortKnotFallback()?.includes('radius 1.350'));
+   const risk=road.inspectCornerRisk();
+   assert.equal(risk.filletReport,undefined,
+     'Fallback diagnostics must not claim it is a constant-width fillet');
+   assert(risk.continuousReport?.minimumWidthRatio<1,
+     'Tight 3-Knot turn must clearly be reported as adaptive width');
+   const axis=uvAxis===1?0:1;
+   const first=auto.uv0[axis];
+   const last=auto.uv0[auto.uv0.length-2+axis];
+   assert(last>first,'No truncated UV or clipped topology in short-Knot fallback');
+   assert.equal(auto.vertexCount%3,0,'Continuous strip must contain centerline UV row');
+   for(let i=3;i<auto.vertexCount;i+=3){
+      const previous=auto.uv0[2*(i-2)+axis];
+      const next=auto.uv0[2*(i+1)+axis];
+      assert(next>=previous-1e-4,'Longitudinal UV phase must never reset at a bend');
+   }
+ }
+ road.shortKnotMode=1;
+ assert.throws(()=>road.generate(),/Knot 0-1 spacing 2\\.236 is too short for radius 1\\.350/,
+    'Strict ConstantWidth must preserve safe failure');
+ road.shortKnotMode=0;
+ road.junctionStartTrim=1;
+ assert.throws(()=>road.generate(),/too short for radius/,
+    'Junction Road may not silently change width at a trim seam');
+ road.junctionStartTrim=0;road.roadSidewalkWidth=1;
+ assert.throws(()=>road.generate(),/too short for radius/,
+    'Sidewalk Road may not silently change full-width curb geometry');
+ road.roadSidewalkWidth=0;
+ road.knots.forEach((k,i)=>{k.worldPosition=oldPositions[i];});
+ road.width=4;road.sampleStep=.25;road.interpolation=3;
+ road.uvLongitudinalAxis=0;road.shortKnotMode=0;
  // Native Cocos-Gizmos v3: scene.js supplies global Gizmos3D;
  // Gizmos3D.move reads/writes the Road's live Knot proxy Vec3.
  const originalSdk=globalThis.Gizmos3D;
