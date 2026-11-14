@@ -4,9 +4,9 @@ import {type SplineDataV2,type CurveTypeV2} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoV3Backend,buildSplineKnotMoveGizmoV3,
-    buildSplineKnotPointGizmosV3,drawSplineSceneGizmosV3,
-    type SplineGizmoV3Handle} from './SplineGizmoV3Bridge';
+import {availableGizmoBackend,buildSplineKnotMoveGizmos,
+    buildSplineKnotPointGizmos,drawSplineSceneGizmos,
+    type SplineGizmoHandle} from './SplineGizmoBridge';
 
 const {ccclass,property,executeInEditMode,menu}=_decorator;
 
@@ -31,9 +31,9 @@ export class SplinePathV2 extends Component {
     @property({tooltip:'Connect the last Knot to the first Knot.'})
     closed=false;
 
-    @property({tooltip:'Draw spline curve and Knot markers when Path is selected (Gizmos v3 installed).'})
+    @property({tooltip:'Draw spline curve and Knot markers when Path is selected (Gizmos installed).'})
     gizmoShowPath=true;
-    @property({tooltip:'Own the Cocos-Gizmos v3 Move handles on the Path, not on individual Road consumers.'})
+    @property({tooltip:'Own the Cocos-Gizmos Move handles on the Path, not on individual Road consumers.'})
     gizmoEditKnots=true;
     @property({min:0,max:127,step:1})
     gizmoKnotIndex=0;
@@ -142,23 +142,23 @@ export class SplinePathV2 extends Component {
             }
         });
     }
-    public onGizmoHandles():SplineGizmoV3Handle[] {
+    public onGizmoHandles():SplineGizmoHandle[] {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
             !this.node?.isValid||!this.knots[this.gizmoKnotIndex]?.isValid)return [];
-        const active=buildSplineKnotMoveGizmoV3('pathGizmoKnotPosition');
+        const active=buildSplineKnotMoveGizmos('pathGizmoKnotPosition');
         if(!active.length||!this.gizmoMultiKnotPoints)return active;
         const limit=Number.isFinite(this.gizmoPointLimit)?
             Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
         const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
             .filter(i=>i!==this.gizmoKnotIndex&&this.knots[i]?.isValid);
-        return active.concat(buildSplineKnotPointGizmosV3('pathGizmoKnotPositions',indices));
+        return active.concat(buildSplineKnotPointGizmos('pathGizmoKnotPositions',indices));
     }
     public onGizmoHudControls():Array<{
         type:'slider'|'toggle';id:string;text:string;property:string;
         min?:number;max?:number;step?:number;order?:number;
     }> {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
-            this.knots.length<2||!availableGizmoV3Backend())return [];
+            this.knots.length<2||!availableGizmoBackend())return [];
         return [
             {type:'slider',id:'path-active-knot',text:'Active Knot',
                 property:'gizmoKnotIndex',min:0,
@@ -196,7 +196,7 @@ export class SplinePathV2 extends Component {
     }
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoShowPath||
-           !this.node?.isValid||!availableGizmoV3Backend()||
+           !this.node?.isValid||!availableGizmoBackend()||
            this.knots.length<2)return;
         try{
             const source=this.getSplineDataV2(this.node);
@@ -208,7 +208,7 @@ export class SplinePathV2 extends Component {
                 table.frames,source.knots.map(k=>k.position),0,{
                     maxSteps:64,showEdges:false,showKnots:true
                 });
-            drawSplineSceneGizmosV3(this.node,guide);
+            drawSplineSceneGizmos(this.node,guide);
         }catch{
             // Incomplete Path is normal while authoring; do not log per frame.
         }
