@@ -98,7 +98,46 @@ function refreshV2JunctionAutoTrim(uuid){
         return {ok:true,branchCount:plan.branches.length};
     });
 }
+/** Endpoint planning is always read-only, no serialized Knot mutations. */
+function planV2JunctionEndpointSnap(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planEndpointSnapsV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,plan:c.planEndpointSnapsV2()};
+    });
+}
+/** Editor-only discovery of already-near Road endpoints in the Scene. */
+function inspectV2RoadNetwork(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.inspectRoadNetworkV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,report:c.inspectRoadNetworkV2()};
+    });
+}
+/**
+ * Refresh only after recordable Path Knot dump commits. Invalid unfinished
+ * Junctions can fail preview without invalidating the saved Knot edits or Bake.
+ */
+function refreshV2JunctionEndpointSnap(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planEndpointSnapsV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        const warnings=[];
+        const paths=new Set();
+        for(const link of c.branches){
+            const path=link.road?.pathSource;
+            if(path&&!paths.has(path)){
+                paths.add(path);
+                try{path.onRestore();}catch(e){warnings.push(String(e));}
+            }
+            try{link.road?.rebuildPreview();}catch(e){warnings.push(String(e));}
+        }
+        try{c.rebuildPreview();}catch(e){warnings.push(String(e));}
+        return {ok:true,refreshedPaths:paths.size,warnings};
+    });
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
-    inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim};
+    inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
+    planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap};
 exports.load=function(){};
 exports.unload=function(){};
