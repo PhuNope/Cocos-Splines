@@ -8,7 +8,8 @@
 const {style,callEditor}=require('./common');
 const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
-    'gizmoPointLimit','gizmoEditTangents'];
+    'gizmoPointLimit','gizmoEditTangents',
+    'gizmoRotationMode','gizmoRotationSnap'];
 const $={knots:'.spl-path-knots',items:'.spl-path-items',
     count:'.spl-path-count',add:'.spl-path-add'};
 for(const field of simple)$[field]='.spl-path-'+field;
