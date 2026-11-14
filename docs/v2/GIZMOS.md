@@ -30,15 +30,15 @@ during Editor draw, not on module import.
 
 ## Rebuild lifecycle
 
-A Path edit writes the **existing Knot Node**, not a duplicate serialized
-point list. On `update`, registered mesh generators rebuild temporary
+A Path edit writes the **serialized Vec3 Knot record**, not a Scene
+Node or duplicate point list. On `update`, registered mesh generators rebuild temporary
 Scene previews with a default 100ms throttle. On `end` or `cancel`,
 Path forces a final rebuild after the SDK writes the final or restored Knot.
 Knot target identity is pinned during the drag, even if its array index
 changes before Escape.
 
-Native Cocos Transform or Inspector edits do not send external Gizmos
-callbacks. Path also watches Node world positions in the Editor (up to
+Native Inspector edits do not send external Gizmos callbacks.
+Path watches serialized Knot values and the Path Node transform (up to
 one scan/50ms), emits preview changes and forces a settled final preview
 after at least 180ms idle. In Play/Preview none of these authoring callbacks
 create meshes or mutate Knots.
@@ -48,16 +48,17 @@ Road `gizmoLiveMesh` and `gizmoMeshIntervalMs` configure only the
 
 ## Manual Creator 3.8.x smoke test
 
-1. Add `SplinePathV2` and three Knot Nodes. Add a separate Road with
+1. Add `SplinePathV2` and three Vec3 Knot records using its custom Inspector. Add a separate Road with
    `pathSource` linked and click **Rebuild Preview**.
 2. Select Path, drag the active Knot with Move or another Knot with a point
    handle. The Road mesh should follow. Escape should restore both the
    source Knot position and the temporary mesh.
 3. Select Road. Check that it draws only edges/trim/centerline and **does
    not** expose another copy of active Knot Gizmos.
-4. Switch to the default Cocos Transform tool and move a Knot Node directly.
-   Confirm preview updates and converges to the final shape on mouse-up.
-   Also change Path interpolation and Knot order via Inspector.
+4. Use the Path Inspector to edit a Knot's Vec3 position directly.
+   Confirm preview updates and converges to the final value.
+   Move/rotate/scale the Path Node itself to move the entire spline;
+   also change interpolation and Knot order via Inspector.
 5. Test native Undo/Redo, save/reopen Scene, duplicate Path instances and
    3-/4-arm Road/Junction trim. Undo/Redo across a computed Path proxy
    still needs certification in the real Editor.
