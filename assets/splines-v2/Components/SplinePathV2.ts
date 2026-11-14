@@ -185,6 +185,117 @@ export class SplinePathV2 extends Component {
         this._previewConsumers.clear();
     }
 
+    private tangentEntry(knot:Node):SplineBezierTangentV2|null {
+        let found:SplineBezierTangentV2|null=null;
+        for(const entry of this.bezierTangents){
+            if(entry?.knot!==knot)continue;
+            if(found)throw new Error('SplinePath has multiple Bezier tangent records for the same Knot');
+            found=entry;
+        }
+        return found;
+    }
+    private knotPathPosition(knot:Node):Vec3 {
+        const inv=Mat4.invert(new Mat4(),this.node.worldMatrix);
+        return Vec3.transformMat4(new Vec3(),knot.worldPosition,inv);
+    }
+    private defaultTangent(knot:Node,side:TangentSide):Vec3 {
+        const index=this.knots.indexOf(knot),count=this.knots.length;
+        if(index<0||count<2)return new Vec3();
+        const point=this.knotPathPosition(knot);
+        const next=(index+1)%count,prev=(index+count-1)%count;
+        // The unused first incoming and last outgoing endpoint handles
+        // follow the adjacent chord for a predictable Editor display.
+        let neighbor:Node|undefined;
+        let sign=1;
+        if(side==='out'){
+            if(this.closed||index<count-1)neighbor=this.knots[next];
+            else {neighbor=this.knots[prev];sign=-1;}
+        }else{
+            if(this.closed||index>0)neighbor=this.knots[prev];
+            else {neighbor=this.knots[next];sign=-1;}
+        }
+        if(!neighbor?.isValid)return new Vec3();
+        return vec(scale(sub(this.knotPathPosition(neighbor),point),sign/3));
+    }
+    private tangentOffset(knot:Node,side:TangentSide):Vec3 {
+        const entry=this.tangentEntry(knot);
+        if(!entry||entry.mode===SplineBezierTangentModeV2.Auto)
+            return this.defaultTangent(knot,side);
+        return entry[side==='in'?'handleIn':'handleOut'];
+    }
+    private tangentLocalPosition(knot:Node,side:TangentSide):Vec3 {
+        return vec(add(this.knotPathPosition(knot),this.tangentOffset(knot,side)));
+    }
+    /** Change tangent mode while keeping the currently displayed controls. */
+    public setBezierTangentMode(index:number,mode:SplineBezierTangentModeV2):void {
+        if(!Number.isSafeInteger(index)||index<0||index>=this.knots.length||
+            !Object.values(SplineBezierTangentModeV2).includes(mode)||
+            !this.knots[index]?.isValid)
+            throw new Error('Invalid Bezier tangent Knot index or mode');
+        const knot=this.knots[index];
+        const inOffset=vec(this.tangentOffset(knot,'in'));
+        const outOffset=vec(this.tangentOffset(knot,'out'));
+        let entry=this.tangentEntry(knot);
+        if(!entry){
+            entry=new SplineBezierTangentV2();
+            entry.knot=knot;
+            this.bezierTangents.push(entry);
+        }
+        entry.mode=mode;
+        entry.handleIn=inOffset;
+        entry.handleOut=outOffset;
+        if(mode===SplineBezierTangentModeV2.Mirrored)
+            entry.handleIn=vec(scale(outOffset,-1));
+        else if(mode===SplineBezierTangentModeV2.Aligned){
+            const n=len(outOffset),other=len(inOffset);
+            if(n>1e-9)entry.handleIn=vec(scale(outOffset,-other/n));
+        }
+        this.notifyPreviewConsumers(this,true);
+    }
+    private readTangent(side:TangentSide):Vec3 {
+        const field:PathGizmoProperty=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
+        const knot=this.knotAt(this.gizmoKnotIndex,field);
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||!knot?.isValid)
+            return new Vec3();
+        return this.tangentLocalPosition(knot,side);
+    }
+    private writeTangent(side:TangentSide,point:Vec3):void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!this.gizmoEditTangents||
+           this.interpolation!==SplinePathCurveModeV2.Bezier||
+           !this.node?.isValid||!point||!finite(point))return;
+        const field:PathGizmoProperty=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
+        const knot=this.knotAt(this.gizmoKnotIndex,field);
+        if(!knot?.isValid)return;
+        let entry=this.tangentEntry(knot);
+        if(!entry){
+            entry=new SplineBezierTangentV2();
+            entry.knot=knot;
+            this.bezierTangents.push(entry);
+        }
+        if(entry.mode===SplineBezierTangentModeV2.Auto){
+            entry.handleIn=this.defaultTangent(knot,'in');
+            entry.handleOut=this.defaultTangent(knot,'out');
+            entry.mode=SplineBezierTangentModeV2.Free;
+        }
+        const newOffset=vec(sub(point,this.knotPathPosition(knot)));
+        const opposite=side==='in'?'handleOut':'handleIn';
+        const selected=side==='in'?'handleIn':'handleOut';
+        const oppositeLength=len(entry[opposite]);
+        entry[selected]=newOffset;
+        if(entry.mode===SplineBezierTangentModeV2.Aligned||
+           entry.mode===SplineBezierTangentModeV2.Mirrored){
+            const d=len(newOffset);
+            const linkedLength=entry.mode===SplineBezierTangentModeV2.Mirrored?
+                d:oppositeLength;
+            entry[opposite]=d>1e-9?
+                vec(scale(newOffset,-linkedLength/d)):new Vec3();
+        }
+    }
+    public get pathGizmoTangentIn():Vec3 {return this.readTangent('in');}
+    public set pathGizmoTangentIn(v:Vec3){this.writeTangent('in',v);}
+    public get pathGizmoTangentOut():Vec3 {return this.readTangent('out');}
+    public set pathGizmoTangentOut(v:Vec3){this.writeTangent('out',v);}
+
     /** Consumer-relative immutable-data snapshot; not saved as another list. */
     public getSplineDataV2(consumer:Node):SplineDataV2 {
         if(!consumer?.isValid||!this.node?.isValid)
@@ -197,9 +308,38 @@ export class SplinePathV2 extends Component {
         const type=map[this.interpolation];
         if(!type)throw new Error('SplinePathV2 interpolation is invalid');
         const inverse=Mat4.invert(new Mat4(),consumer.worldMatrix);
+        const used=new Set<Node>();
+        for(const entry of this.bezierTangents){
+            if(!entry?.knot||!this.knots.includes(entry.knot))continue;
+            if(used.has(entry.knot))
+                throw new Error('SplinePath has duplicate Bezier tangent records for one Knot');
+            used.add(entry.knot);
+            if(!Number.isInteger(entry.mode)||
+               entry.mode<SplineBezierTangentModeV2.Auto||
+               entry.mode>SplineBezierTangentModeV2.Mirrored||
+               (entry.mode!==SplineBezierTangentModeV2.Auto&&
+                (!entry.handleIn||!entry.handleOut||
+                 !finite(entry.handleIn)||!finite(entry.handleOut))))
+                throw new Error('SplinePath contains invalid Bezier tangents');
+        }
         return {type,closed:this.closed,knots:this.knots.map(k=>{
             const p=Vec3.transformMat4(new Vec3(),k.worldPosition,inverse);
-            return {position:{x:p.x,y:p.y,z:p.z}};
+            const position={x:p.x,y:p.y,z:p.z};
+            if(type!=='bezier')return {position};
+            const entry=this.tangentEntry(k);
+            if(!entry||entry.mode===SplineBezierTangentModeV2.Auto)
+                return {position};
+            const control=(side:TangentSide):V3=>{
+                // Offsets are authored in Path-local meters and transformed
+                // as POINTS through Path world into consumer local space.
+                // This handles translated/rotated/scaled Path and consumer
+                // nodes without treating relative vectors as positions.
+                const pathPoint=this.tangentLocalPosition(k,side);
+                const world=Vec3.transformMat4(new Vec3(),pathPoint,this.node.worldMatrix);
+                const local=Vec3.transformMat4(new Vec3(),world,inverse);
+                return sub(local,p);
+            };
+            return {position,handleIn:control('in'),handleOut:control('out')};
         })};
     }
 
