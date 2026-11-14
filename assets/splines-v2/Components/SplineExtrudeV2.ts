@@ -20,9 +20,10 @@ export class SplineExtrudeV2 extends SplineRoadV2 {
     /** Extrude cylinders are not road ribbons; do not apply corner miter/trim. */
     public inspectCornerRisk():null {return null;}
     protected generate(){
-        const cache=buildSplineCacheV2(this.source());
+        const source=this.source();
+        const cache=buildSplineCacheV2(source);
         const geometry=buildTubeV2(cache,{
-            radius:this.radius,sides:this.sides,capEnds:this.capEnds&&!this.closed,
+            radius:this.radius,sides:this.sides,capEnds:this.capEnds&&!source.closed,
             flipFaces:this.flipFaces,step:this.sampleStep,uvMetersPerRepeat:this.uvMetersPerRepeat,
             uvLongitudinalAxis:this.uvLongitudinalAxis===SplineV2UVAxis.U?'u':'v'
         });
