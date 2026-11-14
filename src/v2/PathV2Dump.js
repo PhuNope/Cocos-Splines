@@ -53,13 +53,14 @@ function planPathEditDump(nodeDump,operation,index){
     if(!raw||!array||!Array.isArray(array.value))
         throw new Error('SplinePath serialized Knot dump is unavailable');
     const current=array.value;
+    const selectionDump=clone(props.gizmoKnotIndex);
     if(current.length>128||current.some(x=>!finite(position(x))))
         throw new Error('SplinePath contains invalid serialized Vec3 Knot records');
     if(operation==='select'){
         if(index>=current.length)throw new Error('Selected Knot does not exist');
         const selected=clone(raw);
         selected.value=index;
-        return {field,componentIndex,dump:selected,index,count:current.length,record:false};
+        return {field,componentIndex,dump:selected,index,count:current.length,record:false,selectionDump:selected};
     }
     const result=clone(array),knots=result.value,n=knots.length;
     if(operation==='add'||operation==='insert'||operation==='duplicate'){
@@ -80,19 +81,23 @@ function planPathEditDump(nodeDump,operation,index){
         setPosition(next,p);
         const to=operation==='add'?n:Math.min(index+1,n);
         knots.splice(to,0,next);
-        return {field,componentIndex,dump:result,index:to,count:knots.length,record:true};
+        selectionDump.value=to;
+        return {field,componentIndex,dump:result,index:to,count:knots.length,record:true,selectionDump};
     }
     if(index>=n)throw new Error('Knot does not exist');
     if(operation==='remove'){
         if(n<=2)throw new Error('Spline requires at least two Knots');
         knots.splice(index,1);
+        const selected=Math.min(index,knots.length-1);
+        selectionDump.value=selected;
         return {field,componentIndex,dump:result,
-            index:Math.min(index,knots.length-1),count:knots.length,record:true};
+            index:selected,count:knots.length,record:true,selectionDump};
     }
     const to=index+(operation==='up'?-1:1);
     if(to<0||to>=n)
-        return {field,componentIndex,dump:result,index,count:n,record:false,noOp:true};
+        return {field,componentIndex,dump:result,index,count:n,record:false,noOp:true,selectionDump};
     [knots[index],knots[to]]=[knots[to],knots[index]];
-    return {field,componentIndex,dump:result,index:to,count:n,record:true};
+    selectionDump.value=to;
+    return {field,componentIndex,dump:result,index:to,count:n,record:true,selectionDump};
 }
 module.exports={planPathEditDump};
