@@ -68,7 +68,9 @@ export function buildSplinePathRotateGizmos(
         throw new Error('Rotation snap must be a finite nonnegative angle');
     const sdk=availableGizmoBackend();
     if(!sdk)return [];
-    const options:SplineGizmoRotateOptions={space:'local',ringSize:72,pickSize:14,
+    // The Euler proxy already mirrors Node rotation. World-axis rings
+    // prevent visual double-rotation from composing Node+proxy Euler.
+    const options:SplineGizmoRotateOptions={space:'world',ringSize:72,pickSize:14,
         ...(snapDegrees>0?{snap:snapDegrees}:{})};
     if(mode==='3d')
         return typeof sdk.rotate==='function'?sdk.rotate(property,options):[];
