@@ -365,6 +365,7 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
      */
     protected source():SplineDataV2 {
         if(this.pathSource)return super.source();
+        this.unlinkPathPreviewConsumer();
         if(this.knots.length<2||this.knots.some(k=>!k||!k.isValid))
             throw new Error('Assign SplinePathV2 Path Source or at least two valid Road Knot Nodes');
         const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
