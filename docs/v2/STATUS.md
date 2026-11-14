@@ -14,7 +14,7 @@
 | **8. Flat Junction Shoulder/Curb** | **Implemented this step (alpha)** | Full end-ring shoulder+curb material/UV match, taper into flat junction; needs real Creator shader/scene validation |
 | 9. Junction 3D / sidewalks | In progress (Road sidewalk + Junction join alpha) | Opt-in Road-length left/right sidewalk bands from exact trimmed curb rings; Junction can phase-match outer Road sidewalk seams, flat/Terrain samples, UV0/UV2/glTF. Real Cocos 3.8 Editor certification, crossings/CSG and terrain cuts remain |
 | 10. Lane graph / traffic tools | Not implemented | Lane arrows, legal turns, collision avoidance, junction signal/priority and vehicle routing |
-| 11. Editor production hardening | Partial (mandatory SplinePath + native transform watcher alpha) | Four independent MeshGenerators share preview/Bake. Road now requires SplinePath, contains no Knot/interpolation/closed fields or Knot handles. Path owns Gizmos and observes native Knot Transform/Inspector changes with settled preview. Real Creator Undo/Redo, serialization, collider/lightmap remain. |
+| 11. Editor production hardening | Partial (Path Bézier tangents alpha) | Path owns Knot position and per-Knot authored In/Out tangent modes with dedicated Gizmos; Road uses Path only. Editor watcher and end/cancel preview validation covered by CI. Real Creator Undo/Redo/save-reopen and collider/lightmap remain. |
 
 | 12. Alpha → Beta → RC → Release | Not started | Explicit user approval required before tag or GitHub Release |
 
@@ -23,6 +23,13 @@
 ## Current checkpoint
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
+
+## Bézier tangent authoring checkpoint (2026-11-15)
+
+- `SplinePathV2` now serializes `bezierTangents` entries keyed to Knot Nodes (not indices), with Auto/Free/Aligned/Mirrored modes and visible In/Out tangent point handles (selected Path only).
+- Handles are relative to each Knot in Path-local coordinates and are transformed correctly into each generator's local mesh coordinates; changes affect actual Road geometry, UV tessellation and explicit glTF Bake.
+- Gizmos begin/update/end/cancel supports an explicit tangent-state snapshot. Escape removes newly-created manual records when returning to Auto, or restores the prior mode and offsets, so a canceled drag does not silently freeze future tangents.
+- CI covers consumer conversion, modes, reorder, invalid duplicates, Play guard, Editor Inspector watcher, Path-to-Road bake and transient previews. Native Creator Undo/Redo, save/reopen and real mouse picking remain **manual acceptance gates**. [Guide](BEZIER_TANGENTS.md).
 
 ## Path-only authoring checkpoint (2026-11-15)
 
