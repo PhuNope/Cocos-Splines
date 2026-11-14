@@ -24,6 +24,21 @@
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
 
+## Pure Vec3 Knot / custom Inspector checkpoint (2026-11-15)
+
+- `SplinePathV2.knots` now holds pure serialized `SplineKnotRecordV2[]`
+  (Path-local position, tangent offsets/mode and Catmull tension).
+  **No child Knot Nodes, independent tangent records or legacy UUID
+  compatibility**.
+- Custom Path Inspector provides Add, Insert After, Duplicate, Remove,
+  Up/Down, Select and per-Knot native `ui-prop` data fields. Editor
+  messages and Scene snapshots wire topology buttons.
+- Path Gizmos now edit the value records directly. Escape restores the
+  whole Knot record; Road/Junction world endpoints are transformed from
+  the Path's local coordinate system. Native Creator save/reopen and
+  Undo/Redo remain unverified.
+- [Pure Vec3 authoring](PURE_VEC3_KNOTS.md).
+
 ## Bézier tangent authoring checkpoint (2026-11-15)
 
 - `SplinePathV2` now serializes `bezierTangents` entries keyed to Knot Nodes (not indices), with Auto/Free/Aligned/Mirrored modes and visible In/Out tangent point handles (selected Path only).
