@@ -3,6 +3,9 @@ import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV
 import {SplineRoadV2} from './SplineRoadV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
+import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
+import {availableGizmoV3Backend,drawSplineSceneGizmosV3} from './SplineGizmoV3Bridge';
+import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
 @ccclass('SplinesV2.JunctionRoadLink')
@@ -106,7 +109,44 @@ export class SplineJunctionPatchV2 extends SplineRoadV2 {
     @property({type:[JunctionTurnGuideV2],tooltip:'Explicit branch pairs for curved yellow guide lines. Leave empty to omit guides.'})
     turnGuides:JunctionTurnGuideV2[]=[];
     @property({min:.02,max:.6,step:.01}) guideLineWidth=.10;
+    @property({tooltip:'Show read-only junction center, trimmed Road rings and curb end guides when selected.'})
+    showJunctionSceneGizmosV3=true;
+    @property({tooltip:'Include curb profile end markers in the Junction selection guides.'})
+    gizmoV3JunctionCurbs=true;
     private _lastJunctionReport:(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null=null;
+    /** Selected-only read-only authoring visualization. Never paints runtime geometry. */
+    public onDrawGizmosSelected():void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmosV3||
+            !availableGizmoV3Backend()||this.branches.length<3||
+            this.branches.length>4)return;
+        try{
+            const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
+            const local=(p:{x:number;y:number;z:number})=>{
+                const v=Vec3.transformMat4(new Vec3(),
+                    new Vec3(p.x,p.y,p.z),inverse);
+                return {x:v.x,y:v.y,z:v.z};
+            };
+            const entries:JunctionRoadBranchV2[]=this.branches.map(link=>{
+                if(!link.road||!link.road.node.isValid)
+                    throw new Error('Road link missing');
+                const ring=link.road.sampleJunctionEndV2(!!link.atEnd);
+                return {endpoint:local(ring.endpoint),
+                    left:{position:local(ring.left.position),uv0:ring.left.uv0},
+                    middle:{position:local(ring.middle.position),uv0:ring.middle.uv0},
+                    right:{position:local(ring.right.position),uv0:ring.right.uv0},
+                    ...(ring.profile?{profile:{edgeMaterials:ring.profile.edgeMaterials,
+                        vertices:ring.profile.vertices.map(p=>({
+                            position:local(p.position),uv0:p.uv0
+                        }))}}:{})};
+            });
+            const guide=buildJunctionSceneGuideV2(entries,{
+                showCurb:this.gizmoV3JunctionCurbs});
+            drawSplineSceneGizmosV3(this.node,guide);
+        }catch{
+            // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
+            // Gizmos never mutate Nodes, meshes or the saved Scene.
+        }
+    }
     public inspectCornerRisk():null{return null;}
     public inspectJunction():(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null{return this._lastJunctionReport;}
     protected generate(){
