@@ -219,7 +219,8 @@ export class SplineRoadV2 extends Component {
      * transient and NOT a Cocos @property or a second serialized Knot list.
      */
     public get gizmoKnotPositions():Vec3[] {
-        const limit=Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit)));
+        const limit=(Number.isFinite(this.gizmoV3PointLimit)?
+            Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit))):16);
         const count=Math.min(this.knots.length,limit);
         const values=new Array<Vec3>(count);
         const indexOf=(property:string|symbol):number=>{
@@ -280,8 +281,9 @@ export class SplineRoadV2 extends Component {
             !this.knots[this.gizmoV3KnotIndex]?.isValid)return [];
         const handles=buildSplineKnotMoveGizmoV3('gizmoKnotPosition');
         if(!this.gizmoV3MultiKnotPoints||!handles.length)return handles;
-        const count=Math.min(this.knots.length,32,
-            Math.max(2,Math.floor(this.gizmoV3PointLimit)));
+        const count=Math.min(this.knots.length,
+            Number.isFinite(this.gizmoV3PointLimit)?
+                Math.min(32,Math.max(2,Math.floor(this.gizmoV3PointLimit))):16);
         const indexes=Array.from({length:count},(_,i)=>i).filter(i=>
             i!==this.gizmoV3KnotIndex&&this.knots[i]?.isValid);
         return handles.concat(buildSplineKnotPointGizmosV3('gizmoKnotPositions',indexes));
