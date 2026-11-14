@@ -41,6 +41,7 @@
 - [ ] Junction-aware dashed lanes, paint intersections and material auto-creation.
 
 - [x] Constant Width tangent circular/Bezier fillets for road geometry and constant physical UV cross section.
+- [x] Short-Knot UX: typed insufficient-radius/spacing error; Road component `Auto Continuous` (default) falls back to UV-continuous width fitting on ordinary unlinked Roads; strict option and Junction/sidewalk geometry remain fail-closed. Inspector V2 removes bottom text/log, routes explicit button errors to Editor Console.
 - [x] Exact 3-Knot regression: no triangle culling, UV0 U/V & UV2, material bands, marking strips, glTF export.
 - [x] Safe failure when Knot spacing cannot fit full-width fillet radius; Editor-only diagnostics.
 - [ ] Visual confirmation with the actual Cocos Creator 3.8.x scene and painted asphalt material.
