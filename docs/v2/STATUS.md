@@ -24,6 +24,21 @@
 
 **Checkpoint 9 / 12 (in progress): Road-length Sidewalk V2 (opt-in) now derives left/right slot-5 bands from exact open ConstantWidth Road curb rings, including trimmed endpoints, U/V longitudinal Road texture and per-vertex flat/Terrain height. An opt-in Junction join mode uses the curb-top lateral tangent to align 3D outer endpoint positions and interpolates Repeat-UV U phase between the matched Road cut edges. The clean rebuild does not migrate old Road-local Knot scenes. This is bounded mesh topology only: no automatic road graph/Boolean union, terrain mesh modifications, crossing/accessible ramp certification or actual Cocos Creator visual scene validation.** This is a feature checkpoint, not a percentage of all work. Passing automated CI does **not** constitute real Cocos Creator visual certification.
 
+## Interactive Roll HUD and bank guide checkpoint (2026-11-15)
+
+- Path's Gizmos HUD now has a signed -180..180° **Knot Roll** slider
+  in Knot-editing mode, with native begin/update/end/cancel phases and
+  a pinned Knot identity for the entire drag.
+- Changes invalidate registered preview consumers during slider
+  updates, and force a final rebuild on End/Escape. Escape restores
+  the original roll; no Baked mesh is silently rewritten.
+- Selected Knot guide draws a banked orange Right crossbar and green
+  Up vector at the original source Knot station. This is Scene-only,
+  bounded and does not create additional Nodes or change meshes.
+- CI checks virtual Cocos HUD events, rollback, topology interaction
+  guards, guide visibility/color and Play safety. Actual native
+  Editor Undo/Redo and Scene Save/Reopen remain unverified.
+
 ## Path Rotate and per-Knot banking checkpoint (2026-11-15)
 
 - Path Inspector now exposes `Gizmos Rotation Mode`: Knots, Planar2D
