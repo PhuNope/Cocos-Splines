@@ -21,8 +21,8 @@ on demand; coordinates are NOT duplicated into Road or a generated array.
 1. Create a Node `RoadPath` and add `SplinesV2.SplinePath` using **Add Component**. Put 3 Knot Nodes in its `Knots` array and select interpolation/closed there.
 2. Create a Road Node with `SplinesV2.SplineRoad`, `MeshRenderer`, assign `RoadPath`'s `SplinePathV2` component to the Road Inspector **Path Source**.
 3. Road's legacy Knot/interpolation/closed controls are hidden when Path Source is assigned, to avoid displaying two conflicting authorities.
-4. In Road inspector enable `Show Scene Gizmos V3`, `Gizmo V3 Edit Knot` and `Gizmo V3 Live Mesh` (default true). Select Road and drag its Gizmos v3 handles.
-5. Each Gizmos v3 `update` updates the **temporary preview mesh** at most once per `Gizmo V3 Mesh Interval Ms` (default 100ms, 50–400). **End/Cancel always rebuild**, so Escape restores the source Knot and the displayed Road together.
+4. Select **SplinePathV2** (not Road) to edit source Knots. The Path now owns `gizmoEditKnots`, `gizmoKnotIndex`, `gizmoMultiKnotPoints` and its Gizmos v3 Scene HUD; a Road linked to this Path suppresses its own duplicate Knot handles. In the Road Inspector keep `Gizmo V3 Live Mesh=true` (default).
+5. Each Path-owned Gizmos v3 `update` updates the **temporary preview mesh** at most once per `Gizmo V3 Mesh Interval Ms` (default 100ms, 50–400). **End/Cancel always rebuild**, so Escape restores the source Knot and the displayed Road together.
 6. If a Knot travels through invalid geometry, the last valid transient preview remains visible. The final failed rebuild logs **one Editor warning**; fix Knot spacing / Road width and rebuild. The Baked Mesh asset remains unchanged until an explicit Bake.
 7. Optional: assign that **same SplinePathV2** to multiple Roads. Roads that have generated their geometry in the Editor register as preview consumers. Changing a Knot with a linked Road's Gizmos triggers preview updates on all registered Roads. This does not guarantee automatically updating roads that were never initialized in the Scene Editor.
 
@@ -40,9 +40,7 @@ re-open before deleting old serialized references.
   glTF Bake, and no background timers.
 - During drag, builds are throttled; end/cancel always force a final build.
   Invalid temporary geometry does not delete last valid preview.
-- Path Source currently supported by **SplineRoadV2**. Wiring
-  `SplineExtrudeV2` and `SplineMeshDeformV2` as consumers is a subsequent
-  step, not certified as part of this checkpoint.
+- All three generators **Road, Extrude and MeshDeform** inherit the current base `SplineRoadV2.source()` and can read `pathSource`, but Extrude/Deform still inherit many Road-specific fields. Eliminating that inheritance is part of the next clean rebuild stage. Junction remains linked through its Road branches.
 - Undo/Redo on original **Knot Nodes** and save/reopen handling need real
   Creator 3.8.x visual/manual verification. Gizmos v3's change snapshot
   belongs to the Road's computed proxy, not the Node being changed.
