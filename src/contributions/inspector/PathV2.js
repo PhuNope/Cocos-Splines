@@ -97,10 +97,19 @@ module.exports={
         '<ui-prop type="dump" class="spl-prop spl-path-entry-'+i+'"></ui-prop>'+
       '</div>'
     ).join('');
-    if(this.$.items.innerHTML!==html)this.$.items.innerHTML=html;
+    // Recreate DOM only when cards/selection change: frequent Inspector
+    // refresh must not steal focus from an in-progress Vec3 numeric edit.
+    if(this._cardCount!==entries.length||this._cardSelected!==selected){
+        this.$.items.innerHTML=html;
+        this._cardCount=entries.length;
+        this._cardSelected=selected;
+    }
     entries.forEach((entry,i)=>{
-        const node=this.$.items.querySelector('.spl-path-entry-'+i);
-        if(node&&entry&&typeof node.render==='function')node.render(entry);
+        const card=this.$.items.querySelectorAll('.spl-path-knot')[i];
+        const label=card?.querySelector('.spl-path-position');
+        if(label)label.textContent=pointLabel(entry);
+        const prop=card?.querySelector('ui-prop');
+        if(prop&&entry&&typeof prop.render==='function')prop.render(entry);
     });
  },
  ready(){
