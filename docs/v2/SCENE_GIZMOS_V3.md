@@ -1,36 +1,51 @@
-# Cocos Splines v2 — Scene Gizmos v3 compatibility (alpha)
+# Cocos Splines v2 — Native Cocos-Gizmos v3 integration (alpha)
 
-**Branch:** `v2.0.0` test-only. No tag/release. This is an optional drawing adapter, not a vendored Gizmos SDK.
+- **Gizmos SDK:** [PhuNope/Cocos-Gizmos, branch `v3`](https://github.com/PhuNope/Cocos-Gizmos/tree/v3), inspected at commit `184ce3ed6bfce429bcce8c795964da276ee82c81`.
+- **Splines:** `PhuNope/Cocos-Splines` branch `v2.0.0`. Test builds only; no tag/release.
 
-## Implemented
-- `SplineRoadV2.onDrawGizmosSelected()`: bounded centerline, approximate full width rails, trim caps, existing Knot markers. The preview uses spline cache/frames and never generates `cc.Mesh`, never edits Knot data.
-- `SplineJunctionPatchV2.onDrawGizmosSelected()`: 3-/4-way junction center, exact trimmed Road ring, optional curb profile ends. Only selected, no runtime log or on-play builder.
-- `SplineGizmoV3Bridge`: accepts `beginColor(owner, color)`, `drawLine(owner,a,b)`, optional `drawSphere(owner,p,radius,...)`. All positions passed to the backend are **WORLD-space**. Uses lazy `Color` allocations only during Editor draws.
-- Missing SDK or disabled/invalid geometry => no drawing and no thrown exception. Renderer calls bounded (600 segments/128 markers). No serialized UUID migrations.
-- Inspector: Road `showSceneGizmosV3`, `gizmoV3Steps`, `gizmoV3Edges`, `gizmoV3Knots`. Junction `showJunctionSceneGizmosV3`, `gizmoV3JunctionCurbs`.
+## Direct v3 API (not the old Cocos-Gizmos v2 adapter)
 
-## Optional SDK bridge
-This repository **does not contain the source or declaration of the user's Gizmos v3.0 package**. The known usage samples involve `registerGizmos` and `Gizmos3D.beginColor/drawLine/drawSphere`, but the compatibility of a specific **v3.0 registration/decorator** is **not certified**.
+Cocos-Gizmos `v3` installs `globalThis.Gizmos3D` in its **Editor Scene** process in `scene.js`.
+Its `ExecuteGizmos` auto-discovers enabled Components implementing
+`onDrawGizmosSelected` or `onGizmoHandles`. No `@registerGizmos` is required for the Component-hook API.
+Do **not** import legacy `db://assets/CompanyCore/Gizmos/`, `dist/Gizmos3D`, or
+assign `__SplineGizmosV3`. A separately installed v3 extension owns the Editor
+renderer; the Spline scripts have **no hard runtime dependency** on the package.
 
-If your game project actually has `db://assets/CompanyCore/Gizmos/Gizmos3D` installed and its v3 API is still compatible with those method signatures, an **Editor-only project-local integration** can assign the module to `globalThis.__SplineGizmosV3`:
+The optional Spline bridge checks the real v3 global only when drawing/handling in
+the Editor and directly invokes
+`Gizmos3D.beginColor(node,color)`,
+`Gizmos3D.drawLine(node,worldA,worldB)`,
+`Gizmos3D.drawSphere(node,worldPosition,radius,...)`, and
+`Gizmos3D.move('gizmoKnotPosition', {space:'local', ...})`.
 
-```ts
-// Example only — keep this in the GAME PROJECT with the separately installed SDK.
-// Do not add a hard db:// dependency to the reusable Spline extension.
-import Gizmos3D from 'db://assets/CompanyCore/Gizmos/Gizmos3D';
-import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-if (EDITOR_NOT_IN_PREVIEW)
-    (globalThis as unknown as {__SplineGizmosV3?:typeof Gizmos3D}).__SplineGizmosV3 = Gizmos3D;
-```
+## Road Scene guides and movable Knot
 
-Or a compatible SDK may publish `globalThis.Gizmos3D` (legacy fallback). You must ensure its own scene callback/registration system actually invokes `onDrawGizmosSelected()`. If v3 changed the decorator or drawing argument order, update the bridge **after inspecting its actual SDK**. The sample above alone does *not* guarantee Creator will invoke custom callbacks.
+- **Road onDrawGizmosSelected:** bounded centerline, approximate full-width curb/shoulder rails, actual Knot markers, trim caps; no mesh creation or serialized writes.
+- **Road onGizmoHandles:** optional `Gizmos3D.move` XYZ arrows and XY/XZ/YZ planes for **one Knot at a time**. Select `Gizmo V3 Knot Index` (0-based), enable `Gizmo V3 Edit Knot`. Other Knot Nodes can still use native Cocos Transform gizmos.
+- The dynamically resolved `gizmoKnotPosition` `Vec3` getter/setter reads and writes the selected **Knot Node's actual world position** through the Road's local/world transforms. It is NOT a second, serialized point list. On Escape, v3 writes its rollback value through that same setter, restoring the Node.
+- **Junction onDrawGizmosSelected:** branch center, exact trimmed Road ring bars and curb endpoints from linked Road profiles; no new geometry and no runtime writes.
+- **Missing Gizmos:** these drawing/handle hooks produce no errors or dependencies when Cocos-Gizmos is absent.
+- **Play:** Editor-only guard prevents Gizmos handles and knot setter writes in Play/Preview.
+- Viewport guides capped at 600 lines + 128 dots and avoid allocating Cocos `Color` until an Editor drawing callback.
 
-## Manual test in Cocos Creator 3.8.x
-1. Install both the extension and your Gizmos package in a disposable project. Configure its documented component registration, and enable the optional bridge. Restart/refresh the Scene editor.
-2. Select an open 3-knot Road using ConstantWidth + two trimmed Junction-end Roads. Verify road centerline and full-width guides; move the **Knot Nodes using Cocos's normal transform gizmos**, not by clicking the preview.
-3. Select a 3-/4-arm Junction. Inspect exact trim/cut bars and curb endpoint markers. Keep `gizmoV3JunctionCurbs=true` when checking curb paths.
-4. Turn visibility off, choose Manual/Baked, Play and check there is **no Gizmo-derived mesh generation or runtime warning**. Save/reopen the scene and check the serialized Knot values and baked fingerprint remain identical.
-5. Add 100+ knots / very long Road: ensure drawing calls remain capped. Test missing SDK, missing Road links and invalid trims; selection should not throw.
+**Important:** Gizmos v3's drag command groups begin/update/end/cancel for the bound property. Here that property is a live proxy to a **different Node**, so complete native cross-Node Undo/Redo integration must be verified in the actual Cocos Creator 3.8.x Editor. The automated test validates get/write/rollback and no-Play writes, not Undo history.
 
-## Limitations
-No verified new v3.0 SDK declaration is available in this conversation, so this update does **not** claim v3.0 decorator registration, interactive gizmo drag/picking, Undo transaction semantics or actual Cocos Editor visual certification. It provides ready-to-bind, read-only geometry with the known drawing call signatures. Interactive manipulation will be implemented only after obtaining actual v3.0 SDK APIs; use existing Cocos Knot Node transform handles meanwhile.
+## Try it in Creator 3.8.x
+
+1. Install/enable **Cocos-Gizmos v3** and **Cocos-Splines v2.0.0 Test Build** in a disposable Creator project (Project extension preferred to Global for repeatable setup). Refresh the Scene.
+2. Select a Road with three Knot Nodes. With `Show Scene Gizmos V3=true`, view the cyan centerline, green width guides and orange Knot points.
+3. Turn on `Gizmo V3 Edit Knot`, set `Gizmo V3 Knot Index=1`; drag X/Y/Z arrows and XY/XZ/YZ plane handles. Confirm the **original Knot Node** moves, spline guides update, and no extra Knot is created.
+4. Press **Escape while dragging**; verify the Knot is restored. Commit a drag, then test Editor **Undo/Redo**, save, close/reopen and repeat. If Undo does not restore the Knot Node, disable `Gizmo V3 Edit Knot` and edit the actual Knot Node with standard Transform gizmos until that transactional edge case is resolved.
+5. Select a linked 3-/4-way Junction; check trimmed Road rings and curb markers. Toggle the Junction settings and invalid Road links.
+6. In Manual/Baked Play, ensure zero Gizmos rendering calls, zero proxy writes, no procedural mesh generation. If you change Knots, explicitly **Rebuild Preview / Bake glTF Asset** to update the rendered surface; selection Gizmos do not automatically Bake mesh.
+
+## SDK references
+
+- [Cocos-Gizmos v3 README](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/README.md)
+- [Callbacks and undo/cancel lifecycle](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/CALLBACKS.md)
+- [Move API and descriptor semantics](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/MOVE_GIZMO.md)
+- [Editor Scene auto-discovery](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/source/ExecuteGizmos.ts)
+- [Native v3 scene.js global installation](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/scene.js)
+
+Still pending: visual Cocos Creator certification, cross-Node Undo/Redo, interactive multi-Knot manipulation, automatic Sidewalk networking / Terrain Boolean joins.
