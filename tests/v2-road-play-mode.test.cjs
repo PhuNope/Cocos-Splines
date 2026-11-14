@@ -272,6 +272,7 @@ try{
     assert(pathHandles.some(h=>h.property==='pathGizmoKnotPosition'));
     assert.deepEqual(pathHandles.slice(6).map(h=>h.index),[0,2]);
     assert.equal(splinePath.onGizmoHudControls().length,2);
+    const dragStart={...b.worldPosition};
     splinePath.onGizmoChanged('pathGizmoKnotPosition','begin');
     splinePath.pathGizmoKnotPosition=new Vec3(
         editedPosition.x+.4,editedPosition.y,editedPosition.z);
@@ -284,7 +285,8 @@ try{
     const previewBeforeCancel=renderer.mesh;
     splinePath.onGizmoChanged('pathGizmoKnotPosition','cancel');
     assert(renderer.mesh!==previewBeforeCancel,'Escape restores Road mesh from Path');
-    assert.deepEqual({...b.worldPosition},{...editedPosition});
+    assert.deepEqual({...b.worldPosition},dragStart,
+        'Cancel restores pure Vec3 Knot value from drag-begin snapshot');
     assert(otherRenderer.mesh&&renderer.mesh);
     const point=splinePath.pathGizmoKnotPositions;
     assert.equal(Array.isArray(point),true);
