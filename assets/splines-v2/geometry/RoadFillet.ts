@@ -1,6 +1,24 @@
 import {buildSplineCacheV2,type SplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type V3} from '../core/SplineCurves';
 
+/** A geometric fit constraint, not a malformed spline or a UV failure.
+ * This typed error lets the Road component opt into a safe Continuous
+ * fallback without hiding unrelated fillet/tessellation errors.
+ */
+export class RoadFilletSpacingErrorV2 extends Error {
+ constructor(
+     readonly segmentIndex:number,
+     readonly distance:number,
+     readonly radius:number,
+     readonly requiredDistance:number
+ ) {
+     super('Constant Width Road: Knot '+segmentIndex+'-'+(segmentIndex+1)+
+         ' spacing '+distance.toFixed(3)+' is too short for radius '+
+         radius.toFixed(3)+' (needs >'+requiredDistance.toFixed(3)+
+         '). Move knots apart, reduce Width, or use Continuous');
+     this.name='RoadFilletSpacingErrorV2';
+ }
+}
 export interface RoadFilletOptionsV2 {
  readonly minimumRadiusScale?:number;
  readonly maxArcAngleDegrees?:number;
@@ -86,9 +104,7 @@ export function buildRoadFilletCacheV2(
  for(let i=0;i<edgeCount;i++){
     const j=(i+1)%n;
     if(trim[i]+trim[j]>=edgeLen[i]-1e-4)
-        throw new Error('Constant Width Road: Knot '+i+'-'+j+' spacing '+edgeLen[i].toFixed(3)+
-            ' is too short for radius '+minRadius.toFixed(3)+' (needs >'+(trim[i]+trim[j]).toFixed(3)+
-            '). Move knots apart, reduce Width, or use Continuous');
+        throw new RoadFilletSpacingErrorV2(i,edgeLen[i],minRadius,trim[i]+trim[j]);
  }
  interface Segment {start:V3;end:V3;startHandle:V3;endHandle:V3;}
  const segments:Segment[]=[];
