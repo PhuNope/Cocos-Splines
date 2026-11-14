@@ -174,7 +174,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             if(!!this.branches[index].atEnd!==branch.atEnd)
                 throw new Error('Junction branch '+index+' At End does not match nearest Path endpoint; correct the link first');
             return {...branch,nodeUuid:road.node.uuid,
-                componentIndex:road.node.components.indexOf(road)};
+                componentIndex:(road.node as unknown as {components:unknown[]}).components.indexOf(road)};
         })};
     }
     public inspectCornerRisk():null{return null;}
