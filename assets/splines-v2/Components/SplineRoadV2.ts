@@ -16,6 +16,8 @@ import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
 import {buildRoadFilletCacheV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
+import {type JunctionRoadCandidateV2} from '../geometry/JunctionAutoTrimV2';
+import {sampleSplineDistanceV2} from '../core/SplineCache';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
@@ -306,6 +308,41 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
         });
         return {geometry:appendRoadMarkingsV2(geometry,apron.mesh)};
     }
+    /**
+     * Editor-only, read-only branch candidate for automatic Junction trims.
+     * Samples a short distance INSIDE each spline end (not the next Knot).
+     * This is accurate for curved Bezier/Catmull endpoints and rotated Paths.
+     */
+    public junctionAutoTrimCandidateV2(id:string):JunctionRoadCandidateV2 {
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Junction Auto Trim is Editor-only');
+        if(!this.pathSource||this.pathSource.closed||
+           this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth)
+            throw new Error('Junction Auto Trim needs an open ConstantWidth Path Source');
+        const matrix=this.node.worldMatrix;
+        const unit=(x:number)=>Math.abs(x-1)<1e-4;
+        if(!unit(Math.hypot(matrix.m00,matrix.m01,matrix.m02))||
+           !unit(Math.hypot(matrix.m04,matrix.m05,matrix.m06))||
+           !unit(Math.hypot(matrix.m08,matrix.m09,matrix.m10)))
+            throw new Error('Junction Auto Trim requires a unit-scale Road Node');
+        const cache=buildSplineCacheV2(this.source());
+        if(cache.length<1e-4)
+            throw new Error('Junction Auto Trim cannot use a zero-length Path');
+        const toWorld=(point:{x:number;y:number;z:number})=>{
+            const p=Vec3.transformMat4(new Vec3(),
+                new Vec3(point.x,point.y,point.z),matrix);
+            return {x:p.x,y:p.y,z:p.z};
+        };
+        const probe=Math.min(.5,cache.length*.1);
+        const at=(distance:number)=>toWorld(sampleSplineDistanceV2(cache,distance).position);
+        return {roadId:id,start:at(0),end:at(cache.length),
+            startInside:at(probe),endInside:at(cache.length-probe),
+            length:cache.length,
+            halfWidth:this.width*.5+this.shoulderWidth+this.curbWidth,
+            currentStartTrim:this.junctionStartTrim,
+            currentEndTrim:this.junctionEndTrim};
+    }
+
     /**
      * Editor authoring helper: read the EXACT trimmed asphalt edge positions and
      * UV0 from this Road's own current procedural geometry. The patch never
