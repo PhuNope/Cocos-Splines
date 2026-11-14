@@ -2,6 +2,7 @@ import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {SplineRoadV2} from './SplineRoadV2';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
+import {planJunctionEndpointSnapV2} from '../geometry/SplineRoadNetworkV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -59,6 +60,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     junctionUVBlend=.55;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum gap between the original (untrimmed) Road endpoints, in local units.'})
     endpointTolerance=.25;
+    @property({min:.05,max:5,step:.05,tooltip:'Editor-only maximum distance to move a linked Pure Vec3 Path endpoint when applying Junction Endpoint Snap.'})
+    endpointSnapMaxDistance=.75;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units; in Gentle Grade, also caps crossfall (max .03).'})
     flatTolerance=.1;
     @property({type:Enum(JunctionGradeModeV2),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
@@ -175,6 +178,50 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                 throw new Error('Junction branch '+index+' At End does not match nearest Path endpoint; correct the link first');
             return {...branch,nodeUuid:road.node.uuid,
                 componentIndex:(road.node as unknown as {components:unknown[]}).components.indexOf(road)};
+        })};
+    }
+    /**
+     * Pure Vec3 endpoint connection proposal. Reads distinct Path sources
+     * and converts one world-space Junction center into each Path-local
+     * position. Does not mutate Scene serialization or any Baked meshes.
+     */
+    public planEndpointSnapsV2(){
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Endpoint Snap is Editor-only');
+        const inputs=this.branches.map((link,index)=>{
+            const road=link?.road;
+            if(!road?.node?.isValid||!road.pathSource?.node?.isValid)
+                throw new Error('Endpoint Snap missing Road/Path source at branch '+index);
+            return {...road.junctionAutoTrimCandidateV2(road.node.uuid),
+                pathId:road.pathSource.node.uuid,atEnd:!!link.atEnd};
+        });
+        const plan=planJunctionEndpointSnapV2(inputs,{
+            center:this.node.worldPosition,
+            maxDistance:this.endpointSnapMaxDistance,
+            maxHeightDelta:this.flatTolerance
+        });
+        return {...plan,branches:plan.branches.map((branch,index)=>{
+            const road=this.branches[index].road!;
+            const path=road.pathSource!;
+            const indexOfKnot=branch.atEnd?path.knots.length-1:0;
+            const source=path.knots[indexOfKnot];
+            if(!source||path.knots.length<2)
+                throw new Error('Endpoint Snap Path has fewer than 2 valid Knots');
+            const m=path.node.worldMatrix;
+            const determinant=m.m00*(m.m05*m.m10-m.m06*m.m09)-
+                m.m04*(m.m01*m.m10-m.m02*m.m09)+
+                m.m08*(m.m01*m.m06-m.m02*m.m05);
+            if(!Number.isFinite(determinant)||Math.abs(determinant)<1e-8)
+                throw new Error('Endpoint Snap Path has singular world transform');
+            const inv=Mat4.invert(new Mat4(),m);
+            const target=Vec3.transformMat4(new Vec3(),
+                new Vec3(branch.to.x,branch.to.y,branch.to.z),inv);
+            if(![target.x,target.y,target.z].every(Number.isFinite))
+                throw new Error('Endpoint Snap cannot convert world position to Path-local Knot');
+            return {...branch,pathUuid:path.node.uuid,
+                knotIndex:indexOfKnot,knotCount:path.knots.length,
+                expectedLocal:{x:source.position.x,y:source.position.y,z:source.position.z},
+                targetLocal:{x:target.x,y:target.y,z:target.z}};
         })};
     }
     public inspectCornerRisk():null{return null;}
