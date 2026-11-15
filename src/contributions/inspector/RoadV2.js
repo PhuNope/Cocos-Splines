@@ -14,6 +14,13 @@ async function dispatchV2(inspector,action){
         console.info('[Cocos Splines V2] Junction Auto Trim proposal:',result.plan);
     }else if(action==='apply-v2-junction-auto-trim'&&result?.ok){
         console.info('[Cocos Splines V2] Applied '+result.changed+' Road trims; Baked assets unchanged');
+    }else if(action==='plan-v2-junction-auto-connect'&&result?.ok){
+        console.info('[Cocos Splines V2] Auto Connect preview (no Scene edits):',result.plan);
+    }else if(action==='apply-v2-junction-auto-connect'&&result?.ok){
+        console.info('[Cocos Splines V2] Junction Auto Connect: '+(result.changed?'recorded':'unchanged')+
+            ', '+result.branches+' linked Roads; Path Knots and Baked Mesh unchanged');
+        if(result.warnings?.length)
+            console.warn('[Cocos Splines V2] Junction preview warnings:',result.warnings);
     }else if(action==='plan-v2-junction-endpoint-snap'&&result?.ok){
         console.info('[Cocos Splines V2] Junction Endpoint Snap (read-only):',result.plan);
     }else if(action==='apply-v2-junction-endpoint-snap'&&result?.ok){
@@ -32,7 +39,7 @@ function makeV2Inspector(kind='road'){
     const deform=kind==='mesh-deform';
     const junction=kind==='junction';
     const fields=junction?
-        [['Junction branches',['branches','endpointSnapMaxDistance','junctionUVMode','junctionUVBlend','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
+        [['Junction branches',['branches','autoConnectSearchRadius','endpointSnapMaxDistance','junctionUVMode','junctionUVBlend','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
          ['Junction Scene Gizmos',['showJunctionSceneGizmos','gizmoJunctionCurbs']],
          ['Junction markings',['generateJunctionMarkings','generateStopBars','generateCrosswalks','markingLift',
              'stopBarWidth','stopBarSetback','zebraStripeLength','zebraGap','zebraStartSetback',
@@ -61,6 +68,7 @@ function makeV2Inspector(kind='road'){
     const selectors={preview:'.spl-v2-preview',restore:'.spl-v2-restore',bake:'.spl-v2-bake',bind:'.spl-v2-bind',inspect:'.spl-v2-inspect'};
     if(junction){selectors.autoTrimPlan='.spl-v2-autotrim-plan';selectors.autoTrimApply='.spl-v2-autotrim-apply';}
     if(junction){selectors.snapPlan='.spl-v2-snap-plan';selectors.snapApply='.spl-v2-snap-apply';selectors.network='.spl-v2-network';}
+    if(junction){selectors.connectPlan='.spl-v2-connect-plan';selectors.connectApply='.spl-v2-connect-apply';}
     const sections=fields.map(([title,props])=>
         `<details open class="spl-section"><summary>${title}</summary>`+
         props.map(name=>{
@@ -75,6 +83,7 @@ function makeV2Inspector(kind='road'){
           <div class="spl-header"><strong>∿ Spline ${tube?'Extrude':deform?'Mesh Deform':junction?'Junction Patch':'Road'} V2</strong></div>
           ${sections}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-autotrim-plan">Check Auto Trim</button><button type="button" class="spl-btn spl-v2-autotrim-apply">Apply Auto Trim</button></div>':''}
+          ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-connect-plan">Check Auto Connect</button><button type="button" class="spl-btn spl-v2-connect-apply">Apply Auto Connect</button></div>':''}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-network">Check Road Network</button><button type="button" class="spl-btn spl-v2-snap-plan">Check Endpoint Snap</button><button type="button" class="spl-btn spl-v2-snap-apply">Apply Endpoint Snap</button></div>':''}
           <div class="spl-btns">
             <button type="button" class="spl-btn spl-v2-preview">↻ Rebuild Preview</button>
@@ -103,6 +112,8 @@ function makeV2Inspector(kind='road'){
                 this.$.autoTrimPlan.addEventListener('click',()=>void dispatchV2(this,'plan-v2-junction-auto-trim'));
                 this.$.autoTrimApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-auto-trim'));
                 this.$.network.addEventListener('click',()=>void dispatchV2(this,'inspect-v2-road-network'));
+                this.$.connectPlan.addEventListener('click',()=>void dispatchV2(this,'plan-v2-junction-auto-connect'));
+                this.$.connectApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-auto-connect'));
                 this.$.snapPlan.addEventListener('click',()=>void dispatchV2(this,'plan-v2-junction-endpoint-snap'));
                 this.$.snapApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-endpoint-snap'));
             }
