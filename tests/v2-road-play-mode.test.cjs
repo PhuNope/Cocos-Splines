@@ -123,7 +123,8 @@ try{
  road.showSavedMesh();
  assert.deepEqual(renderer.materials.slice(0,3),[null,null,null],
   'Invalid primitive count must clear materials left by a previous Mesh, not guess');
- assert.equal(road.inspectBake().materialMapStatus,'invalid');
+ // inspectBake() is Editor-only: its diagnostics are asserted below
+ // during the Editor portion, not during Manual/Baked Play.
  road.bakedMaterialSlots='';
  road.materials=[];renderer.materials=[];saved.subMeshCount=1;
  const originalGenerate=road.generate;
