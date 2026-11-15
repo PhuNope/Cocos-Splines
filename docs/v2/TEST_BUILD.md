@@ -258,3 +258,12 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 5. For profiled curb/shoulder Roads or World Projected Junction UV, leave smoothing **0**. Setting a positive value intentionally rejects those unsupported combinations; it must not silently apply a partial profile UV transform.
 6. Turn on **Strict Road Seams** only after a passing audit and test both Preview and Bake. Warnings are emitted in Editor Console only. Strict mode is Editor-only and never writes Knot data.
 7. Real Creator 3.8.x verification is still needed for UV/tangent shading under each actual shader/material, Scene save/reopen, Undo, Painter/paint geometry, and stability under extreme acute corner trims. This stage detects overlaps, it does not repair a global polygon union.
+
+
+## Creator 3.8.8: SplinePath invalid Vec3 Knot dump regression
+
+1. Install the **latest v2.0.0 test ZIP** from the successful GitHub Actions run, replacing the whole old `extensions/cocos-splines` folder while the Cocos Editor is closed. Ensure there is not a duplicate older extension with the same name. Reopen Creator 3.8.8 and let scripts/imports finish.
+2. In the same Scene where the previous error occurred, select the Path Node and test **Select**, **+ Add Knot**, **+ After**, **Duplicate**, **Move Up/Down** and **Remove**. Verify no `invalid serialized Vec3 Knot records` error, and that positions, tangent modes/handles, Roll, custom values, and selection all match the expected records.
+3. Test **Undo/Redo**, Save/Reopen, Prefab override, and preview rebuilding from the linked Road / Extrude / Junction in the actual Editor. The pure codec does not touch live Script component values directly.
+4. Check **Endpoint Snap** and **Align Tangents** if the Scene contains Junctions; they now use the same Vec3 nesting decoder for the affected Path fields.
+5. If an individual record really is malformed, the new Editor message identifies the Knot index and a short **structural shape** hint without modifying it. Record that new message and, if possible, a sanitized excerpt of the affected `query-node` Knot object to resolve any additional Creator-specific representation. Do not edit raw Scene JSON simply to silence the error.
