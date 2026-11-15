@@ -5,7 +5,7 @@ const {planPathEditDump}=require('../src/v2/PathV2Dump');
 const deep=v=>JSON.parse(JSON.stringify(v));
 const float=(value)=>({type:'Float',value});
 const vec3=(x,y,z)=>({type:'cc.Vec3',value:{x,y,z}});
-const knot=(x,y,z,roll=0,tag=0)=>({type:'SplinesV2.Knot',value:{
+const knot=(x,y,z,roll=0,tag=0)=>({type:'Spline.Knot',value:{
  position:vec3(x,y,z),mode:{type:'Enum',value:tag},
  handleIn:vec3(-2,0,0),handleOut:vec3(2,0,1),
  tension:float(.2),rollDegrees:float(roll),other:{type:'String',value:'keep'}
@@ -13,7 +13,7 @@ const knot=(x,y,z,roll=0,tag=0)=>({type:'SplinesV2.Knot',value:{
 const template=knot(0,0,0);
 const dump=(knots)=>({uuid:{type:'String',value:'node-id'},__comps__:[
  {type:'cc.MeshRenderer',value:{enabled:{type:'Boolean',value:true}}},
- {type:'SplinesV2.SplinePath',value:{
+ {type:'Spline.Path',value:{
    gizmoKnotIndex:{type:'Integer',value:0},
    interpolation:{type:'Enum',value:3},
    knots:{type:'Array',isArray:true,elementTypeData:deep(template),value:deep(knots)}
@@ -63,7 +63,7 @@ assert.throws(()=>planPathEditDump(initial,'add',-1),/Unsupported/);
 assert.throws(()=>planPathEditDump({__comps__:[]},'add',0),/SplinePath/);
 const empty=dump([]),one=planPathEditDump(empty,'add',0);
 assert.equal(one.count,1);
-assert.equal(one.dump.value[0].type,'SplinesV2.Knot');
+assert.equal(one.dump.value[0].type,'Spline.Knot');
 assert.deepEqual(one.dump.value[0].value.position.value,{x:0,y:0,z:0});
 const newKnots=Array.from({length:128},(_,i)=>knot(i,0,0));
 assert.throws(()=>planPathEditDump(dump(newKnots),'add',0),/at most 128/);

@@ -13,7 +13,7 @@ try {
    '--strict','--experimentalDecorators','--skipLibCheck',
    '--useDefineForClassFields','false','--rootDir',
    path.join(root,'assets/splines-v2'),'--outDir',dir,
-   path.join(root,'assets/splines-v2/Components/SplinePathV2.ts'),
+   path.join(root,'assets/splines-v2/Components/SplinePath.ts'),
    path.join(root,'tests/types/cc.d.ts')],{stdio:'pipe'});
  const env={EDITOR_NOT_IN_PREVIEW:true};
  class Vec3 {
@@ -59,22 +59,22 @@ try {
    if(id==='cc/env')return env;
    return original.apply(this,arguments);
  };
- let SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,SplineKnotRecordV2,SplinePathRotationModeV2,evaluateSplineV2;
+ let SplinePath,CurveMode,TangentMode,SplineKnot,RotationMode,evaluateSplineV2;
  try{
-   ({SplinePathV2,SplinePathCurveModeV2,SplineBezierTangentModeV2,
-     SplineKnotRecordV2,SplinePathRotationModeV2}=require(path.join(dir,'Components/SplinePathV2.js')));
+   ({SplinePath,CurveMode,TangentMode,
+     SplineKnot,RotationMode}=require(path.join(dir,'Components/SplinePath.js')));
    ({evaluateSplineV2}=require(path.join(dir,'core/SplineCurves.js')));
  }finally{Module._load=original;}
  const eq=(a,b,e=1e-5)=>assert(Math.abs(a-b)<=e,`expected ${a} ~ ${b}`);
  const pathNode=new Node('AuthoritativePath'),consumer=new Node('Road');
  pathNode.worldMatrix.sx=2;pathNode.worldMatrix.sy=2;pathNode.worldMatrix.tx=10;
  consumer.worldMatrix.tx=-2;
- const k0=new SplineKnotRecordV2(),k1=new SplineKnotRecordV2();
+ const k0=new SplineKnot(),k1=new SplineKnot();
  k0.position=new Vec3(0,0,0);k1.position=new Vec3(6,0,0);
- const pathComp=pathNode.addComponent(SplinePathV2);
- pathComp.knots=[k0,k1];pathComp.interpolation=SplinePathCurveModeV2.Bezier;
+ const pathComp=pathNode.addComponent(SplinePath);
+ pathComp.knots=[k0,k1];pathComp.interpolation=CurveMode.Bezier;
  // Auto tangents exactly match core's natural 1/3 chord fallback.
- const auto=pathComp.getSplineDataV2(consumer);
+ const auto=pathComp.getSplineData(consumer);
  assert.equal(auto.type,'bezier');
  assert.equal(auto.knots[0].handleOut,undefined);
  assert.equal(auto.knots[1].handleIn,undefined);
@@ -151,7 +151,7 @@ try {
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','update',-22);
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','end',-22);
    assert.equal(k0.rollDegrees,-22,'HUD End commits bank to actual Knot');
-   assert.equal(pathComp.getSplineDataV2(consumer).knots[0].rollDegrees,-22);
+   assert.equal(pathComp.getSplineData(consumer).knots[0].rollDegrees,-22);
    pathComp.pathGizmoActiveRoll=181;
    assert.equal(k0.rollDegrees,-22,'HUD roll rejects out-of-range values');
    pathComp.pathGizmoActiveRoll=-Infinity;
@@ -163,14 +163,14 @@ try {
    assert(calls.includes('startA')&&calls.includes('startB'));
    pathComp.pathGizmoTangentOut=new Vec3(2,3,0);
    assert.equal(pathComp.knots.length,2);
-   assert.equal(k0.mode,SplineBezierTangentModeV2.Free);
+   assert.equal(k0.mode,TangentMode.Free);
    pathComp.onGizmoChanged('pathGizmoTangentOut','update');
    assert(calls.includes('Afalse')&&calls.includes('Bfalse'));
    pathComp.pathGizmoTangentOut=new Vec3(2,0,0);
    pathComp.onGizmoChanged('pathGizmoTangentOut','cancel');
-   assert.equal(k0.mode,SplineBezierTangentModeV2.Auto,
+   assert.equal(k0.mode,TangentMode.Auto,
      'Escape restores Auto tangent behavior without creating another record');
-   assert.equal(pathComp.getSplineDataV2(consumer).knots[0].handleOut,undefined);
+   assert.equal(pathComp.getSplineData(consumer).knots[0].handleOut,undefined);
    assert(calls.includes('Atrue')&&calls.includes('Btrue'));
    // Commit explicit tangents and verify actual core Bezier math in
    // consumer-local coordinates (Path sx=2, sy=2, consumer tx=-2).
@@ -181,20 +181,20 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentIn','begin');
    pathComp.pathGizmoTangentIn=new Vec3(4,3,0);
    pathComp.onGizmoChanged('pathGizmoTangentIn','end');
-   assert.equal(k0.mode,SplineBezierTangentModeV2.Free);
-   assert.equal(k1.mode,SplineBezierTangentModeV2.Free);
-   const shaped=pathComp.getSplineDataV2(consumer);
+   assert.equal(k0.mode,TangentMode.Free);
+   assert.equal(k1.mode,TangentMode.Free);
+   const shaped=pathComp.getSplineData(consumer);
    assert.deepEqual(shaped.knots[0].handleOut,{x:4,y:6,z:0});
    assert.deepEqual(shaped.knots[1].handleIn,{x:-4,y:6,z:0});
    eq(evaluateSplineV2(shaped,.5).position.y,4.5);
    // Tangents follow source Node identities, not Path array indices.
    pathComp.knots=[k1,k0];
-   const reordered=pathComp.getSplineDataV2(consumer);
+   const reordered=pathComp.getSplineData(consumer);
    assert.deepEqual(reordered.knots[0].handleIn,{x:-4,y:6,z:0});
    assert.deepEqual(reordered.knots[1].handleOut,{x:4,y:6,z:0});
    pathComp.knots=[k0,k1];
    // Aligned retains the opposite length and flips its direction.
-   pathComp.setBezierTangentMode(0,SplineBezierTangentModeV2.Aligned);
+   pathComp.setBezierTangentMode(0,TangentMode.Aligned);
    pathComp.gizmoKnotIndex=0;
    const oppositeBefore=k0.handleIn;
    const lenBefore=Math.hypot(oppositeBefore.x,oppositeBefore.y,oppositeBefore.z);
@@ -205,7 +205,7 @@ try {
    assert(aligned.handleIn.x*aligned.handleOut.x+
           aligned.handleIn.y*aligned.handleOut.y<=0);
    // Mirrored keeps equal lengths, and Escape restores both offsets.
-   pathComp.setBezierTangentMode(0,SplineBezierTangentModeV2.Mirrored);
+   pathComp.setBezierTangentMode(0,TangentMode.Mirrored);
    pathComp.onGizmoChanged('pathGizmoTangentOut','begin');
    const savedIn={...aligned.handleIn},savedOut={...aligned.handleOut};
    pathComp.pathGizmoTangentOut=new Vec3(1,5,0);
@@ -213,10 +213,10 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentOut','cancel');
    assert.deepEqual({...aligned.handleIn},savedIn);
    assert.deepEqual({...aligned.handleOut},savedOut);
-   assert.equal(aligned.mode,SplineBezierTangentModeV2.Mirrored);
+   assert.equal(aligned.mode,TangentMode.Mirrored);
    // Duplicated control records must reject ambiguous authoring.
    pathComp.knots.push(k0);
-   assert.throws(()=>pathComp.getSplineDataV2(consumer),/not be reused/i);
+   assert.throws(()=>pathComp.getSplineData(consumer),/not be reused/i);
    pathComp.knots.pop();
    // Inspector mutations are observed without Gizmos callbacks.
    const realDate=Date.now;let now=realDate();Date.now=()=>now;
@@ -232,7 +232,7 @@ try {
    }finally{Date.now=realDate;}
    // Rotation presets use native SDK descriptors around the selected
    // Path Node. They must never pretend to pivot about a non-Node Knot.
-   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Planar2D;
+   pathComp.gizmoRotationMode=RotationMode.Planar2D;
    pathComp.gizmoRotationSnap=15;
    assert.deepEqual(pathComp.onGizmoHandles().map(h=>h.axis),['z']);
    assert(pathComp.onGizmoHandles().every(h=>h.snap===15));
@@ -249,7 +249,7 @@ try {
    assert.deepEqual({...pathNode.eulerAngles},{x:0,y:0,z:0},
        'Escape restores the entire Path Node Euler value');
    assert.deepEqual({...pathComp.getKnotWorldPosition(1)},{...beforeRotate});
-   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Spatial3D;
+   pathComp.gizmoRotationMode=RotationMode.Spatial3D;
    pathComp.gizmoRotationSnap=0;
    assert.deepEqual(pathComp.onGizmoHandles().map(h=>h.axis),['x','y','z']);
    assert(pathComp.onGizmoHandles().every(h=>h.snap===undefined));
@@ -258,17 +258,17 @@ try {
    pathComp.onGizmoChanged('pathGizmoRotationEuler','end');
    assert.deepEqual({...pathNode.eulerAngles},{x:10,y:20,z:30});
    assert(calls.at(-1)==='Btrue','3D rotation end forces final consumer preview');
-   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Planar2D;
+   pathComp.gizmoRotationMode=RotationMode.Planar2D;
    pathComp.pathGizmoRotationEuler=new Vec3(99,99,40);
    assert.deepEqual({...pathNode.eulerAngles},{x:10,y:20,z:40},
        '2D rotates Z while preserving existing 3D X/Y Euler');
-   pathComp.gizmoRotationMode=SplinePathRotationModeV2.Knots;
+   pathComp.gizmoRotationMode=RotationMode.Knots;
    assert(pathComp.onGizmoHandles().some(h=>h.property==='pathGizmoKnotPosition'));
    pathNode.eulerAngles=new Vec3();
    // Roll lives on the Knot value, not Node rotation; changing it must
    // reach every mesh consumer through the Path source snapshot.
    k0.rollDegrees=35;k1.rollDegrees=-10;
-   assert.deepEqual(pathComp.getSplineDataV2(consumer).knots.map(k=>k.rollDegrees),
+   assert.deepEqual(pathComp.getSplineData(consumer).knots.map(k=>k.rollDegrees),
       [35,-10]);
    k0.rollDegrees=0;k1.rollDegrees=0;
    // Creator Undo/deserializer may replace Knot value objects during
@@ -276,9 +276,9 @@ try {
    pathComp.gizmoKnotIndex=0;
    const staleKnot=k0;
    pathComp.onGizmoChanged('pathGizmoKnotPosition','begin');
-   const revived=new SplineKnotRecordV2();
+   const revived=new SplineKnot();
    revived.position=new Vec3(2,2,2);
-   const revivedOther=new SplineKnotRecordV2();
+   const revivedOther=new SplineKnot();
    revivedOther.position=new Vec3(6,0,0);
    pathComp.knots=[revived,revivedOther];
    const restoresBefore=calls.length;
@@ -291,7 +291,7 @@ try {
    assert.notDeepEqual({...staleKnot.position},{x:3,y:3,z:3},
      'Restored Path must not write to a stale Knot record');
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
-   const revivedAgain=new SplineKnotRecordV2();
+   const revivedAgain=new SplineKnot();
    revivedAgain.position=new Vec3(4,4,4);
    pathComp.knots=[revivedAgain,revivedOther];
    pathComp.onRestore();
@@ -324,7 +324,7 @@ try {
  }
  // Custom Inspector topology operations act only on pure Vec3 records.
  // No Node for Knot storage, no independent per-Node tangent components.
- assert(pathComp.knots.every(k=>k instanceof SplineKnotRecordV2&&!(k instanceof Node)));
+ assert(pathComp.knots.every(k=>k instanceof SplineKnot&&!(k instanceof Node)));
  assert.deepEqual({...pathComp.getKnotWorldPosition(1)},{x:22,y:0,z:0});
  const between=pathComp.editKnot('insert',0);
  assert.equal(between,1);

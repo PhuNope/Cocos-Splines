@@ -14,27 +14,27 @@ const copy=x=>JSON.parse(JSON.stringify(x));
 const baseVec=(x,y,z)=>({x,y,z});
 const vv=p=>({type:'cc.Vec3',value:copy(p)});
 const v=(x,y,z)=>baseVec(x,y,z);
-const typed=p=>({type:'SplinesV2.Knot',value:{
+const typed=p=>({type:'Spline.Knot',value:{
  position:vv(p),mode:{type:'Enum',value:2},
  handleIn:vv(v(-2,0,1)),handleOut:vv(v(2,0,1)),
  tension:{type:'Float',value:.1},rollDegrees:{type:'Float',value:14},
  unknown:{type:'String',value:'keep'} }});
 const innerObject=p=>({
- type:'SplinesV2.Knot',value:{
+ type:'Spline.Knot',value:{
  position:copy(p),mode:{type:'Enum',value:2},
  handleIn:vv(v(-2,0,1)),handleOut:vv(v(2,0,1)),
  tension:{type:'Float',value:.1},rollDegrees:{type:'Float',value:14},
  unknown:{type:'String',value:'keep'}
  }});
 const wrappedClass=p=>({
- type:'SplinesV2.Knot',value:{type:'Object',value:copy(typed(p).value)}});
+ type:'Spline.Knot',value:{type:'Object',value:copy(typed(p).value)}});
 const bare=p=>({
  position:copy(p),mode:{value:1},
  handleIn:vv(v(-2,0,1)),handleOut:vv(v(2,0,1)),
  rollDegrees:{value:11}
 });
 const scalarAxes=p=>({
- type:'SplinesV2.Knot',value:{
+ type:'Spline.Knot',value:{
  position:{type:'cc.Vec3',value:{
   x:{type:'Float',value:p.x},y:{type:'Float',value:p.y},
   z:{type:'Float',value:p.z}
@@ -43,7 +43,7 @@ const scalarAxes=p=>({
 const cases=[typed,innerObject,wrappedClass,bare,scalarAxes];
 const dump=(records,elementTypeData)=>({__comps__:[
  {type:'cc.MeshRenderer',value:{}},
- {type:'SplinesV2.SplinePath',value:{
+ {type:'Spline.Path',value:{
   gizmoKnotIndex:{type:'Integer',value:0},
   interpolation:{type:'Enum',value:1},
   knots:{type:'Array',isArray:true,
@@ -111,7 +111,7 @@ const noMetadata=dump([innerObject(v(0,0,0)),innerObject(v(0,0,4))]);
 assert.deepEqual(position(edit(noMetadata,'add',0).dump.value[2]),v(0,0,8));
 assert.deepEqual(position(edit(dump([]),'add',0).dump.value[0]),v(0,0,0));
 // A real malformed record still must be rejected before a recorded write.
-const malformed=dump([typed(v(0,0,0)),{type:'SplinesV2.Knot',value:{
+const malformed=dump([typed(v(0,0,0)),{type:'Spline.Knot',value:{
  position:{type:'cc.Vec3',value:{x:'bad',y:0,z:0}}
 }}]);
 const before=JSON.stringify(malformed);

@@ -127,12 +127,12 @@ try{
    ...sampled,sidewalkTerrainMode:'invalid'}),/invalid sidewalk apron/);
  }
  const component=fs.readFileSync(path.join(root,
-  'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),'utf8');
+  'assets/splines-v2/Components/JunctionPatch.ts'),'utf8');
  assert.match(component,/getHeightAt\(terrainLocal\.x,terrainLocal\.z\)/);
  assert.match(component,/new Vec3\(terrainLocal\.x,height,terrainLocal\.z\)/);
  assert.match(component,/terrain\.node\.worldMatrix/);
  assert.match(component,/sidewalkTerrainSampler:terrainSample/);
- assert.match(component,/sidewalkTerrainMode=JunctionTerrainEdgeModeV2.FlatHeight/);
+ assert.match(component,/sidewalkTerrainMode=JunctionTerrainEdgeMode.FlatHeight/);
  assert.match(component,/Sample Terrain requires upright Junction\/Terrain/);
  const inspector=require(path.join(root,'src/contributions/inspector/JunctionV2.js'));
  assert.match(inspector.template,/spl-v2-sidewalkTerrainMode/);

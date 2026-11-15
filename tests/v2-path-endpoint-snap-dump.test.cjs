@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {planEndpointSnapDump:plan}=require('../src/v2/PathEndpointSnapDump');
 const deep=x=>JSON.parse(JSON.stringify(x));
 const vec=p=>({type:'cc.Vec3',value:p});
-const knot=(p,roll=17)=>({type:'SplinesV2.Knot',value:{
+const knot=(p,roll=17)=>({type:'Spline.Knot',value:{
  position:vec(p),handleIn:vec({x:-3,y:2,z:1}),
  handleOut:vec({x:3,y:-1,z:0}),mode:{type:'Enum',value:2},
  tension:{type:'Float',value:.18},rollDegrees:{type:'Float',value:roll},
@@ -12,7 +12,7 @@ const before=[
  knot({x:0,y:0,z:0},50),knot({x:5,y:0,z:10},-30)
 ];
 const dump={__comps__:[{type:'cc.MeshRenderer',value:{}},{
- type:'SplinesV2.SplinePath',value:{
+ type:'Spline.Path',value:{
  knots:{type:'Array',isArray:true,elementTypeData:deep(before[0]),value:deep(before)},
  interpolation:{type:'Enum',value:1},
  gizmoKnotIndex:{type:'Integer',value:0}
