@@ -7,7 +7,8 @@ try{
  cp.execFileSync('tsc',['--strict','--target','ES2020','--module','commonjs',
   '--rootDir',path.join(root,'src-v2'),'--outDir',dir,
   path.join(root,'src-v2/geometry/JunctionInteriorUVV2.ts'),
-  path.join(root,'src-v2/geometry/JunctionPatchV2.ts')],{stdio:'pipe'});
+  path.join(root,'src-v2/geometry/JunctionPatchV2.ts'),
+  path.join(root,'src-v2/geometry/MeshBuildPlan.ts')],{stdio:'pipe'});
  const {smoothJunctionInteriorUVRingV2:smooth}=
   require(path.join(dir,'geometry/JunctionInteriorUVV2.js'));
  const original=Array.from({length:12},(_,i)=>({x:i%3===0?i*2:i*.1,y:i%4===0?4:-1}));
