@@ -101,3 +101,11 @@
 - [x] Planner/test dump history replay regressions and clean test bundle wiring.
 - [ ] Native Creator Undo/Redo per Path + Prefab override certification, Scene Save/Reopen, real SDK Gizmos and painted material seam validation. **Multiple Paths are separate Undo entries**, not one atomic transaction.
 - [ ] Automatic connection assignment/graph serialization, collision-safe multi-Junction consensus, horizontal tangent alignment, shared-Path fan-out resolution, 3D banked intersection topology and junction-aware lane routing.
+
+## Auto Connect milestone (2026-11-15)
+
+- [x] Scene Road discovery and read-only geometric 3-/4-way Junction Auto Connect proposal: endpoint proximity, source Path identity, ascending heading, ambiguous/multiple candidate rejection.
+- [x] Record native Creator typed `JunctionRoadLink` array through `scene.set-property(record:true)`, preserve Road-specific paint flags, existing branch order, safety guards against branch-indexed guide/ramp corruption; add Check/Apply Inspector buttons.
+- [x] Mock Creator Check/Apply/Undo regression and clean extension test-bundle wiring; no tag or GitHub Release.
+- [ ] Certify actual Creator 3.8.x component-reference dump schema, native Undo/Redo, Scene Save/Reopen and Prefab overrides.
+- [ ] World-space tangent alignment options, geometric/UV seam certification, dynamic Road Network graph persistence and automated 3D Junction mesh topology.
