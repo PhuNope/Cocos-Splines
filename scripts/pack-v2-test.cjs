@@ -30,6 +30,7 @@ copy('assets/splines-v2');
 copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
 copy('src/v2/PathV2Dump.js','dist/v2/PathV2Dump.js');
+copy('src/v2/PathGroupNudgeDump.js','dist/v2/PathGroupNudgeDump.js');
 copy('src/v2/PathKnotDumpCodec.js','dist/v2/PathKnotDumpCodec.js');
 copy('src/v2/PathEndpointSnapDump.js','dist/v2/PathEndpointSnapDump.js');
 copy('src/v2/JunctionAutoConnectDump.js','dist/v2/JunctionAutoConnectDump.js');
@@ -54,6 +55,7 @@ pkg.contributions={
         'bake-v2-road':{methods:['bakeV2Road']},
         'bind-v2-road-mesh':{methods:['bindV2RoadMesh']},
         'edit-v2-path':{methods:['editV2Path']},
+        'nudge-v2-path-group':{methods:['nudgeV2PathGroup']},
         'plan-v2-junction-auto-trim':{methods:['planV2JunctionAutoTrim']},
         'apply-v2-junction-auto-trim':{methods:['applyV2JunctionAutoTrim']},
         'plan-v2-junction-endpoint-snap':{methods:['planV2JunctionEndpointSnap']},
@@ -94,6 +96,7 @@ for(const rel of [
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePath.ts',
  'dist/v2/PathV2Dump.js',
+ 'dist/v2/PathGroupNudgeDump.js',
  'dist/v2/PathKnotDumpCodec.js',
  'dist/v2/PathEndpointSnapDump.js',
  'dist/v2/JunctionAutoConnectDump.js',

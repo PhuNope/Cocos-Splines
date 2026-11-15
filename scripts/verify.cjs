@@ -32,6 +32,7 @@ checkRel('assets/splines-v2/Components/JunctionPatch.ts.meta');
 checkRel('assets/splines-v2/geometry/SplineRoadNetworkV2.ts');
 checkRel('assets/splines-v2/geometry/SplineRoadNetworkV2.ts.meta');
 checkRel('src/v2/PathKnotDumpCodec.js');
+checkRel('src/v2/PathGroupNudgeDump.js');
 checkRel('src/v2/PathEndpointSnapDump.js');
 checkRel('src/v2/JunctionAutoConnectDump.js');
 checkRel('assets/splines-v2/geometry/JunctionAutoConnectV2.ts');

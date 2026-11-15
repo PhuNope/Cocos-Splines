@@ -14,7 +14,7 @@ const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
     'gizmoShowRollGuide','gizmoRollGuideSize'];
 const $={items:'.spl-path-items',
-    count:'.spl-path-count',add:'.spl-path-add'};
+    count:'.spl-path-count',add:'.spl-path-add',nudge:'.spl-path-nudge'};
 for(const field of simple)$[field]='.spl-path-'+field;
 const sections=[
  ['Spline',['interpolation','closed']],
@@ -31,6 +31,7 @@ const rows=sections.map(([name,fields])=>
     ).join('')+'</details>'
 ).join('');
 const names=['select','insert','duplicate','remove','up','down'];
+const nudgeDirections=['x-','x+','y-','y+','z-','z+'];
 function escapeText(s){
     return String(s).replace(/[&<>"']/g,c=>({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -45,6 +46,12 @@ function pointLabel(entry){
     if(!p||typeof p!=='object')return 'Vec3';
     const f=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):'?';
     return 'X '+f(p.x)+' · Y '+f(p.y)+' · Z '+f(p.z);
+}
+async function nudgeGroup(axis){
+    if(!nudgeDirections.includes(axis))return;
+    const result=await callEditor(null,'nudge-v2-path-group',axis);
+    if(!result?.ok)
+        console.warn('[Cocos Splines] Group Nudge:',String(result?.error||'Failed'));
 }
 async function action(operation,index){
     if(!names.includes(operation)&&operation!=='add')return;
@@ -64,10 +71,20 @@ module.exports={
  .spl-path-position{font-size:11px;opacity:.8}
  .spl-path-actions{display:flex;gap:4px;flex-wrap:wrap;margin:5px 0}
  .spl-path-items ui-prop{display:block;margin-top:5px}
+ .spl-path-nudge{display:flex;flex-wrap:wrap;gap:5px;padding:6px 0}
+ .spl-path-nudge button{min-width:46px}
  `,
  template:`<div class="spl-inspector">
    <div class="spl-header"><strong>∿ Spline Path</strong></div>
    ${rows}
+   <details class="spl-section"><summary>Group Nudge (HUD selection)</summary>
+      <div class="spl-path-nudge">
+        ${nudgeDirections.map(axis=>
+            '<button type="button" class="spl-btn" data-nudge="'+axis+'">'+axis.toUpperCase()+'</button>'
+        ).join('')}
+      </div>
+      <small>Step: Position Snap (or 1 if disabled). One Undo step for all selected Knots.</small>
+   </details>
    <details open class="spl-section"><summary>Vec3 Knots
        <small class="spl-path-count"></small></summary>
       <div class="spl-btns">
@@ -117,6 +134,10 @@ module.exports={
  },
  ready(){
     this.$.add.addEventListener('click',()=>void action('add',0));
+    this.$.nudge.addEventListener('click',event=>{
+        const button=event.target?.closest?.('button[data-nudge]');
+        if(button)void nudgeGroup(button.dataset.nudge);
+    });
     this.$.items.addEventListener('click',event=>{
         const button=event.target?.closest?.('button[data-operation]');
         if(!button)return;

@@ -174,8 +174,29 @@ function inspectV2JunctionSeams(uuid){
         return {ok:true,report:c.inspectJunctionSeams()};
     });
 }
+/** Read-only plan; use Creator main to record the entire Knot array. */
+function planV2PathGroupNudge(uuid,axis){
+    const node=locate(uuid),{js}=require('cc');
+    const path=node?.components?.find(c=>js.getClassName(c)==='Spline.Path');
+    if(!path||typeof path.planGroupNudge!=='function')
+        return {ok:false,error:'Select a Spline.Path component with a HUD group'};
+    try{return {ok:true,plan:path.planGroupNudge(axis)};}
+    catch(e){return {ok:false,error:String(e instanceof Error?e.message:e)};}
+}
+/** Rebind transient selection after Creator's typed property commit. */
+function refreshV2PathGroup(uuid,indices){
+    const previous=refreshV2Path(uuid);
+    if(!previous?.ok)return previous;
+    const node=locate(uuid),{js}=require('cc');
+    const path=node?.components?.find(c=>js.getClassName(c)==='Spline.Path');
+    if(!path||typeof path.restoreGroupSelection!=='function')
+        return {ok:false,error:'Spline.Path Group selection unavailable after commit'};
+    path.restoreGroupSelection(indices);
+    return {...previous,groupCount:path.selectedGroupIndices().length};
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
-    inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
+    inspectV2RoadBake,refreshV2Path,planV2PathGroupNudge,refreshV2PathGroup,
+    planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap,
     planV2JunctionAutoConnect,refreshV2JunctionAutoConnect,planV2JunctionTangents,
     inspectV2JunctionSeams};

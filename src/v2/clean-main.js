@@ -7,6 +7,7 @@
 const NAME='cocos-splines';
 const {bindWhenImported}=require('./EditorAssetBind');
 const {planPathEditDump}=require('./PathV2Dump');
+const {planPathGroupNudgeDump}=require('./PathGroupNudgeDump');
 const {planEndpointSnapDump}=require('./PathEndpointSnapDump');
 const {planJunctionAutoConnectDump}=require('./JunctionAutoConnectDump');
 const {planJunctionTangentDump}=require('./JunctionTangentDump');
@@ -142,6 +143,26 @@ async function editV2Path(operation,index){
         }
         return {ok:true,index:plan.index,count:plan.count};
     }catch(e){return fail('edit path',e);}
+}
+/** Group Nudge: one native Creator history transaction for all selected Knots. */
+async function nudgeV2PathGroup(axis){
+    try{
+        const uuid=currentNode();
+        const proposed=await scene('planV2PathGroupNudge',uuid,axis);
+        if(!proposed?.ok)throw new Error(proposed?.error||'Group Nudge rejected');
+        const node=await Editor.Message.request('scene','query-node',uuid);
+        const commit=planPathGroupNudgeDump(node,proposed.plan);
+        if(commit.noOp)return {ok:true,noOp:true,count:commit.count};
+        const saved=await Editor.Message.request('scene','set-property',{
+            uuid,path:'__comps__.'+commit.componentIndex+'.knots',
+            dump:commit.dump,record:true
+        });
+        if(saved===false)throw new Error('Creator rejected Group Nudge Knot edit');
+        const refresh=await scene('refreshV2PathGroup',uuid,commit.indices);
+        if(!refresh?.ok)
+            throw new Error(refresh?.error||'Group Nudge was recorded but preview failed');
+        return {ok:true,count:commit.count,axis,groupCount:refresh.groupCount};
+    }catch(e){return fail('group nudge',e);}
 }
 async function planV2JunctionAutoTrim(){
     try{
@@ -358,7 +379,8 @@ async function inspectV2JunctionSeams(){
     }catch(e){return fail('inspect Junction seams',e);}
 }
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
-    bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
+    bindV2RoadMesh,bakeV2Road,editV2Path,nudgeV2PathGroup,
+    planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork,
     planV2JunctionAutoConnect,applyV2JunctionAutoConnect,
     planV2JunctionTangents,applyV2JunctionTangents,inspectV2JunctionSeams};
