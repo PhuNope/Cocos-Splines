@@ -1,4 +1,4 @@
-import {_decorator,Component,Node,Mat4,Vec3,Enum} from 'cc';
+import {_decorator,Component,Node,Mat4,Quat,Vec3,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
@@ -85,6 +85,10 @@ export class SplinePath extends Component {
     @property({min:0,max:90,step:1,
         tooltip:'Rotation snap in degrees; 0 is continuous.'})
     gizmoRotationSnap=0;
+    @property({type:Enum(SplineSpace),tooltip:'Move Gizmos axes and numeric position in Path Local or World coordinates.'})
+    gizmoPositionSpace=SplineSpace.Local;
+    @property({type:Enum(SplineSpace),tooltip:'Rotate Gizmos axes and Euler edit in Path Local or World coordinates.'})
+    gizmoRotationSpace=SplineSpace.Local;
 
     private _consumers=new Set<PreviewConsumer>();
     private _dragKnot:SplineKnot|null=null;
@@ -253,18 +257,30 @@ export class SplinePath extends Component {
         }
         this.notifyPreviewConsumers(this,true);
     }
-    private readTangent(side:TangentSide):Vec3 {
+    /** UI proxies change coordinate space; serialized Knot fields stay local. */
+    private toGizmoPoint(p:V3,world:boolean):Vec3 {
+        return world&&this.node?.isValid?
+            Vec3.transformMat4(new Vec3(),vec(p),this.node.worldMatrix):vec(p);
+    }
+    private fromGizmoPoint(p:V3,world:boolean):Vec3 {
+        if(!world||!this.node?.isValid)return vec(p);
+        const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
+        return Vec3.transformMat4(new Vec3(),vec(p),inverse);
+    }
+    private readTangent(side:TangentSide,world=false):Vec3 {
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
         const knot=this.knotAt(this.gizmoKnotIndex,field);
         if(!EDITOR_NOT_IN_PREVIEW||!knot)return new Vec3();
-        return vec(add(knot.position,this.tangentOffset(knot,side)));
+        return this.toGizmoPoint(add(knot.position,this.tangentOffset(knot,side)),world);
     }
-    private writeTangent(side:TangentSide,point:Vec3):void {
+    private writeTangent(side:TangentSide,point:Vec3,world=false):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!this.gizmoEditTangents||
             this.interpolation!==CurveMode.Bezier||!finite(point))return;
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
         const k=this.knotAt(this.gizmoKnotIndex,field);
         if(!k)return;
+        const localPoint=this.fromGizmoPoint(point,world);
+        if(!finite(localPoint))return;
         if(k.mode===TangentMode.Auto){
             k.handleIn=vec(this.tangentOffset(k,'in'));
             k.handleOut=vec(this.tangentOffset(k,'out'));
@@ -273,7 +289,7 @@ export class SplinePath extends Component {
         const picked=side==='in'?'handleIn':'handleOut';
         const other=side==='in'?'handleOut':'handleIn';
         const oppositeLength=length(k[other]);
-        k[picked]=vec(sub(point,k.position));
+        k[picked]=vec(sub(localPoint,k.position));
         if(k.mode===TangentMode.Mirrored||
            k.mode===TangentMode.Aligned){
             const l=length(k[picked]);
@@ -285,6 +301,10 @@ export class SplinePath extends Component {
     public set pathGizmoTangentIn(v:Vec3){this.writeTangent('in',v);}
     public get pathGizmoTangentOut():Vec3{return this.readTangent('out');}
     public set pathGizmoTangentOut(v:Vec3){this.writeTangent('out',v);}
+    public get pathGizmoTangentInWorld():Vec3{return this.readTangent('in',true);}
+    public set pathGizmoTangentInWorld(v:Vec3){this.writeTangent('in',v,true);}
+    public get pathGizmoTangentOutWorld():Vec3{return this.readTangent('out',true);}
+    public set pathGizmoTangentOutWorld(v:Vec3){this.writeTangent('out',v,true);}
 
     public getSplineData(consumer:Node,space:SplineSpace=SplineSpace.Local):SplineDataV2 {
         if(!consumer?.isValid||!this.node?.isValid)
@@ -331,26 +351,36 @@ export class SplinePath extends Component {
     /** Rotate SDK rings are centered at the Path Node origin; the Euler
      * proxy is therefore the Path Node orientation, never a fake Knot pivot. */
     public get pathGizmoRotationEuler():Vec3 {
-        return this.node?.isValid?vec(this.node.eulerAngles):new Vec3();
+        if(!this.node?.isValid)return new Vec3();
+        return this.gizmoRotationSpace===SplineSpace.World?
+            Quat.toEuler(new Vec3(),this.node.worldRotation):
+            vec(this.node.eulerAngles);
     }
     public set pathGizmoRotationEuler(value:Vec3) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
            this.gizmoRotationMode===RotationMode.Knots||
            !finite(value))return;
+        const world=this.gizmoRotationSpace===SplineSpace.World;
         if(this.gizmoRotationMode===RotationMode.Planar2D){
-            const original=this.node.eulerAngles;
-            this.node.setRotationFromEuler(new Vec3(original.x,original.y,value.z));
-        }else this.node.setRotationFromEuler(vec(value));
+            const original=this.pathGizmoRotationEuler;
+            const next=new Vec3(original.x,original.y,value.z);
+            if(world)this.node.setWorldRotationFromEuler(next.x,next.y,next.z);
+            else this.node.setRotationFromEuler(next);
+        }else if(world)this.node.setWorldRotationFromEuler(value.x,value.y,value.z);
+        else this.node.setRotationFromEuler(vec(value));
     }
-    private read(index:number,field:PathGizmoProperty):Vec3 {
+    private read(index:number,field:PathGizmoProperty,world=false):Vec3 {
         const k=this.knotAt(index,field);
         if(!EDITOR_NOT_IN_PREVIEW||!k||!finite(k.position))return new Vec3();
-        return vec(k.position);
+        return this.toGizmoPoint(k.position,world);
     }
-    private write(index:number,field:PathGizmoProperty,value:Vec3):void {
+    private write(index:number,field:PathGizmoProperty,value:Vec3,world=false):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!finite(value))return;
         const k=this.knotAt(index,field);
-        if(k)k.position=vec(value);
+        if(k){
+            const local=this.fromGizmoPoint(value,world);
+            if(finite(local))k.position=local;
+        }
     }
     public get pathGizmoKnotPosition():Vec3 {
         return this.read(this.gizmoKnotIndex,'pathGizmoKnotPosition');
@@ -358,8 +388,14 @@ export class SplinePath extends Component {
     public set pathGizmoKnotPosition(value:Vec3) {
         this.write(this.gizmoKnotIndex,'pathGizmoKnotPosition',value);
     }
-    /** Indexed Gizmos proxy writes directly to a Knot Vec3 record. */
-    public get pathGizmoKnotPositions():Vec3[] {
+    public get pathGizmoKnotPositionWorld():Vec3 {
+        return this.read(this.gizmoKnotIndex,'pathGizmoKnotPosition',true);
+    }
+    public set pathGizmoKnotPositionWorld(value:Vec3) {
+        this.write(this.gizmoKnotIndex,'pathGizmoKnotPosition',value,true);
+    }
+    /** Indexed Gizmos proxies write back to the same local Knot record. */
+    private knotPositionsProxy(world:boolean):Vec3[] {
         const limit=Number.isFinite(this.gizmoPointLimit)?
             Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
         const count=Math.min(this.knots.length,limit),result=new Array<Vec3>(count);
@@ -370,15 +406,36 @@ export class SplinePath extends Component {
         return new Proxy(result,{
             get:(target,p,receiver)=>{
                 const i=toIndex(p);
-                return i>=0?this.read(i,'pathGizmoKnotPositions'):Reflect.get(target,p,receiver);
+                return i>=0?this.read(i,'pathGizmoKnotPositions',world):Reflect.get(target,p,receiver);
             },
             set:(target,p,value,receiver)=>{
                 const i=toIndex(p);
-                if(i>=0){this.write(i,'pathGizmoKnotPositions',value);return true;}
+                if(i>=0){this.write(i,'pathGizmoKnotPositions',value,world);return true;}
                 if(typeof p==='string'&&/^(0|[1-9][0-9]*)$/.test(p))return false;
                 return Reflect.set(target,p,value,receiver);
             }
         });
+    }
+    public get pathGizmoKnotPositions():Vec3[] {
+        return this.knotPositionsProxy(false);
+    }
+    public get pathGizmoKnotPositionsWorld():Vec3[] {
+        return this.knotPositionsProxy(true);
+    }
+    /** Each HUD pair is mutually exclusive and always has one active space. */
+    public get pathHudPositionLocal():boolean {return this.gizmoPositionSpace===SplineSpace.Local;}
+    public set pathHudPositionLocal(v:boolean) {if(v)this.switchHudSpace('position',SplineSpace.Local);}
+    public get pathHudPositionWorld():boolean {return this.gizmoPositionSpace===SplineSpace.World;}
+    public set pathHudPositionWorld(v:boolean) {if(v)this.switchHudSpace('position',SplineSpace.World);}
+    public get pathHudRotationLocal():boolean {return this.gizmoRotationSpace===SplineSpace.Local;}
+    public set pathHudRotationLocal(v:boolean) {if(v)this.switchHudSpace('rotation',SplineSpace.Local);}
+    public get pathHudRotationWorld():boolean {return this.gizmoRotationSpace===SplineSpace.World;}
+    public set pathHudRotationWorld(v:boolean) {if(v)this.switchHudSpace('rotation',SplineSpace.World);}
+    private switchHudSpace(kind:'position'|'rotation',space:SplineSpace):void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
+           this._dragKnot||this._rotationDragging||this._hudRollKnot)return;
+        if(kind==='position')this.gizmoPositionSpace=space;
+        else this.gizmoRotationSpace=space;
     }
     public onGizmoHandles():SplineGizmoHandle[] {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid)return [];
@@ -387,10 +444,14 @@ export class SplinePath extends Component {
                 '2d':this.gizmoRotationMode===RotationMode.Spatial3D?
                 '3d':null;
             return mode?buildSplinePathRotateGizmos('pathGizmoRotationEuler',
-                mode,this.gizmoRotationSnap):[];
+                mode,this.gizmoRotationSnap,
+                this.gizmoRotationSpace===SplineSpace.World?'world':'local'):[];
         }
         if(!this.gizmoEditKnots||!this.knots[this.gizmoKnotIndex])return [];
-        const active=buildSplineKnotMoveGizmos('pathGizmoKnotPosition');
+        const world=this.gizmoPositionSpace===SplineSpace.World;
+        const space=world?'world':'local';
+        const active=buildSplineKnotMoveGizmos(
+            world?'pathGizmoKnotPositionWorld':'pathGizmoKnotPosition',space);
         if(!active.length)return [];
         const handles=[...active];
         if(this.gizmoMultiKnotPoints){
@@ -398,15 +459,16 @@ export class SplinePath extends Component {
                 Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
             const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
                 .filter(i=>i!==this.gizmoKnotIndex);
-            handles.push(...buildSplineKnotPointGizmos('pathGizmoKnotPositions',indices));
+            handles.push(...buildSplineKnotPointGizmos(
+                world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',indices,space));
         }
         if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
             handles.push(
-                {id:'path-tangent-in',property:'pathGizmoTangentIn',
-                    visual:'point',plane:'view',space:'local',
+                {id:'path-tangent-in',property:world?'pathGizmoTangentInWorld':'pathGizmoTangentIn',
+                    visual:'point',plane:'view',space,
                     color:'#b58cff',hoverColor:'#fff269',pickSize:24},
-                {id:'path-tangent-out',property:'pathGizmoTangentOut',
-                    visual:'point',plane:'view',space:'local',
+                {id:'path-tangent-out',property:world?'pathGizmoTangentOutWorld':'pathGizmoTangentOut',
+                    visual:'point',plane:'view',space,
                     color:'#48d8e6',hoverColor:'#fff269',pickSize:24});
         }
         return handles;
@@ -457,11 +519,19 @@ export class SplinePath extends Component {
     }
     public onGizmoHudControls():Array<{
         type:'slider'|'toggle';id:string;text:string;property:string;
-        min?:number;max?:number;step?:number;order?:number;
+        min?:number;max?:number;step?:number;order?:number;group?:string;
     }> {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
             this.knots.length<2||!availableGizmoBackend())return [];
         return [
+            {type:'toggle',id:'position-local',text:'Position · Local',
+                property:'pathHudPositionLocal',group:'position-space',order:-4},
+            {type:'toggle',id:'position-world',text:'Position · World',
+                property:'pathHudPositionWorld',group:'position-space',order:-3},
+            {type:'toggle',id:'rotation-local',text:'Rotation · Local',
+                property:'pathHudRotationLocal',group:'rotation-space',order:-2},
+            {type:'toggle',id:'rotation-world',text:'Rotation · World',
+                property:'pathHudRotationWorld',group:'rotation-space',order:-1},
             {type:'slider',id:'path-active-knot',text:'Active Knot',
                 property:'gizmoKnotIndex',min:0,
                 max:Math.min(this.knots.length-1,127),step:1,order:1},
@@ -481,9 +551,11 @@ export class SplinePath extends Component {
         if(!EDITOR_NOT_IN_PREVIEW)return;
         if(name==='pathGizmoRotationEuler'){
             if(phase==='begin'){
-                if(this._rotationDragging||this._dragKnot)return;
+                if(this._rotationDragging||this._dragKnot||this._hudRollKnot)return;
                 this._rotationDragging=true;
-                this._rotationStart=this.pathGizmoRotationEuler;
+                // Always store the LOCAL node Euler for lossless Escape,
+                // even when the tool is editing a world orientation.
+                this._rotationStart=vec(this.node.eulerAngles);
                 for(const consumer of this._consumers)
                     consumer.onSharedSplinePathEditBegin?.();
             }else if(phase==='update'&&this._rotationDragging){
@@ -500,11 +572,20 @@ export class SplinePath extends Component {
             }
             return;
         }
-        if(!['pathGizmoKnotPosition','pathGizmoKnotPositions',
-             'pathGizmoTangentIn','pathGizmoTangentOut'].includes(name))return;
-        const field=name as PathGizmoProperty;
+        const proxy={
+            pathGizmoKnotPosition:'pathGizmoKnotPosition',
+            pathGizmoKnotPositionWorld:'pathGizmoKnotPosition',
+            pathGizmoKnotPositions:'pathGizmoKnotPositions',
+            pathGizmoKnotPositionsWorld:'pathGizmoKnotPositions',
+            pathGizmoTangentIn:'pathGizmoTangentIn',
+            pathGizmoTangentInWorld:'pathGizmoTangentIn',
+            pathGizmoTangentOut:'pathGizmoTangentOut',
+            pathGizmoTangentOutWorld:'pathGizmoTangentOut'
+        } as const;
+        if(!(name in proxy))return;
+        const field=proxy[name as keyof typeof proxy] as PathGizmoProperty;
         if(phase==='begin'){
-            if(this._dragKnot)return;
+            if(this._dragKnot||this._rotationDragging||this._hudRollKnot)return;
             const i=field==='pathGizmoKnotPositions'?index:this.gizmoKnotIndex;
             if(!Number.isSafeInteger(i)||i===undefined||i<0)return;
             const knot=this.knots[i];
