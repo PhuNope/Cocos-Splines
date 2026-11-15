@@ -115,7 +115,11 @@ for(const rel of [
  'assets/splines-v2/geometry/JunctionTangentAlignV2.ts',
  'assets/splines-v2/geometry/JunctionTangentAlignV2.ts.meta',
  'assets/splines-v2/geometry/JunctionSeamAuditV2.ts',
- 'assets/splines-v2/geometry/JunctionSeamAuditV2.ts.meta'
+ 'assets/splines-v2/geometry/JunctionSeamAuditV2.ts.meta',
+ 'assets/splines-v2/geometry/JunctionAsphaltOverlapV2.ts',
+ 'assets/splines-v2/geometry/JunctionAsphaltOverlapV2.ts.meta',
+ 'assets/splines-v2/geometry/JunctionInteriorUVV2.ts',
+ 'assets/splines-v2/geometry/JunctionInteriorUVV2.ts.meta'
 ])assertFile(rel);
 assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
