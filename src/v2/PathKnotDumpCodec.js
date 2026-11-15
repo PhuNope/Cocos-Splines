@@ -18,10 +18,11 @@ const vectorAt=point=>{
     const x=axisValue(point.x),y=axisValue(point.y),z=axisValue(point.z);
     return [x,y,z].every(Number.isFinite)?{x,y,z}:null;
 };
-function locate(entry){
+function locate(entry,field='position'){
+    if(!['position','handleIn','handleOut'].includes(field))return null;
     const nodes=[
-        entry?.value?.position,entry?.value?.value?.position,
-        entry?.position,entry?.value?.__value__?.position
+        entry?.value?.[field],entry?.value?.value?.[field],
+        entry?.[field],entry?.value?.__value__?.[field]
     ];
     for(const item of nodes){
         let candidate=item;
@@ -34,13 +35,14 @@ function locate(entry){
     }
     return null;
 }
-function knotPosition(entry){
-    return locate(entry)?.point||null;
+function knotVec3(entry,field='position'){
+    return locate(entry,field)?.point||null;
 }
-function setKnotPosition(entry,point){
+function knotPosition(entry){return knotVec3(entry,'position');}
+function setKnotVec3(entry,field,point){
     if(!vectorAt(point))throw new Error('Invalid finite Vec3 Knot target');
-    const found=locate(entry);
-    if(!found)throw new Error('Unsupported serialized Vec3 Knot position shape');
+    const found=locate(entry,field);
+    if(!found)throw new Error('Unsupported serialized Vec3 Knot '+field+' shape');
     for(const axis of ['x','y','z']){
         const current=found.container[axis];
         if(isObject(current)&&typeof current.value==='number')
@@ -48,6 +50,7 @@ function setKnotPosition(entry,point){
         else found.container[axis]=point[axis];
     }
 }
+function setKnotPosition(entry,point){setKnotVec3(entry,'position',point);}
 /** Report structure only; never print serialized Knot values or full dumps. */
 function knotDumpShape(entry){
     if(entry==null)return 'null';
@@ -62,4 +65,4 @@ function knotDumpShape(entry){
     }
     return 'position:'+typeof pos;
 }
-module.exports={knotPosition,setKnotPosition,knotDumpShape};
+module.exports={knotPosition,setKnotPosition,knotVec3,setKnotVec3,knotDumpShape};
