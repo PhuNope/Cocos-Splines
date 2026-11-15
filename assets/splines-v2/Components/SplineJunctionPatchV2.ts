@@ -62,6 +62,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     junctionUVMode=JunctionUVModeV2.MatchedRepeat;
     @property({min:.05,max:.95,step:.05,tooltip:'Inner transition radius for the central shared UV patch.'})
     junctionUVBlend=.55;
+    @property({min:0,max:.5,step:.025,tooltip:'Optional angular UV smoothing for PLAIN asphalt Junction only (0 = legacy UV). Never changes Road cut-ring UV; unavailable with shoulder/curb profiles or Projected UV.'})
+    junctionUVInteriorSmoothing=0;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum gap between the original (untrimmed) Road endpoints, in local units.'})
     endpointTolerance=.25;
     @property({min:.05,max:5,step:.05,tooltip:'Editor-only maximum distance to move a linked Pure Vec3 Path endpoint when applying Junction Endpoint Snap.'})
@@ -509,7 +511,9 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
         const result=buildJunctionPatchV2(entries,{
             uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
             uvMetersPerRepeat:this.uvMetersPerRepeat,
-            uvBlendStart:this.junctionUVBlend,endpointTolerance:this.endpointTolerance,
+            uvBlendStart:this.junctionUVBlend,
+            uvInteriorSmoothing:this.junctionUVInteriorSmoothing,
+            endpointTolerance:this.endpointTolerance,
             flatTolerance:this.flatTolerance,
             gradeMode:this.gradeMode===JunctionGradeModeV2.Gentle?'gentle':'flat',
             maxGrade:this.maxGrade,surfaceLift:this.patchLift,materialSlot:0,
