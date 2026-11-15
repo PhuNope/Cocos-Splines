@@ -114,8 +114,9 @@ try{
   assert.deepEqual(Object.keys(main.methods).sort(),[
    'applyV2JunctionAutoConnect','applyV2JunctionAutoTrim','applyV2JunctionEndpointSnap','applyV2JunctionTangents','bakeV2Road',
    'bindV2RoadMesh','checkV2RoadBake','editV2Path','inspectV2JunctionSeams','inspectV2RoadNetwork',
+   'nudgeV2PathGroup',
    'planV2JunctionAutoConnect','planV2JunctionAutoTrim','planV2JunctionEndpointSnap','planV2JunctionTangents',
-   'nudgeV2PathGroup','rebuildV2Road','restoreV2RoadBaked']);
+   'rebuildV2Road','restoreV2RoadBaked']);
   assert.equal((await main.methods.rebuildV2Road()).ok,true);
   assert.equal((await main.methods.checkV2RoadBake()).ok,true);
   assert.equal((await main.methods.restoreV2RoadBaked()).ok,true);
