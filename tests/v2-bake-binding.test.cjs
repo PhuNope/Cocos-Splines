@@ -56,6 +56,14 @@ function makeEditor(){
  assert(result.ok);
  assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
  assert.equal(calls.filter(x=>x.method==='set-property').length,6,'No mutation during import wait');
+ for(const kind of ['Spline.MeshDeform','Spline.Junction']){
+   calls=[];scene={__comps__:[comp(kind)]};assetResponses=[meshInfo];
+   result=await bindImportedMesh(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp});
+   assert.equal(result.ok,true,kind+' must bind saved glTF Mesh');
+   assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
+   assert.equal(calls.filter(x=>x.method==='set-property').length,6);
+ }
+
  // Existing mesh remains untouched if no unique import can be proven.
  scene={__comps__:[comp()]};calls=[];assetResponses=[{subAssets:{
   one:{type:'cc.Mesh',uuid:'one'},two:{type:'cc.Mesh',uuid:'two'}}}];

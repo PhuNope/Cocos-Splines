@@ -17,7 +17,7 @@ function discoverMeshSubasset(assetInfo){
 }
 function componentDump(nodeInfo,index){
     const c=nodeInfo?.__comps__?.[index];
-    if(!c||!['SplinesV2.SplineRoad','SplinesV2.SplineExtrude'].includes(c.type))
+    if(!c||!['Spline.Road','Spline.Extrude','Spline.MeshDeform','Spline.Junction'].includes(c.type))
         throw new Error('Component changed before bake binding. Reopen Inspector.');
     return c;
 }
