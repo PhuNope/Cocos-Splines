@@ -433,8 +433,9 @@ export class SplinePath extends Component {
         if(!Number.isFinite(raw)||raw<0||raw>20)
             throw new Error('Invalid Path Position Snap');
         const step=raw>0?raw:1;
-        const vector:V3={x:0,y:0,z:0};
-        vector[axis[0] as keyof V3]=axis[1]==='+'?step:-step;
+        const signed=axis[1]==='+'?step:-step;
+        const vector:V3=axis[0]==='x'?{x:signed,y:0,z:0}:
+            axis[0]==='y'?{x:0,y:signed,z:0}:{x:0,y:0,z:signed};
         const world=this.gizmoPositionSpace===SplineSpace.World;
         const origin=this.fromGizmoPoint({x:0,y:0,z:0},world);
         const destination=this.fromGizmoPoint(vector,world);
