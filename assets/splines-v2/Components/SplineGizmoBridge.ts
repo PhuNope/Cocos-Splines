@@ -27,6 +27,7 @@ export interface SplineGizmoHandle {
     plane?:string;
     axis?:string;
     space?:string;
+    snap?:number;
     color?:string;
     hoverColor?:string;
     pickSize?:number;
@@ -84,13 +85,15 @@ export function buildSplinePathRotateGizmos(
  * A missing/older SDK simply offers no handles.
  */
 export function buildSplineKnotMoveGizmos(
-    property:string,space:'local'|'world'='local'
+    property:string,space:'local'|'world'='local',snap=0
 ):SplineGizmoHandle[] {
+    if(!Number.isFinite(snap)||snap<0||snap>20)
+        throw new Error('Move snap must be finite and in [0,20]');
     const sdk=availableGizmoBackend();
     if(!sdk||typeof sdk.move!=='function')return [];
     return sdk.move(property,{space,axisSize:66,pickSize:28,
         planeSize:18,planeOffset:14,showPositionLabel:true,
-        positionLabelOffset:82});
+        positionLabelOffset:82,...(snap>0?{snap}:{})});
 }
 /**
  * Cocos-Gizmos PositionHandles.readField/writeField accepts indexed
@@ -102,14 +105,17 @@ export function buildSplineKnotMoveGizmos(
  * Knots get one pickable point each.
  */
 export function buildSplineKnotPointGizmos(
-    property:string,indices:ReadonlyArray<number>,space:'local'|'world'='local'
+    property:string,indices:ReadonlyArray<number>,space:'local'|'world'='local',
+    snap=0
 ):SplineGizmoHandle[] {
+    if(!Number.isFinite(snap)||snap<0||snap>20)
+        throw new Error('Point snap must be finite and in [0,20]');
     if(!availableGizmoBackend())return [];
     if(indices.length>32||indices.some(i=>!Number.isSafeInteger(i)||i<0||i>127))
         throw new Error('Cocos Splines Gizmos: invalid indexed Knot handles');
     return indices.map(index=>({
         property,index,id:'spline-knot-'+index,
-        visual:'point',plane:'view',space,
+        visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
         color:'#ffb84a',hoverColor:'#ffff78',pickSize:24
     }));
 }
