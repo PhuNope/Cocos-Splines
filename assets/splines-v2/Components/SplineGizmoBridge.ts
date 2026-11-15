@@ -62,15 +62,15 @@ export function availableGizmoBackend():SplineSceneGizmoBackend|null {
  * Missing SDK methods cause no handles, not Editor/Play errors.
  */
 export function buildSplinePathRotateGizmos(
-    property:string,mode:'2d'|'3d',snapDegrees=0
+    property:string,mode:'2d'|'3d',snapDegrees=0,space:'local'|'world'='local'
 ):SplineGizmoHandle[] {
     if(!Number.isFinite(snapDegrees)||snapDegrees<0)
         throw new Error('Rotation snap must be a finite nonnegative angle');
     const sdk=availableGizmoBackend();
     if(!sdk)return [];
-    // The Euler proxy already mirrors Node rotation. World-axis rings
-    // prevent visual double-rotation from composing Node+proxy Euler.
-    const options:SplineGizmoRotateOptions={space:'world',ringSize:72,pickSize:14,
+    // Axis orientation is selected independently from the Path Node's
+    // authored rotation, with an Euler proxy in the same space.
+    const options:SplineGizmoRotateOptions={space,ringSize:72,pickSize:14,
         ...(snapDegrees>0?{snap:snapDegrees}:{})};
     if(mode==='3d')
         return typeof sdk.rotate==='function'?sdk.rotate(property,options):[];
@@ -83,10 +83,12 @@ export function buildSplinePathRotateGizmos(
 /** Gizmos3D.move('Vec3-property',options) provided by Cocos-Gizmos.
  * A missing/older SDK simply offers no handles.
  */
-export function buildSplineKnotMoveGizmos(property:string):SplineGizmoHandle[] {
+export function buildSplineKnotMoveGizmos(
+    property:string,space:'local'|'world'='local'
+):SplineGizmoHandle[] {
     const sdk=availableGizmoBackend();
     if(!sdk||typeof sdk.move!=='function')return [];
-    return sdk.move(property,{space:'local',axisSize:66,pickSize:28,
+    return sdk.move(property,{space,axisSize:66,pickSize:28,
         planeSize:18,planeOffset:14,showPositionLabel:true,
         positionLabelOffset:82});
 }
@@ -100,14 +102,14 @@ export function buildSplineKnotMoveGizmos(property:string):SplineGizmoHandle[] {
  * Knots get one pickable point each.
  */
 export function buildSplineKnotPointGizmos(
-    property:string,indices:ReadonlyArray<number>
+    property:string,indices:ReadonlyArray<number>,space:'local'|'world'='local'
 ):SplineGizmoHandle[] {
     if(!availableGizmoBackend())return [];
     if(indices.length>32||indices.some(i=>!Number.isSafeInteger(i)||i<0||i>127))
         throw new Error('Cocos Splines Gizmos: invalid indexed Knot handles');
     return indices.map(index=>({
         property,index,id:'spline-knot-'+index,
-        visual:'point',plane:'view',space:'local',
+        visual:'point',plane:'view',space,
         color:'#ffb84a',hoverColor:'#ffff78',pickSize:24
     }));
 }
