@@ -98,6 +98,9 @@ export class SplinePath extends Component {
     private _dragProperty:PathGizmoProperty|null=null;
     private _dragIndex=-1;
     private _dragSnapshot:DragSnapshot|null=null;
+    /** Transient editor-only group; Knot object identity survives reordering. */
+    private _selectedGroup=new Set<SplineKnot>();
+    private _dragGroupPositions:Array<{knot:SplineKnot;position:Vec3}>=[];
     private _rotationDragging=false;
     private _rotationStart:Vec3|null=null;
     private _hudRollKnot:SplineKnot|null=null;
@@ -115,6 +118,8 @@ export class SplinePath extends Component {
             throw new Error('Invalid Knot index');
         if(this._dragKnot||this._hudRollKnot||this._rotationDragging)
             throw new Error('Cannot change Knot topology during a Gizmos drag');
+        // Topology changes invalidate any previous multi-Knot selection.
+        this._selectedGroup.clear();
         const count=this.knots.length;
         if(operation==='add'||operation==='insert'||operation==='duplicate'){
             if(count>=128)throw new Error('SplinePath supports at most 128 Knots');
@@ -217,6 +222,7 @@ export class SplinePath extends Component {
     }
     protected onDisable():void {
         this._dragKnot=null;this._dragProperty=null;this._dragSnapshot=null;
+        this._dragGroupPositions=[];this._selectedGroup.clear();
         this._rotationDragging=false;this._rotationStart=null;
         this._hudRollKnot=null;this._hudRollStart=0;
         this._observed=null;this._needsFinal=false;
@@ -382,7 +388,49 @@ export class SplinePath extends Component {
         const k=this.knotAt(index,field);
         if(k){
             const local=this.fromGizmoPoint(value,world);
-            if(finite(local))k.position=local;
+            if(!finite(local))return;
+            const frozen=this._dragKnot===k&&this._dragProperty===field?
+                this._dragGroupPositions.map(entry=>entry.knot):null;
+            const group=frozen??this.selectedGroupKnots();
+            // Only moving an INCLUDED Knot translates the group. Other
+            // active handles remain ordinary independent single-Knot edits.
+            if(group.length>1&&group.includes(k)){
+                const delta=sub(local,k.position);
+                if(!finite(delta))return;
+                const next=group.map(member=>({
+                    knot:member,position:add(member.position,delta)
+                }));
+                if(next.every(item=>finite(item.position)))
+                    for(const item of next)item.knot.position=vec(item.position);
+            }else k.position=local;
+        }
+    }
+    /** In-memory edit selection: no extra CCClass or serialized Knot indices. */
+    private selectedGroupKnots():SplineKnot[] {
+        const existing=new Set(this.knots);
+        for(const knot of this._selectedGroup)
+            if(!existing.has(knot))this._selectedGroup.delete(knot);
+        return this.knots.filter(knot=>this._selectedGroup.has(knot)).slice(0,32);
+    }
+    public selectedGroupIndices():number[] {
+        const selected=new Set(this.selectedGroupKnots());
+        return this.knots.flatMap((k,i)=>selected.has(k)?[i]:[]);
+    }
+    public onGizmoHudAction(id:string):void {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
+           !this.gizmoEditKnots||this._dragKnot||
+           this._rotationDragging||this._hudRollKnot)return;
+        if(id==='path-group-clear'){
+            this._selectedGroup.clear();
+            return;
+        }
+        if(id!=='path-group-toggle')return;
+        const active=this.knots[this.gizmoKnotIndex];
+        if(!active)return;
+        if(this._selectedGroup.has(active)){
+            this._selectedGroup.delete(active);
+        }else if(this.selectedGroupKnots().length<32){
+            this._selectedGroup.add(active);
         }
     }
     public get pathGizmoKnotPosition():Vec3 {
@@ -467,7 +515,7 @@ export class SplinePath extends Component {
                 .filter(i=>i!==this.gizmoKnotIndex);
             handles.push(...buildSplineKnotPointGizmos(
                 world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',
-                indices,space,snap));
+                indices,space,snap,this.selectedGroupIndices()));
         }
         if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
             handles.push(
@@ -540,13 +588,16 @@ export class SplinePath extends Component {
         const p=this.toGizmoPoint(knot.position,world);
         if(!finite(p))return [];
         const f=(n:number)=>n.toFixed(2);
+        const selected=this.selectedGroupIndices();
+        const group=selected.length>0?' · Group '+selected.length+': '+
+            selected.join(', '):'';
         return [{id:'path-active-position',
             text:'Knot '+index+' · '+(world?'World':'Local')+
-                 '  X '+f(p.x)+'  Y '+f(p.y)+'  Z '+f(p.z),
+                 '  X '+f(p.x)+'  Y '+f(p.y)+'  Z '+f(p.z)+group,
             order:0,fontSize:12,color:'#a3e2ff'}];
     }
     public onGizmoHudControls():Array<{
-        type:'slider'|'toggle';id:string;text:string;property:string;
+        type:'slider'|'toggle'|'button';id:string;text:string;property?:string;
         min?:number;max?:number;step?:number;order?:number;group?:string;
     }> {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
@@ -573,7 +624,9 @@ export class SplinePath extends Component {
             {type:'slider',id:'path-knot-roll',text:'Knot Roll (deg)',
                 property:'pathGizmoActiveRoll',min:-180,max:180,step:1,order:4},
             {type:'toggle',id:'path-roll-guide',text:'Roll Guide',
-                property:'gizmoShowRollGuide',order:5}
+                property:'gizmoShowRollGuide',order:5},
+            {type:'button',id:'path-group-toggle',text:'Toggle Active Group',order:6},
+            {type:'button',id:'path-group-clear',text:'Clear Group',order:7}
         ];
     }
     public onGizmoChanged(name:string,phase:'begin'|'update'|'end'|'cancel',
@@ -626,6 +679,13 @@ export class SplinePath extends Component {
                 handleIn:vec(knot.handleIn),handleOut:vec(knot.handleOut),
                 rollDegrees:knot.rollDegrees
             };
+            // Pin group by record identity for the lifetime of this gesture.
+            // An Inspector active-index change cannot retarget or resize it.
+            this._dragGroupPositions=field==='pathGizmoKnotPosition'||
+                field==='pathGizmoKnotPositions'?
+                this.selectedGroupKnots()
+                    .filter(member=>this._selectedGroup.has(knot))
+                    .map(member=>({knot:member,position:vec(member.position)})):[];
             for(const consumer of this._consumers)
                 consumer.onSharedSplinePathEditBegin?.();
         }else if(phase==='update'&&this._dragProperty===field){
@@ -633,6 +693,8 @@ export class SplinePath extends Component {
         }else if((phase==='end'||phase==='cancel')&&this._dragProperty===field){
             try{
                 if(phase==='cancel'&&this._dragSnapshot){
+                    for(const item of this._dragGroupPositions)
+                        item.knot.position=vec(item.position);
                     const snap=this._dragSnapshot;
                     snap.knot.position=vec(snap.position);
                     snap.knot.mode=snap.mode;
@@ -644,7 +706,8 @@ export class SplinePath extends Component {
             }finally{
                 this._observed=this.signature();this._needsFinal=false;
                 this._dragKnot=null;this._dragProperty=null;
-                this._dragSnapshot=null;this._dragIndex=-1;
+                this._dragSnapshot=null;this._dragGroupPositions=[];
+                this._dragIndex=-1;
             }
         }
     }
@@ -707,6 +770,7 @@ export class SplinePath extends Component {
         if(!EDITOR_NOT_IN_PREVIEW)return;
         this._dragKnot=null;this._dragProperty=null;
         this._dragSnapshot=null;this._dragIndex=-1;
+        this._dragGroupPositions=[];this._selectedGroup.clear();
         this._rotationDragging=false;this._rotationStart=null;
         this._hudRollKnot=null;this._hudRollStart=0;
         this._lastScan=Number.NEGATIVE_INFINITY;
