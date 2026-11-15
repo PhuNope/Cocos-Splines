@@ -7,10 +7,10 @@ const expected={ok:true,uvPhaseChecked:true,branches:3,boundaryVertices:9,
  inconsistentUVBranches:0,degenerateTriangles:0,
  duplicatedTriangles:0,nonManifoldEdges:0,materialSlots:[0],details:[],notes:[]};
 let passes=0;
-const road={className:'SplinesV2.SplineRoad',bakedMesh:{uuid:'road-baked'}};
-const junction={className:'SplinesV2.JunctionPatch',
+const road={className:'Spline.Road',bakedMesh:{uuid:'road-baked'}};
+const junction={className:'Spline.Junction',
  bakedMesh:{uuid:'junction-baked'},branches:[road,road,road],
- inspectJunctionSeamsV2(){passes++;return expected;}};
+ inspectJunctionSeams(){passes++;return expected;}};
 const nodes={uuid:'scene',components:[],children:[
  {uuid:'junction',components:[junction],children:[]},
  {uuid:'road',components:[road],children:[]}]};
@@ -40,7 +40,7 @@ try{
  assert.equal(junction.bakedMesh.uuid,'junction-baked');
  const broken={...expected,ok:false,matchedUV:8,
   inconsistentUVBranches:1,notes:['Road cut-ring UV does not match']};
- junction.inspectJunctionSeamsV2=()=>broken;
+ junction.inspectJunctionSeams=()=>broken;
  result=await main.methods.inspectV2JunctionSeams();
  assert.equal(result.ok,true,'Audit should return a report, not hide the cause');
  assert.equal(result.report.ok,false);

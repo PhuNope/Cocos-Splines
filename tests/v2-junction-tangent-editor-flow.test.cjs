@@ -6,7 +6,7 @@ const vec=(x,y,z)=>({x,y,z}),wrap=(type,value)=>({type,value});
 const knot=(position,mode,handleIn,handleOut,rollDegrees=25)=>({
  position,mode,handleIn,handleOut,rollDegrees,tension:.2
 });
-const typed=k=>wrap('SplinesV2.Knot',{
+const typed=k=>wrap('Spline.Knot',{
  position:wrap('cc.Vec3',copy(k.position)),mode:wrap('Enum',k.mode),
  handleIn:wrap('cc.Vec3',copy(k.handleIn)),
  handleOut:wrap('cc.Vec3',copy(k.handleOut)),
@@ -20,7 +20,7 @@ const ends=[false,true,false],handles=[
 for(let i=0;i<3;i++){
  const mode=i===0?1:i===1?2:0;
  const record={
-  className:'SplinesV2.SplinePath',restores:0,
+  className:'Spline.Path',restores:0,
   interpolation:1,closed:false,
   knots:[knot(vec(0,0,0),ends[i]?1:mode,vec(-1,0,0),vec(0,0,2)),
    knot(vec(12,0,5),ends[i]?mode:1,vec(-1,0,0),vec(1,0,0))],
@@ -29,17 +29,17 @@ for(let i=0;i<3;i++){
  const node={uuid:'path-'+i,components:[record],children:[]};
  paths.push(node);record.node=node;
  roadNodes.push({uuid:'road-'+i,children:[],components:[{
-  className:'SplinesV2.SplineRoad',pathSource:record,
+  className:'Spline.Road',pathSource:record,
   rebuilds:0,bakedMesh:{uuid:'mesh-'+i},
   rebuildPreview(){this.rebuilds++;}
  }]});
 }
 const original=paths.map(p=>copy(p.components[0].knots));
-const junction={className:'SplinesV2.JunctionPatch',
+const junction={className:'Spline.Junction',
  previews:0,bakedMesh:{uuid:'junction-asset'},
  branches:roadNodes.map((r,i)=>({road:r.components[0],atEnd:ends[i]})),
- rebuildPreview(){this.previews++;},planEndpointSnapsV2(){return {};},
- planTangentAlignmentV2(){
+ rebuildPreview(){this.previews++;},planEndpointSnaps(){return {};},
+ planTangentAlignment(){
   const branches=paths.map((node,i)=>{
    const record=node.components[0],atEnd=ends[i],index=atEnd?1:0;
    const k=record.knots[index],side=atEnd?'in':'out',active=atEnd?k.handleIn:k.handleOut;
@@ -65,7 +65,7 @@ Module._load=function(id,parent,isMain){
 };
 const oldEditor=globalThis.Editor,history=[],writes=[];
 let failAfter=-1,mutateBeforeQuery=false;
-const nodeDump=node=>({__comps__:[{type:'SplinesV2.SplinePath',value:{
+const nodeDump=node=>({__comps__:[{type:'Spline.Path',value:{
  interpolation:wrap('Enum',1),closed:wrap('Boolean',false),
  gizmoKnotIndex:wrap('Integer',0),
  knots:{type:'Array',value:node.components[0].knots.map(typed),

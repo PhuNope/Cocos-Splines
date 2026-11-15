@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {planJunctionTangentDump:plan}=require('../src/v2/JunctionTangentDump');
 const copy=x=>JSON.parse(JSON.stringify(x)),v=(x,y,z)=>({x,y,z});
 const wrap=(type,value)=>({type,value});
-const knot=(p,mode,handleIn,handleOut,roll)=>wrap('SplinesV2.Knot',{
+const knot=(p,mode,handleIn,handleOut,roll)=>wrap('Spline.Knot',{
  position:wrap('cc.Vec3',p),mode:wrap('Enum',mode),
  handleIn:wrap('cc.Vec3',handleIn),handleOut:wrap('cc.Vec3',handleOut),
  tension:wrap('Float',.35),rollDegrees:wrap('Float',roll),
@@ -13,7 +13,7 @@ const knots=[knot(v(0,0,0),2,v(-8,0,0),v(0,0,3),18),
  knot(v(5,0,0),1,v(-1,0,0),v(1,0,0),12),
  knot(v(10,0,0),3,v(0,0,-4),v(2,0,0),-42)];
 const node={__comps__:[{type:'cc.MeshRenderer',value:{}},
- {type:'SplinesV2.SplinePath',value:{
+ {type:'Spline.Path',value:{
  interpolation:wrap('Enum',1),closed:wrap('Boolean',false),
  gizmoKnotIndex:wrap('Integer',0),
  knots:{type:'Array',isArray:true,elementTypeData:copy(knots[0]),
