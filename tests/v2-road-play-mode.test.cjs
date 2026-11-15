@@ -236,8 +236,9 @@ try{
    authoredPath.gizmoKnotIndex=1;
    const handles=authoredPath.onGizmoHandles();
    assert.equal(handles.length,8,'Path owns active handles and two point handles');
-   assert.equal(authoredPath.onGizmoHudControls().length,4,
-     'Path HUD offers Knot picker, other Knot toggle, Roll slider and guide');
+   assert.equal(authoredPath.onGizmoHudControls().length,8,
+     'Path HUD offers two Local/World toggle pairs plus Knot, Roll and guide controls');
+   assert.equal(authoredPath.onGizmoHudControls().filter(h=>h.group?.endsWith('-space')).length,4);
    assert(authoredPath.onGizmoHudControls().some(h=>h.property==='pathGizmoActiveRoll'));
    assert.deepEqual(handles.slice(6).map(h=>h.index),[0,2]);
    const firstOriginal={...a.worldPosition};
