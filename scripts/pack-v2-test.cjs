@@ -30,6 +30,7 @@ copy('assets/splines-v2');
 copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
 copy('src/v2/PathV2Dump.js','dist/v2/PathV2Dump.js');
+copy('src/v2/PathKnotDumpCodec.js','dist/v2/PathKnotDumpCodec.js');
 copy('src/v2/PathEndpointSnapDump.js','dist/v2/PathEndpointSnapDump.js');
 copy('src/v2/JunctionAutoConnectDump.js','dist/v2/JunctionAutoConnectDump.js');
 copy('src/v2/JunctionTangentDump.js','dist/v2/JunctionTangentDump.js');
@@ -93,6 +94,7 @@ for(const rel of [
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePathV2.ts',
  'dist/v2/PathV2Dump.js',
+ 'dist/v2/PathKnotDumpCodec.js',
  'dist/v2/PathEndpointSnapDump.js',
  'dist/v2/JunctionAutoConnectDump.js',
  'dist/v2/JunctionTangentDump.js',
