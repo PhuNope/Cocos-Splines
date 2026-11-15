@@ -137,3 +137,28 @@ NOT the mesh generator's separate `Coordinate Space` option.
 - Live Creator 3.8.8 certification of HUD layout/group support, SDK
   world-space proxy values and Prefab Undo/Redo is still needed; headless
   test mocks verify the proxy math, group invariants and lifecycle.
+
+
+## Position Snap and selected Knot coordinates (2026-11-15)
+
+- **Position Snap** controls the Move handle, additional indexed Knot handles
+  and Bézier tangent point handles together. This property is available as
+  a numeric setting on `SplinePath` Inspector and as a slider in the Scene
+  HUD (0–5, 0.05 steps). A value of **0** (default) keeps continuous drag.
+  Values above 0 ask Cocos-Gizmos to snap in the selected Position Space,
+  without altering previously authored Vec3 records just by changing a setting.
+- The HUD also displays a single **read-only** `Knot N · Local/World X Y Z`
+  line using the same underlying position proxy as Move. No serialized Knot
+  dump, Node per Knot or additional bottom Inspector log is introduced.
+- Position Snap and the Local/World authoring frame do not change the separate
+  Road/Extrude/MeshDeform Coordinate Space used for mesh generation. Rotation
+  Snap remains independent.
+- The underlying Cocos-Gizmos SDK handles snap itself. The bridge passes the
+  same bounded step to the Move factory and indexed/tangent descriptors; it
+  does not round source Knot Vec3 data or compromise Cancel/Undo semantics.
+- Upstream Cocos-Gizmos v3 normalizes toggle controls individually and
+  does not implement a native `group` visual layout. The Position/Rotation
+  Local/World pairs instead enforce mutual exclusion through Path boolean
+  proxy getters/setters; their renderer shows four toggle rows, not a
+  segmented button bar. Native Creator 3.8.8 HUD appearance still needs
+  manual verification.

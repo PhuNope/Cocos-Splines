@@ -303,3 +303,23 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
    Their **Coordinate Space** setting is independent from HUD's axis space;
    they should only change when Path content or transform relevant to their
    own generation mode changes.
+
+
+## Path HUD precision / snap checks
+
+1. In a test Scene containing an editable `Spline.Path`, confirm the HUD
+   displays the selected Knot's **Local/World XYZ** in a read-only row. Select
+   another Knot and verify the row updates. The Inspector shows no raw array.
+2. Set `Position Snap = 0`: Move handles, additional Knot point handles
+   and Bézier tangent handles should drag smoothly without discrete steps.
+3. Set `Position Snap = 0.25` in Inspector or the Scene HUD. Drag active
+   Knot, an indexed Knot and a Bézier tangent in both Position Local and
+   Position World. Check each drag uses matching 0.25 unit increments in the
+   selected coordinate frame while Knot data stays Path-local.
+4. Check **Rotation Snap** works independently of Position Snap in 2D and
+   3D Rotate modes. Escape should restore the authored Knot and manual
+   tangent modes/offsets, not leave snapped intermediate coordinates.
+5. Repeat with the Path Node translated/rotated/scaled and a separately
+   transformed Road generator. Check linked Road preview and UV remain
+   consistent. Save/Reload and Prefab/Undo require native Creator 3.8.8
+   certification; automated tests cover code and mocked SDK calls only.

@@ -218,3 +218,18 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
   conversion, indexed points, tangent drags, rotation with rotated parent,
   Cancel/drag locking and concise Inspector. No public `@ccclass` name
   changes in this checkpoint; no release/tag.
+
+
+## HUD authoring precision follow-up (2026-11-15)
+
+- Added bounded `gizmoPositionSnap`, default 0, to Path Inspector and
+  Scene HUD. Active Move, other Knot points and Bézier tangents now forward
+  the same optional SDK snap increment in Local/World space; Rotation Snap
+  is separate.
+- Added a read-only live active Knot XYZ line in the current HUD Position
+  Space. No raw Inspector Knot dump or debug footer; existing per-Knot
+  editable fields and local Vec3 persistence are unchanged.
+- Added snapping, finite invalid-step rejection, exact zero/default no-op,
+  Editor Play lifecycle and HUD readout regression coverage. Real Cocos-Gizmos
+  snapping/picking, Creator Undo/Redo and Prefab overrides require visual
+  3.8.8 acceptance. No tag or release.
