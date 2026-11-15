@@ -51,6 +51,33 @@ export function roadUVMetersForClosedLoopV2(
         throw new Error('Closed Road exceeds Float32 UV repeat precision');
     return length/tiles;
 }
+/** Read-only GPU-precision phase audit for closed Road UV0 (not a sampler check). */
+export interface RoadLoopUVReportV2 {
+    readonly enabled:boolean;
+    readonly generatedLength:number;
+    readonly requestedMetersPerRepeat:number;
+    readonly effectiveMetersPerRepeat:number;
+    readonly longitudinalTiles:number;
+    readonly nearestIntegerTiles:number;
+    readonly phaseErrorTiles:number;
+    readonly phaseMismatch:boolean;
+    readonly requiresRepeatSampler:true;
+}
+export function inspectRoadLoopUVV2(
+    length:number,requested:number,closed:boolean,enabled=false
+):RoadLoopUVReportV2|null {
+    if(!closed)return null;
+    const effective=roadUVMetersForClosedLoopV2(length,requested,true,enabled);
+    const tiles=Math.fround(length/effective); // Mesh UV0 is Float32.
+    if(!Number.isFinite(tiles))
+        throw new Error('Closed Road UV0 repeat count exceeds Float32 range');
+    const nearest=Math.round(tiles),error=Math.abs(tiles-nearest);
+    return {enabled,generatedLength:length,requestedMetersPerRepeat:requested,
+        effectiveMetersPerRepeat:effective,longitudinalTiles:tiles,
+        nearestIntegerTiles:nearest,phaseErrorTiles:error,
+        phaseMismatch:error>1e-4||tiles>16777216,
+        requiresRepeatSampler:true};
+}
 /**
  * Minimal v2 road geometry generator. Uses the same stable frames as followers,
  * and Mesh Pipeline 2 to preserve UV0, UV2, normal and tangent channels.

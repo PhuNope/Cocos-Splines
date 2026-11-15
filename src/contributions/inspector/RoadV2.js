@@ -40,6 +40,17 @@ async function dispatchV2(inspector,action){
     }else if(action==='check-v2-road-bake'&&result?.ok){
         console.info('[Cocos Splines] Bake status:',result);
     }
+    // Report only on explicit Check Bake Status, never during Play/preview.
+    // CPU UV phases cannot certify the material's GPU sampler wrap mode.
+    if(action==='check-v2-road-bake'&&result?.ok&&result.closedLoopUV?.phaseMismatch){
+        const uv=result.closedLoopUV;
+        console.warn('[Cocos Splines] Closed Road UV0 seam phase mismatch: '+
+            uv.longitudinalTiles.toFixed(4)+' repeats ('+
+            uv.phaseErrorTiles.toFixed(4)+' tile from integer). '+
+            'Enable Closed Loop UV Repeat and explicitly Rebuild/Re-Bake. '+
+            'Verify the material uses Repeat on longitudinal U/V; '+
+            'CPU UV checks cannot certify the GPU sampler.');
+    }
     return result;
 }
 

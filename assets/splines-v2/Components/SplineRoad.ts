@@ -7,7 +7,7 @@ import {MeshGenerator} from './MeshGenerator';
 import {UVAxis,SurfaceMode} from './GeometrySettings';
 export {UVAxis,SurfaceMode} from './GeometrySettings';
 export {MeshMode} from './MeshGenerator';
-import {buildRoadStripV2} from '../geometry/RoadStrip';
+import {buildRoadStripV2,inspectRoadLoopUVV2,type RoadLoopUVReportV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2,roadProfileLayoutV2} from '../geometry/ProfileSweep';
 import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClearanceV2,type RoadCornerReportV2} from '../geometry/RoadCorners';
 import {buildSplineFramesV2} from '../core/SplineFrames';
@@ -174,7 +174,7 @@ export class SplineRoad extends MeshGenerator {
         }
     }
     /** Editor-only local corner report; no warnings are printed during Play. */
-    public inspectCornerRisk():RoadCornerReportV2|null {
+    public inspectCornerRisk():(RoadCornerReportV2&{closedLoopUV:RoadLoopUVReportV2|null})|null {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
         let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
@@ -203,7 +203,11 @@ export class SplineRoad extends MeshGenerator {
         const report=inspectRoadCornersV2(sections);
         const clearance=inspectRoadCenterlineClearanceV2(frameTable.frames,
             this.width+2*this.shoulderWidth+2*this.curbWidth);
-        return {...report,...clearance,overlapReport:this._lastOverlapReport??undefined,
+        const closedLoopUV=inspectRoadLoopUVV2(testedCache.length,
+            this.uvMetersPerRepeat,testedCache.spline.closed,
+            this.closedLoopUVRepeat===true);
+        return {...report,...clearance,closedLoopUV,
+            overlapReport:this._lastOverlapReport??undefined,
             continuousReport:this._lastContinuousReport??undefined,filletReport:fillet?.report};
     }
     private cornerSettings(){

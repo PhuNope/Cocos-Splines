@@ -353,3 +353,41 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
    Bezier mode all 12 controls are occupied, so avoid adding
    additional HUD entries without consolidating an existing control.
    Validate actual Gizmos and native Scene Undo/Redo in Cocos 3.8.8.
+
+## Closed Loop UV phase — Creator 3.8.8 manual acceptance
+
+The Road Inspector's existing **Check Bake Status** reports a
+`closedLoopUV` read-only CPU diagnostic for closed Paths. It measures
+the **generated** Road length (including Constant Width fillets, or
+source length after Continuous fallback) and checks whether the
+longitudinal UV0 ends on an integer Repeat tile. Fractional repeats
+produce **one warning on each explicit check** in the Editor Console,
+not a running debug panel or Play log. This does not change the Scene,
+MeshRenderer, temporary preview or saved Bake. The CPU cannot verify
+the actual GPU sampler: even aligned UV0 needs an appropriate Repeat
+material for seamless texture rendering.
+
+1. On a clean Creator 3.8.8 project, author a closed four-Knot Path
+   with a length that is not a multiple of UV Meters Per Repeat.
+2. On the linked Road set Longitudinal Axis U and turn
+   Closed Loop UV Repeat **Off**. Click Check Bake Status and expect
+   `closedLoopUV.phaseMismatch=true` and a fractional-tile warning.
+   Repeat for axis V.
+3. Turn Closed Loop UV Repeat **On**, Rebuild Preview and recheck.
+   Expect `phaseMismatch=false`. Verify rendered seam using a
+   material whose longitudinal axis sampler uses **Repeat** (compare
+   with Clamp to distinguish material configuration).
+4. Repeat on Continuous and Constant Width (fillet), both plain
+   asphalt and shoulder/curb Profile with separate markings.
+   Geometry, mesh indices and UV2 must be unchanged by the setting.
+5. Explicitly Bake glTF, bind its imported `.mesh`, switch to Baked,
+   Save/Reopen and compare Dynamic vs Baked. Turning the setting Off
+   should mark the old Bake stale, without automatically overwriting it.
+6. On an Open Path the loop report should be null, and toggling
+   the option must not affect UV0. Play Manual/Baked cannot regenerate
+   geometry or emit Editor-only warnings.
+
+Record U/V, Repeat/Clamp, Constant Width/Continuous, Profile/markings,
+Dynamic/Baked, Save/Reopen, Prefab Overrides and native Undo/Redo
+separately. CI validates only headless geometry and mocked Editor
+workflows, **not** native Creator 3.8.8 rendering.

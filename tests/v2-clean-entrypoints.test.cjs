@@ -16,7 +16,9 @@ const road={
   restoreBakedPreview(){this.restore++;},
   prepareBake(){return {content:'{"asset":{"version":"2.0"}}',fingerprint:'abcd',primitiveCount:1};},
   inspectBake(){return {stale:true,hasMesh:false,url:'',fingerprint:'abcd'};},
-  inspectCornerRisk(){return null;},
+  inspectCornerRisk(){return {closedLoopUV:{
+   enabled:false,longitudinalTiles:2.35,phaseErrorTiles:.35,
+   phaseMismatch:true,requiresRepeatSampler:true}};},
   getShortKnotFallback(){return null;}
 };
 const node={uuid:'road-node',components:[road],children:[]};
@@ -64,7 +66,11 @@ try{
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
  assert.equal(scene.methods.prepareV2RoadBake('road-node').componentIndex,0);
- assert.equal(scene.methods.inspectV2RoadBake('road-node').fingerprint,'abcd');
+ const sceneReport=scene.methods.inspectV2RoadBake('road-node');
+ assert.equal(sceneReport.fingerprint,'abcd');
+ assert.equal(sceneReport.closedLoopUV.phaseMismatch,true);
+ assert.strictEqual(sceneReport.cornerRisk.closedLoopUV,sceneReport.closedLoopUV,
+  'Check Bake exposes one read-only Closed Loop UV report');
  assert.equal(scene.methods.restoreV2RoadBaked('road-node').ok,true);
  assert.equal(road.restore,1);
  assert.equal(scene.methods.rebuildV2Road('missing').ok,false);

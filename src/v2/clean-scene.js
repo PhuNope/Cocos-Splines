@@ -51,11 +51,12 @@ function prepareV2RoadBake(uuid){
 function inspectV2RoadBake(uuid){
     return run(uuid,(node,c)=>{
         const status=c.inspectBake();
+        const cornerRisk=c.inspectCornerRisk?.()||null;
         return {ok:true,...status,componentIndex:node.components.indexOf(c),
             shortKnotFallback:c.getShortKnotFallback?.()||null,
             pendingUrl:c.pendingBakeUrl||'',
             pendingFingerprint:c.pendingBakeFingerprint||'',
-            cornerRisk:c.inspectCornerRisk?.()||null,
+            cornerRisk,closedLoopUV:cornerRisk?.closedLoopUV??null,
             junctionReport:c.inspectJunction?.()||null};
     });
 }

@@ -11,7 +11,7 @@ try{
  const {buildSplineCacheV2}=require(path.join(tmp,'core/SplineCache.js'));
  const {buildSplineFramesV2}=require(path.join(tmp,'core/SplineFrames.js'));
  const {buildRoadContinuousSectionsV2}=require(path.join(tmp,'geometry/RoadContinuous.js'));
- const {buildRoadStripV2}=require(path.join(tmp,'geometry/RoadStrip.js'));
+ const {buildRoadStripV2,inspectRoadLoopUVV2}=require(path.join(tmp,'geometry/RoadStrip.js'));
  const {buildRoadProfileV2,buildTubeV2}=require(path.join(tmp,'geometry/ProfileSweep.js'));
  const {exportMeshGltfV2}=require(path.join(tmp,'geometry/GltfExporter.js'));
  const k=(x,z,y=0)=>({position:{x,y,z}});
@@ -141,6 +141,17 @@ try{
  }
  // Opt-in closed-loop integer tile UVs; geometry and UV2 must be identical.
  const tiles=Math.max(1,Math.round(loop.length/5));
+ const raw=inspectRoadLoopUVV2(loop.length,5,true,false);
+ const fixed=inspectRoadLoopUVV2(loop.length,5,true,true);
+ assert.equal(raw.enabled,false);
+ assert.equal(raw.phaseMismatch,true,'Fractional loop UV tiles need a warning');
+ assert(raw.phaseErrorTiles>.01);
+ assert.equal(fixed.phaseMismatch,false);
+ assert.equal(fixed.requiresRepeatSampler,true);
+ assert(Math.abs(fixed.longitudinalTiles-tiles)<1e-5);
+ assert(Math.abs(fixed.effectiveMetersPerRepeat-loop.length/tiles)<1e-9);
+ assert.equal(inspectRoadLoopUVV2(loop.length,5,false,true),null);
+ assert.throws(()=>inspectRoadLoopUVV2(loop.length,0,true,true),/uvMetersPerRepeat/);
  assert(Math.abs(loop.length/5-tiles)>.01,'Fixture must have noninteger default repeats');
  for(const axis of ['u','v']){
   const settings={width:4,step:.2,surfaceMode:'continuous',uvLongitudinalAxis:axis};

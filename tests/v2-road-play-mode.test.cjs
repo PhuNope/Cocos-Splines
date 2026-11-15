@@ -450,6 +450,26 @@ try{
  road.width=5;assert.equal(road.inspectBake().stale,true);
  const report=road.inspectCornerRisk();
  assert.equal(report.pinchedSections,0,'Straight road needs no pinch warning');
+ assert.equal(report.closedLoopUV,null,'Open Road has no loop phase warning');
+ // Read-only diagnostic on an actual mocked SplineRoad, after fillets.
+ const beforeKnots=authoredPath.knots,beforeClosed=authoredPath.closed;
+ const beforeWidth=road.width,beforeMode=road.surfaceMode;
+ authoredPath.knots=[knot(0,0,0),knot(0,0,12),knot(12,0,12),knot(12,0,0)];
+ authoredPath.closed=true;road.surfaceMode=2;road.width=4;
+ road.closedLoopUVRepeat=false;
+ const loopBefore=road.inspectCornerRisk();
+ assert.equal(loopBefore.closedLoopUV.enabled,false);
+ assert.equal(loopBefore.closedLoopUV.phaseMismatch,true);
+ const meshBefore=road.generate().geometry,savedAsset=road.bakedMesh;
+ road.closedLoopUVRepeat=true;
+ const loopAfter=road.inspectCornerRisk();
+ assert.equal(loopAfter.closedLoopUV.phaseMismatch,false);
+ const meshAfter=road.generate().geometry;
+ assert.deepEqual(Array.from(meshAfter.positions),Array.from(meshBefore.positions));
+ assert.deepEqual(Array.from(meshAfter.uv2),Array.from(meshBefore.uv2));
+ assert.strictEqual(road.bakedMesh,savedAsset,'Check cannot change saved Bake');
+ road.closedLoopUVRepeat=false;authoredPath.closed=beforeClosed;
+ authoredPath.knots=beforeKnots;road.width=beforeWidth;road.surfaceMode=beforeMode;
  road.restoreBakedPreview();
  assert.equal(renderer.mesh,saved,'Baked asset must be visible after preview is cleared');
  assert(generated[2].destroyed,'Old temporary preview must be destroyed');
