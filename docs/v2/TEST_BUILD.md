@@ -415,3 +415,35 @@ workflows, **not** native Creator 3.8.8 rendering.
 
 Record screenshots and logs for Play/Dynamic/Baked and Save/Reopen.
 The headless regression does not certify GPU rendering.
+
+## Late AssetDB import versus changed Path/Bake (2026-11-16, P1)
+
+**Bake glTF Asset** may take several AssetDB import retries. A new
+Path/UV/material-slot topology edit during that window invalidates the
+source fingerprint; a second Bake can replace the pending URL, fingerprint
+or primitive material slots. **Bind Imported Mesh must not attach the old
+Mesh** in either case.
+
+The Editor main entrypoint now supplies a read-only `inspectV2RoadBake`
+verification callback to the import binder. Once AssetDB reports one
+concrete `cc.Mesh` subasset, the binder re-reads the *current* Scene
+fingerprint and pending Bake metadata and verifies that the serialized
+component still has the exact pending URL/fingerprint/material slots.
+Only then can it write the Mesh UUID and committed metadata; if stale,
+it returns `ok:false`, never a misleading successful/pending result.
+Existing Baked Mesh and material bindings remain untouched on this
+pre-write rejection.
+
+Manual test: start Bake on a Road with slots 0/3/4, modify its Path
+before import completes, then press **Bind Imported Mesh**. Confirm
+a stale-source refusal, zero new Mesh binding, and no false success.
+Repeat with two fast consecutive Bakes (the second supersedes the
+first). Finally restore the correct Path and Bake/Bind again.
+
+For a bound Mesh with an invalid saved primitive slot map, verify
+the renderer **clears** any previously assigned dense imported
+materials instead of accidentally retaining asphalt/markings from
+a prior preview. Check Bake Status must report
+`materialMapStatus: invalid`. Native Cocos Creator 3.8.8 tests are
+still required; mocked CI cannot make Editor operations atomic or
+prove the importer preserves primitive order.

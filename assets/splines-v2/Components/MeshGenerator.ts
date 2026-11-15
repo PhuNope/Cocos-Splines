@@ -157,7 +157,14 @@ export abstract class MeshGenerator extends Component {
     private applyMaterials(renderer:MeshRenderer):void {
         if(this.bakedMaterialSlots){
             const slots=this.importedMaterialSlots();
-            if(!slots)return; // Fail closed on invalid metadata / importer count.
+            if(!slots){
+                // Do not leave materials from the PREVIOUS preview/baked Mesh
+                // attached to mismatched imported submeshes. Clearing is
+                // safer than rendering a guessed 0/3/4 -> 0/1/2 mapping.
+                for(let i=0;i<(this.bakedMesh?.subMeshCount??0);i++)
+                    renderer.setSharedMaterial(null,i);
+                return;
+            }
             for(let i=0;i<slots.length;i++)
                 renderer.setSharedMaterial(this.materials[slots[i]]??null,i);
             return;

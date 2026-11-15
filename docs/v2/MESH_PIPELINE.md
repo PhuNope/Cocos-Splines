@@ -378,3 +378,22 @@ geometry, invalid submesh count, persistence after Scene serialization
 and legacy replacement. The glTF document and geometry fingerprint
 are unchanged by storing metadata separately; actual Creator 3.8.8
 glTF importer submesh ordering still needs native verification.
+
+### Import-ready source freshness and invalid material fail-closed (2026-11-16)
+
+Before attaching a newly imported `cc.Mesh`, the Editor bind flow
+re-checks the current geometry fingerprint and the serialized pending
+Bake URL, fingerprint and primitive material-slot layout. This check
+takes place **after** AssetDB import readiness, not only at the start
+of a long-running retry. A newly edited Path or a more recent Bake
+cannot silently reuse the earlier import result. A stale refusal is
+returned as an error, leaving the existing bound Mesh and metadata
+unchanged. The check minimizes the async edit window but does not
+provide an atomic Scene transaction; native Undo/Redo and simultaneous
+Editor edits still require testing.
+
+An invalid `bakedMaterialSlots` mapping now explicitly clears the
+bound renderer's dense material indices. Previously an early return
+could leave stale materials from the last valid Baked/Preview mesh
+visible on the wrong submeshes. The Inspector's existing
+`materialMapStatus: invalid` diagnostic remains available.

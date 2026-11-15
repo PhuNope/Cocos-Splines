@@ -38,8 +38,17 @@ function validateMaterialSlots(raw){
         throw new Error('Invalid Baked material slot map');
     return JSON.stringify(slots);
 }
+/** Validate the serialized pending bake once import has completed, before
+ * any scene.set-property mutation. A later Bake can supersede a retry. */
+function pendingBakeMatches(comp,assetUrl,fingerprint,slotMap){
+    const field=name=>comp.value?.[name]?.value??'';
+    return field('pendingBakeUrl')===assetUrl&&
+        field('pendingBakeFingerprint')===fingerprint&&
+        field('pendingBakeMaterialSlots')===slotMap;
+}
 async function bindImportedMesh(editor,params){
-    const {nodeUuid,componentIndex,assetUrl,fingerprint,mode=2,materialSlots=''}=params;
+    const {nodeUuid,componentIndex,assetUrl,fingerprint,mode=2,
+        materialSlots='',verifyCurrent}=params;
     if(typeof nodeUuid!=='string'||!nodeUuid||!Number.isInteger(componentIndex)||componentIndex<0)
         throw new Error('Invalid node/component for binding');
     if(typeof assetUrl!=='string'||!assetUrl.startsWith('db://assets/')||!assetUrl.endsWith('.gltf'))
@@ -50,8 +59,26 @@ async function bindImportedMesh(editor,params){
     const info=await editor.Message.request('asset-db','query-asset-info',assetUrl);
     const target=discoverMeshSubasset(info);
     if(!target.ok)return {ok:false,pending:true,reason:target.reason,assetUrl};
+    // This is intentionally *after* AssetDB is ready: the source may
+    // change over several asynchronous importer retry attempts.
+    // Production main passes a fresh read-only Scene fingerprint audit.
+    if(verifyCurrent!==undefined){
+        if(typeof verifyCurrent!=='function')
+            throw new Error('Invalid Bake source verifier');
+        const current=await verifyCurrent();
+        if(!current?.ok||current.componentIndex!==componentIndex||
+           current.fingerprint!==fingerprint||
+           current.pendingUrl!==assetUrl||
+           current.pendingFingerprint!==fingerprint||
+           (current.pendingMaterialSlots??'')!==slotMap)
+            return {ok:false,pending:false,
+                reason:'Spline or pending Bake changed during import; export again'};
+    }
     const dump=await editor.Message.request('scene','query-node',nodeUuid);
     const comp=componentDump(dump,componentIndex);
+    if(!pendingBakeMatches(comp,assetUrl,fingerprint,slotMap))
+        return {ok:false,pending:false,
+            reason:'A newer Bake replaced the pending import; refusing stale Mesh binding'};
     const old=comp.value?.bakedMesh?.value;
     // Never assume the glTF imported mesh actually has an alias to its parent
     // model UUID; only the concrete child asset UUID is acceptable.

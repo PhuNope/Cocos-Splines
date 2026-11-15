@@ -120,10 +120,10 @@ try{
  assert.strictEqual(renderer.materials[2],road.materials[4],
   'Switching paint material updates dense imported primitive 2');
  road.bakedMaterialSlots='[0,3]';
- renderer.materials=[];
  road.showSavedMesh();
- assert.equal(renderer.materials.length,0,
-  'Invalid primitive count must not guess and assign mismatched materials');
+ assert.deepEqual(renderer.materials.slice(0,3),[null,null,null],
+  'Invalid primitive count must clear materials left by a previous Mesh, not guess');
+ assert.equal(road.inspectBake().materialMapStatus,'invalid');
  road.bakedMaterialSlots='';
  road.materials=[];renderer.materials=[];saved.subMeshCount=1;
  const originalGenerate=road.generate;

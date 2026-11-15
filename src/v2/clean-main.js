@@ -61,7 +61,8 @@ async function bindV2RoadMesh(){
         const result=await bindWhenImported(Editor,{
             nodeUuid:uuid,componentIndex:status.componentIndex,
             assetUrl:status.pendingUrl,fingerprint:status.pendingFingerprint,
-            materialSlots:status.pendingMaterialSlots||''
+            materialSlots:status.pendingMaterialSlots||'',
+            verifyCurrent:()=>scene('inspectV2RoadBake',uuid)
         },{attempts:1});
         if(!result.ok)return {ok:false,pending:!!result.pending,
             error:result.reason||'AssetDB import is not ready'};
@@ -102,10 +103,15 @@ async function bakeV2Road(){
         const bound=await bindWhenImported(Editor,{
             nodeUuid:uuid,componentIndex:output.componentIndex,
             assetUrl,fingerprint:output.fingerprint,
-            materialSlots:JSON.stringify(output.primitiveMaterialSlots)
+            materialSlots:JSON.stringify(output.primitiveMaterialSlots),
+            verifyCurrent:()=>scene('inspectV2RoadBake',uuid)
         },{attempts:10,delayMs:200});
-        if(!bound.ok)return {ok:true,bound:false,url:assetUrl,
-            message:'Exported glTF. Click Bind Imported Mesh after AssetDB import.'};
+        if(!bound.ok){
+            if(!bound.pending)return {ok:false,bound:false,url:assetUrl,
+                error:bound.reason||'Bake source changed during import'};
+            return {ok:true,bound:false,url:assetUrl,
+                message:'Exported glTF. Click Bind Imported Mesh after AssetDB import.'};
+        }
         const shown=await scene('restoreV2RoadBaked',uuid);
         if(!shown?.ok)throw new Error(shown?.error||'Cannot display imported Mesh');
         await snapshot();
