@@ -198,3 +198,14 @@ NOT the mesh generator's separate `Coordinate Space` option.
 - Cocos-Gizmos native drag history and Scene picking still require real
   Creator 3.8.8 acceptance; grouped Inspector Nudge provides the explicit
   recordable history path. No raw Knot data or bottom Inspector log.
+
+### P0 gesture write isolation (2026-11-15)
+
+While a Gizmos gesture is active, only the pinned Knot/tangent proxy may write.
+Late setters targeting other indexed handles, unrelated tangent or rotation
+proxies, and stale Knot records after a topology replacement are ignored.
+For indexed point drags, a callback carrying another index cannot prematurely
+end/cancel the original drag; the matching callback still performs final
+preview settlement. HUD Roll and Node Rotation gestures also block competing
+Knot/tangent setter writes. This is regression-tested with Cocos mocks; native
+Creator 3.8.8 Undo/Redo and Prefab override acceptance remain **unverified**.

@@ -256,6 +256,29 @@ try {
    pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
    assert.deepEqual({...k0.position},group0,'Escape restores group origin');
    assert.deepEqual({...k1.position},group1,'Escape restores every selected Knot');
+   // Interleaved proxy writes must not escape the active gesture snapshot.
+   // This covers delayed SDK handles, Inspector callbacks, and Esc rollback.
+   pathComp.gizmoKnotIndex=0;
+   const guardPos0={...k0.position},guardPos1={...k1.position};
+   const guardHandle={...k0.handleOut},guardMode=k0.mode;
+   const guardEuler={...pathNode.eulerAngles};
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','begin');
+   pathComp.pathGizmoTangentOutWorld=new Vec3(99,99,0);
+   pathComp.pathGizmoKnotPositionsWorld[1]=new Vec3(99,0,0);
+   pathComp.gizmoRotationMode=RotationMode.Spatial3D;
+   pathComp.pathGizmoRotationEuler=new Vec3(0,0,70);
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','begin');
+   pathComp.gizmoRotationMode=RotationMode.Knots;
+   assert.deepEqual({...k0.handleOut},guardHandle);
+   assert.equal(k0.mode,guardMode,'Foreign tangent cannot switch Auto mode');
+   assert.deepEqual({...k1.position},guardPos1,'Foreign indexed setter is blocked');
+   assert.deepEqual({...pathNode.eulerAngles},guardEuler,'Foreign rotation is blocked');
+   pathComp.pathGizmoKnotPositionWorld=new Vec3(16,0,0);
+   assert.equal(k0.position.x,3);
+   assert.equal(k1.position.x,9,'Pinned group still follows its active proxy');
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
+   assert.deepEqual({...k0.position},guardPos0);
+   assert.deepEqual({...k1.position},guardPos1);
    pathComp.gizmoKnotIndex=0;
    pathComp.pathHudPositionLocal=true;
    pathComp.onGizmoChanged('pathGizmoKnotPosition','begin');
@@ -275,6 +298,19 @@ try {
    pathComp.onGizmoHudAction('path-group-clear');
    assert.deepEqual(pathComp.selectedGroupIndices(),[]);
    pathComp.gizmoKnotIndex=0;
+   // Wrong indexed handle callbacks must neither write another Knot nor
+   // prematurely close the original drag.
+   const indexed0={...k0.position},indexed1={...k1.position};
+   pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','begin',1);
+   pathComp.pathGizmoKnotPositionsWorld[0]=new Vec3(99,0,0);
+   assert.deepEqual({...k0.position},indexed0);
+   pathComp.pathGizmoKnotPositionsWorld[1]=new Vec3(32,0,0);
+   assert.notDeepEqual({...k1.position},indexed1);
+   pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','cancel',0);
+   assert.notDeepEqual({...k1.position},indexed1,'Wrong index cannot settle drag');
+   pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','cancel',1);
+   assert.deepEqual({...k0.position},indexed0);
+   assert.deepEqual({...k1.position},indexed1,'Correct indexed Cancel restores Knot');
    // Group Nudge produces a read-only local delta for one recordable
    // serialized-CCClass write in extension main (not a live Scene mutation).
    pathComp.onGizmoHudAction('path-group-toggle');

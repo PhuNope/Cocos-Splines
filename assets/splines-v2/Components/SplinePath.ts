@@ -276,6 +276,16 @@ export class SplinePath extends Component {
         const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
         return Vec3.transformMat4(new Vec3(),vec(p),inverse);
     }
+    /** During a gesture only its pinned proxy may write. Other setters can
+     * bypass the snapshot and make Escape leave an unrelated Knot modified. */
+    private gizmoWriteAllowed(field:PathGizmoProperty,index:number):boolean {
+        if(this._rotationDragging||this._hudRollKnot)return false;
+        if(!this._dragKnot)return true;
+        return this._dragProperty===field&&
+            (field!=='pathGizmoKnotPositions'||index===this._dragIndex)&&
+            this.knots.includes(this._dragKnot)&&
+            this._dragGroupPositions.every(item=>this.knots.includes(item.knot));
+    }
     private readTangent(side:TangentSide,world=false):Vec3 {
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
         const knot=this.knotAt(this.gizmoKnotIndex,field);
@@ -286,6 +296,7 @@ export class SplinePath extends Component {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!this.gizmoEditTangents||
             this.interpolation!==CurveMode.Bezier||!finite(point))return;
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
+        if(!this.gizmoWriteAllowed(field,this.gizmoKnotIndex))return;
         const k=this.knotAt(this.gizmoKnotIndex,field);
         if(!k)return;
         const localPoint=this.fromGizmoPoint(point,world);
@@ -368,7 +379,7 @@ export class SplinePath extends Component {
     public set pathGizmoRotationEuler(value:Vec3) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
            this.gizmoRotationMode===RotationMode.Knots||
-           !finite(value))return;
+           this._dragKnot||this._hudRollKnot||!finite(value))return;
         const world=this.gizmoRotationSpace===SplineSpace.World;
         if(this.gizmoRotationMode===RotationMode.Planar2D){
             const original=this.pathGizmoRotationEuler;
@@ -384,7 +395,8 @@ export class SplinePath extends Component {
         return this.toGizmoPoint(k.position,world);
     }
     private write(index:number,field:PathGizmoProperty,value:Vec3,world=false):void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!finite(value))return;
+        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!finite(value)||
+            !this.gizmoWriteAllowed(field,index))return;
         const k=this.knotAt(index,field);
         if(k){
             const local=this.fromGizmoPoint(value,world);
@@ -711,6 +723,9 @@ export class SplinePath extends Component {
         } as const;
         if(!(name in proxy))return;
         const field=proxy[name as keyof typeof proxy] as PathGizmoProperty;
+        // Late callbacks from another indexed point must not finish this drag.
+        if(phase!=='begin'&&field==='pathGizmoKnotPositions'&&
+            index!==undefined&&index!==this._dragIndex)return;
         if(phase==='begin'){
             if(this._dragKnot||this._rotationDragging||this._hudRollKnot)return;
             const i=field==='pathGizmoKnotPositions'?index:this.gizmoKnotIndex;
