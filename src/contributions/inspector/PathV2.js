@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Compact pure-Vec3 Path authoring. No Knot Nodes, custom bottom log
- * or legacy Inspector. ui-prop renders serialized Cocos Knot records
+ * or legacy Inspector. Each Knot card renders the editable Cocos Knot fields
  * (position, tangent mode/offsets and tension) and owns field Undo.
  * Topology buttons route through the active Scene process.
  */
@@ -12,7 +12,7 @@ const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoPointLimit','gizmoEditTangents',
     'gizmoRotationMode','gizmoRotationSnap',
     'gizmoShowRollGuide','gizmoRollGuideSize'];
-const $={knots:'.spl-path-knots',items:'.spl-path-items',
+const $={items:'.spl-path-items',
     count:'.spl-path-count',add:'.spl-path-add'};
 for(const field of simple)$[field]='.spl-path-'+field;
 const sections=[
@@ -48,7 +48,7 @@ async function action(operation,index){
     if(!names.includes(operation)&&operation!=='add')return;
     const result=await callEditor(null,'edit-v2-path',operation,index);
     if(!result?.ok)
-        console.warn('[Cocos Splines V2] Knot edit:',String(result?.error||'Failed'));
+        console.warn('[Cocos Splines] Knot edit:',String(result?.error||'Failed'));
 }
 const button=(operation,index,label)=>`<button type="button" class="spl-btn"
     data-operation="${operation}" data-index="${index}">${label}</button>`;
@@ -72,9 +72,6 @@ module.exports={
          <button type="button" class="spl-btn spl-path-add">+ Add Knot</button>
       </div>
       <div class="spl-path-items"></div>
-      <details><summary>Raw Knot Data</summary>
-        <ui-prop type="dump" class="spl-prop spl-path-knots"></ui-prop>
-      </details>
    </details>
  </div>`,
  $,
@@ -84,7 +81,6 @@ module.exports={
         if(property&&this.$[field])this.$[field].render(property);
     }
     const prop=dump?.value?.knots;
-    if(prop&&this.$.knots)this.$.knots.render(prop);
     const entries=Array.isArray(prop?.value)?prop.value:[];
     const selected=Number(dump?.value?.gizmoKnotIndex?.value)||0;
     this.$.count.textContent='('+entries.length+')';

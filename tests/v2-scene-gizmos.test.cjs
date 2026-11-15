@@ -93,6 +93,10 @@ try{
         h.space==='local'&&h.visual==='point'&&h.pickSize===24));
       assert.throws(()=>buildSplineKnotPointGizmos('gizmoKnotPositions',[-1]),
         /invalid indexed Knot/);
+      const worldMove=buildSplineKnotMoveGizmos('worldKnot','world');
+      assert(worldMove.every(h=>h.space==='world'));
+      const worldPoints=buildSplineKnotPointGizmos('worldKnots',[0,2],'world');
+      assert(worldPoints.every(h=>h.space==='world'));
       const move=buildSplineKnotMoveGizmos('gizmoKnotPosition');
       assert.equal(move.length,6,'Gizmos move generates XYZ+three plane descriptors');
       assert(move.every(h=>h.property==='gizmoKnotPosition'));

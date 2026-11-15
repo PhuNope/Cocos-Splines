@@ -32,6 +32,7 @@ declare module 'cc' {
         static invert(out:Quat,a:Quat):Quat;
         static fromAxes(out:Quat,x:Vec3,y:Vec3,z:Vec3):Quat;
         static fromEuler(out:Quat,x:number,y:number,z:number):Quat;
+        static toEuler(out:Vec3,q:Quat,outerZ?:boolean):Vec3;
     }
     export class Mat4 {
         m00:number;m01:number;m02:number;m04:number;m05:number;m06:number;m08:number;m09:number;m10:number;m12:number;m13:number;m14:number;
@@ -45,7 +46,7 @@ declare module 'cc' {
         uuid:string;name:string;isValid:boolean;hideFlags:number;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;eulerAngles:Vec3;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
         addComponent<T>(c:new (...args:any[])=>T):T;
-        setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setRotationFromEuler(v:Vec3):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
+        setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setWorldRotationFromEuler(x:number,y:number,z:number):void;setRotationFromEuler(v:Vec3):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
         emit(event:string,payload?:any):void;
         destroy():void;
     }
