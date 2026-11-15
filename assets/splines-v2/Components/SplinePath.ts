@@ -105,6 +105,10 @@ export class SplinePath extends Component {
     private _rotationStart:Vec3|null=null;
     private _hudRollKnot:SplineKnot|null=null;
     private _hudRollStart=0;
+    /** SDK gestures can outlive a Creator Undo/onRestore() replacement. */
+    private _gizmoGestureName:string|null=null;
+    private _discardedGizmo:{name:string;index?:number}|null=null;
+    private _discardedHudRoll=false;
     private _observed:string|null=null;
     private _lastScan=Number.NEGATIVE_INFINITY;
     private _lastChange=Number.NEGATIVE_INFINITY;
@@ -116,7 +120,8 @@ export class SplinePath extends Component {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Knot editing is Editor-only');
         if(!Number.isSafeInteger(index)||index<0||index>Math.max(0,this.knots.length))
             throw new Error('Invalid Knot index');
-        if(this._dragKnot||this._hudRollKnot||this._rotationDragging)
+        if(this._dragKnot||this._hudRollKnot||this._rotationDragging||
+           this._discardedGizmo||this._discardedHudRoll)
             throw new Error('Cannot change Knot topology during a Gizmos drag');
         // Topology changes invalidate any previous multi-Knot selection.
         this._selectedGroup.clear();
@@ -225,6 +230,8 @@ export class SplinePath extends Component {
         this._dragGroupPositions=[];this._selectedGroup.clear();
         this._rotationDragging=false;this._rotationStart=null;
         this._hudRollKnot=null;this._hudRollStart=0;
+        this._gizmoGestureName=null;this._discardedGizmo=null;
+        this._discardedHudRoll=false;
         this._observed=null;this._needsFinal=false;
     }
     protected onDestroy():void {
@@ -279,7 +286,8 @@ export class SplinePath extends Component {
     /** During a gesture only its pinned proxy may write. Other setters can
      * bypass the snapshot and make Escape leave an unrelated Knot modified. */
     private gizmoWriteAllowed(field:PathGizmoProperty,index:number):boolean {
-        if(this._rotationDragging||this._hudRollKnot)return false;
+        if(this._rotationDragging||this._hudRollKnot||
+           this._discardedGizmo||this._discardedHudRoll)return false;
         if(!this._dragKnot)return true;
         return this._dragProperty===field&&
             (field!=='pathGizmoKnotPositions'||index===this._dragIndex)&&
@@ -379,7 +387,8 @@ export class SplinePath extends Component {
     public set pathGizmoRotationEuler(value:Vec3) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
            this.gizmoRotationMode===RotationMode.Knots||
-           this._dragKnot||this._hudRollKnot||!finite(value))return;
+           this._dragKnot||this._hudRollKnot||this._discardedGizmo||
+           this._discardedHudRoll||!finite(value))return;
         const world=this.gizmoRotationSpace===SplineSpace.World;
         if(this.gizmoRotationMode===RotationMode.Planar2D){
             const original=this.pathGizmoRotationEuler;
@@ -597,6 +606,7 @@ export class SplinePath extends Component {
     public set pathGizmoActiveRoll(value:number) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
            !Number.isFinite(value)||value< -180||value>180||
+           this._discardedGizmo||this._discardedHudRoll||
            ((this._dragKnot||this._rotationDragging)&&!this._hudRollKnot))return;
         const knot=this._hudRollKnot??this.knots[this.gizmoKnotIndex];
         if(!knot)return;
@@ -606,7 +616,16 @@ export class SplinePath extends Component {
         name:string,phase:'begin'|'update'|'end'|'cancel',_value:number|boolean
     ):void {
         if(!EDITOR_NOT_IN_PREVIEW||name!=='pathGizmoActiveRoll')return;
+        if(this._discardedHudRoll){
+            if(phase==='begin'){
+                this._discardedHudRoll=false;this._discardedGizmo=null;
+            }else{
+                if(phase==='end'||phase==='cancel')this._discardedHudRoll=false;
+                return; // Ignore SDK callbacks for the old CCClass instance.
+            }
+        }
         if(phase==='begin'){
+            this._discardedGizmo=null;
             if(this._hudRollKnot||this._dragKnot||this._rotationDragging)return;
             const knot=this.knots[this.gizmoKnotIndex];
             if(!knot)return;
@@ -688,10 +707,21 @@ export class SplinePath extends Component {
     public onGizmoChanged(name:string,phase:'begin'|'update'|'end'|'cancel',
                           index?:number):void {
         if(!EDITOR_NOT_IN_PREVIEW)return;
+        if(this._discardedGizmo){
+            const stale=this._discardedGizmo;
+            if(phase==='begin'){
+                this._discardedGizmo=null;this._discardedHudRoll=false;
+            }else{
+                if((phase==='end'||phase==='cancel')&&name===stale.name&&
+                   (stale.index===undefined||index===stale.index))
+                    this._discardedGizmo=null;
+                return; // Stale SDK callbacks never settle restored records.
+            }
+        }
         if(name==='pathGizmoRotationEuler'){
             if(phase==='begin'){
                 if(this._rotationDragging||this._dragKnot||this._hudRollKnot)return;
-                this._rotationDragging=true;
+                this._rotationDragging=true;this._gizmoGestureName=name;
                 // Always store the LOCAL node Euler for lossless Escape,
                 // even when the tool is editing a world orientation.
                 this._rotationStart=vec(this.node.eulerAngles);
@@ -706,6 +736,7 @@ export class SplinePath extends Component {
                     this.notifyPreviewConsumers(this,true);
                 }finally{
                     this._rotationDragging=false;this._rotationStart=null;
+                    this._gizmoGestureName=null;
                     this._observed=this.signature();this._needsFinal=false;
                 }
             }
@@ -733,6 +764,7 @@ export class SplinePath extends Component {
             const knot=this.knots[i];
             if(!knot)return;
             this._dragKnot=knot;this._dragProperty=field;this._dragIndex=i;
+            this._gizmoGestureName=name;
             this._dragSnapshot={
                 knot,position:vec(knot.position),mode:knot.mode,
                 handleIn:vec(knot.handleIn),handleOut:vec(knot.handleOut),
@@ -766,7 +798,7 @@ export class SplinePath extends Component {
                 this._observed=this.signature();this._needsFinal=false;
                 this._dragKnot=null;this._dragProperty=null;
                 this._dragSnapshot=null;this._dragGroupPositions=[];
-                this._dragIndex=-1;
+                this._dragIndex=-1;this._gizmoGestureName=null;
             }
         }
     }
@@ -827,6 +859,14 @@ export class SplinePath extends Component {
      */
     public onRestore():void {
         if(!EDITOR_NOT_IN_PREVIEW)return;
+        // Keep the interrupted SDK session's identity until it settles:
+        // the active command may still issue updates after deserialization.
+        if(this._gizmoGestureName)
+            this._discardedGizmo={name:this._gizmoGestureName,
+                ...(this._dragProperty==='pathGizmoKnotPositions'?
+                    {index:this._dragIndex}:{})};
+        if(this._hudRollKnot)this._discardedHudRoll=true;
+        this._gizmoGestureName=null;
         this._dragKnot=null;this._dragProperty=null;
         this._dragSnapshot=null;this._dragIndex=-1;
         this._dragGroupPositions=[];this._selectedGroup.clear();

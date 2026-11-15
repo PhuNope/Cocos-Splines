@@ -209,3 +209,18 @@ end/cancel the original drag; the matching callback still performs final
 preview settlement. HUD Roll and Node Rotation gestures also block competing
 Knot/tangent setter writes. This is regression-tested with Cocos mocks; native
 Creator 3.8.8 Undo/Redo and Prefab override acceptance remain **unverified**.
+
+### P0 interrupted-Gizmos quarantine (2026-11-15)
+
+If Creator replaces serialized CCClass Knot objects during an active
+Move, indexed Knot, Rotate, or HUD Roll gesture, `onRestore()` now
+invalidates that SDK gesture. Late SDK proxy setters and callbacks are
+ignored until the matching `end/cancel` (matching index for indexed
+points) or a fresh `begin` starts. This preserves restored source
+records and forces a final temporary-mesh refresh without rebaking.
+
+Mocks/regression cover Knot identity replacement, stale writes,
+indexed callback identity and HUD Roll. **Native Creator 3.8.8 Undo
+grouping, Scene Save/Reopen and Prefab history still require Editor
+acceptance**. Inspector Group Nudge remains the explicitly recordable
+one-step group translation path.

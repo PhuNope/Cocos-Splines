@@ -527,18 +527,45 @@ try {
    assert(calls.at(-1)==='Btrue',
      'Creator restore must force final refresh for all linked generators');
    pathComp.pathGizmoKnotPosition=new Vec3(3,3,3);
-   assert.deepEqual({...revived.position},{x:3,y:3,z:3});
+   assert.deepEqual({...revived.position},{x:2,y:2,z:2},
+     'Late SDK setter must not overwrite the restored CCClass Knot');
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','update');
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','cancel');
+   assert.deepEqual({...revived.position},{x:2,y:2,z:2},
+     'Late Cancel must not roll back the restored Knot');
    assert.notDeepEqual({...staleKnot.position},{x:3,y:3,z:3},
-     'Restored Path must not write to a stale Knot record');
+     'Stale Knot record is never revived');
+   pathComp.pathGizmoKnotPosition=new Vec3(3,3,3);
+   assert.deepEqual({...revived.position},{x:3,y:3,z:3},
+     'Normal edits resume after the interrupted gesture settles');
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
    const revivedAgain=new SplineKnot();
    revivedAgain.position=new Vec3(4,4,4);
    pathComp.knots=[revivedAgain,revivedOther];
    pathComp.onRestore();
    pathComp.pathGizmoActiveRoll=30;
-   assert.equal(revivedAgain.rollDegrees,30);
+   assert.equal(revivedAgain.rollDegrees,0,
+     'Interrupted HUD Roll cannot edit newly restored Knot records');
+   pathComp.onGizmoHudChanged('pathGizmoActiveRoll','cancel',0);
+   pathComp.pathGizmoActiveRoll=30;
+   assert.equal(revivedAgain.rollDegrees,30,
+     'The next HUD edit targets the restored CCClass record');
    assert.equal(revived.rollDegrees,0,
      'Restored Path must not retain old HUD Roll target');
+   // Wrong indexed callbacks must not release the stale-session guard.
+   pathComp.onGizmoChanged('pathGizmoKnotPositions','begin',1);
+   const replacement=new SplineKnot();
+   replacement.position=new Vec3(10,2,0);
+   pathComp.knots=[revivedAgain,replacement];
+   pathComp.onRestore();
+   pathComp.pathGizmoKnotPositions[1]=new Vec3(99,0,0);
+   assert.equal(replacement.position.x,10);
+   pathComp.onGizmoChanged('pathGizmoKnotPositions','cancel',0);
+   pathComp.pathGizmoKnotPositions[1]=new Vec3(88,0,0);
+   assert.equal(replacement.position.x,10,'Wrong index cannot release quarantine');
+   pathComp.onGizmoChanged('pathGizmoKnotPositions','cancel',1);
+   pathComp.pathGizmoKnotPositions[1]=new Vec3(12,2,0);
+   assert.equal(replacement.position.x,12,'Matching indexed Cancel releases quarantine');
    // Restore fixture to test runtime guard and topology independently.
    pathComp.knots=[k0,k1];
    pathComp.onRestore();
