@@ -238,3 +238,12 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 4. Click **Apply Align Tangents**. Only Start `handleOut` or End `handleIn` should change, potentially changing that terminal Knot's mode to Free. Unused opposite handle, every Knot position, Roll, tension, saved Baked Mesh and source materials remain unchanged. Auto-mode endpoints remain Auto.
 5. Run **Rebuild Preview**, then inspect real Road/Junction mesh and asphalt UV seams. Perform Ctrl+Z/Redo per Path, Save/Reopen and Prefab Override tests in Creator 3.8.x; multi-Path Apply is not a grouped native history transaction.
 6. Negative tests: Linear/Catmull interpolation, closed Path, shared Path used by two Road branches, incorrect `At End`, endpoints not yet snapped, vertical/steep arm, insufficient chord spacing, and stale Knot data between Check and Apply. No automatic surface-Boolean or lane continuity is implied.
+
+
+## Check Junction Seams and Strict Road Seams
+
+1. Create a 3- or 4-way Junction with matching trimmed Road end rings. Use **Matched Repeat UV** and **Patch Lift = 0** for exact seam certification. Use the same **Repeat-wrapped material** on Road and Junction asphalt and confirm U/V axis/tiling compatibility.
+2. Select Junction Patch and click **Check Junction Seams**. View the CPU audit in the **Editor Console only** (no footer debug panel). A passing matched Junction should show `ok: true`, `matchedGeometry === boundaryVertices`, `matchedUV === boundaryVertices`, `inconsistentUVBranches: 0`, `degenerateTriangles: 0`.
+3. Enable **Strict Road Seams** to validate those checks automatically before any Junction Editor Preview/Bake. This is default OFF so older scenes keep their behavior. Check again after changing trim, profile material slots, UV tiling, curb ramps or side sidewalk geometry.
+4. Negative tests: select **World Projected** UV, set **Patch Lift = 0.01**, or attach an invalid/untrimmed Road. The audit must refuse to claim exact XYZ/Repeat seam continuity. Restore settings before Bake.
+5. Compare real material filtering and tangent shading in the Scene view, including curb/sidewalk corners and painted markings. The CPU check cannot prove that two different source textures, wrap modes, material instances or the engine's renderer produce a visually seamless material. Nor does it Boolean-weld entire Road and Junction meshes.
