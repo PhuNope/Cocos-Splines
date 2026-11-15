@@ -166,9 +166,18 @@ function planV2JunctionTangents(uuid){
         return {ok:true,plan:c.planTangentAlignmentV2()};
     });
 }
+/** Diagnostic-only CPU geometry audit; no MeshRenderer / AssetDB writes. */
+function inspectV2JunctionSeams(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.inspectJunctionSeamsV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,report:c.inspectJunctionSeamsV2()};
+    });
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
     inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap,
-    planV2JunctionAutoConnect,refreshV2JunctionAutoConnect,planV2JunctionTangents};
+    planV2JunctionAutoConnect,refreshV2JunctionAutoConnect,planV2JunctionTangents,
+    inspectV2JunctionSeams};
 exports.load=function(){};
 exports.unload=function(){};
