@@ -34,10 +34,13 @@ try {
    }
  }
  class Color{constructor(r,g,b,a=255){Object.assign(this,{r,g,b,a});}}
+ class Quat{
+   static toEuler(out,quat){out.x=quat.x;out.y=quat.y;out.z=quat.z;return out;}
+ }
  class Component{}
  class Node{
    constructor(name){
-     this.name=name;this.isValid=true;this.components=[];
+     this.name=name;this.isValid=true;this.components=[];this.parent=null;
      this.worldPosition=new Vec3();this.worldMatrix=new Mat4();
      this._euler=new Vec3();
    }
@@ -47,12 +50,20 @@ try {
      this.worldMatrix.rz=v.z*Math.PI/180;
    }
    setRotationFromEuler(v){this.eulerAngles=v;}
+   get worldRotation(){
+     const p=this.parent?.worldRotation||new Vec3();
+     return new Vec3(this._euler.x+p.x,this._euler.y+p.y,this._euler.z+p.z);
+   }
+   setWorldRotationFromEuler(x,y,z){
+     const p=this.parent?.worldRotation||new Vec3();
+     this.eulerAngles=new Vec3(x-p.x,y-p.y,z-p.z);
+   }
    addComponent(Type){const v=new Type();v.node=this;this.components.push(v);return v;}
    setWorldPosition(p){this.worldPosition=new Vec3(p.x,p.y,p.z);}
  }
  const decorators={ccclass:()=>target=>target,menu:()=>target=>target,
    executeInEditMode:()=>target=>target,property:()=>()=>{}};
- const cc={_decorator:decorators,Node,Vec3,Mat4,Color,Component,Enum:x=>x};
+ const cc={_decorator:decorators,Node,Vec3,Mat4,Quat,Color,Component,Enum:x=>x};
  const original=Module._load;
  Module._load=function(id,parent,isMain){
    if(id==='cc')return cc;
@@ -97,6 +108,30 @@ try {
  assert.equal(auto.knots[1].handleIn,undefined);
  eq(evaluateSplineV2(auto,.5).position.y,0);
  pathComp.gizmoKnotIndex=0;
+ // HUD Position/Rotation Local+World form independent, exclusive toggle pairs.
+ const hud=pathComp;
+ assert.equal(hud.pathHudPositionLocal,true);
+ assert.equal(hud.pathHudPositionWorld,false);
+ assert.equal(hud.pathHudRotationLocal,true);
+ assert.equal(hud.pathHudRotationWorld,false);
+ hud.pathHudPositionWorld=true;
+ assert.equal(hud.gizmoPositionSpace,SplineSpace.World);
+ assert.equal(hud.pathHudPositionLocal,false);
+ assert.deepEqual({...hud.pathGizmoKnotPositionWorld},{x:10,y:0,z:0});
+ assert.deepEqual({...hud.pathGizmoKnotPositionsWorld[1]},{x:22,y:0,z:0});
+ hud.pathGizmoKnotPositionWorld=new Vec3(14,4,0);
+ assert.deepEqual({...k0.position},{x:2,y:2,z:0},
+   'World position edits must be inverted into Path-local Knot storage');
+ hud.pathGizmoKnotPositionsWorld[1]=new Vec3(26,2,0);
+ assert.deepEqual({...k1.position},{x:8,y:1,z:0});
+ assert.deepEqual({...hud.pathGizmoKnotPositionWorld},{x:14,y:4,z:0});
+ // Restore the authored points; toggling UI coordinate mode never migrates data.
+ k0.position=new Vec3(0,0,0);k1.position=new Vec3(6,0,0);
+ hud.pathHudPositionLocal=true;
+ hud.pathHudPositionLocal=false;
+ assert.equal(hud.pathHudPositionWorld,false,
+   'Clicking an already active toggle off must never leave neither selected');
+ assert.deepEqual({...hud.pathGizmoKnotPosition},{x:0,y:0,z:0});
  assert.deepEqual({...pathComp.pathGizmoTangentOut},{x:2,y:0,z:0});
  const sourceMap=new Map();
  const calls=[];
@@ -126,7 +161,11 @@ try {
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
-   assert.equal(pathComp.onGizmoHudControls().length,5);
+   assert.equal(pathComp.onGizmoHudControls().length,9);
+   const spaceControls=pathComp.onGizmoHudControls().filter(x=>x.group?.endsWith('-space'));
+   assert.deepEqual(spaceControls.map(x=>x.id),[
+     'position-local','position-world','rotation-local','rotation-world']);
+   assert(spaceControls.every(x=>x.type==='toggle'));
    const rollHud=pathComp.onGizmoHudControls().find(x=>x.property==='pathGizmoActiveRoll');
    assert.deepEqual({min:rollHud.min,max:rollHud.max,step:rollHud.step},
      {min:-180,max:180,step:1});
@@ -144,6 +183,34 @@ try {
    assert.equal(lines.length,baseGuideLines-2,
      'Disabling the bank guide should remove exactly two visual guide lines');
    pathComp.gizmoShowRollGuide=true;
+   // Position World Gizmos use genuine world-coordinate proxies for
+   // active, indexed and Bezier tangent handles. Escape restores local data.
+   pathComp.pathHudPositionWorld=true;
+   const worldHandles=pathComp.onGizmoHandles();
+   assert(worldHandles.every(h=>h.space==='world'));
+   assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionWorld'));
+   assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionsWorld'));
+   assert(worldHandles.some(h=>h.property==='pathGizmoTangentOutWorld'));
+   const oldLocalKnot={...k0.position};
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','begin');
+   pathComp.pathHudPositionLocal=true;
+   assert.equal(pathComp.pathHudPositionWorld,true,
+     'Cannot switch coordinate space while dragging');
+   pathComp.pathGizmoKnotPositionWorld=new Vec3(18,0,0);
+   assert.equal(k0.position.x,4);
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
+   assert.deepEqual({...k0.position},oldLocalKnot);
+   pathComp.pathGizmoTangentOutWorld=new Vec3(14,4,0);
+   assert.deepEqual({...k0.handleOut},{x:2,y:2,z:0},
+     'World tangent position must preserve Path-local offset');
+   pathComp.pathGizmoTangentOutWorld=new Vec3(14,0,0);
+   pathComp.onGizmoChanged('pathGizmoTangentOutWorld','begin');
+   pathComp.pathGizmoTangentOutWorld=new Vec3(16,4,0);
+   pathComp.onGizmoChanged('pathGizmoTangentOutWorld','cancel');
+   assert.equal(k0.mode,TangentMode.Free);
+   assert.deepEqual({...k0.handleOut},{x:2,y:0,z:0});
+   k0.mode=TangentMode.Auto;
+   pathComp.pathHudPositionLocal=true;
    const rollCallsBefore=calls.length;
    pathComp.gizmoKnotIndex=0;
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);
@@ -279,6 +346,33 @@ try {
    pathComp.pathGizmoRotationEuler=new Vec3(99,99,40);
    assert.deepEqual({...pathNode.eulerAngles},{x:10,y:20,z:40},
        '2D rotates Z while preserving existing 3D X/Y Euler');
+   // World rotation uses absolute orientation, including a rotated parent.
+   // Undo/Escape restores the Path Node's original LOCAL Euler.
+   const parent=new Node('Rotated Parent');
+   parent.eulerAngles=new Vec3(0,0,25);
+   pathNode.parent=parent;
+   pathNode.eulerAngles=new Vec3(0,0,10);
+   pathComp.gizmoRotationMode=RotationMode.Spatial3D;
+   pathComp.pathHudRotationWorld=true;
+   assert.equal(pathComp.pathHudRotationLocal,false);
+   assert.deepEqual({...pathComp.pathGizmoRotationEuler},{x:0,y:0,z:35});
+   assert(pathComp.onGizmoHandles().every(h=>h.space==='world'));
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','begin');
+   pathComp.pathHudRotationLocal=true;
+   assert.equal(pathComp.pathHudRotationWorld,true,
+     'World/local rotation cannot toggle during drag');
+   pathComp.pathGizmoRotationEuler=new Vec3(0,0,90);
+   assert.equal(pathNode.eulerAngles.z,65,'World 90 minus parent World 25');
+   pathComp.onGizmoChanged('pathGizmoRotationEuler','cancel');
+   assert.equal(pathNode.eulerAngles.z,10,'World Escape restores local node Euler');
+   pathComp.gizmoRotationMode=RotationMode.Planar2D;
+   pathComp.pathGizmoRotationEuler=new Vec3(60,30,55);
+   assert.equal(pathNode.eulerAngles.z,30,'2D rotate affects world Z only');
+   pathComp.pathHudRotationLocal=true;
+   assert.equal(pathComp.pathHudRotationWorld,false);
+   assert(pathComp.onGizmoHandles().every(h=>h.space==='local'));
+   assert.equal(pathComp.pathGizmoRotationEuler.z,30);
+   pathNode.parent=null;
    pathComp.gizmoRotationMode=RotationMode.Knots;
    assert(pathComp.onGizmoHandles().some(h=>h.property==='pathGizmoKnotPosition'));
    pathNode.eulerAngles=new Vec3();
