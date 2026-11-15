@@ -6,6 +6,7 @@
  * Topology buttons route through the active Scene process.
  */
 const {style,callEditor}=require('./common');
+const {knotPosition}=require('../../v2/PathKnotDumpCodec');
 const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
@@ -38,7 +39,7 @@ function valueFromEntry(entry,name){
     return prop?.value??null;
 }
 function pointLabel(entry){
-    const p=valueFromEntry(entry,'position');
+    const p=knotPosition(entry);
     if(!p||typeof p!=='object')return 'Vec3';
     const f=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):'?';
     return 'X '+f(p.x)+' · Y '+f(p.y)+' · Z '+f(p.z);
