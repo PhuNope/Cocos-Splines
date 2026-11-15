@@ -104,6 +104,12 @@ try{
       assert(snappedPoints.every(h=>h.snap===.5));
       const unsnappedPoints=buildSplineKnotPointGizmos('pointSnap',[1,3]);
       assert(unsnappedPoints.every(h=>h.snap===undefined));
+      const groupPoints=buildSplineKnotPointGizmos('groups',[0,1,2],
+        'world',0,[0,2]);
+      assert.deepEqual(groupPoints.map(h=>h.color),
+        ['#72e6e0','#ffb84a','#72e6e0']);
+      assert.throws(()=>buildSplineKnotPointGizmos('groups',[0],
+        'world',0,[-1]),/invalid group Knot/);
       assert.throws(()=>buildSplineKnotMoveGizmos('bad','world',Infinity),/Move snap/);
       assert.throws(()=>buildSplineKnotPointGizmos('bad',[1],'world',-1),/Point snap/);
       const move=buildSplineKnotMoveGizmos('gizmoKnotPosition');

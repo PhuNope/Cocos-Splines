@@ -164,7 +164,9 @@ try {
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
-   assert.equal(pathComp.onGizmoHudControls().length,10);
+   assert.equal(pathComp.onGizmoHudControls().length,12);
+   assert.deepEqual(pathComp.onGizmoHudControls().slice(-2).map(x=>x.id),
+     ['path-group-toggle','path-group-clear']);
    const positionSnapHud=pathComp.onGizmoHudControls().find(x=>x.property==='gizmoPositionSnap');
    assert.deepEqual({min:positionSnapHud.min,max:positionSnapHud.max,step:positionSnapHud.step},
      {min:0,max:5,step:.05});
@@ -227,6 +229,52 @@ try {
    pathComp.gizmoPositionSnap=0;
    assert(pathComp.onGizmoHandles().every(h=>h.snap===undefined),
       'Zero Position Snap must leave continuous movement intact');
+   // HUD multi-selection is transient; no new Knot Nodes or serialized
+   // group array. The active handle translates all selected records.
+   pathComp.gizmoKnotIndex=0;
+   assert.deepEqual(pathComp.selectedGroupIndices(),[]);
+   pathComp.onGizmoHudAction('path-group-toggle');
+   assert.deepEqual(pathComp.selectedGroupIndices(),[0]);
+   pathComp.gizmoKnotIndex=1;
+   pathComp.onGizmoHudAction('path-group-toggle');
+   assert.deepEqual(pathComp.selectedGroupIndices(),[0,1]);
+   assert.match(pathComp.onGizmoHud()[0].text,/Group 2: 0, 1/);
+   assert(pathComp.onGizmoHandles().some(h=>
+     h.index===0&&h.color==='#72e6e0'),'Selected peers are cyan');
+   pathComp.gizmoKnotIndex=0;
+   const group0={...k0.position},group1={...k1.position};
+   pathComp.pathHudPositionWorld=true;
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','begin');
+   pathComp.gizmoKnotIndex=1; // Simulate an Inspector selection change
+   pathComp.onGizmoHudAction('path-group-clear');
+   assert.deepEqual(pathComp.selectedGroupIndices(),[0,1],
+     'Selection changes are refused during drag');
+   pathComp.pathGizmoKnotPositionWorld=new Vec3(18,0,0);
+   assert.equal(k0.position.x,4,'World group delta must convert into Path local');
+   assert.equal(k1.position.x,10,'World group move includes second Knot');
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','update');
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
+   assert.deepEqual({...k0.position},group0,'Escape restores group origin');
+   assert.deepEqual({...k1.position},group1,'Escape restores every selected Knot');
+   pathComp.gizmoKnotIndex=0;
+   pathComp.pathHudPositionLocal=true;
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','begin');
+   pathComp.pathGizmoKnotPosition=new Vec3(3,0,0);
+   assert.equal(k0.position.x,3);
+   assert.equal(k1.position.x,9);
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','end');
+   assert.equal(k0.position.x,3,'Group End retains both edits');
+   assert.equal(k1.position.x,9);
+   pathComp.onGizmoHudAction('path-group-toggle');
+   assert.deepEqual(pathComp.selectedGroupIndices(),[1]);
+   pathComp.pathGizmoKnotPosition=new Vec3(4,0,0);
+   assert.equal(k0.position.x,4,'Non-selected active Knot can move separately');
+   assert.equal(k1.position.x,9,'Other selected Knot remains unchanged');
+   k0.position=new Vec3(group0.x,group0.y,group0.z);
+   k1.position=new Vec3(group1.x,group1.y,group1.z);
+   pathComp.onGizmoHudAction('path-group-clear');
+   assert.deepEqual(pathComp.selectedGroupIndices(),[]);
+   pathComp.gizmoKnotIndex=0;
    const rollCallsBefore=calls.length;
    pathComp.gizmoKnotIndex=0;
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);

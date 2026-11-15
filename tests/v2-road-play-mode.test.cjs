@@ -236,7 +236,7 @@ try{
    authoredPath.gizmoKnotIndex=1;
    const handles=authoredPath.onGizmoHandles();
    assert.equal(handles.length,8,'Path owns active handles and two point handles');
-   assert.equal(authoredPath.onGizmoHudControls().length,9,
+   assert.equal(authoredPath.onGizmoHudControls().length,11,
      'Path HUD offers Position Snap, two Local/World toggle pairs, Knot, Roll and guide controls');
    assert.equal(authoredPath.onGizmoHudControls().filter(h=>h.group?.endsWith('-space')).length,4);
    assert(authoredPath.onGizmoHudControls().some(h=>h.property==='pathGizmoActiveRoll'));
@@ -327,7 +327,7 @@ try{
     assert.equal(pathHandles.length,8,'SplinePath owns six XYZ/plane + two point handles');
     assert(pathHandles.some(h=>h.property==='pathGizmoKnotPosition'));
     assert.deepEqual(pathHandles.slice(6).map(h=>h.index),[0,2]);
-    assert.equal(splinePath.onGizmoHudControls().length,9,
+    assert.equal(splinePath.onGizmoHudControls().length,11,
        'Shared Path HUD includes Position/Rotation Local/World groups and Knot Roll/guide');
     const dragStart={...b.worldPosition};
     splinePath.onGizmoChanged('pathGizmoKnotPosition','begin');
