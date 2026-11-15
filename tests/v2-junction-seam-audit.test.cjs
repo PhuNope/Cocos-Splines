@@ -62,6 +62,9 @@ try{
   assert.equal(report.matchedUV,report.boundaryVertices);
   assert.equal(report.inconsistentUVBranches,0);
   assert.equal(report.degenerateTriangles,0);
+  assert.equal(report.asphaltOverlapChecked,true);
+  assert.equal(report.overlappingAsphaltPairs,0,
+   'Generated Junction asphalt must not overlap in positive area');
   assert.deepEqual(Array.from(mesh.positions),initial);
   assert.deepEqual(Array.from(mesh.uv0),initialUV);
   const lifted=build(entries,{...options,surfaceLift:.012}).mesh;
@@ -87,6 +90,13 @@ try{
     'Each point individually matches Repeat, but one segment jumps a tile');
    assert.equal(incoherentReport.ok,false,'Global per-arm UV offset must remain coherent');
    assert(incoherentReport.inconsistentUVBranches>=1);
+   const overlap={...mesh,submeshes:mesh.submeshes.map((group,i)=>({
+    ...group,indices:i===0?new Uint16Array([
+      ...group.indices,...group.indices.slice(0,3)]):group.indices}))};
+   const overlapReport=audit(overlap,entries);
+   assert.equal(overlapReport.ok,false);
+   assert(overlapReport.overlappingAsphaltPairs>0,
+    'Duplicate asphalt surface must be reported as overlapping');
    const broken={...mesh,submeshes:mesh.submeshes.map((s,i)=>({
     ...s,indices:i===0?new Uint16Array(s.indices):s.indices}))};
    broken.submeshes[0].indices[1]=broken.submeshes[0].indices[0];
