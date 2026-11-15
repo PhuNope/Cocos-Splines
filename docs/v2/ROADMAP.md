@@ -127,3 +127,11 @@
 - [x] Regression tests from real 3-/4-way trimmed Road Strip/Profile meshes and negative UV/Lift/triangle cases; include audit in breaking v2 test ZIP without legacy assets.
 - [ ] Visually certify actual Cocos Creator 3.8.x scene shader/material/UV wrap settings, Inspector behavior, tangent shading, Undo/Redo and Scene reloading.
 - [ ] Full 2.5D/3D intersection union and lane-aware surface topology; this audit is not a boolean mesh solver or a geometry-repair algorithm.
+
+
+## Junction interior UV / asphalt overlap milestone (2026-11-15)
+
+- [x] Deterministic opt-in inner-ring UV relaxation on plain 3-/4-way Matched Repeat asphalt patches; Road ring XYZ/UV0 and UV2 preserved, default legacy rendering unchanged.
+- [x] 2.5D positive-area asphalt triangle intersection scan with polygon clipping, height separation guard and Editor scan budget; seam/topology audit exposes overlap diagnostics and Strict gate.
+- [x] Synthetic overlap/duplicate/shared-edge/elevation regressions, actual plain-profile Road/Junction seam tests, inner UV geometry and GLTF fingerprint invariance checks.
+- [ ] Acute-wedge constrained remeshing / Boolean polygon union, complex shoulder/curb UV field blending, tangent-space-normal-map transitions, shader material equivalence checks, and runtime/Editor manual certification.
