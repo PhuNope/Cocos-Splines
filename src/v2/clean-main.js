@@ -9,6 +9,7 @@ const {bindWhenImported}=require('./EditorAssetBind');
 const {planPathEditDump}=require('./PathV2Dump');
 const {planEndpointSnapDump}=require('./PathEndpointSnapDump');
 const {planJunctionAutoConnectDump}=require('./JunctionAutoConnectDump');
+const {planJunctionTangentDump}=require('./JunctionTangentDump');
 const selected=()=>Editor.Selection.getSelected('node')||[];
 async function scene(method,uuid,...args){
     return Editor.Message.request('scene','execute-scene-script',{
@@ -292,9 +293,66 @@ async function applyV2JunctionAutoConnect(){
             (changed?' (Junction links were recorded; Undo or inspect Scene)':'')));
     }
 }
+async function planV2JunctionTangents(){
+    try{
+        const result=await scene('planV2JunctionTangents',currentNode());
+        if(!result?.ok)throw new Error(result?.error||'Junction tangent check rejected');
+        return result;
+    }catch(e){return fail('check Junction Tangents',e);}
+}
+/**
+ * Preflight every Path before the first write. Each changed Path receives a
+ * native Creator history item (not a grouped/atomic multi-Path transaction).
+ * Never edit live Knot CCClass data in the Scene process.
+ */
+async function applyV2JunctionTangents(){
+    let changed=0,junctionUuid;
+    try{
+        junctionUuid=currentNode();
+        const result=await scene('planV2JunctionTangents',junctionUuid);
+        if(!result?.ok)
+            throw new Error(result?.error||'Junction tangent plan rejected');
+        const branches=result.plan?.branches;
+        if(!Array.isArray(branches)||
+           (branches.length!==3&&branches.length!==4))
+            throw new Error('Invalid Junction tangent branch count');
+        const paths=new Set(),commits=[];
+        for(const branch of branches){
+            if(typeof branch.pathUuid!=='string'||!branch.pathUuid||
+               paths.has(branch.pathUuid))
+                throw new Error('Junction Tangents requires unique linked Path Nodes');
+            paths.add(branch.pathUuid);
+            const node=await Editor.Message.request('scene','query-node',branch.pathUuid);
+            commits.push(planJunctionTangentDump(node,branch));
+        }
+        for(const commit of commits){
+            if(commit.noOp)continue;
+            const accepted=await Editor.Message.request('scene','set-property',{
+                uuid:commit.pathUuid,
+                path:'__comps__.'+commit.componentIndex+'.knots',
+                dump:commit.dump,record:true
+            });
+            if(accepted===false)
+                throw new Error('Creator rejected Path tangent edit: '+commit.pathUuid);
+            changed++;
+        }
+        if(changed){
+            const refresh=await scene('refreshV2JunctionEndpointSnap',junctionUuid);
+            if(!refresh?.ok)
+                throw new Error(refresh?.error||'Tangent edits saved but preview refresh failed');
+            return {ok:true,changed,plan:result.plan,warnings:refresh.warnings||[]};
+        }
+        return {ok:true,changed:0,plan:result.plan,warnings:[]};
+    }catch(e){
+        const detail=String(e instanceof Error?e.message:e);
+        return fail('apply Junction Tangents',new Error(detail+
+            (changed?' ('+changed+' Path edits were recorded; Undo each or inspect Scene)':'')));
+    }
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
     bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork,
-    planV2JunctionAutoConnect,applyV2JunctionAutoConnect};
+    planV2JunctionAutoConnect,applyV2JunctionAutoConnect,
+    planV2JunctionTangents,applyV2JunctionTangents};
 exports.load=function(){};
 exports.unload=function(){};
