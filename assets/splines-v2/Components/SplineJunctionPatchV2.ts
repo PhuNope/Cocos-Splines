@@ -1,5 +1,6 @@
 import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain,director} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
+import {auditJunctionSeamsV2,type JunctionSeamAuditReportV2} from '../geometry/JunctionSeamAuditV2';
 import {SplineRoadV2} from './SplineRoadV2';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
@@ -79,6 +80,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     maxGrade=.15;
     @property({min:-.2,max:.2,step:.001,tooltip:'Optional small lift in local Y; normally 0 because Roads have already been trimmed.'})
     patchLift=0;
+    @property({tooltip:'Editor-only opt-in: reject Junction Preview/Bake when cut-ring XYZ/Repeat UV seams are not certified. Requires Matched Repeat UV and zero Patch Lift.'})
+    strictRoadSeams=false;
     @property({min:.01,max:2,step:.01,tooltip:'Maximum curb lip height above flat asphalt supported by the radial shoulder/curb transition.'})
     maxCurbHeight=.6;
     @property({type:Enum(JunctionCurbCornerModeV2),tooltip:'Radial Legacy: taper curb to center. Rounded Continuous: smooth top and vertical wall around flat junction corners, all Roads need curb.'})
@@ -130,6 +133,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     @property({tooltip:'Include curb profile end markers in the Junction selection guides.'})
     gizmoJunctionCurbs=true;
     private _lastJunctionReport:(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null=null;
+    private _lastSeamAudit:JunctionSeamAuditReportV2|null=null;
+    private _seamAuditRequested=false;
     /** Selected-only read-only authoring visualization. Never paints runtime geometry. */
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmos||
@@ -398,6 +403,20 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             maxHeightDelta:this.flatTolerance
         }),scannedRoads:candidates.length+skipped.length,skipped};
     }
+    /** Read-only inspect: builds CPU geometry but never creates GPU meshes,
+     * changes Road trims/Knots or modifies the saved Baked asset. */
+    public inspectJunctionSeamsV2():JunctionSeamAuditReportV2 {
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Junction Seam Audit is Editor-only');
+        this._lastSeamAudit=null;
+        this._seamAuditRequested=true;
+        try{
+            this.generate();
+            if(!this._lastSeamAudit)
+                throw new Error('Junction Seam Audit did not produce a report');
+            return this._lastSeamAudit;
+        }finally{this._seamAuditRequested=false;}
+    }
     public inspectCornerRisk():null{return null;}
     public inspectJunction():(JunctionPatchReportV2&{markings?:JunctionMarkingReportV2})|null{return this._lastJunctionReport;}
     protected generate(){
@@ -507,6 +526,19 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             sidewalkMaxEdgeSlope:this.sidewalkMaxEdgeSlope,
             sidewalkRoadJoin:this.joinRoadSidewalks
         });
+        // Check the exact CPU patch BEFORE paint overlays. Default-off keeps
+        // legacy scenes and runtime fast; opt-in strict mode fails closed for
+        // visually cracked/mismatched end rings, without moving any vertex.
+        if(EDITOR_NOT_IN_PREVIEW&&(this.strictRoadSeams||this._seamAuditRequested)){
+            const seam=auditJunctionSeamsV2(result.mesh,entries,{
+                uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?
+                    'projected':'matched'
+            });
+            this._lastSeamAudit=seam;
+            if(this.strictRoadSeams&&!this._seamAuditRequested&&!seam.ok)
+                throw new Error('Junction strict seam validation failed: '+
+                    (seam.notes.join('; ')||'Road end-ring topology mismatch'));
+        }
         if(!this.generateJunctionMarkings){
             this._lastJunctionReport=result.report;
             return {geometry:result.mesh};
