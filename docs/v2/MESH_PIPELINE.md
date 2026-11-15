@@ -285,3 +285,23 @@ coplanar hairpin coverage. This is not a general 3D Boolean or
 road-intersection solver. A real Creator 3.8.8 material/3-Knot
 acceptance pass is still required; previously baked assets are never
 rewritten automatically.
+
+### Closed Loop Continuous Road seam width (2026-11-15, P1)
+
+For a closed spline, `SplineFramesV2` supplies a final ring at total
+distance with the **same position and local orientation** as ring zero.
+Previously the `RoadContinuous` Lipschitz-width and rounded-minimum
+smoothers treated those rings as unrelated ends of an open list. A
+tight turn just after the seam could therefore narrow only one side
+and split the closed road mesh, including UV cross-section isolines.
+
+The width envelope now seeds both seam endpoints with their shared
+minimum, propagates constraints in both arc directions, and uses wrapped
+arc distance for rounded smoothing. The duplicate last ring receives
+the exact first-ring widths. This preserves an uncut three-vertex
+left/centre/right strip, U/V longitudinal UV0 and the independent UV2
+length channel. UV0 longitudinal values still differ by the path
+length divided by `uvMetersPerRepeat`: a perfectly repeating
+texture across a closed loop also requires an integer repeat count
+or suitable material mapping. This is a headless mesh/UV regression,
+not yet a certification of materials in Creator 3.8.8.

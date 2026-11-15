@@ -93,8 +93,56 @@ try{
    if(count(profile,x+.00073,z+.00017,true)>1)over++;
   assert.equal(over,0,'Asphalt and flat shoulders should not double-cover the U-turn');
  }
+ // Closed loops have a duplicate final frame. A nearby one-sided
+ // sharp corner must constrain BOTH seam rings, not leave a visible gap.
+ const closedFrames=[
+  fakeClosed(0,0,0),fakeClosed(0,1,1),fakeClosed(0,2,2),
+  fakeClosed(1,2,3),fakeClosed(2,2,4),fakeClosed(2,0,6),fakeClosed(0,0,8)
+ ];
+ const cyclicCorners=closedFrames.map((_,i)=>({
+  right:{x:1,y:0,z:0},insideSign:i===1?1:0,
+  insideLimit:i===1?.5:Infinity,angleRadians:0,isPinched:i===1
+ }));
+ const cyclic=buildRoadContinuousSectionsV2(closedFrames,2,{
+  closed:true,cornerSections:cyclicCorners,widthSlope:.65
+ });
+ const seam0=cyclic.sections[0],seamLast=cyclic.sections.at(-1);
+ assert(seam0.right<2,'One-sided pinch must influence the closed seam');
+ assert(Math.abs(seam0.right-seamLast.right)<1e-10,
+  'Closed Loop positive edge cannot split at the duplicate first/last frame');
+ assert(Math.abs(seam0.left-seamLast.left)<1e-10,
+  'Closed Loop negative edge cannot split at the duplicate first/last frame');
+ for(let i=1;i<cyclic.sections.length;i++){
+  const d=closedFrames[i].distance-closedFrames[i-1].distance;
+  assert(Math.abs(cyclic.sections[i].right-cyclic.sections[i-1].right)<=.25*d+1e-6,
+   'Closed Loop smoothing must preserve its conservative width slope');
+ }
+ const loop=buildSplineCacheV2({type:'catmull-rom-centripetal',closed:true,
+  knots:[k(0,0),k(0,2),k(2,2),k(3,0),k(1,-1)]});
+ for(const axis of ['u','v']){
+  const mesh=buildRoadStripV2(loop,{width:4,step:.2,
+   surfaceMode:'continuous',uvLongitudinalAxis:axis});
+  const frames=buildSplineFramesV2(loop,{maxStep:.2}).frames;
+  assert.equal(mesh.vertexCount,frames.length*3);
+  const final=frames.length-1;
+  for(let side=0;side<3;side++){
+   const firstVertex=side,lastVertex=3*final+side;
+   for(let c=0;c<3;c++)assert(Math.abs(
+    mesh.positions[3*firstVertex+c]-mesh.positions[3*lastVertex+c])<2e-5,
+    'Closed Road seam position split on axis '+axis+' at side '+side);
+   for(let c=0;c<2;c++)assert(Math.abs(
+    mesh.uv0[2*firstVertex+c]-mesh.uv0[2*lastVertex+c]-
+     (c===(axis==='u'?0:1)?-loop.length/5:0))<3e-5,
+    'Closed Road UV0 must differ only by expected longitudinal distance');
+   assert(Math.abs(mesh.uv2[2*firstVertex]-mesh.uv2[2*lastVertex])<2e-6);
+   assert(Math.abs(mesh.uv2[2*firstVertex+1])<2e-6);
+   assert(Math.abs(mesh.uv2[2*lastVertex+1]-1)<2e-6);
+  }
+ }
  const tube=buildTubeV2(hairpin,{radius:.5,step:.25,sides:12});
  assert(tube.vertexCount>0,'Extrude tube must remain independent');
+ const fakeClosed=(x,z,distance)=>({position:{x,y:0,z},up:{x:0,y:1,z:0},
+  right:{x:1,y:0,z:0},tangent:{x:0,y:0,z:1},distance});
  const fake=(x,y,z,distance)=>({position:{x,y,z},up:{x:0,y:1,z:0},right:{x:1,y:0,z:0},tangent:{x:0,y:0,z:1},distance});
  const bridge=[fake(0,0,0,0),fake(0,0,4,4),fake(1,5,4,8),fake(1,5,0,12)];
  assert.equal(buildRoadContinuousSectionsV2(bridge,2).report.constrainedSections,0,'Do not shrink elevated crossings');

@@ -120,7 +120,24 @@ export function buildRoadContinuousSectionsV2(
         for(let i=1;i<n;i++)values[i]=Math.min(values[i],values[i-1]+slope*Math.max(0,frames[i].distance-frames[i-1].distance));
         for(let i=n-2;i>=0;i--)values[i]=Math.min(values[i],values[i+1]+slope*Math.max(0,frames[i+1].distance-frames[i].distance));
     };
-    spread(negative);spread(positive);
+    // The last frame of a closed spline duplicates the first in position,
+    // tangent and right. Treat them as ONE width constraint, then propagate
+    // along both directions around the ring. Otherwise a pinch just after
+    // the seam narrows only the first edge and leaves a visible gap at the
+    // final ring (even though both rings occupy the same world position).
+    const cyclicSpread=(values:number[])=>{
+        if(options.closed===true){
+            const seam=Math.min(values[0],values[n-1]);
+            values[0]=values[n-1]=seam;
+            spread(values);
+            // The first pass covers direct arc distances. Reseeding both
+            // ends with their minimum exposes the shorter route via seam.
+            const atSeam=Math.min(values[0],values[n-1]);
+            values[0]=values[n-1]=atSeam;
+        }
+        spread(values);
+    };
+    cyclicSpread(negative);cyclicSpread(positive);
     // A plain minimum-of-linear-cones has a derivative cusp at the narrowest
     // ring: this showed up as a visibly stepped yellow line on a real 3-knot
     // turn. Rounded minimum convolution preserves conservative width bounds,
@@ -128,22 +145,29 @@ export function buildRoadContinuousSectionsV2(
     const soften=(values:number[])=>{
         const original=values.slice(),out=values.slice();
         const radius=Math.max(2,halfExtent*5),transition=Math.max(.5,halfExtent*2);
-        for(let i=0;i<n;i++){
+        const closed=options.closed===true,uniqueCount=closed?n-1:n;
+        const total=frames[n-1].distance-frames[0].distance;
+        for(let i=0;i<uniqueCount;i++){
             let best=original[i];
-            for(let delta=1;delta<=128;delta++){
+            const maxDelta=closed?Math.min(128,uniqueCount-1):128;
+            for(let delta=1;delta<=maxDelta;delta++){
                 let any=false;
-                for(const j of [i-delta,i+delta]){
-                    if(j<0||j>=n)continue;
-                    const distance=Math.abs(frames[i].distance-frames[j].distance);
+                for(const raw of [i-delta,i+delta]){
+                    if(!closed&&(raw<0||raw>=n))continue;
+                    const j=closed?(raw%uniqueCount+uniqueCount)%uniqueCount:raw;
+                    if(j===i)continue;
+                    const direct=Math.abs(frames[i].distance-frames[j].distance);
+                    const distance=closed?Math.min(direct,total-direct):direct;
                     if(distance>radius)continue;
                     any=true;
                     const cost=slope*distance*distance/(distance+transition);
                     best=Math.min(best,original[j]+cost);
                 }
-                if(!any)break;
+                if(!closed&&!any)break;
             }
             out[i]=best;
         }
+        if(closed)out[n-1]=out[0]; // identical seam frames share a width
         for(let i=0;i<n;i++)values[i]=out[i];
     };
     soften(negative);soften(positive);
