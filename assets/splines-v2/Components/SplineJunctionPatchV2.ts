@@ -4,6 +4,8 @@ import {SplineRoadV2} from './SplineRoadV2';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
 import {planJunctionAutoConnectV2,type JunctionConnectCandidateV2} from '../geometry/JunctionAutoConnectV2';
+import {planJunctionTangentAlignmentV2} from '../geometry/JunctionTangentAlignV2';
+import {SplinePathCurveModeV2} from './SplinePathV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -65,6 +67,10 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     endpointSnapMaxDistance=.75;
     @property({min:.05,max:5,step:.05,tooltip:'Editor-only search radius for 3- or 4-way Auto Connect. It links references but never moves Path endpoints.'})
     autoConnectSearchRadius=.75;
+    @property({min:.001,max:.25,step:.005,tooltip:'Maximum endpoint distance from Junction center for Bezier tangent alignment; Snap endpoints first.'})
+    tangentEndpointTolerance=.05;
+    @property({min:.5,max:30,step:.5,tooltip:'Maximum deviation of authored endpoint handle from Road arm before alignment is needed.'})
+    tangentAngleToleranceDegrees=3;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units; in Gentle Grade, also caps crossfall (max .03).'})
     flatTolerance=.1;
     @property({type:Enum(JunctionGradeModeV2),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
@@ -225,6 +231,88 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                 knotIndex:indexOfKnot,knotCount:path.knots.length,
                 expectedLocal:{x:source.position.x,y:source.position.y,z:source.position.z},
                 targetLocal:{x:target.x,y:target.y,z:target.z}};
+        })};
+    }
+    /**
+     * Read-only Bézier authoring proposal, after Endpoint Snap.
+     * Only the active endpoint handle changes; no Path position, Knot bank,
+     * opposite handle, geometry, connection or Baked Mesh is modified.
+     */
+    public planTangentAlignmentV2(){
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Junction Align Tangents is Editor-only');
+        const seenPaths=new Set<string>();
+        const details=this.branches.map((link,index)=>{
+            const road=link?.road,path=road?.pathSource;
+            if(!road?.node?.isValid||!path?.node?.isValid)
+                throw new Error('Missing Road/Path in tangent branch '+index);
+            if(path.closed||path.interpolation!==SplinePathCurveModeV2.Bezier)
+                throw new Error('Junction tangent alignment requires an open Bezier SplinePath (branch '+index+')');
+            if(seenPaths.has(path.node.uuid))
+                throw new Error('Junction tangent alignment requires one distinct Path per Road');
+            seenPaths.add(path.node.uuid);
+            const knots=path.knots;
+            if(knots.length<2)
+                throw new Error('Bezier Path needs at least two Knots');
+            const knotIndex=link.atEnd?knots.length-1:0;
+            const neighborIndex=link.atEnd?knotIndex-1:1;
+            const knot=knots[knotIndex],neighbor=knots[neighborIndex];
+            if(!knot||!neighbor)
+                throw new Error('Invalid endpoint Knot in branch '+index);
+            const endpoint=path.getKnotWorldPosition(knotIndex);
+            const adjacent=path.getKnotWorldPosition(neighborIndex);
+            const handleSide=link.atEnd?'in' as const:'out' as const;
+            const active=handleSide==='in'?knot.handleIn:knot.handleOut;
+            const currentWorld=Vec3.transformMat4(new Vec3(),
+                new Vec3(knot.position.x+active.x,knot.position.y+active.y,
+                    knot.position.z+active.z),path.node.worldMatrix);
+            const originalHandle={
+                x:currentWorld.x-endpoint.x,
+                y:currentWorld.y-endpoint.y,
+                z:currentWorld.z-endpoint.z
+            };
+            // Validate the linked Road's Road-specific assumptions too.
+            road.junctionAutoTrimCandidateV2(road.node.uuid);
+            return {road,path,knot,knotIndex,handleSide,
+                endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
+                adjacent:{x:adjacent.x,y:adjacent.y,z:adjacent.z},
+                originalHandle};
+        });
+        const proposal=planJunctionTangentAlignmentV2(details.map(d=>({
+            roadId:d.road.node.uuid,pathId:d.path.node.uuid,
+            atEnd:d.handleSide==='in',
+            endpoint:d.endpoint,neighbor:d.adjacent,
+            activeHandle:d.originalHandle,mode:d.knot.mode
+        })),{
+            center:this.node.worldPosition,
+            endpointTolerance:this.tangentEndpointTolerance,
+            maxAngleDegrees:this.tangentAngleToleranceDegrees
+        });
+        return {...proposal,branches:proposal.branches.map((branch,index)=>{
+            const d=details[index],path=d.path,knot=d.knot;
+            const active=d.handleSide==='in'?knot.handleIn:knot.handleOut;
+            const matrix=path.node.worldMatrix;
+            const determinant=matrix.m00*(matrix.m05*matrix.m10-matrix.m06*matrix.m09)-
+                matrix.m04*(matrix.m01*matrix.m10-matrix.m02*matrix.m09)+
+                matrix.m08*(matrix.m01*matrix.m06-matrix.m02*matrix.m05);
+            if(!Number.isFinite(determinant)||Math.abs(determinant)<1e-8)
+                throw new Error('Bezier Path has singular world transform');
+            const inverse=Mat4.invert(new Mat4(),matrix);
+            const targetWorld=new Vec3(d.endpoint.x+branch.targetHandle.x,
+                d.endpoint.y+branch.targetHandle.y,
+                d.endpoint.z+branch.targetHandle.z);
+            const local=Vec3.transformMat4(new Vec3(),targetWorld,inverse);
+            const targetLocal={x:local.x-knot.position.x,
+                y:local.y-knot.position.y,z:local.z-knot.position.z};
+            if(![targetLocal.x,targetLocal.y,targetLocal.z].every(Number.isFinite))
+                throw new Error('Non-finite proposed Bezier Path handle');
+            return {...branch,pathUuid:path.node.uuid,knotIndex:d.knotIndex,
+                knotCount:path.knots.length,
+                expectedPosition:{x:knot.position.x,y:knot.position.y,z:knot.position.z},
+                expectedHandle:{x:active.x,y:active.y,z:active.z},
+                expectedMode:knot.mode,
+                targetLocalHandle:branch.changed?targetLocal:
+                    {x:active.x,y:active.y,z:active.z}};
         })};
     }
     /**
