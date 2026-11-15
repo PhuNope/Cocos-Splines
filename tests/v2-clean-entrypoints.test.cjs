@@ -177,6 +177,7 @@ try{
  assert(fs.existsSync(path.join(installed,'dist/contributions/inspector/PathV2.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/EditorAssetBind.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathV2Dump.js')));
+ assert(fs.existsSync(path.join(installed,'dist/v2/PathKnotDumpCodec.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathEndpointSnapDump.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/JunctionAutoConnectDump.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/JunctionTangentDump.js')));
