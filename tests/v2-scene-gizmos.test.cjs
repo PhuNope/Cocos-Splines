@@ -100,7 +100,7 @@ try{
       const move=buildSplineKnotMoveGizmos('gizmoKnotPosition');
       assert.equal(move.length,6,'Gizmos move generates XYZ+three plane descriptors');
       assert(move.every(h=>h.property==='gizmoKnotPosition'));
-      const moveCall=calls.find(x=>x.t==='move');
+      const moveCall=calls.find(x=>x.t==='move'&&x.property==='gizmoKnotPosition');
       assert.equal(moveCall.options.space,'local');
       assert.equal(moveCall.options.pickSize,28);
       const rendered=drawSplineSceneGizmos(node,guide);
