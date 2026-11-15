@@ -13,6 +13,8 @@ const {ccclass,property,executeInEditMode,menu}=_decorator;
 export enum SplinePathCurveModeV2 {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
 export enum SplineBezierTangentModeV2 {Auto=0,Free=1,Aligned=2,Mirrored=3}
 export enum SplinePathRotationModeV2 {Knots=0,Planar2D=1,Spatial3D=2}
+/** Coordinates used by consuming mesh generators; authored Path Knots always remain local. */
+export enum SplineSpace {Local=0,World=1}
 
 /**
  * A pure, serialized value object. No Node is created for each Knot.
@@ -284,7 +286,7 @@ export class SplinePathV2 extends Component {
     public get pathGizmoTangentOut():Vec3{return this.readTangent('out');}
     public set pathGizmoTangentOut(v:Vec3){this.writeTangent('out',v);}
 
-    public getSplineDataV2(consumer:Node):SplineDataV2 {
+    public getSplineDataV2(consumer:Node,space:SplineSpace=SplineSpace.World):SplineDataV2 {
         if(!consumer?.isValid||!this.node?.isValid)
             throw new Error('SplinePath and consumer require valid Nodes');
         if(this.knots.length<2||this.knots.some(k=>!k||!finite(k.position)))
@@ -296,20 +298,27 @@ export class SplinePathV2 extends Component {
         ];
         const type=types[this.interpolation];
         if(!type)throw new Error('SplinePath interpolation is invalid');
-        const inverse=Mat4.invert(new Mat4(),consumer.worldMatrix);
+        // Local generation copies authored Path-local coordinates verbatim.
+        // World mode preserves the previous Path.world -> Generator.local behavior.
+        // Compute the inverse only when World mapping is explicitly requested.
+        const inverse=space===SplineSpace.World?
+            Mat4.invert(new Mat4(),consumer.worldMatrix):null;
         return {type,closed:this.closed,knots:this.knots.map(k=>{
             if(!Number.isInteger(k.mode)||k.mode<0||k.mode>3||
                 !finite(k.handleIn)||!finite(k.handleOut)||
                 !Number.isFinite(k.tension)||
                 !Number.isFinite(k.rollDegrees)||Math.abs(k.rollDegrees)>180)
                 throw new Error('SplinePath has invalid Knot handles or tension');
-            const world=Vec3.transformMat4(new Vec3(),k.position,this.node.worldMatrix);
-            const local=Vec3.transformMat4(new Vec3(),world,inverse);
+            const local=inverse?
+                Vec3.transformMat4(new Vec3(),
+                    Vec3.transformMat4(new Vec3(),k.position,this.node.worldMatrix),
+                    inverse):k.position;
             const position={x:local.x,y:local.y,z:local.z};
             const tension=k.tension,rollDegrees=k.rollDegrees;
             if(type!=='bezier')return {position,tension,rollDegrees};
             if(k.mode===SplineBezierTangentModeV2.Auto)return {position,tension,rollDegrees};
             const toRelative=(offset:V3):V3=>{
+                if(!inverse)return {x:offset.x,y:offset.y,z:offset.z};
                 const control=Vec3.transformMat4(new Vec3(),
                     vec(add(k.position,offset)),this.node.worldMatrix);
                 const target=Vec3.transformMat4(new Vec3(),control,inverse);

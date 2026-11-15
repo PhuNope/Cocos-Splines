@@ -373,8 +373,13 @@ export class SplineRoadV2 extends SplineMeshGeneratorV2 {
         const sourceKnots=this.pathSource?.getKnotPositions();
         if(!this.pathSource||!sourceKnots?.length)
             throw new Error('Junction V2 requires a SplinePath with valid Vec3 Knots');
-        const endpoint=this.pathSource.getKnotWorldPosition(
-            atEnd?sourceKnots.length-1:0);
+        // Junction needs the endpoint of the ACTUAL generated Road, not the
+        // Path Node's world position. In Local mode these differ by design.
+        const localEndpoint=this.source().knots[
+            atEnd?sourceKnots.length-1:0].position;
+        const endpoint=Vec3.transformMat4(new Vec3(),
+            new Vec3(localEndpoint.x,localEndpoint.y,localEndpoint.z),
+            this.node.worldMatrix);
         if(!layout)return {endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
             left:vertex(start),middle:vertex(start+1),right:vertex(start+2)};
         const edges=layout.edgeMaterials.length;

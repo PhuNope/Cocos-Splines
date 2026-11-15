@@ -1,6 +1,6 @@
 import {_decorator,Component,Node,Mesh,MeshRenderer,Material,Enum,CCObject,utils,gfx} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {SplinePathV2} from './SplinePathV2';
+import {SplinePathV2,SplineSpace} from './SplinePathV2';
 import {type SplineDataV2} from '../core/SplineCurves';
 import {type MeshDataV2} from '../geometry/MeshData';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
@@ -22,6 +22,8 @@ export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
 export abstract class SplineMeshGeneratorV2 extends Component {
     @property({type:SplinePathV2,tooltip:'Required shared spline source: Path owns serialized Vec3 Knot records, interpolation and Gizmos editing.'})
     pathSource:SplinePathV2|null=null;
+    @property({type:Enum(SplineSpace),tooltip:'Local (default): generate at Path Knot local coordinates in this generator Node. World: place mesh by the Path Node world transform, converted to this Node local.'})
+    coordinateSpace=SplineSpace.Local;
     @property({min:0.01,tooltip:'Maximum frame step for generated path-following geometry.'})
     sampleStep=.5;
     @property({min:0.01,tooltip:'Distance in local units per longitudinal UV repeat.'})
@@ -57,7 +59,7 @@ export abstract class SplineMeshGeneratorV2 extends Component {
             this.unlinkPathPreviewConsumer();
         if(!this.pathSource)
             throw new Error('Assign a SplinePathV2 Path Source before generating geometry');
-        const source=this.pathSource.getSplineDataV2(this.node);
+        const source=this.pathSource.getSplineDataV2(this.node,this.coordinateSpace);
         if(EDITOR_NOT_IN_PREVIEW){
             this.pathSource.registerPreviewConsumer(this);
             this._registeredPath=this.pathSource;

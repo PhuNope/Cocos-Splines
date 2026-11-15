@@ -6,7 +6,7 @@ import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
 import {planJunctionAutoConnectV2,type JunctionConnectCandidateV2} from '../geometry/JunctionAutoConnectV2';
 import {planJunctionTangentAlignmentV2} from '../geometry/JunctionTangentAlignV2';
-import {SplinePathCurveModeV2} from './SplinePathV2';
+import {SplinePathCurveModeV2,SplineSpace} from './SplinePathV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -223,12 +223,15 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             const source=path.knots[indexOfKnot];
             if(!source||path.knots.length<2)
                 throw new Error('Endpoint Snap Path has fewer than 2 valid Knots');
-            const m=path.node.worldMatrix;
+            const m=road.coordinateSpace===SplineSpace.Local?
+                road.node.worldMatrix:path.node.worldMatrix;
             const determinant=m.m00*(m.m05*m.m10-m.m06*m.m09)-
                 m.m04*(m.m01*m.m10-m.m02*m.m09)+
                 m.m08*(m.m01*m.m06-m.m02*m.m05);
             if(!Number.isFinite(determinant)||Math.abs(determinant)<1e-8)
                 throw new Error('Endpoint Snap Path has singular world transform');
+            // Local coordinate generation places the Road end on its Road Node.
+            // World coordinate generation follows the Path Node.
             const inv=Mat4.invert(new Mat4(),m);
             const target=Vec3.transformMat4(new Vec3(),
                 new Vec3(branch.to.x,branch.to.y,branch.to.z),inv);
@@ -266,13 +269,17 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             const knot=knots[knotIndex],neighbor=knots[neighborIndex];
             if(!knot||!neighbor)
                 throw new Error('Invalid endpoint Knot in branch '+index);
-            const endpoint=path.getKnotWorldPosition(knotIndex);
-            const adjacent=path.getKnotWorldPosition(neighborIndex);
+            // Tangent geometry follows the Road's chosen coordinate space,
+            // never blindly assumes the Path Node world matrix.
+            const basis=road.coordinateSpace===SplineSpace.Local?
+                road.node.worldMatrix:path.node.worldMatrix;
+            const endpoint=Vec3.transformMat4(new Vec3(),knot.position,basis);
+            const adjacent=Vec3.transformMat4(new Vec3(),neighbor.position,basis);
             const handleSide=link.atEnd?'in' as const:'out' as const;
             const active=handleSide==='in'?knot.handleIn:knot.handleOut;
             const currentWorld=Vec3.transformMat4(new Vec3(),
                 new Vec3(knot.position.x+active.x,knot.position.y+active.y,
-                    knot.position.z+active.z),path.node.worldMatrix);
+                    knot.position.z+active.z),basis);
             const originalHandle={
                 x:currentWorld.x-endpoint.x,
                 y:currentWorld.y-endpoint.y,
@@ -280,7 +287,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             };
             // Validate the linked Road's Road-specific assumptions too.
             road.junctionAutoTrimCandidateV2(road.node.uuid);
-            return {road,path,knot,knotIndex,handleSide,
+            return {road,path,knot,knotIndex,handleSide,basis,
                 endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
                 adjacent:{x:adjacent.x,y:adjacent.y,z:adjacent.z},
                 originalHandle};
@@ -298,7 +305,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
         return {...proposal,branches:proposal.branches.map((branch,index)=>{
             const d=details[index],path=d.path,knot=d.knot;
             const active=d.handleSide==='in'?knot.handleIn:knot.handleOut;
-            const matrix=path.node.worldMatrix;
+            const matrix=d.basis;
             const determinant=matrix.m00*(matrix.m05*matrix.m10-matrix.m06*matrix.m09)-
                 matrix.m04*(matrix.m01*matrix.m10-matrix.m02*matrix.m09)+
                 matrix.m08*(matrix.m01*matrix.m06-matrix.m02*matrix.m05);
