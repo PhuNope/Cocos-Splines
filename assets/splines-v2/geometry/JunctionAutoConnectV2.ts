@@ -37,8 +37,7 @@ const positive=(n:number,label:string)=>{
     if(!Number.isFinite(n)||n<=0)throw new Error(label+' must be positive');
     return n;
 };
-const radians=d=>d*Math.PI/180;
-const deg=r=>r*180/Math.PI;
+const deg=(r:number):number=>r*180/Math.PI;
 export function planJunctionAutoConnectV2(
     roads:ReadonlyArray<JunctionConnectCandidateV2>,
     options:JunctionAutoConnectOptionsV2
