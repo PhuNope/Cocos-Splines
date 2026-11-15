@@ -162,3 +162,39 @@ NOT the mesh generator's separate `Coordinate Space` option.
   proxy getters/setters; their renderer shows four toggle rows, not a
   segmented button bar. Native Creator 3.8.8 HUD appearance still needs
   manual verification.
+
+
+## Multi-Knot group authoring (2026-11-15)
+
+- Use **Active Knot** in the Scene HUD to choose a Knot, then click
+  **Toggle Active Group** to include/exclude it. Repeat for each member;
+  **Clear Group** empties the selection. Up to 32 Knot records can be
+  selected, with no extra Knot Nodes or serialized index array. The
+  read-only HUD line reports the selected indices and member count.
+- When the active Knot is one of at least two selected members, its
+  Local/World Move handle translates the **entire group** by the same
+  Path-local delta. Member points are highlighted cyan (other Knot points
+  stay orange), and unselected active Knot handles still move normally.
+  Bézier tangent offsets, mode, tension and bank remain unchanged by
+  positional group translation.
+- Each Gizmos drag pins selected Knot **record identities** for the gesture.
+  Changing the active index cannot retarget the drag, and selection
+  buttons do not change the set during dragging. Escape restores all
+  originally selected positions before the final preview refresh.
+  Runtime/Play cannot edit the group.
+- For a **native Creator single-step Undo** across the full group, use
+  the compact Inspector **Group Nudge (HUD selection)** section:
+  X-/X+/Y-/Y+/Z-/Z+ moves every selected Knot in one
+  `scene.set-property(record:true)` edit of the typed `knots` CCClass
+  array. The distance is **Position Snap** when nonzero, or 1 otherwise.
+  In Position World, the delta is converted through the inverse Path
+  Node transform, preserving local authored Vec3. The planner validates
+  expected Knot positions again before the first write and refuses
+  stale or invalid sources.
+- Selection is transient: topology changes, deserialization and native
+  Undo/Redo clear stale Knot object references. A successful Inspector
+  Group Nudge explicitly rebinds its selected indices to restored Knot
+  objects for consecutive nudges.
+- Cocos-Gizmos native drag history and Scene picking still require real
+  Creator 3.8.8 acceptance; grouped Inspector Nudge provides the explicit
+  recordable history path. No raw Knot data or bottom Inspector log.

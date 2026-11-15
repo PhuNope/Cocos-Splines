@@ -323,3 +323,33 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
    transformed Road generator. Check linked Road preview and UV remain
    consistent. Save/Reload and Prefab/Undo require native Creator 3.8.8
    certification; automated tests cover code and mocked SDK calls only.
+
+
+## Multi-Knot authoring / Group Nudge
+
+1. Select a Path with 3 or more Knots and choose **Active Knot = 0**
+   in the Scene HUD. Click **Toggle Active Group**, choose Knot 2
+   and click again. The HUD reports **Group 2: 0, 2** and selected
+   point handles have a distinct cyan tint.
+2. Set Position Space to **Local**, drag Knot 0 by +X=2.
+   Only Knots 0 and 2 move by +2 local units; Knot 1 stays fixed,
+   and every Bézier handle/roll is unchanged. Cancel/Escape restores
+   both selected positions, not just the active point.
+3. Set Position Space to **World** with a Path Node scaled X=2.
+   Drag +X=2 World; both selected Knots move +X=1 local.
+   Switching mode or toggling selection during drag must not alter
+   its originally pinned Knot group.
+4. Re-select the same group via HUD. In the Path Inspector open
+   **Group Nudge (HUD selection)** and click **X+**. With
+   Position Snap=.5 this moves each chosen Knot by +.5 in Local
+   mode or the equivalent world-space vector in World mode.
+   One Inspector click should make one typed serialized Knot-array
+   Undo history entry. Ctrl+Z/Redo must affect all selected Knots
+   together. A second nudge should use the same selection.
+5. Check **Clear Group**, individual active-Knot movement, invalid
+   selection (fewer than 2), Add/Insert/Remove and Scene save/reopen.
+   Old serialized Knot data must remain unchanged when selecting.
+6. The SDK exposes a maximum of 12 normalized HUD controls; in
+   Bezier mode all 12 controls are occupied, so avoid adding
+   additional HUD entries without consolidating an existing control.
+   Validate actual Gizmos and native Scene Undo/Redo in Cocos 3.8.8.

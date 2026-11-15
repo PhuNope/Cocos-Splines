@@ -233,3 +233,22 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
   Editor Play lifecycle and HUD readout regression coverage. Real Cocos-Gizmos
   snapping/picking, Creator Undo/Redo and Prefab overrides require visual
   3.8.8 acceptance. No tag or release.
+
+
+## Multi-Knot local/world Group Move checkpoint (2026-11-15)
+
+- HUD-only transient multi-Knot selection using Toggle Active Group/Clear
+  Group, highlighted peer point handles, read-only group count/index label.
+  Move the active member to translate the group, preserving per-Knot tangent
+  offsets, modes and Roll and respecting the selected Local/World frame.
+- Drag lifecycle snapshots all selected source Knot record identities and
+  restores them together on Cancel/Escape. Group can be at most 32 members;
+  invalidated selection clears on topology change/CCClass restore.
+- Added an Inspector Group Nudge with six axis buttons, using Position Snap
+  (or 1 when disabled) and a read-only Scene proposal, stale preflight and
+  a single `set-property(record:true)` for the entire Knot array.
+  This is the explicit one-step native Undo/Redo path.
+- Added geometry, group gesture and Editor history mock regressions, and
+  clean v2 ZIP wiring. Live Cocos Creator 3.8.8 Undo and Cocos-Gizmos
+  rendering/picking must still be certified. No new public V2 suffix,
+  no raw data UI, no release/tag.
