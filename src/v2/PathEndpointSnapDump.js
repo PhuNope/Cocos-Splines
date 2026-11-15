@@ -5,8 +5,9 @@
  * typed Array dump. Never mutates live Cocos CCClass objects in main process.
  */
 const copy=value=>JSON.parse(JSON.stringify(value));
+const {knotPosition,setKnotPosition}=require('./PathKnotDumpCodec');
 const isFinite3=p=>!!p&&[p.x,p.y,p.z].every(Number.isFinite);
-const position=entry=>entry?.value?.position?.value;
+const position=entry=>knotPosition(entry);
 const vecEqual=(a,b,epsilon=1e-5)=>
     Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.z-b.z))<=epsilon;
 const isPath=c=>c?.type==='SplinesV2.SplinePath'||
@@ -31,9 +32,7 @@ function planEndpointSnapDump(nodeDump,branch){
     if(!isFinite3(current)||!vecEqual(current,branch.expectedLocal))
         throw new Error('Path Knot changed since snap proposal; Check again');
     const out=copy(array);
-    out.value[branch.knotIndex].value.position.value={
-        x:branch.targetLocal.x,y:branch.targetLocal.y,z:branch.targetLocal.z
-    };
+    setKnotPosition(out.value[branch.knotIndex],branch.targetLocal);
     return {componentIndex,field:'knots',dump:out,record:true,
         pathUuid:branch.pathUuid,knotIndex:branch.knotIndex,
         noOp:vecEqual(current,branch.targetLocal,1e-7)};
