@@ -16,8 +16,8 @@ function locate(uuid){
     };
     return visit(root);
 }
-const classes=new Set(['SplinesV2.SplineRoad','SplinesV2.SplineExtrude',
-    'SplinesV2.SplineMeshDeform','SplinesV2.JunctionPatch']);
+const classes=new Set(['Spline.Road','Spline.Extrude',
+    'Spline.MeshDeform','Spline.Junction']);
 function component(uuid){
     const node=locate(uuid),{js}=require('cc');
     const target=node?.components?.find(c=>classes.has(js.getClassName(c)));
@@ -66,8 +66,8 @@ function inspectV2RoadBake(uuid){
  */
 function refreshV2Path(uuid){
     const node=locate(uuid),{js}=require('cc');
-    const path=node?.components?.find(c=>js.getClassName(c)==='SplinesV2.SplinePath');
-    if(!path)return {ok:false,error:'Select a SplinesV2.SplinePath Node'};
+    const path=node?.components?.find(c=>js.getClassName(c)==='Spline.Path');
+    if(!path)return {ok:false,error:'Select a Spline.Path Node'};
     try{
         path.onRestore();
         return {ok:true,count:path.knots.length,index:path.gizmoKnotIndex};
@@ -81,18 +81,18 @@ function refreshV2Path(uuid){
  */
 function planV2JunctionAutoTrim(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planAutomaticTrimsV2!=='function')
+        if(typeof c.planAutomaticTrims!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,plan:c.planAutomaticTrimsV2()};
+        return {ok:true,plan:c.planAutomaticTrims()};
     });
 }
 /** Called after serialized Road trims have been committed by Editor. */
 function refreshV2JunctionAutoTrim(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planAutomaticTrimsV2!=='function')
+        if(typeof c.planAutomaticTrims!=='function')
             throw new Error('Select a Junction Patch component');
         // Reading a plan also rejects broken links before changing previews.
-        const plan=c.planAutomaticTrimsV2();
+        const plan=c.planAutomaticTrims();
         for(const link of c.branches)link.road.rebuildPreview();
         c.rebuildPreview();
         return {ok:true,branchCount:plan.branches.length};
@@ -101,17 +101,17 @@ function refreshV2JunctionAutoTrim(uuid){
 /** Endpoint planning is always read-only, no serialized Knot mutations. */
 function planV2JunctionEndpointSnap(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planEndpointSnapsV2!=='function')
+        if(typeof c.planEndpointSnaps!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,plan:c.planEndpointSnapsV2()};
+        return {ok:true,plan:c.planEndpointSnaps()};
     });
 }
 /** Editor-only discovery of already-near Road endpoints in the Scene. */
 function inspectV2RoadNetwork(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.inspectRoadNetworkV2!=='function')
+        if(typeof c.inspectRoadNetwork!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,report:c.inspectRoadNetworkV2()};
+        return {ok:true,report:c.inspectRoadNetwork()};
     });
 }
 /**
@@ -120,7 +120,7 @@ function inspectV2RoadNetwork(uuid){
  */
 function refreshV2JunctionEndpointSnap(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planEndpointSnapsV2!=='function')
+        if(typeof c.planEndpointSnaps!=='function')
             throw new Error('Select a Junction Patch component');
         const warnings=[];
         const paths=new Set();
@@ -139,15 +139,15 @@ function refreshV2JunctionEndpointSnap(uuid){
 /** Read-only Junction auto-link proposal; never mutate the live Branches array. */
 function planV2JunctionAutoConnect(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planAutoConnectV2!=='function')
+        if(typeof c.planAutoConnect!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,plan:c.planAutoConnectV2()};
+        return {ok:true,plan:c.planAutoConnect()};
     });
 }
 /** Called only after Creator's recorded Branches property commit. */
 function refreshV2JunctionAutoConnect(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planAutoConnectV2!=='function')
+        if(typeof c.planAutoConnect!=='function')
             throw new Error('Select a Junction Patch component');
         const warnings=[];
         try{c.rebuildPreview();}catch(error){
@@ -161,17 +161,17 @@ function refreshV2JunctionAutoConnect(uuid){
 /** Read-only, all linked Paths must be open Bezier. */
 function planV2JunctionTangents(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.planTangentAlignmentV2!=='function')
+        if(typeof c.planTangentAlignment!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,plan:c.planTangentAlignmentV2()};
+        return {ok:true,plan:c.planTangentAlignment()};
     });
 }
 /** Diagnostic-only CPU geometry audit; no MeshRenderer / AssetDB writes. */
 function inspectV2JunctionSeams(uuid){
     return run(uuid,(_node,c)=>{
-        if(typeof c.inspectJunctionSeamsV2!=='function')
+        if(typeof c.inspectJunctionSeams!=='function')
             throw new Error('Select a Junction Patch component');
-        return {ok:true,report:c.inspectJunctionSeamsV2()};
+        return {ok:true,report:c.inspectJunctionSeams()};
     });
 }
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,

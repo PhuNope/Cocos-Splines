@@ -12,7 +12,7 @@ const reference=dump=>{
  if(typeof x?.uuid?.value==='string')return x.uuid.value;
  return '';
 };
-const isJunction=c=>c?.type==='SplinesV2.JunctionPatch'||
+const isJunction=c=>c?.type==='Spline.Junction'||
  (!!c?.value?.branches&&!!c?.value?.junctionUVMode&&!!c?.value?.endpointTolerance);
 const linkInfo=entry=>({
  componentUuid:reference(entry?.value?.road),
@@ -25,8 +25,8 @@ const template=raw=>{
  if(existing)return clone(existing);
  // Empty Cocos typed CCClass arrays can lack elementTypeData in some
  // Creator dump versions. Use only the documented fields of JunctionRoadLink.
- return {type:'SplinesV2.JunctionRoadLink',value:{
-  road:{type:'SplinesV2.SplineRoad',value:{uuid:''}},
+ return {type:'Spline.JunctionRoadLink',value:{
+  road:{type:'Spline.Road',value:{uuid:''}},
   atEnd:{type:'Boolean',value:false},
   stopBarEnabled:{type:'Boolean',value:true},
   crosswalkEnabled:{type:'Boolean',value:true}
@@ -85,7 +85,7 @@ function planJunctionAutoConnectDump(nodeDump,proposal){
    throw new Error('Invalid JunctionRoadLink typed dump template');
   // CC Component references use the component UUID, not the Node UUID.
   // Preserve additional reference metadata if supplied by Creator.
-  if(!entry.value.road.type)entry.value.road.type='SplinesV2.SplineRoad';
+  if(!entry.value.road.type)entry.value.road.type='Spline.Road';
   entry.value.road.value={uuid:id};
   entry.value.atEnd.value=branch.atEnd;
   newEntries.push(entry);

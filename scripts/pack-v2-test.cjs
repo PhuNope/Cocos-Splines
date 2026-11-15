@@ -66,11 +66,11 @@ pkg.contributions={
         'inspect-v2-junction-seams':{methods:['inspectV2JunctionSeams']}
     },
     inspector:{section:{node:{
-        'SplinesV2.SplinePath':'./dist/contributions/inspector/PathV2.js',
-        'SplinesV2.SplineRoad':'./dist/contributions/inspector/RoadV2.js',
-        'SplinesV2.SplineExtrude':'./dist/contributions/inspector/ExtrudeV2.js',
-        'SplinesV2.SplineMeshDeform':'./dist/contributions/inspector/MeshDeformV2.js',
-        'SplinesV2.JunctionPatch':'./dist/contributions/inspector/JunctionV2.js'
+        'Spline.Path':'./dist/contributions/inspector/PathV2.js',
+        'Spline.Road':'./dist/contributions/inspector/RoadV2.js',
+        'Spline.Extrude':'./dist/contributions/inspector/ExtrudeV2.js',
+        'Spline.MeshDeform':'./dist/contributions/inspector/MeshDeformV2.js',
+        'Spline.Junction':'./dist/contributions/inspector/JunctionV2.js'
     }}}
 };
 delete pkg.scripts;
@@ -79,10 +79,10 @@ fs.writeFileSync(path.join(target,'package.json'),
     JSON.stringify(pkg,null,2)+'\n','utf8');
 fs.writeFileSync(path.join(target,'README.md'),
     '# Cocos Splines '+version+' (breaking test build)\n\n'+
-    'Only SplinesV2 components are shipped. No old Splines.SplineContainer, legacy assets, legacy .meta, legacy menus, or scene migration.\n\n'+
-    '1. Add SplinesV2.SplinePath and edit pure Vec3 Knot records in its custom Inspector.\n'+
-    '2. Add SplinesV2.SplineRoad / SplineExtrude / SplineMeshDeform, link Path Source.\n'+
-    '3. Add SplinesV2.JunctionPatch and linked Roads if needed.\n'+
+    'Only Spline.* components are shipped. No old Splines.SplineContainer, legacy assets, legacy .meta, legacy menus, or scene migration.\n\n'+
+    '1. Add Spline.Path and edit pure Vec3 Knot records in its custom Inspector.\n'+
+    '2. Add Spline.Road / SplineExtrude / SplineMeshDeform, link Path Source.\n'+
+    '3. Add Spline.Junction and linked Roads if needed.\n'+
     '4. In Inspector use Rebuild Preview, Bake glTF Asset and Bind Imported Mesh.\n'+
     '5. Enable Cocos-Gizmos separately for Scene editing.\n\n'+
     '**This is a test artifact, not a release. Existing legacy scenes are not supported.**\n'+
@@ -92,21 +92,21 @@ const assertFile=rel=>assert(fs.statSync(path.join(target,rel)).isFile(),
 for(const rel of [
  'dist/v2/clean-main.js','dist/v2/clean-scene.js',
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
- 'assets/splines-v2/Components/SplinePathV2.ts',
+ 'assets/splines-v2/Components/SplinePath.ts',
  'dist/v2/PathV2Dump.js',
  'dist/v2/PathKnotDumpCodec.js',
  'dist/v2/PathEndpointSnapDump.js',
  'dist/v2/JunctionAutoConnectDump.js',
  'dist/v2/JunctionTangentDump.js',
  'dist/contributions/inspector/PathV2.js',
- 'assets/splines-v2/Components/SplineMeshGeneratorV2.ts',
- 'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta',
+ 'assets/splines-v2/Components/MeshGenerator.ts',
+ 'assets/splines-v2/Components/MeshGenerator.ts.meta',
  'assets/splines-v2/Components/SplineGeometrySettingsV2.ts',
  'assets/splines-v2/Components/SplineGeometrySettingsV2.ts.meta',
- 'assets/splines-v2/Components/SplineRoadV2.ts',
- 'assets/splines-v2/Components/SplineMeshDeformV2.ts',
- 'assets/splines-v2/Components/SplineExtrudeV2.ts',
- 'assets/splines-v2/Components/SplineJunctionPatchV2.ts',
+ 'assets/splines-v2/Components/SplineRoad.ts',
+ 'assets/splines-v2/Components/SplineMeshDeform.ts',
+ 'assets/splines-v2/Components/SplineExtrude.ts',
+ 'assets/splines-v2/Components/JunctionPatch.ts',
  'assets/splines-v2/geometry/RoadFillet.ts',
  'assets/splines-v2/geometry/JunctionAutoTrimV2.ts',
  'assets/splines-v2/geometry/JunctionAutoTrimV2.ts.meta',
@@ -131,7 +131,7 @@ assert(!fs.existsSync(path.join(target,'dist/main.js'))&&
        !fs.existsSync(path.join(target,'dist/scene.js')),
     'Legacy Editor entrypoints must NOT ship');
 assert(Object.keys(pkg.contributions.inspector.section.node).every(n=>
-    n.startsWith('SplinesV2.')));
+    n.startsWith('Spline.')));
 assert(Object.keys(pkg.contributions.messages).every(n=>
     n.includes('-v2-')));
 const metadata=new Set(),seen=new Set();

@@ -10,7 +10,7 @@ const {knotPosition,knotVec3,setKnotVec3}=require('./PathKnotDumpCodec');
 const finite=p=>p!=null&&[p.x,p.y,p.z].every(Number.isFinite);
 const near=(a,b,epsilon=1e-5)=>finite(a)&&finite(b)&&
     Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.z-b.z))<=epsilon;
-const isPath=c=>c?.type==='SplinesV2.SplinePath'||
+const isPath=c=>c?.type==='Spline.Path'||
     (c?.value?.knots&&c?.value?.interpolation&&c?.value?.gizmoKnotIndex);
 function planJunctionTangentDump(nodeDump,branch){
     if(!branch||!Number.isSafeInteger(branch.knotIndex)||

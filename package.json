@@ -350,10 +350,10 @@
           "Splines.SplineObjectBender": "./dist/contributions/inspector/Bender.js",
           "Splines.SplineMorph": "./dist/contributions/inspector/Morph.js",
           "Splines.SplineJunctionMesh": "./dist/contributions/inspector/JunctionMesh.js",
-          "SplinesV2.SplineRoad": "./dist/contributions/inspector/RoadV2.js",
-          "SplinesV2.SplineExtrude": "./dist/contributions/inspector/ExtrudeV2.js",
-          "SplinesV2.SplineMeshDeform": "./dist/contributions/inspector/MeshDeformV2.js",
-          "SplinesV2.JunctionPatch": "./dist/contributions/inspector/JunctionV2.js"
+          "Spline.Road": "./dist/contributions/inspector/RoadV2.js",
+          "Spline.Extrude": "./dist/contributions/inspector/ExtrudeV2.js",
+          "Spline.MeshDeform": "./dist/contributions/inspector/MeshDeformV2.js",
+          "Spline.Junction": "./dist/contributions/inspector/JunctionV2.js"
         }
       }
     }

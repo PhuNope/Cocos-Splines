@@ -15,7 +15,7 @@ function isPath(c){
     if(!c||typeof c!=='object')return false;
     const type=[c.type,c.value?.__type__,c.value?.__classname__].filter(x=>typeof x==='string');
     const props=c.value;
-    return type.includes('SplinesV2.SplinePath')||
+    return type.includes('Spline.Path')||
         (!!props?.knots&&!!props?.interpolation&&!!props?.gizmoKnotIndex);
 }
 function defaultTemplate(array){
@@ -27,7 +27,7 @@ function defaultTemplate(array){
     if(existing)return clone(existing);
     // Some Creator 3.8 dump versions omit elementTypeData on an empty
     // array. Cocos CCClass annotations match these fields and types.
-    return {type:'SplinesV2.Knot',value:{
+    return {type:'Spline.Knot',value:{
         position:{type:'cc.Vec3',value:{x:0,y:0,z:0}},
         mode:{type:'Enum',value:0},
         handleIn:{type:'cc.Vec3',value:{x:-1,y:0,z:0}},

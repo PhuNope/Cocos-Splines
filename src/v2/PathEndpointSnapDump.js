@@ -10,7 +10,7 @@ const isFinite3=p=>!!p&&[p.x,p.y,p.z].every(Number.isFinite);
 const position=entry=>knotPosition(entry);
 const vecEqual=(a,b,epsilon=1e-5)=>
     Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.z-b.z))<=epsilon;
-const isPath=c=>c?.type==='SplinesV2.SplinePath'||
+const isPath=c=>c?.type==='Spline.Path'||
     (c?.value?.knots&&c?.value?.interpolation&&c?.value?.gizmoKnotIndex);
 function planEndpointSnapDump(nodeDump,branch){
     if(!branch||!Number.isSafeInteger(branch.knotIndex)||branch.knotIndex<0||
