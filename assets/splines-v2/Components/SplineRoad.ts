@@ -4,8 +4,8 @@ import {
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {MeshGenerator} from './MeshGenerator';
-import {UVAxis,SurfaceMode} from './SplineGeometrySettingsV2';
-export {UVAxis,SurfaceMode} from './SplineGeometrySettingsV2';
+import {UVAxis,SurfaceMode} from './GeometrySettings';
+export {UVAxis,SurfaceMode} from './GeometrySettings';
 export {MeshMode} from './MeshGenerator';
 import {buildRoadStripV2} from '../geometry/RoadStrip';
 import {buildRoadProfileV2,roadProfileLayoutV2} from '../geometry/ProfileSweep';

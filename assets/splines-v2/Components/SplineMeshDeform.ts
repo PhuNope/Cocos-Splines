@@ -4,7 +4,7 @@ import {buildRoadFilletCacheV2} from '../geometry/RoadFillet';
 import {readSourceMeshV2} from '../geometry/SourceMeshRead';
 import {deformSourceMeshV2,type MeshDeformReportV2} from '../geometry/SourceMeshDeform';
 import {MeshGenerator} from './MeshGenerator';
-import {SurfaceMode} from './SplineGeometrySettingsV2';
+import {SurfaceMode} from './GeometrySettings';
 
 const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
 export enum DeformSourceAxis {Z=0,X=1}

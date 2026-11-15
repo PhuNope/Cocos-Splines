@@ -2,7 +2,7 @@ import {_decorator,Enum,MeshRenderer} from 'cc';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildTubeV2} from '../geometry/ProfileSweep';
 import {MeshGenerator} from './MeshGenerator';
-import {UVAxis} from './SplineGeometrySettingsV2';
+import {UVAxis} from './GeometrySettings';
 
 const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
 
