@@ -524,6 +524,27 @@ export class SplinePath extends Component {
             }
         }
     }
+    /**
+     * Read-only Scene HUD coordinate readout. It shows the editing space,
+     * never serialized CCClass/Vec3 dump data or a second Inspector panel.
+     */
+    public onGizmoHud():Array<{
+        id:string;text:string;order:number;fontSize:number;color:string
+    }> {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
+           !this.gizmoEditKnots||this.knots.length<2||
+           !availableGizmoBackend())return [];
+        const index=this.gizmoKnotIndex,knot=this.knots[index];
+        if(!knot||!finite(knot.position))return [];
+        const world=this.gizmoPositionSpace===SplineSpace.World;
+        const p=this.toGizmoPoint(knot.position,world);
+        if(!finite(p))return [];
+        const f=(n:number)=>n.toFixed(2);
+        return [{id:'path-active-position',
+            text:'Knot '+index+' · '+(world?'World':'Local')+
+                 '  X '+f(p.x)+'  Y '+f(p.y)+'  Z '+f(p.z),
+            order:0,fontSize:12,color:'#a3e2ff'}];
+    }
     public onGizmoHudControls():Array<{
         type:'slider'|'toggle';id:string;text:string;property:string;
         min?:number;max?:number;step?:number;order?:number;group?:string;
