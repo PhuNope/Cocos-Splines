@@ -146,7 +146,7 @@ try {
  globalThis.Gizmos3D={beginColor:(owner,color)=>colors.push(color),
    drawLine:(owner,a,b)=>lines.push({a:{...a},b:{...b}}),
    drawSphere:()=>{},move:(property,opts)=>Array.from({length:6},(_,i)=>({
-     id:property+i,property,space:opts.space,visual:'axis',plane:'xy'
+     id:property+i,property,space:opts.space,snap:opts.snap,visual:'axis',plane:'xy'
    })),
    rotate:(property,opts)=>['x','y','z'].map(axis=>({
      property,axis,visual:'rotation',snap:opts.snap,space:opts.space
@@ -156,6 +156,9 @@ try {
      snap:opts.snap,space:opts.space}]
  };
  try{
+   const localPositionText=pathComp.onGizmoHud();
+   assert.equal(localPositionText.length,1);
+   assert.match(localPositionText[0].text,/Knot 0.*Local.*X 0\.00/);
    const hs=pathComp.onGizmoHandles();
    assert.equal(hs.length,9,'6 move, 1 other Knot and two tangent points');
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
@@ -192,6 +195,8 @@ try {
    assert(pathComp.onGizmoHandles().every(h=>h.snap===.25),
      'Local active/point/tangent handles should share Position Snap');
    pathComp.pathHudPositionWorld=true;
+   assert.match(pathComp.onGizmoHud()[0].text,/Knot 0.*World.*X 10\.00/,
+     'Read-only HUD XYZ must follow the selected World coordinate space');
    const worldHandles=pathComp.onGizmoHandles();
    assert(worldHandles.every(h=>h.space==='world'));
    assert(worldHandles.every(h=>h.snap===.25),
