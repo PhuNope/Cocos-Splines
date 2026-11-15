@@ -106,17 +106,22 @@ export function buildSplineKnotMoveGizmos(
  */
 export function buildSplineKnotPointGizmos(
     property:string,indices:ReadonlyArray<number>,space:'local'|'world'='local',
-    snap=0
+    snap=0,selectedIndices:ReadonlyArray<number>=[]
 ):SplineGizmoHandle[] {
     if(!Number.isFinite(snap)||snap<0||snap>20)
         throw new Error('Point snap must be finite and in [0,20]');
+    if(selectedIndices.length>32||selectedIndices.some(i=>
+        !Number.isSafeInteger(i)||i<0||i>127))
+        throw new Error('Cocos Splines Gizmos: invalid group Knot indices');
+    const selected=new Set(selectedIndices);
     if(!availableGizmoBackend())return [];
     if(indices.length>32||indices.some(i=>!Number.isSafeInteger(i)||i<0||i>127))
         throw new Error('Cocos Splines Gizmos: invalid indexed Knot handles');
     return indices.map(index=>({
         property,index,id:'spline-knot-'+index,
         visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
-        color:'#ffb84a',hoverColor:'#ffff78',pickSize:24
+        color:selected.has(index)?'#72e6e0':'#ffb84a',
+        hoverColor:'#ffff78',pickSize:24
     }));
 }
 // Constants only; in particular DO NOT construct Cocos Color at module
