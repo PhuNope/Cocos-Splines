@@ -57,6 +57,26 @@ try{
   assert(gltf.meshes[0].primitives.every(p=>
    p.attributes.TEXCOORD_0!==undefined&&p.attributes.TEXCOORD_1!==undefined));
  }
+ // Graded crossing (centroid at equal height) must not alter Repeat U
+ // or Repeat V texture coordinates; UV2 remains authoritative too.
+ for(const axis of ['u','v']){
+  const slope=.12,norm=Math.hypot(1,slope);
+  const coords=points.map((p,i)=>i<3?p:{...p,y:slope*(p.z-.5)});
+  const graded=buildMeshV2({
+   positions:coords,
+   normals:coords.map((_,i)=>i<3?{x:0,y:1,z:0}:{x:0,y:1/norm,z:-slope/norm}),
+   uv0:coords.map((p,i)=>axis==='u'
+    ?{x:p.x/5+(i>=3?.27:0),y:p.z/5}
+    :{x:p.z/5,y:p.x/5+(i>=3?.27:0)}),
+   uv2:coords.map(p=>({x:p.x/10,y:p.z/10})),
+   submeshes:[{materialSlot:0,indices:[0,1,2,3,4,5]}]
+  });
+  const kept=resolveRoadOverlapV2(graded,{roadWidth:2});
+  assert.strictEqual(kept.mesh,graded,'No weld for graded crossing in '+axis);
+  assert.equal(kept.report.stitchedCutVertices,0);
+  assert.deepEqual(Array.from(kept.mesh.uv0),Array.from(graded.uv0));
+  assert.deepEqual(Array.from(kept.mesh.uv2),Array.from(graded.uv2));
+ }
  const different=sample('u',1);
  const differentOn=resolveRoadOverlapV2(different,{roadWidth:2});
  const differentOff=resolveRoadOverlapV2(different,{roadWidth:2,stitchCutUV:false});

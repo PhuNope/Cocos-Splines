@@ -216,10 +216,18 @@ export function resolveRoadOverlapV2(mesh:MeshDataV2,options:RoadOverlapOptionsV
                 if(tri.minY>other.maxY+heightTol||other.minY>tri.maxY+heightTol)continue;
                 const overlap=intersection(tri.verts,other);
                 if(overlap.length<3||Math.abs(area2(overlap))<=areaEps)continue;
+                // A centroid-only comparison can erroneously erase a
+                // shallow graded crossing whose heights meet at the middle.
+                // Triangle height is affine over XZ, so requiring ALL
+                // intersection vertices to match bounds the entire region.
+                const nearCoplanar=overlap.every(p=>{
+                    const ya=heightAt(p.x,p.z,tri),yb=heightAt(p.x,p.z,other);
+                    return Number.isFinite(ya)&&Number.isFinite(yb)&&
+                        Math.abs(ya-yb)<=heightTol;
+                });
+                if(!nearCoplanar){nonplanar++;continue;}
                 const xx=overlap.reduce((sum,v)=>sum+v.x,0)/overlap.length;
                 const zz=overlap.reduce((sum,v)=>sum+v.z,0)/overlap.length;
-                const delta=Math.abs(heightAt(xx,zz,tri)-heightAt(xx,zz,other));
-                if(!Number.isFinite(delta)||delta>heightTol)continue;
                 const next:Vertex[][]=[];
                 const sameMaterial=options.stitchCutUV!==false&&sub.materialSlot===originalSlots[id];
                 const midpoint={...overlap[0],x:xx,z:zz};

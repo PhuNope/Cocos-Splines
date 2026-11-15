@@ -267,3 +267,21 @@ When any branch contains a profile, `JunctionProfilePatchV2` constructs an angul
 The full profile **tapers toward the flat centre of the junction**. This is a first-pass intersection transition for asphalt shoulders and low curbs, **not** a continuous sidewalk/curb CSG loop across block corners. It does not claim to keep a hard, constant curb lip height around corners or to create ramp accessibility cutouts. For now the junction center must be flat and all Road asphalt vertices must meet the original `Flat Tolerance`; the maximum curb lip is controlled independently by **Max Curb Height** (default 0.6), and negative curb heights / excessively tall lips are rejected. Increase Road `Junction Start/End Trim` to give the full cross-section enough room to blend; as a starting point for Width=4, Shoulder=.45, Curb=.22 and Curb Height=.16 use Trim=4. The junction rejects interleaved profile edges, mismatched Road UV/position, non-flat centers, or trim shorter than the full profile width. It does not Boolean-union arbitrary Road crossings.
 
 Junction Markings v2 still applies on the *asphalt* wedge only, with the same optional slot 3 white stop/zebra and slot 4 yellow turn guides. Existing Roads without shoulder/curb and their flat Junction patches remain unchanged. Material slots 0/1/2/3/4 remain consistent through Rebuild Preview, Baked glTF export and fingerprint tracking. These tests do not establish actual Cocos Editor rendering quality; test real materials, depth fighting and shader face culling in Creator 3.8.x.
+
+### Height-aware Road self-overlap clipping (2026-11-15, P1)
+
+`RoadOverlapClip` now compares the two source triangles' heights
+**at every vertex of their actual XZ intersection polygon**, rather
+than only at the overlap centroid. Graded/rolled surfaces may touch
+at the centroid yet separate at the cut edges; clipping those sheets
+would remove valid geometry. Height on a triangle is affine in XZ,
+so vertex checks bound the whole overlapping polygon. The existing
+normal-angle and configurable `heightTolerance` checks still apply;
+truly near-coplanar sheets are unioned as before.
+
+Regression uses a shallow graded crossing, a deliberately larger
+tolerance control, Repeat U/V UV0, preserved UV2, and unchanged
+coplanar hairpin coverage. This is not a general 3D Boolean or
+road-intersection solver. A real Creator 3.8.8 material/3-Knot
+acceptance pass is still required; previously baked assets are never
+rewritten automatically.

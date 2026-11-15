@@ -73,6 +73,26 @@ try{
  assert.strictEqual(elevatedResult.mesh,elevated,'A bridge over a road must not be clipped');
  assert.equal(elevatedResult.report.clippedSourceTriangles,0);
  assert.strictEqual(resolveRoadOverlapV2(input,{roadWidth:2,heightTolerance:0}).mesh!==input,true);
+ // XZ intersection centroid is z=.5. A shallow crossing at that point
+ // diverges by up to .12 at its edges: do not clip the higher/lower sheet.
+ const gradedPoints=points.map((p,i)=>i<3?p:{...p,y:.12*(p.z-.5)});
+ const gradeNorm=Math.hypot(1,.12);
+ const graded=buildMeshV2({
+  positions:gradedPoints,
+  normals:gradedPoints.map((_,i)=>i<3?{x:0,y:1,z:0}:{x:0,y:1/gradeNorm,z:-.12/gradeNorm}),
+  uv0:gradedPoints.map(p=>({x:p.x/5,y:p.z/5})),
+  uv2:gradedPoints.map(p=>({x:p.x/10,y:p.z/10})),
+  submeshes:[{materialSlot:0,indices:[0,1,2,3,4,5]}]
+ });
+ const gradeSafe=resolveRoadOverlapV2(graded,{roadWidth:2});
+ assert.strictEqual(gradeSafe.mesh,graded,
+  'No clipping when heights match at centroid but diverge at intersection edges');
+ assert.equal(gradeSafe.report.clippedSourceTriangles,0);
+ assert(gradeSafe.report.skippedNonplanarPairs>0);
+ const gradeLoose=resolveRoadOverlapV2(graded,{roadWidth:2,heightTolerance:.15});
+ assert(gradeLoose.report.clippedSourceTriangles>0,
+  'Explicitly larger height tolerance can still allow near-coplanar clipping');
+ assert.equal(gradeLoose.report.hitSafetyLimit,false);
  for(const invalid of [{roadWidth:0},{roadWidth:2,heightTolerance:-1},{roadWidth:2,minUpComponent:2}])
   assert.throws(()=>resolveRoadOverlapV2(input,invalid),/Invalid/);
 
