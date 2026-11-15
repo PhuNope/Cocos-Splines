@@ -158,9 +158,17 @@ function refreshV2JunctionAutoConnect(uuid){
         return {ok:true,branchCount:c.branches.length,warnings};
     });
 }
+/** Read-only, all linked Paths must be open Bezier. */
+function planV2JunctionTangents(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planTangentAlignmentV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,plan:c.planTangentAlignmentV2()};
+    });
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
     inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap,
-    planV2JunctionAutoConnect,refreshV2JunctionAutoConnect};
+    planV2JunctionAutoConnect,refreshV2JunctionAutoConnect,planV2JunctionTangents};
 exports.load=function(){};
 exports.unload=function(){};
