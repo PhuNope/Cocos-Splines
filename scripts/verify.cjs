@@ -35,4 +35,7 @@ checkRel('src/v2/PathEndpointSnapDump.js');
 checkRel('src/v2/JunctionAutoConnectDump.js');
 checkRel('assets/splines-v2/geometry/JunctionAutoConnectV2.ts');
 checkRel('assets/splines-v2/geometry/JunctionAutoConnectV2.ts.meta');
+checkRel('assets/splines-v2/geometry/JunctionTangentAlignV2.ts');
+checkRel('assets/splines-v2/geometry/JunctionTangentAlignV2.ts.meta');
+checkRel('src/v2/JunctionTangentDump.js');
 console.log('VERIFY PASS: Editor manifest, scripts, asset DB and UUID metadata.');
