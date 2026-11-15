@@ -200,13 +200,13 @@ try {
    pathComp.onGizmoChanged('pathGizmoTangentIn','end');
    assert.equal(k0.mode,TangentMode.Free);
    assert.equal(k1.mode,TangentMode.Free);
-   const shaped=pathComp.getSplineData(consumer);
+   const shaped=pathComp.getSplineData(consumer,SplineSpace.World);
    assert.deepEqual(shaped.knots[0].handleOut,{x:4,y:6,z:0});
    assert.deepEqual(shaped.knots[1].handleIn,{x:-4,y:6,z:0});
    eq(evaluateSplineV2(shaped,.5).position.y,4.5);
    // Tangents follow source Node identities, not Path array indices.
    pathComp.knots=[k1,k0];
-   const reordered=pathComp.getSplineData(consumer);
+   const reordered=pathComp.getSplineData(consumer,SplineSpace.World);
    assert.deepEqual(reordered.knots[0].handleIn,{x:-4,y:6,z:0});
    assert.deepEqual(reordered.knots[1].handleOut,{x:4,y:6,z:0});
    pathComp.knots=[k0,k1];
