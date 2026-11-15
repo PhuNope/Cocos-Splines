@@ -161,7 +161,10 @@ try {
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
-   assert.equal(pathComp.onGizmoHudControls().length,9);
+   assert.equal(pathComp.onGizmoHudControls().length,10);
+   const positionSnapHud=pathComp.onGizmoHudControls().find(x=>x.property==='gizmoPositionSnap');
+   assert.deepEqual({min:positionSnapHud.min,max:positionSnapHud.max,step:positionSnapHud.step},
+     {min:0,max:5,step:.05});
    const spaceControls=pathComp.onGizmoHudControls().filter(x=>x.group?.endsWith('-space'));
    assert.deepEqual(spaceControls.map(x=>x.id),[
      'position-local','position-world','rotation-local','rotation-world']);
@@ -185,9 +188,14 @@ try {
    pathComp.gizmoShowRollGuide=true;
    // Position World Gizmos use genuine world-coordinate proxies for
    // active, indexed and Bezier tangent handles. Escape restores local data.
+   pathComp.gizmoPositionSnap=.25;
+   assert(pathComp.onGizmoHandles().every(h=>h.snap===.25),
+     'Local active/point/tangent handles should share Position Snap');
    pathComp.pathHudPositionWorld=true;
    const worldHandles=pathComp.onGizmoHandles();
    assert(worldHandles.every(h=>h.space==='world'));
+   assert(worldHandles.every(h=>h.snap===.25),
+     'World active/point/tangent handles should snap in world coordinates');
    assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionWorld'));
    assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionsWorld'));
    assert(worldHandles.some(h=>h.property==='pathGizmoTangentOutWorld'));
@@ -211,6 +219,9 @@ try {
    assert.deepEqual({...k0.handleOut},{x:2,y:0,z:0});
    k0.mode=TangentMode.Auto;
    pathComp.pathHudPositionLocal=true;
+   pathComp.gizmoPositionSnap=0;
+   assert(pathComp.onGizmoHandles().every(h=>h.snap===undefined),
+      'Zero Position Snap must leave continuous movement intact');
    const rollCallsBefore=calls.length;
    pathComp.gizmoKnotIndex=0;
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);

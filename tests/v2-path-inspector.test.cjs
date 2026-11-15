@@ -8,6 +8,10 @@ assert.match(inspector.template,/spl-path-items/);
 assert.match(inspector.template,/spl-path-add/);
 assert.doesNotMatch(inspector.template,/Raw Knot Data|spl-path-knots/);
 assert(!('knots' in inspector.$),'Raw Knot dump selector must not exist');
+for(const field of ['gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap']){
+ assert(inspector.template.includes('spl-path-'+field),
+   'The native Inspector must expose '+field+' without a raw dump panel');
+}
 for(const operation of ['add','insert','duplicate','remove','up','down','select'])
     assert(inspector.update.toString().includes(operation)||
         fs.readFileSync(path.join(root,'src/contributions/inspector/PathV2.js'),'utf8')
@@ -28,6 +32,7 @@ for(const name of ['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
     'gizmoRotationMode','gizmoRotationSnap',
+    'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
     'gizmoShowRollGuide','gizmoRollGuideSize'])$[name]=ui();
 const fake={$, _cardCount:undefined,_cardSelected:undefined};
 const entry=(i)=>({name:'Knot'+i,value:{
