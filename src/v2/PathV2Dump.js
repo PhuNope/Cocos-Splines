@@ -7,14 +7,7 @@
  */
 const operations=new Set(['add','insert','duplicate','remove','up','down','select']);
 const clone=value=>JSON.parse(JSON.stringify(value));
-const at=(v,...names)=>names.reduce((x,k)=>x?.[k],v);
-const finite=p=>!!p&&[p.x,p.y,p.z].every(Number.isFinite);
-const position=entry=>at(entry,'value','position','value');
-function setPosition(entry,p){
-    const v=at(entry,'value','position');
-    if(!v||!finite(p))throw new Error('Invalid Vec3 Knot dump template');
-    v.value={x:p.x,y:p.y,z:p.z};
-}
+const {knotPosition:position,setKnotPosition:setPosition,knotDumpShape}=require('./PathKnotDumpCodec');
 function plus(a,b){return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z};}
 function minus(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};}
 function half(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:(a.z+b.z)/2};}
@@ -27,7 +20,11 @@ function isPath(c){
 }
 function defaultTemplate(array){
     const first=array.elementTypeData;
-    if(first?.value?.position?.value)return clone(first);
+    if(position(first))return clone(first);
+    // When the element metadata is absent, keep an authored Knot's exact
+    // dump nesting so Creator sees the same class-array shape on insert.
+    const existing=array.value?.find(entry=>position(entry));
+    if(existing)return clone(existing);
     // Some Creator 3.8 dump versions omit elementTypeData on an empty
     // array. Cocos CCClass annotations match these fields and types.
     return {type:'SplinesV2.Knot',value:{
@@ -54,14 +51,20 @@ function planPathEditDump(nodeDump,operation,index){
         throw new Error('SplinePath serialized Knot dump is unavailable');
     const current=array.value;
     const selectionDump=clone(props.gizmoKnotIndex);
-    if(current.length>128||current.some(x=>!finite(position(x))))
-        throw new Error('SplinePath contains invalid serialized Vec3 Knot records');
+    if(current.length>128)
+        throw new Error('SplinePath supports at most 128 Knots');
+    // Active selection does not read/modify any position, so a malformed
+    // legacy entry must not block selecting another Knot for inspection.
     if(operation==='select'){
         if(index>=current.length)throw new Error('Selected Knot does not exist');
         const selected=clone(raw);
         selected.value=index;
         return {field,componentIndex,dump:selected,index,count:current.length,record:false,selectionDump:selected};
     }
+    const broken=current.findIndex(entry=>!position(entry));
+    if(broken!==-1)
+        throw new Error('SplinePath Knot '+broken+' has unsupported or invalid Vec3 dump ('+
+            knotDumpShape(current[broken])+'). No Knot data was changed.');
     const result=clone(array),knots=result.value,n=knots.length;
     if(operation==='add'||operation==='insert'||operation==='duplicate'){
         if(n>=128)throw new Error('SplinePath supports at most 128 Knots');
