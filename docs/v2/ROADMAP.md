@@ -117,3 +117,13 @@
 - [x] Pure planner, typed dump, mock Editor transaction regression, clean v2 test ZIP wiring.
 - [ ] Certify Creator 3.8.x Editor Undo/Redo, prefab overrides, save/reopen and viewport mesh/paint/UV seams.
 - [ ] Automatic multi-road C1/G1 blending, collision-aware banked Junction corner surfaces and true surface Boolean/topology joins.
+
+
+## Junction seam and topology integrity milestone (2026-11-15)
+
+- [x] Audit actual CPU patch XYZ and per-arm Repeat UV0 at every sampled *Road trim end-ring*, including profile split vertices, plus per-branch integer tile phase coherence.
+- [x] Detect degenerate/coincident triangles and high-valence physical edges as topology diagnostics; distinguish intentional profile splits from claimed global manifold guarantees.
+- [x] Add Junction Inspector **Check Junction Seams** (console only), optional Editor-only **Strict Road Seams** gate before Preview/Bake, default OFF.
+- [x] Regression tests from real 3-/4-way trimmed Road Strip/Profile meshes and negative UV/Lift/triangle cases; include audit in breaking v2 test ZIP without legacy assets.
+- [ ] Visually certify actual Cocos Creator 3.8.x scene shader/material/UV wrap settings, Inspector behavior, tangent shading, Undo/Redo and Scene reloading.
+- [ ] Full 2.5D/3D intersection union and lane-aware surface topology; this audit is not a boolean mesh solver or a geometry-repair algorithm.
