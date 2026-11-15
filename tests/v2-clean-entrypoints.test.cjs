@@ -59,7 +59,7 @@ try{
  assert.deepEqual(keys,[
   'inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
   'planV2JunctionEndpointSnap','prepareV2RoadBake','rebuildV2Road',
-  'refreshV2JunctionAutoTrim','refreshV2JunctionAutoConnect','refreshV2JunctionEndpointSnap',
+  'refreshV2JunctionAutoConnect','refreshV2JunctionAutoTrim','refreshV2JunctionEndpointSnap',
   'refreshV2Path','restoreV2RoadBaked']);
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
