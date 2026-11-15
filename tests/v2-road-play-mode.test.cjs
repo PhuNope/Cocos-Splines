@@ -13,9 +13,9 @@ try{
  const identity={};
  class Vec3{
   constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
-  static transformMat4(out,v){out.x=v.x;out.y=v.y;out.z=v.z;return out;}
+  static transformMat4(out,v,m){out.x=v.x+(m?.tx||0);out.y=v.y+(m?.ty||0);out.z=v.z+(m?.tz||0);return out;}
  }
- class Mat4{static invert(out){return out;}}
+ class Mat4{static invert(out,m){out.tx=-(m?.tx||0);out.ty=-(m?.ty||0);out.tz=-(m?.tz||0);return out;}}
  class Mesh{
   constructor(){this.isValid=true;this.destroyed=false;this.subMeshCount=1;this.attributes={};this.localIndices=null;}
   readAttribute(i,name){return this.attributes[name]??null;}
@@ -77,6 +77,25 @@ try{
  const authoredPath=authoredNode.addComponent(SplinePath);
  authoredPath.knots=[a,b];authoredPath.interpolation=0;
  road.pathSource=authoredPath;road.sampleStep=1;road.width=4;
+ // Integration proof: the same serialized Path Knot creates different
+ // world placement only when the generator explicitly requests World mode.
+ const roadMatrix=roadNode.worldMatrix,pathMatrix=authoredNode.worldMatrix;
+ roadNode.worldMatrix={tx:3};authoredNode.worldMatrix={tx:20};
+ assert.equal(road.coordinateSpace,0,'Local mesh generation must be default');
+ const localMesh=road.generate().geometry;
+ road.coordinateSpace=1;
+ const worldMesh=road.generate().geometry;
+ assert.equal(localMesh.vertexCount,worldMesh.vertexCount);
+ for(let i=0;i<localMesh.vertexCount;i++){
+   const x=i*3;
+   assert(Math.abs(worldMesh.positions[x]-localMesh.positions[x]-17)<1e-5,
+     'World mode must map Path.world X=20 back into Road.local X offset 17');
+ }
+ assert.deepEqual(Array.from(worldMesh.uv0),Array.from(localMesh.uv0),
+   'CoordinateSpace changes positions, not UV tiling');
+ road.coordinateSpace=0;
+ roadNode.worldMatrix=roadMatrix;authoredNode.worldMatrix=pathMatrix;
+
  assert(!('knots' in road)&&!('interpolation' in road)&&!('closed' in road));
  assert(!('onGizmoHandles' in road)&&!('onGizmoHudControls' in road));
  const currentPath=road.pathSource;
