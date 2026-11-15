@@ -48,7 +48,7 @@ function makeV2Inspector(kind='road'){
     const deform=kind==='mesh-deform';
     const junction=kind==='junction';
     const fields=junction?
-        [['Junction branches',['branches','autoConnectSearchRadius','endpointSnapMaxDistance','tangentEndpointTolerance','tangentAngleToleranceDegrees','junctionUVMode','junctionUVBlend','strictRoadSeams','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
+        [['Junction branches',['branches','autoConnectSearchRadius','endpointSnapMaxDistance','tangentEndpointTolerance','tangentAngleToleranceDegrees','junctionUVMode','junctionUVBlend','junctionUVInteriorSmoothing','strictRoadSeams','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
          ['Junction Scene Gizmos',['showJunctionSceneGizmos','gizmoJunctionCurbs']],
          ['Junction markings',['generateJunctionMarkings','generateStopBars','generateCrosswalks','markingLift',
              'stopBarWidth','stopBarSetback','zebraStripeLength','zebraGap','zebraStartSetback',
