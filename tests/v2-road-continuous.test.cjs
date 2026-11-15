@@ -141,8 +141,8 @@ try{
  }
  const tube=buildTubeV2(hairpin,{radius:.5,step:.25,sides:12});
  assert(tube.vertexCount>0,'Extrude tube must remain independent');
- const fakeClosed=(x,z,distance)=>({position:{x,y:0,z},up:{x:0,y:1,z:0},
-  right:{x:1,y:0,z:0},tangent:{x:0,y:0,z:1},distance});
+ function fakeClosed(x,z,distance){return {position:{x,y:0,z},up:{x:0,y:1,z:0},
+  right:{x:1,y:0,z:0},tangent:{x:0,y:0,z:1},distance};}
  const fake=(x,y,z,distance)=>({position:{x,y,z},up:{x:0,y:1,z:0},right:{x:1,y:0,z:0},tangent:{x:0,y:0,z:1},distance});
  const bridge=[fake(0,0,0,0),fake(0,0,4,4),fake(1,5,4,8),fake(1,5,0,12)];
  assert.equal(buildRoadContinuousSectionsV2(bridge,2).report.constrainedSections,0,'Do not shrink elevated crossings');
