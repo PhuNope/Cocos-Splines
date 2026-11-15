@@ -6,6 +6,8 @@
  */
 const assert=require('node:assert/strict');
 const {planPathEditDump:edit}=require('../src/v2/PathV2Dump');
+const {planEndpointSnapDump:snap}=require('../src/v2/PathEndpointSnapDump');
+const {planJunctionTangentDump:tangent}=require('../src/v2/JunctionTangentDump');
 const {knotPosition:position,setKnotPosition:setPosition,knotDumpShape:shape}=
  require('../src/v2/PathKnotDumpCodec');
 const copy=x=>JSON.parse(JSON.stringify(x));
@@ -58,6 +60,28 @@ for(const make of cases){
  assert.equal(plan.count,3,make.name);
  assert.deepEqual(position(plan.dump.value[1]),v(0,0,3),make.name);
  assert.equal(JSON.stringify(input),baseline,'Do not mutate query-node dumps');
+ const endpoint=snap(input,{pathUuid:'test-path',knotIndex:0,knotCount:2,
+  expectedLocal:v(0,0,0),targetLocal:v(0,0,2)});
+ assert.deepEqual(position(endpoint.dump.value[0]),v(0,0,2),
+  'Endpoint Snap must share the same mixed IProperty Vec3 decoder');
+ assert.deepEqual(position(endpoint.dump.value[1]),v(0,0,6));
+ assert.equal(JSON.stringify(input),baseline,'Snap must not mutate authored data');
+ if(make!==scalarAxes){
+  const {knotVec3}=require('../src/v2/PathKnotDumpCodec');
+  const sourceMode=make===bare?1:2;
+  const handle=knotVec3(original[0],'handleOut');
+  const aligned=tangent(input,{
+   pathUuid:'test-path',knotIndex:0,knotCount:2,handleSide:'out',
+   expectedPosition:v(0,0,0),expectedHandle:handle,
+   targetLocalHandle:v(0,0,2),expectedMode:sourceMode,targetMode:1,
+   changed:true
+  });
+  assert.deepEqual(knotVec3(aligned.dump.value[0],'handleOut'),v(0,0,2),
+   'Tangent Apply must preserve nested Vec3 handles too');
+  assert.deepEqual(position(aligned.dump.value[0]),v(0,0,0));
+  assert.equal(JSON.stringify(input),baseline);
+ }
+
  const selected=edit(input,'select',1);
  assert.equal(selected.record,false);
  assert.equal(selected.dump.value,1);
