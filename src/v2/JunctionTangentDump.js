@@ -6,6 +6,7 @@
  * metadata and elementTypeData, are preserved from the live dump.
  */
 const copy=value=>JSON.parse(JSON.stringify(value));
+const {knotPosition,knotVec3,setKnotVec3}=require('./PathKnotDumpCodec');
 const finite=p=>p!=null&&[p.x,p.y,p.z].every(Number.isFinite);
 const near=(a,b,epsilon=1e-5)=>finite(a)&&finite(b)&&
     Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.z-b.z))<=epsilon;
@@ -36,10 +37,11 @@ function planJunctionTangentDump(nodeDump,branch){
     const knots=props.knots;
     if(!Array.isArray(knots?.value)||knots.value.length!==branch.knotCount)
         throw new Error('Path Knot topology changed before tangent Apply');
-    const entry=knots.value[branch.knotIndex]?.value;
+    const entry=knots.value[branch.knotIndex];
     const handleKey=branch.handleSide==='in'?'handleIn':'handleOut';
-    const position=entry?.position?.value,handle=entry?.[handleKey]?.value;
-    const mode=entry?.mode?.value;
+    const position=knotPosition(entry),handle=knotVec3(entry,handleKey);
+    const root=entry?.value?.value??entry?.value??entry;
+    const mode=typeof root?.mode==='number'?root.mode:root?.mode?.value;
     if(!near(position,branch.expectedPosition)||
        !near(handle,branch.expectedHandle)||mode!==branch.expectedMode)
         throw new Error('Bezier Knot changed since Check Tangents; Check again');
@@ -50,12 +52,13 @@ function planJunctionTangentDump(nodeDump,branch){
     if(branch.changed&&branch.expectedMode===0)
         throw new Error('Cannot rewrite Auto tangents without an explicit authoring mode');
     const dump=copy(knots);
-    const target=dump.value[branch.knotIndex].value;
-    target[handleKey].value={
-        x:branch.targetLocalHandle.x,
-        y:branch.targetLocalHandle.y,z:branch.targetLocalHandle.z
-    };
-    target.mode.value=branch.targetMode;
+    const target=dump.value[branch.knotIndex];
+    setKnotVec3(target,handleKey,branch.targetLocalHandle);
+    const modeRoot=target?.value?.value??target?.value??target;
+    if(typeof modeRoot?.mode==='number')modeRoot.mode=branch.targetMode;
+    else if(modeRoot?.mode&&typeof modeRoot.mode.value==='number')
+        modeRoot.mode.value=branch.targetMode;
+    else throw new Error('Unsupported serialized Bezier Knot tangent mode');
     return {pathUuid:branch.pathUuid,componentIndex,field:'knots',
         dump,record:true,noOp,knotIndex:branch.knotIndex};
 }
