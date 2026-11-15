@@ -349,10 +349,18 @@ async function applyV2JunctionTangents(){
             (changed?' ('+changed+' Path edits were recorded; Undo each or inspect Scene)':'')));
     }
 }
+async function inspectV2JunctionSeams(){
+    try{
+        const result=await scene('inspectV2JunctionSeams',currentNode());
+        if(!result?.ok)
+            throw new Error(result?.error||'Junction seam audit unavailable');
+        return result;
+    }catch(e){return fail('inspect Junction seams',e);}
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
     bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork,
     planV2JunctionAutoConnect,applyV2JunctionAutoConnect,
-    planV2JunctionTangents,applyV2JunctionTangents};
+    planV2JunctionTangents,applyV2JunctionTangents,inspectV2JunctionSeams};
 exports.load=function(){};
 exports.unload=function(){};
