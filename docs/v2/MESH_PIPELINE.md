@@ -325,3 +325,28 @@ existing Bake fingerprints; opt-in requires Rebuild and explicit
 new Bake, never modifies saved meshes during Play. Regression covers
 Closed Continuous/Fillet, Profile+markings, both axes, UV2 and glTF.
 Creator 3.8.8 material/Prefab verification remains outstanding.
+
+### Transactional Dynamic/Editor Preview replacement (2026-11-15, P1)
+
+`MeshGenerator` now stages **all** GPU meshes and secondary renderers
+before replacing the visible primary renderer. A failure during partial
+`utils.createMesh` allocation or a secondary renderer material bind
+destroys the staged meshes/nodes and preserves the last valid Preview
+or imported Baked Mesh. On success, it disposes only the previously
+owned transient objects. This fixes a leak if one of several material
+parts failed allocation and avoids destroying a valid Preview before
+its replacement is ready.
+
+The mocked Cocos regression injects a failure at the **second**
+GPU part and during a secondary marking material assignment. It
+checks zero orphan staged meshes, the unchanged prior renderer,
+successful subsequent rebuild and cleanup of extra child renderers.
+It also checks that a multi-part Road Dynamic build plan and glTF
+Bake have the **same geometry fingerprint and primitive count** with
+sparse marking slots 0/3/4. This fingerprint assertion does not itself
+certify material slot assignment by Creator's glTF importer.
+
+No Preview is serialized and no Baked Mesh asset is silently
+rewritten. Real GPU-driver failure/recovery, multi-material imported
+MeshRenderer bindings and Creator 3.8.8 Save/Reopen remain manual
+acceptance requirements.

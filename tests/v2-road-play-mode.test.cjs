@@ -26,6 +26,7 @@ try{
  class Component{constructor(){this.node=null;}getComponent(cls){return this.node?.getComponent(cls)??null;}}
  class MeshRenderer extends Component{
   constructor(){super();this.mesh=null;this.materials=[];}
+  getSharedMaterial(index){return this.materials[index]??null;}
   setSharedMaterial(material,index){this.materials[index]=material;}
  }
  class Node{
@@ -442,6 +443,57 @@ try{
  assert.throws(()=>road.restoreBakedPreview(),/Editor-only/);
  env.EDITOR_NOT_IN_PREVIEW=true;
  road.rebuildPreview();assert.equal(generated.length,3);
+ // Dynamic and Baked export must describe the same geometry and draw
+ // parts, including sparse Road marking material slots 0/3/4.
+ const {createMeshBuildPlanV2}=require(path.join(temp,'geometry/MeshBuildPlan.js'));
+ road.surfaceMode=0;road.generateMarkings=true;
+ road.materials[3]=new Material();road.materials[4]=new Material();
+ const priorValid=renderer.mesh,priorChildren=roadNode.children.filter(child=>child.isValid);
+ const bakePlan=road.prepareBake();
+ const dynamicPlan=createMeshBuildPlanV2(road.generate().geometry,{mode:'dynamic'});
+ assert.equal(bakePlan.fingerprint,dynamicPlan.fingerprint,
+  'Dynamic Preview and glTF Bake must share the mesh fingerprint');
+ assert.deepEqual(dynamicPlan.parts.map(part=>part.materialSlot),[0,3,4]);
+ assert.equal(bakePlan.primitiveCount,dynamicPlan.parts.length);
+ // Failing second GPU allocation destroys earlier staged meshes, while
+ // keeping the valid prior preview (and imported Baked asset) intact.
+ const originalCreate=cc.utils.createMesh;let allocations=0;
+ cc.utils.createMesh=data=>{
+  if(++allocations===2)throw new Error('Injected GPU allocation failure');
+  return originalCreate(data);
+ };
+ const firstFailedOffset=generated.length;
+ try{assert.throws(()=>road.rebuildPreview(),/Injected GPU allocation failure/);}
+ finally{cc.utils.createMesh=originalCreate;}
+ assert.strictEqual(renderer.mesh,priorValid);
+ assert.equal(priorValid.destroyed,false);
+ assert(generated.slice(firstFailedOffset).every(mesh=>mesh.destroyed),
+  'Partial GPU allocations must be destroyed on failure');
+ assert.deepEqual(roadNode.children.filter(child=>child.isValid),priorChildren);
+ // Failure while binding a secondary material must also roll back ALL
+ // staged mesh allocations without replacing the primary preview.
+ const originalSetShared=MeshRenderer.prototype.setSharedMaterial;
+ MeshRenderer.prototype.setSharedMaterial=function(material,index){
+  if(this!==renderer&&this.node?.name==='__SplineDrawPart_1')
+   throw new Error('Injected secondary renderer failure');
+  return originalSetShared.call(this,material,index);
+ };
+ const secondFailedOffset=generated.length;
+ try{assert.throws(()=>road.rebuildPreview(),/Injected secondary renderer failure/);}
+ finally{MeshRenderer.prototype.setSharedMaterial=originalSetShared;}
+ assert.strictEqual(renderer.mesh,priorValid);
+ assert.equal(priorValid.destroyed,false);
+ assert(generated.slice(secondFailedOffset).every(mesh=>mesh.destroyed));
+ assert.deepEqual(roadNode.children.filter(child=>child.isValid),priorChildren);
+ // Successful staged swap disposes only the old transient resources.
+ road.rebuildPreview();
+ assert.notEqual(renderer.mesh,priorValid);
+ assert.equal(priorValid.destroyed,true);
+ assert.equal(roadNode.children.filter(child=>child.isValid).length,2);
+ assert.equal(road.getCurrentFingerprint(),road.prepareBake().fingerprint);
+ road.generateMarkings=false;road.materials[3]=null;road.materials[4]=null;
+ road.rebuildPreview();
+ assert.equal(roadNode.children.filter(child=>child.isValid).length,0);
  const baked=road.prepareBake();assert.equal(JSON.parse(baked.content).asset.version,'2.0');
  road.bakedSourceFingerprint=baked.fingerprint;
  assert.equal(road.inspectBake().stale,false);

@@ -178,38 +178,51 @@ export abstract class MeshGenerator extends Component {
     private rebuildTransient():void {
         const {geometry}=this.generate();
         const plan=createMeshBuildPlanV2(geometry,{mode:'dynamic'});
-        // Validate geometry before deleting the old renderer mesh.
-        const nextMeshes=plan.parts.map(part=>utils.createMesh({
-            positions:Array.from(part.positions),normals:Array.from(part.normals),
-            tangents:Array.from(part.tangents),uvs:Array.from(part.uv0),
-            indices:Array.from(part.indices),
-            ...(part.uv2?{customAttributes:[{
-                attr:new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD1,gfx.Format.RG32F),
-                values:Array.from(part.uv2)
-            }]}:{})
-        }));
-        const nextNodes:Node[]=[];
+        const nextMeshes:Mesh[]=[],nextNodes:Node[]=[];
+        const primary=this.renderer();
+        const previousMesh=primary.mesh;
+        const previousMaterial=primary.getSharedMaterial(0);
+        let primarySwapped=false;
         try{
-            this.disposeTransient();
-            const primary=this.renderer();
-            for(let i=0;i<plan.parts.length;i++){
-                let target=primary;
-                if(i){
-                    const child=new Node('__SplineDrawPart_'+i);
-                    if(EDITOR_NOT_IN_PREVIEW)
-                        child.hideFlags=CCObject.Flags.DontSave|CCObject.Flags.HideInHierarchy;
-                    child.setParent(this.node);
-                    target=child.addComponent(MeshRenderer);
-                    nextNodes.push(child);
-                }
+            // Build all parts before touching the currently visible preview.
+            // A partial createMesh failure must release prior staged parts.
+            for(const part of plan.parts)nextMeshes.push(utils.createMesh({
+                positions:Array.from(part.positions),normals:Array.from(part.normals),
+                tangents:Array.from(part.tangents),uvs:Array.from(part.uv0),
+                indices:Array.from(part.indices),
+                ...(part.uv2?{customAttributes:[{
+                    attr:new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD1,gfx.Format.RG32F),
+                    values:Array.from(part.uv2)
+                }]}:{})
+            }));
+            // Prepare secondary renderers before replacing the primary.
+            for(let i=1;i<plan.parts.length;i++){
+                const child=new Node('__SplineDrawPart_'+i);
+                nextNodes.push(child);
+                if(EDITOR_NOT_IN_PREVIEW)
+                    child.hideFlags=CCObject.Flags.DontSave|CCObject.Flags.HideInHierarchy;
+                const target=child.addComponent(MeshRenderer);
                 target.mesh=nextMeshes[i];
                 const material=this.materials[plan.parts[i].materialSlot];
                 if(material)target.setSharedMaterial(material,0);
             }
+            for(const node of nextNodes)node.setParent(this.node);
+            primarySwapped=true;
+            primary.mesh=nextMeshes[0];
+            const material=this.materials[plan.parts[0].materialSlot];
+            if(material)primary.setSharedMaterial(material,0);
+            // disposeTransient only owns the OLD meshes/child nodes here.
+            // The newly assigned primary is not the previous _primaryMesh.
+            this.disposeTransient();
             this._ownedMeshes=nextMeshes;
             this._ownedNodes=nextNodes;
             this._primaryMesh=nextMeshes[0]??null;
         }catch(error){
+            if(primarySwapped){
+                primary.mesh=previousMesh;
+                try{primary.setSharedMaterial(previousMaterial,0);}
+                catch{/* Preserve the original allocation/binding error. */}
+            }
             for(const node of nextNodes)if(node.isValid)node.destroy();
             for(const mesh of nextMeshes)if(mesh.isValid)mesh.destroy();
             throw error;
