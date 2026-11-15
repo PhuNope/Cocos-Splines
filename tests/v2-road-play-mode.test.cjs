@@ -327,8 +327,8 @@ try{
     assert.equal(pathHandles.length,8,'SplinePath owns six XYZ/plane + two point handles');
     assert(pathHandles.some(h=>h.property==='pathGizmoKnotPosition'));
     assert.deepEqual(pathHandles.slice(6).map(h=>h.index),[0,2]);
-    assert.equal(splinePath.onGizmoHudControls().length,4,
-       'Shared Path HUD also exposes Knot Roll and guide toggle');
+    assert.equal(splinePath.onGizmoHudControls().length,8,
+       'Shared Path HUD includes Position/Rotation Local/World groups and Knot Roll/guide');
     const dragStart={...b.worldPosition};
     splinePath.onGizmoChanged('pathGizmoKnotPosition','begin');
     splinePath.pathGizmoKnotPosition=new Vec3(
