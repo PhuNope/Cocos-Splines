@@ -185,3 +185,12 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
 - Smoothing explicitly rejects profiled shoulder/curb Road junctions and World Projected UV until a profile-aware field can be certified; the default keeps the historical UV layout byte-equivalent. No automatic migration or runtime log is introduced.
 - Added pure helper tests, actual 3/4-way Junction mesh/UV/fingerprint regression, polygon-clipped overlap tests (including raised crossings, duplicate triangles, shared edges), and end-ring seam negative cases. CI packages both new modules into the clean v2 test ZIP.
 - Remaining: authoring-independent junction triangulation for narrow acute wedges, profile-aware interior UV blending, GPU material/tangent seam evaluation in real Cocos Creator, and native Editor certification of Bake/Prefab override/Undo flows.
+
+
+## Cocos Creator 3.8.8 — Knot edit serialized Vec3 dump compatibility (2026-11-15)
+
+- Fixed the Path Inspector button crash `SplinePath contains invalid serialized Vec3 Knot records` caused by assuming a single `entry.value.position.value` nesting in all `scene.query-node` results. The original tests only modeled this one form; a differently wrapped (but finite) Vec3 is **not** evidence of damaged knot coordinates.
+- A shared pure `PathKnotDumpCodec` now accepts the supported type-preserving shapes (typed IProperty Vec3, direct CCClass position, doubly wrapped class property, direct Knot record, and individually wrapped numeric axes). It mutates **only** the actual vector coordinate values in cloned typed dumps, without flattening or discarding type metadata, tangent offsets, Roll/bank, custom fields, or prefab/Undo property history.
+- `PathV2Dump` uses this codec for **Add, Insert, Duplicate, Move, Remove**; **Select** no longer validates the geometry of *other* knots. Invalid records fail before any recorded Scene write and now name the offending Knot index and **shape only**; raw property payloads and numeric values are not logged.
+- The Inspector Knot card labels, Junction Endpoint Snap and Junction Bézier Tangent Apply now use the same vector decoder so they cannot disagree about an authored Path's nested Vec3 fields.
+- This fix is **not a data migration** and does not replace saved Script component UUIDs or rewrite Scene assets. Native Cocos Creator **3.8.8** acceptance still requires testing with the exact `scene.query-node` dumps from the affected local Scene. CI has synthetic compatibility fixtures and Editor mock flows but no access to that user Scene dump.
