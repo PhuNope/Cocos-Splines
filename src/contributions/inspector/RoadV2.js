@@ -28,6 +28,10 @@ async function dispatchV2(inspector,action){
         if(result.warnings?.length)console.warn('[Cocos Splines V2] Preview warnings:',result.warnings);
     }else if(action==='inspect-v2-road-network'&&result?.ok){
         console.info('[Cocos Splines V2] Scene Road connectivity (read-only):',result.report);
+    }else if(action==='inspect-v2-junction-seams'&&result?.ok){
+        console.info('[Cocos Splines V2] Road-Junction boundary XYZ/UV seam audit:',result.report);
+        if(!result.report?.ok)
+            console.warn('[Cocos Splines V2] Junction seams not certified:',result.report?.notes);
     }else if(action==='plan-v2-junction-tangents'&&result?.ok){
         console.info('[Cocos Splines V2] Junction Bezier tangent alignment (read-only):',result.plan);
     }else if(action==='apply-v2-junction-tangents'&&result?.ok){
@@ -44,7 +48,7 @@ function makeV2Inspector(kind='road'){
     const deform=kind==='mesh-deform';
     const junction=kind==='junction';
     const fields=junction?
-        [['Junction branches',['branches','autoConnectSearchRadius','endpointSnapMaxDistance','tangentEndpointTolerance','tangentAngleToleranceDegrees','junctionUVMode','junctionUVBlend','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
+        [['Junction branches',['branches','autoConnectSearchRadius','endpointSnapMaxDistance','tangentEndpointTolerance','tangentAngleToleranceDegrees','junctionUVMode','junctionUVBlend','strictRoadSeams','endpointTolerance','flatTolerance','gradeMode','maxGrade','patchLift','maxCurbHeight','curbCornerMode','curbCornerSegments','curbCornerPull','curbRamps','curbRampMinLip','curbRampMaxSlope','sidewalkApronWidth','sidewalkTerrainHeightOffset','sidewalkMaxCrossSlope','sidewalkTerrainMode','sidewalkTerrainSource','sidewalkMaxEdgeSlope','joinRoadSidewalks','uvMetersPerRepeat']],
          ['Junction Scene Gizmos',['showJunctionSceneGizmos','gizmoJunctionCurbs']],
          ['Junction markings',['generateJunctionMarkings','generateStopBars','generateCrosswalks','markingLift',
              'stopBarWidth','stopBarSetback','zebraStripeLength','zebraGap','zebraStartSetback',
@@ -75,6 +79,7 @@ function makeV2Inspector(kind='road'){
     if(junction){selectors.snapPlan='.spl-v2-snap-plan';selectors.snapApply='.spl-v2-snap-apply';selectors.network='.spl-v2-network';}
     if(junction){selectors.connectPlan='.spl-v2-connect-plan';selectors.connectApply='.spl-v2-connect-apply';}
     if(junction){selectors.tangentPlan='.spl-v2-tangent-plan';selectors.tangentApply='.spl-v2-tangent-apply';}
+    if(junction){selectors.seamAudit='.spl-v2-seam-audit';}
     const sections=fields.map(([title,props])=>
         `<details open class="spl-section"><summary>${title}</summary>`+
         props.map(name=>{
@@ -90,6 +95,7 @@ function makeV2Inspector(kind='road'){
           ${sections}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-autotrim-plan">Check Auto Trim</button><button type="button" class="spl-btn spl-v2-autotrim-apply">Apply Auto Trim</button></div>':''}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-connect-plan">Check Auto Connect</button><button type="button" class="spl-btn spl-v2-connect-apply">Apply Auto Connect</button></div>':''}
+          ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-seam-audit">Check Junction Seams</button></div>':''}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-tangent-plan">Check Align Tangents</button><button type="button" class="spl-btn spl-v2-tangent-apply">Apply Align Tangents</button></div>':''}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-network">Check Road Network</button><button type="button" class="spl-btn spl-v2-snap-plan">Check Endpoint Snap</button><button type="button" class="spl-btn spl-v2-snap-apply">Apply Endpoint Snap</button></div>':''}
           <div class="spl-btns">
@@ -125,6 +131,7 @@ function makeV2Inspector(kind='road'){
                 this.$.snapApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-endpoint-snap'));
                 this.$.tangentPlan.addEventListener('click',()=>void dispatchV2(this,'plan-v2-junction-tangents'));
                 this.$.tangentApply.addEventListener('click',()=>void dispatchV2(this,'apply-v2-junction-tangents'));
+                this.$.seamAudit.addEventListener('click',()=>void dispatchV2(this,'inspect-v2-junction-seams'));
             }
         }
     };
