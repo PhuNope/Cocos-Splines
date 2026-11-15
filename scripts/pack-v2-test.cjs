@@ -31,6 +31,7 @@ copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
 copy('src/v2/PathV2Dump.js','dist/v2/PathV2Dump.js');
 copy('src/v2/PathEndpointSnapDump.js','dist/v2/PathEndpointSnapDump.js');
+copy('src/v2/JunctionAutoConnectDump.js','dist/v2/JunctionAutoConnectDump.js');
 copy('src/v2/clean-scene.js','dist/v2/clean-scene.js');
 copy('dist/v2/EditorAssetBind.js');
 copy('src/v2/inspector-common-clean.js','dist/contributions/inspector/common.js');
@@ -55,7 +56,9 @@ pkg.contributions={
         'apply-v2-junction-auto-trim':{methods:['applyV2JunctionAutoTrim']},
         'plan-v2-junction-endpoint-snap':{methods:['planV2JunctionEndpointSnap']},
         'apply-v2-junction-endpoint-snap':{methods:['applyV2JunctionEndpointSnap']},
-        'inspect-v2-road-network':{methods:['inspectV2RoadNetwork']}
+        'inspect-v2-road-network':{methods:['inspectV2RoadNetwork']},
+        'plan-v2-junction-auto-connect':{methods:['planV2JunctionAutoConnect']},
+        'apply-v2-junction-auto-connect':{methods:['applyV2JunctionAutoConnect']}
     },
     inspector:{section:{node:{
         'SplinesV2.SplinePath':'./dist/contributions/inspector/PathV2.js',
@@ -87,6 +90,7 @@ for(const rel of [
  'assets/splines-v2/Components/SplinePathV2.ts',
  'dist/v2/PathV2Dump.js',
  'dist/v2/PathEndpointSnapDump.js',
+ 'dist/v2/JunctionAutoConnectDump.js',
  'dist/contributions/inspector/PathV2.js',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts',
  'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta',
@@ -100,7 +104,9 @@ for(const rel of [
  'assets/splines-v2/geometry/JunctionAutoTrimV2.ts',
  'assets/splines-v2/geometry/JunctionAutoTrimV2.ts.meta',
  'assets/splines-v2/geometry/SplineRoadNetworkV2.ts',
- 'assets/splines-v2/geometry/SplineRoadNetworkV2.ts.meta'
+ 'assets/splines-v2/geometry/SplineRoadNetworkV2.ts.meta',
+ 'assets/splines-v2/geometry/JunctionAutoConnectV2.ts',
+ 'assets/splines-v2/geometry/JunctionAutoConnectV2.ts.meta'
 ])assertFile(rel);
 assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
