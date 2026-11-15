@@ -247,3 +247,14 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 3. Enable **Strict Road Seams** to validate those checks automatically before any Junction Editor Preview/Bake. This is default OFF so older scenes keep their behavior. Check again after changing trim, profile material slots, UV tiling, curb ramps or side sidewalk geometry.
 4. Negative tests: select **World Projected** UV, set **Patch Lift = 0.01**, or attach an invalid/untrimmed Road. The audit must refuse to claim exact XYZ/Repeat seam continuity. Restore settings before Bake.
 5. Compare real material filtering and tangent shading in the Scene view, including curb/sidewalk corners and painted markings. The CPU check cannot prove that two different source textures, wrap modes, material instances or the engine's renderer produce a visually seamless material. Nor does it Boolean-weld entire Road and Junction meshes.
+
+
+## Junction 2.5D asphalt overlaps and UV interior smoothing (experimental)
+
+1. Create a 3- or 4-way Junction with **plain asphalt-only ConstantWidth Roads**, Match Repeat UV, Patch Lift 0, and correctly applied Endpoint Snap / Auto Trim. Keep `Junction UV Interior Smoothing = 0` to compare the existing mesh with the new option.
+2. Click **Check Junction Seams**. Verify `asphaltOverlapChecked: true` and `overlappingAsphaltPairs: 0` alongside the existing end-ring XYZ/UV0 tests. A shared asphalt triangle boundary should not be flagged as positive-area overlap.
+3. Set `Junction UV Interior Smoothing` to **0.25–0.35** and Rebuild Preview. Road cut-ring UV tiles and xyz vertices must remain exact; only the inner ring UV0 changes. Compare asphalt texture stretching near the center at different camera angles. Verify UV2 and material slot assignments do not change.
+4. Bake a test mesh with Smoothing 0, then change to 0.35 and inspect Bake Status: UV0 data and the new glTF fingerprint should change, but no old Baked Mesh asset is overwritten until an explicit Bake. Repeated rebuilds with the same settings must be deterministic.
+5. For profiled curb/shoulder Roads or World Projected Junction UV, leave smoothing **0**. Setting a positive value intentionally rejects those unsupported combinations; it must not silently apply a partial profile UV transform.
+6. Turn on **Strict Road Seams** only after a passing audit and test both Preview and Bake. Warnings are emitted in Editor Console only. Strict mode is Editor-only and never writes Knot data.
+7. Real Creator 3.8.x verification is still needed for UV/tangent shading under each actual shader/material, Scene save/reopen, Undo, Painter/paint geometry, and stability under extreme acute corner trims. This stage detects overlaps, it does not repair a global polygon union.
