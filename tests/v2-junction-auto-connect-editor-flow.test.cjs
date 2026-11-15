@@ -4,20 +4,20 @@ const assert=require('node:assert/strict'),path=require('node:path'),Module=requ
 const root=path.resolve(__dirname,'..'),copy=x=>JSON.parse(JSON.stringify(x));
 const prop=(type,value)=>({type,value});
 const link=(componentUuid,atEnd=false,stopBarEnabled=true,crosswalkEnabled=true)=>
- prop('SplinesV2.JunctionRoadLink',{
-  road:prop('SplinesV2.SplineRoad',{uuid:componentUuid}),
+ prop('Spline.JunctionRoadLink',{
+  road:prop('Spline.Road',{uuid:componentUuid}),
   atEnd:prop('Boolean',atEnd),
   stopBarEnabled:prop('Boolean',stopBarEnabled),
   crosswalkEnabled:prop('Boolean',crosswalkEnabled)
  });
 const roadNodes=['W','N','E'].map(name=>({
- uuid:'road-'+name,components:[{className:'SplinesV2.SplineRoad',
+ uuid:'road-'+name,components:[{className:'Spline.Road',
  uuid:'component-'+name,bakedMesh:{uuid:'baked-'+name}}],children:[]}));
-const junction={className:'SplinesV2.JunctionPatch',uuid:'junction-component',
+const junction={className:'Spline.Junction',uuid:'junction-component',
  branches:[{road:roadNodes[1].components[0],atEnd:false,
   stopBarEnabled:false,crosswalkEnabled:true}],
  previews:0,bakedMesh:{uuid:'baked-junction'},rebuildPreview(){this.previews++;},
- planAutoConnectV2(){
+ planAutoConnect(){
   const names=['W','N','E'];
   return {center:{x:0,y:0,z:0},searchRadius:.75,scannedRoads:3,skipped:[],
    expectedLinks:this.branches.map(l=>({componentUuid:l.road?.uuid||'',atEnd:!!l.atEnd})),
@@ -36,7 +36,7 @@ Module._load=function(id,parent,isMain){
 const oldEditor=globalThis.Editor;
 let history=[],writes=0,reject=false,mutateBeforeQuery=false;
 const dumped=()=>({__comps__:[{type:'cc.MeshRenderer',value:{}},
- {type:'SplinesV2.JunctionPatch',value:{
+ {type:'Spline.Junction',value:{
   branches:{type:'Array',elementTypeData:link(''),value:
    junction.branches.map(l=>link(l.road?.uuid||'',!!l.atEnd,
     l.stopBarEnabled,l.crosswalkEnabled))},

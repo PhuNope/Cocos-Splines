@@ -4,8 +4,8 @@ const {planJunctionAutoConnectDump:plan}=require('../src/v2/JunctionAutoConnectD
 const copy=x=>JSON.parse(JSON.stringify(x));
 const property=(type,value)=>({type,value});
 const link=(id,atEnd=false,stopBarEnabled=true,crosswalkEnabled=true)=>
- property('SplinesV2.JunctionRoadLink',{
-  road:property('SplinesV2.SplineRoad',{uuid:id}),
+ property('Spline.JunctionRoadLink',{
+  road:property('Spline.Road',{uuid:id}),
   atEnd:property('Boolean',atEnd),
   stopBarEnabled:property('Boolean',stopBarEnabled),
   crosswalkEnabled:property('Boolean',crosswalkEnabled),
@@ -13,7 +13,7 @@ const link=(id,atEnd=false,stopBarEnabled=true,crosswalkEnabled=true)=>
  });
 const make=(entries,opts={})=>({__comps__:[
  {type:'cc.MeshRenderer',value:{}},
- {type:'SplinesV2.JunctionPatch',value:{
+ {type:'Spline.Junction',value:{
   branches:{type:'Array',value:copy(entries),
    elementTypeData:link('',false)},
   endpointTolerance:property('Float',.25),junctionUVMode:property('Enum',0),

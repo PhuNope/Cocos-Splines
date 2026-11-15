@@ -7,7 +7,7 @@ const v=(x,y,z)=>({x,y,z});
 const knot=p=>({position:p,mode:2,handleIn:v(-2,0,0),
  handleOut:v(2,0,1),tension:.3,rollDegrees:27});
 const wrap=(type,value)=>({type,value});
-const typedKnot=k=>wrap('SplinesV2.Knot',{
+const typedKnot=k=>wrap('Spline.Knot',{
  position:wrap('cc.Vec3',clone(k.position)),mode:wrap('Enum',k.mode),
  handleIn:wrap('cc.Vec3',clone(k.handleIn)),
  handleOut:wrap('cc.Vec3',clone(k.handleOut)),
@@ -16,11 +16,11 @@ const typedKnot=k=>wrap('SplinesV2.Knot',{
 const paths=[];
 const roadNodes=[];
 for(let i=0;i<3;i++){
- const pathComponent={className:'SplinesV2.SplinePath',
+ const pathComponent={className:'Spline.Path',
   knots:[knot(v(i+1,0,i)),knot(v(10+i,0,20+i))],restores:0,
   onRestore(){this.restores++;}};
  const pathNode={uuid:'path-'+i,components:[{className:'cc.Node'},pathComponent],children:[]};
- const road={className:'SplinesV2.SplineRoad',pathSource:pathComponent,
+ const road={className:'Spline.Road',pathSource:pathComponent,
   previews:0,bakedMesh:{uuid:'asset-'+i},
   rebuildPreview(){this.previews++;}};
  pathComponent.node=pathNode;
@@ -29,11 +29,11 @@ for(let i=0;i<3;i++){
 }
 const original=paths.map(n=>clone(n.components[1].knots));
 const ends=[false,true,false];
-const junction={className:'SplinesV2.JunctionPatch',previews:0,
+const junction={className:'Spline.Junction',previews:0,
  branches:roadNodes.map((n,i)=>({road:n.components[0],atEnd:ends[i]})),
  rebuildPreview(){this.previews++;},
- inspectRoadNetworkV2(){return {roadCount:3,hubCount:1,hubs:[]};},
- planEndpointSnapsV2(){
+ inspectRoadNetwork(){return {roadCount:3,hubCount:1,hubs:[]};},
+ planEndpointSnaps(){
   return {center:v(0,0,0),maxDistance:1,branches:paths.map((n,i)=>{
    const knots=n.components[1].knots,atEnd=ends[i],knotIndex=atEnd?1:0;
    return {pathUuid:n.uuid,roadId:'road-'+i,atEnd,
@@ -54,7 +54,7 @@ let oldEditor=globalThis.Editor;
 const history=[],committed=[];
 let rejectAfter=-1,staleOnce=false;
 const dumped=node=>({__comps__:[{type:'cc.Node',value:{}},
- {type:'SplinesV2.SplinePath',value:{
+ {type:'Spline.Path',value:{
   knots:{type:'Array',isArray:true,
    elementTypeData:typedKnot(knot(v(0,0,0))),
    value:node.components[1].knots.map(typedKnot)},

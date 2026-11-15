@@ -9,7 +9,7 @@ const root=path.resolve(__dirname,'..');
 const main=require(path.join(root,'src/v2/clean-main.js'));
 const calls=[];
 const road={
-  className:'SplinesV2.SplineRoad',
+  className:'Spline.Road',
   preview:0,restore:0,
   pendingBakeUrl:'',pendingBakeFingerprint:'',
   rebuildPreview(){this.preview++;},
@@ -23,18 +23,18 @@ const node={uuid:'road-node',components:[road],children:[]};
 const knot=(x,y,z)=>({position:{x,y,z},mode:0,
   handleIn:{x:-1,y:0,z:0},handleOut:{x:1,y:0,z:0},tension:0,rollDegrees:0});
 const pathComponent={
-  className:'SplinesV2.SplinePath',
+  className:'Spline.Path',
   knots:[knot(0,0,0),knot(0,0,5)],gizmoKnotIndex:0,restores:0,
   onRestore(){this.restores++;}
 };
 const wrap=(type,value)=>({type,value});
-const knotDump=k=>wrap('SplinesV2.Knot',{position:wrap('cc.Vec3',k.position),
+const knotDump=k=>wrap('Spline.Knot',{position:wrap('cc.Vec3',k.position),
   mode:wrap('Enum',k.mode),handleIn:wrap('cc.Vec3',k.handleIn),
   handleOut:wrap('cc.Vec3',k.handleOut),tension:wrap('Float',k.tension),
   rollDegrees:wrap('Float',k.rollDegrees)});
 const nodeDump=()=>({__comps__:[
  {type:'cc.MeshRenderer',value:{}},
- {type:'SplinesV2.SplinePath',value:{
+ {type:'Spline.Path',value:{
   interpolation:wrap('Enum',3),
   gizmoKnotIndex:wrap('Integer',pathComponent.gizmoKnotIndex),
   knots:{type:'Array',isArray:true,elementTypeData:knotDump(knot(0,0,0)),
@@ -169,11 +169,11 @@ try{
  assert(!fs.existsSync(path.join(installed,'dist/main.js')));
  assert(!fs.existsSync(path.join(installed,'dist/scene.js')));
  assert.equal(Object.keys(pkg.contributions.inspector.section.node).length,5);
- assert(pkg.contributions.inspector.section.node['SplinesV2.SplinePath'].includes('PathV2.js'));
+ assert(pkg.contributions.inspector.section.node['Spline.Path'].includes('PathV2.js'));
  assert(pkg.contributions.messages['edit-v2-path']);
  assert.equal(pkg.contributions.menu,undefined);
  assert(!JSON.stringify(pkg).includes('Splines.SplineContainer'));
- assert(fs.existsSync(path.join(installed,'assets/splines-v2/Components/SplinePathV2.ts')));
+ assert(fs.existsSync(path.join(installed,'assets/splines-v2/Components/SplinePath.ts')));
  assert(fs.existsSync(path.join(installed,'dist/contributions/inspector/PathV2.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/EditorAssetBind.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathV2Dump.js')));

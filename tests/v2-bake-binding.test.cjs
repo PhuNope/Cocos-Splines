@@ -13,7 +13,7 @@ assert.equal(discoverMeshSubasset({subAssets:{}}).ok,false);
 assert.equal(discoverMeshSubasset({...meshInfo,subAssets:{
  a:{type:'cc.Mesh',uuid:'one'},b:{type:'cc.Mesh',uuid:'two'}}}).ok,false);
 assert.equal(discoverMeshSubasset(meshInfo).uuid,meshUuid);
-const comp=(type='SplinesV2.SplineRoad')=>({type,value:{
+const comp=(type='Spline.Road')=>({type,value:{
  bakedMesh:{value:{uuid:'old-mesh'}},bakedSourceUrl:{value:''},
  bakedSourceFingerprint:{value:''},pendingBakeUrl:{value:assetUrl},
  pendingBakeFingerprint:{value:fp},meshMode:{value:1}
@@ -49,7 +49,7 @@ function makeEditor(){
  // Save/restore the serialized dump; UUID survives without rebuilding geometry.
  const persisted=JSON.stringify(scene);scene=JSON.parse(persisted);
  assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
- calls=[];scene={__comps__:[comp('SplinesV2.SplineExtrude')]};
+ calls=[];scene={__comps__:[comp('Spline.Extrude')]};
  assetResponses=[{uuid:'model-importing',subAssets:{}},meshInfo];
  result=await bindWhenImported(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp},
    {attempts:2,delayMs:0});

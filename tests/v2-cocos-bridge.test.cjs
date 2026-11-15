@@ -53,19 +53,19 @@ try{
    assert.equal(fs.readFileSync(asset,'utf8'),fs.readFileSync(path.join(root,'src-v2',name),'utf8'),name+' bridge mirror drift');
    assert(fs.existsSync(asset+'.meta'),name+' missing import metadata');
  }
- const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
- const generator=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineMeshGeneratorV2.ts'),'utf8');
- assert(generator.includes('this.meshMode===SplineV2MeshMode.Dynamic'),'No shared Dynamic gate');
+ const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
+ const generator=fs.readFileSync(path.join(root,'assets/splines-v2/Components/MeshGenerator.ts'),'utf8');
+ assert(generator.includes('this.meshMode===MeshMode.Dynamic'),'No shared Dynamic gate');
  assert(generator.includes('else this.showSavedMesh();'),'Manual/Baked must restore saved Mesh');
  assert(generator.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor-only Bake guard');
- assert(component.includes('extends SplineMeshGeneratorV2'),'Road must use shared Mesh lifecycle');
- for(const kind of ['SplineExtrudeV2','SplineMeshDeformV2','SplineJunctionPatchV2']){
+ assert(component.includes('extends MeshGenerator'),'Road must use shared Mesh lifecycle');
+ for(const kind of ['SplineExtrude','SplineMeshDeform','JunctionPatch']){
    const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+kind+'.ts'),'utf8');
-   assert(source.includes('extends SplineMeshGeneratorV2'),
+   assert(source.includes('extends MeshGenerator'),
       kind+' must use shared generator, not Road inheritance');
-   assert(!source.includes('extends SplineRoadV2'));
+   assert(!source.includes('extends SplineRoad'));
  }
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineMeshGeneratorV2.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/MeshGenerator.ts.meta')));
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert.match(inspector.template,/Rebuild preview/i);assert.match(inspector.template,/Bake glTF asset/i);
  assert.match(inspector.template,/Bind Imported Mesh/i);
@@ -74,7 +74,7 @@ try{
  assert.match(inspector.template,/spl-v2-pathSource/);
  assert.match(inspector.template,/spl-v2-gizmoLiveMesh/);
  assert.match(inspector.template,/spl-v2-gizmoMeshIntervalMs/);
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplinePathV2.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplinePath.ts.meta')));
  assert.match(inspector.template,/spl-v2-shortKnotMode/);
  for(const kind of ['road','junction','extrude','mesh-deform']){
     const html=inspector.makeV2Inspector(kind).template;
@@ -87,7 +87,7 @@ try{
  const deformInspector=require(path.join(root,'src/contributions/inspector/MeshDeformV2.js'));
  assert.match(deformInspector.template,/spl-v2-sourceMesh/);
  assert.match(deformInspector.template,/spl-v2-repeatCount/);
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineMeshDeform.ts.meta')));
  const junctionInspector=require(path.join(root,'src/contributions/inspector/JunctionV2.js'));
  assert.match(junctionInspector.template,/spl-v2-branches/);
  assert.match(junctionInspector.template,/spl-v2-junctionUVMode/);
@@ -95,6 +95,6 @@ try{
  assert.match(junctionInspector.template,/spl-v2-generateJunctionMarkings/);
  assert.match(junctionInspector.template,/spl-v2-generateCrosswalks/);
  assert.match(junctionInspector.template,/spl-v2-turnGuides/);
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/JunctionPatch.ts.meta')));
  console.log('V2 COCOS BRIDGE PASS: road generator, glTF embedded UV2/multi-material, runtime gate, TS mirror and Inspector');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}
