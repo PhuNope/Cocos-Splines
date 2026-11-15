@@ -61,7 +61,8 @@ pkg.contributions={
         'plan-v2-junction-auto-connect':{methods:['planV2JunctionAutoConnect']},
         'apply-v2-junction-auto-connect':{methods:['applyV2JunctionAutoConnect']},
         'plan-v2-junction-tangents':{methods:['planV2JunctionTangents']},
-        'apply-v2-junction-tangents':{methods:['applyV2JunctionTangents']}
+        'apply-v2-junction-tangents':{methods:['applyV2JunctionTangents']},
+        'inspect-v2-junction-seams':{methods:['inspectV2JunctionSeams']}
     },
     inspector:{section:{node:{
         'SplinesV2.SplinePath':'./dist/contributions/inspector/PathV2.js',
@@ -112,7 +113,9 @@ for(const rel of [
  'assets/splines-v2/geometry/JunctionAutoConnectV2.ts',
  'assets/splines-v2/geometry/JunctionAutoConnectV2.ts.meta',
  'assets/splines-v2/geometry/JunctionTangentAlignV2.ts',
- 'assets/splines-v2/geometry/JunctionTangentAlignV2.ts.meta'
+ 'assets/splines-v2/geometry/JunctionTangentAlignV2.ts.meta',
+ 'assets/splines-v2/geometry/JunctionSeamAuditV2.ts',
+ 'assets/splines-v2/geometry/JunctionSeamAuditV2.ts.meta'
 ])assertFile(rel);
 assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
