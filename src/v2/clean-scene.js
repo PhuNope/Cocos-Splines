@@ -150,7 +150,9 @@ function refreshV2JunctionAutoConnect(uuid){
         if(typeof c.planAutoConnectV2!=='function')
             throw new Error('Select a Junction Patch component');
         const warnings=[];
-        try{c.onRestore();}catch(error){
+        try{c.rebuildPreview();}catch(error){
+            // The new Road links can lack trim distances; keep the last valid
+            // transient preview and never invalidate the saved Baked Mesh.
             warnings.push(String(error instanceof Error?error.message:error));
         }
         return {ok:true,branchCount:c.branches.length,warnings};
