@@ -111,7 +111,7 @@ try{
  }
  const inspector=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  assert(inspector.template.includes('spl-v2-stitchCutUV'));
- const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
+ const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
  assert(component.includes('stitchCutUV:this.stitchCutUV'));
  console.log('V2 CUT UV STITCH PASS: U/V, wrapped seam vertices, whole-edge phase, shoulder/curb, UV2, glTF and Inspector');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

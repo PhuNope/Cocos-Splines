@@ -114,19 +114,19 @@ try{
       assert.equal(drawSplineSceneGizmos(node,{lines:[...guide.lines,...guide.lines,...guide.lines,...guide.lines],dots:[...guide.dots,...guide.dots]}),600+6);
     }finally{globalThis.Gizmos3D=old;}
  }finally{Module._load=originalLoad;}
- const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
- const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),'utf8');
+ const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
+ const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),'utf8');
  assert.match(road,/public onDrawGizmosSelected\(\):void/);
  assert(!/\bpublic onGizmoHandles\(/.test(road),'Road cannot own Knot handles');
  assert(!/\b(?:knots:Node\[\]|interpolation=|closed=false)\b/.test(road),
    'Road cannot own Path source fields');
- const pathSource=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplinePathV2.ts'),'utf8');
+ const pathSource=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplinePath.ts'),'utf8');
  assert.match(pathSource,/public onGizmoHandles\(/);
  assert.match(pathSource,/public onGizmoChanged\(/);
  assert.match(junction,/public onDrawGizmosSelected\(\):void/);
  assert.match(road,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showSceneGizmos/);
  assert.match(junction,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showJunctionSceneGizmos/);
- assert.match(junction,/link\.road\.sampleJunctionEndV2/);
+ assert.match(junction,/link\.road\.sampleJunctionEnd/);
  const native=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  for(const field of ['showSceneGizmos','gizmoSteps','gizmoEdges',
      'showJunctionSceneGizmos','gizmoJunctionCurbs'])
@@ -135,8 +135,8 @@ try{
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoBridge.ts.meta')));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/geometry/SceneGizmoGuideV2.ts.meta')));
  // Public APIs and Inspector must use 'Gizmos', never a version-branded key.
- for(const part of ['SplinePathV2','SplineRoadV2','SplineJunctionPatchV2',
-    'SplineMeshGeneratorV2','SplineGizmoBridge']){
+ for(const part of ['SplinePath','SplineRoad','JunctionPatch',
+    'MeshGenerator','SplineGizmoBridge']){
     const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+part+'.ts'),'utf8');
     assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(source),
        part+' must not expose version-tagged Gizmos symbols');

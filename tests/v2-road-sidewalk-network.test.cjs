@@ -146,8 +146,8 @@ try{
    sidewalkApronWidth:w,sidewalkRoadJoin:false}).mesh;
   assert.notEqual(fingerprintMeshV2(changed),fingerprintMeshV2(mesh));
  }
- const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts'),'utf8');
- const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),'utf8');
+ const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
+ const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),'utf8');
  assert.match(component,/buildRoadSidewalkV2\(geometry/);
  assert.match(component,/sidewalkStation:this\.roadSidewalkWidth>0/);
  assert.match(junction,/joinRoadSidewalks/);

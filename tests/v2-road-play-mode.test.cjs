@@ -4,10 +4,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-road-runtime-'));
 try{
  const types=path.join(root,'tests/types/cc.d.ts');
- const file=path.join(root,'assets/splines-v2/Components/SplineRoadV2.ts');
+ const file=path.join(root,'assets/splines-v2/Components/SplineRoad.ts');
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--experimentalDecorators',
   '--skipLibCheck','--useDefineForClassFields','false','--rootDir',path.join(root,'assets/splines-v2'),
-  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrudeV2.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeformV2.ts'),path.join(root,'assets/splines-v2/Components/SplineJunctionPatchV2.ts'),types],{stdio:'pipe'});
+  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrude.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeform.ts'),path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),types],{stdio:'pipe'});
  const generated=[];
  const env={EDITOR_NOT_IN_PREVIEW:false};
  const identity={};
@@ -51,18 +51,18 @@ try{
   if(request==='cc/env')return env;
   return originalLoad.apply(this,arguments);
  };
- let SplineRoadV2,SplineV2MeshMode,SplineExtrudeV2,SplineMeshDeformV2,SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2;
- try{({SplineRoadV2,SplineV2MeshMode}=require(path.join(temp,'Components/SplineRoadV2.js')));
-  ({SplineExtrudeV2}=require(path.join(temp,'Components/SplineExtrudeV2.js')));
-  ({SplineMeshDeformV2}=require(path.join(temp,'Components/SplineMeshDeformV2.js')));
-  ({SplineJunctionPatchV2,JunctionRoadLinkV2,JunctionTurnGuideV2}=require(path.join(temp,'Components/SplineJunctionPatchV2.js')));}
+ let SplineRoad,MeshMode,SplineExtrude,SplineMeshDeform,JunctionPatch,JunctionRoadLink,JunctionTurnGuide;
+ try{({SplineRoad,MeshMode}=require(path.join(temp,'Components/SplineRoad.js')));
+  ({SplineExtrude}=require(path.join(temp,'Components/SplineExtrude.js')));
+  ({SplineMeshDeform}=require(path.join(temp,'Components/SplineMeshDeform.js')));
+  ({JunctionPatch,JunctionRoadLink,JunctionTurnGuide}=require(path.join(temp,'Components/JunctionPatch.js')));}
  finally{Module._load=originalLoad;}
- const {SplinePathV2,SplineKnotRecordV2}=require(path.join(temp,'Components/SplinePathV2.js'));
+ const {SplinePath,SplineKnot}=require(path.join(temp,'Components/SplinePath.js'));
  // Regression fixtures now use pure serialized Knot records. The worldPosition
  // alias below keeps historical coordinate assertions readable in this mock;
  // it is NOT a Node and the real SplinePath never creates Knot Nodes.
  const knot=(x=0,y=0,z=0)=>{
-   const k=new SplineKnotRecordV2();k.position=new Vec3(x,y,z);
+   const k=new SplineKnot();k.position=new Vec3(x,y,z);
    Object.defineProperty(k,'worldPosition',{
      get(){return this.position;},
      set(v){this.position=new Vec3(v.x,v.y,v.z);}
@@ -70,24 +70,24 @@ try{
    k.setWorldPosition=v=>{k.worldPosition=v;};
    return k;
  };
- const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoadV2);
+ const roadNode=new Node('RoadV2'),renderer=roadNode.addComponent(MeshRenderer),road=roadNode.addComponent(SplineRoad);
  const a=knot(),b=knot();
  b.worldPosition=new Vec3(0,0,10);
  const authoredNode=new Node('AuthoredPath');
- const authoredPath=authoredNode.addComponent(SplinePathV2);
+ const authoredPath=authoredNode.addComponent(SplinePath);
  authoredPath.knots=[a,b];authoredPath.interpolation=0;
  road.pathSource=authoredPath;road.sampleStep=1;road.width=4;
  assert(!('knots' in road)&&!('interpolation' in road)&&!('closed' in road));
  assert(!('onGizmoHandles' in road)&&!('onGizmoHudControls' in road));
  const currentPath=road.pathSource;
  road.pathSource=null;
- assert.throws(()=>road.generate(),/Assign a SplinePathV2 Path Source/,
+ assert.throws(()=>road.generate(),/Assign a SplinePath Path Source/,
    'Road must reject geometry without its authoritative SplinePath');
  road.pathSource=currentPath;
  const saved=new Mesh();road.bakedMesh=saved;
  const originalGenerate=road.generate;
  road.generate=()=>{throw new Error('Manual/Baked must never generate');};
- for(const mode of [SplineV2MeshMode.Manual,SplineV2MeshMode.Baked]){
+ for(const mode of [MeshMode.Manual,MeshMode.Baked]){
   road.meshMode=mode;road.onEnable();
   assert.equal(renderer.mesh,saved);assert.equal(generated.length,0);
  }
@@ -98,8 +98,8 @@ try{
  assert.equal(road.adaptiveSampling,true);
  // Authored Bezier controls must flow all the way from Path into the
  // real Road tessellation, not merely into a standalone core evaluator.
- const {SplinePathCurveModeV2}=require(path.join(temp,'Components/SplinePathV2.js'));
- authoredPath.interpolation=SplinePathCurveModeV2.Bezier;
+ const {CurveMode}=require(path.join(temp,'Components/SplinePath.js'));
+ authoredPath.interpolation=CurveMode.Bezier;
  authoredPath.gizmoKnotIndex=0;
  const defaultBezier=road.generate().geometry;
  assert(defaultBezier.positions.every((n,i)=>i%3!==1||Math.abs(n)<1e-5),
@@ -112,7 +112,7 @@ try{
  assert.notEqual(JSON.stringify(curvedBezier.positions),JSON.stringify(defaultBezier.positions));
  const bezierBake=road.prepareBake();
  assert.equal(JSON.parse(bezierBake.content).asset.version,'2.0');
- authoredPath.interpolation=SplinePathCurveModeV2.Linear;
+ authoredPath.interpolation=CurveMode.Linear;
  authoredPath.knots=[a,b];authoredPath.gizmoKnotIndex=0;
  a.rollDegrees=0;b.rollDegrees=0;
  const unbankedRoad=road.generate().geometry;
@@ -242,7 +242,7 @@ try{
 
  // Path Gizmos update a temporary Road mesh; end/cancel force a rebuild.
  road.gizmoLiveMesh=true;road.gizmoMeshIntervalMs=400;
- road.meshMode=SplineV2MeshMode.Baked;road.showSavedMesh();
+ road.meshMode=MeshMode.Baked;road.showSavedMesh();
  const editedPosition=new Vec3(b.worldPosition.x,b.worldPosition.y,b.worldPosition.z);
  authoredPath.gizmoKnotIndex=1;
  authoredPath.onGizmoChanged('pathGizmoKnotPosition','begin');
@@ -266,17 +266,17 @@ try{
  authoredPath.onGizmoChanged('pathGizmoKnotPosition','cancel');
  assert(renderer.mesh!==previousValid,'Path Escape rebuilds Road mesh');
 
- // SplinePathV2 is the preferred shared source: one Path, two Roads.
+ // SplinePath is the preferred shared source: one Path, two Roads.
  // Road-local Knots and interpolation are ignored once it is linked.
  const pathNode=new Node('SharedSplinePath');
- const splinePath=pathNode.addComponent(SplinePathV2);
+ const splinePath=pathNode.addComponent(SplinePath);
  splinePath.knots=[a,b,k2];splinePath.interpolation=0;splinePath.closed=false;
  road.pathSource=splinePath;
  assert.equal(road.source().type,'linear',
-   'Road must read interpolation from the linked SplinePathV2');
+   'Road must read interpolation from the linked SplinePath');
  assert.equal(road.source().knots.length,3);
  const otherNode=new Node('SharedRoad2'),otherRenderer=otherNode.addComponent(MeshRenderer);
- const other=otherNode.addComponent(SplineRoadV2);
+ const other=otherNode.addComponent(SplineRoad);
  other.pathSource=splinePath;other.surfaceMode=0;other.sampleStep=.5;other.width=1.5;
  other.rebuildPreview();road.rebuildPreview();
  const previewBeforeUndo=renderer.mesh;
@@ -404,7 +404,7 @@ try{
  authoredPath.knots=originalKnots;a.worldPosition=originalA;b.worldPosition=originalB;
  road.surfaceMode=0;authoredPath.interpolation=0;road.sampleStep=1;road.width=4;
  // Switching to Dynamic creates one new mesh and preserves UV2 as custom attribute.
- road.meshMode=SplineV2MeshMode.Dynamic;road.onEnable();
+ road.meshMode=MeshMode.Dynamic;road.onEnable();
  assert.equal(generated.length,1);
  assert.equal(renderer.mesh,generated[0]);
  const attribute=generated[0].geometry.customAttributes?.find(a=>a.attr.name==='a_texCoord1');
@@ -414,7 +414,7 @@ try{
  assert.equal(saved.destroyed,false,'Do not destroy imported Mesh assets');
  road.onEnable();assert.equal(generated.length,2);
  assert.notEqual(renderer.mesh,first);
- road.meshMode=SplineV2MeshMode.Baked;road.onEnable();
+ road.meshMode=MeshMode.Baked;road.onEnable();
  assert(generated[1].destroyed);assert.equal(renderer.mesh,saved);
  // Editor-only preview/Bake never persist temporary GPU assets.
  assert.throws(()=>road.rebuildPreview(),/Editor-only/);
@@ -436,13 +436,13 @@ try{
  road.onDisable();assert(generated[2].destroyed);
  assert.equal(saved.destroyed,false);
  const generatorSourceNode=new Node('GeneratorPathV2');
- const generatorPath=generatorSourceNode.addComponent(SplinePathV2);
+ const generatorPath=generatorSourceNode.addComponent(SplinePath);
  generatorPath.knots=[a,b];generatorPath.interpolation=0;generatorPath.closed=false;
- const {SplineMeshGeneratorV2}=require(path.join(temp,'Components/SplineMeshGeneratorV2.js'));
+ const {MeshGenerator}=require(path.join(temp,'Components/MeshGenerator.js'));
  const extrudeNode=new Node('ExtrudeV2'),extrudeRenderer=extrudeNode.addComponent(MeshRenderer);
- const extrude=extrudeNode.addComponent(SplineExtrudeV2);
- assert(extrude instanceof SplineMeshGeneratorV2);
- assert(!(extrude instanceof SplineRoadV2));
+ const extrude=extrudeNode.addComponent(SplineExtrude);
+ assert(extrude instanceof MeshGenerator);
+ assert(!(extrude instanceof SplineRoad));
  assert.equal('knots' in extrude,false,'Extrude has no duplicated Knot list');
  assert.equal('width' in extrude,false,'Extrude must not inherit Road width/curb settings');
  assert.equal('junctionStartTrim' in extrude,false);
@@ -450,9 +450,9 @@ try{
  extrude.uvLongitudinalAxis=1;
  extrude.sides=8;extrude.capEnds=true;extrude.bakedMesh=saved;
  const countBefore=generated.length;
- env.EDITOR_NOT_IN_PREVIEW=false;extrude.meshMode=SplineV2MeshMode.Baked;extrude.onEnable();
+ env.EDITOR_NOT_IN_PREVIEW=false;extrude.meshMode=MeshMode.Baked;extrude.onEnable();
  assert.equal(generated.length,countBefore);assert.equal(extrudeRenderer.mesh,saved);
- extrude.meshMode=SplineV2MeshMode.Dynamic;extrude.onEnable();
+ extrude.meshMode=MeshMode.Dynamic;extrude.onEnable();
  assert.equal(generated.length,countBefore+1);
  assert(generated.at(-1).geometry.indices.length>100,'Tube should contain side and end cap faces');
  extrude.onDisable();
@@ -463,14 +463,14 @@ try{
   // New v2 source Mesh Deformer: Baked/Manual modes must never read source
  // geometry, and transient previews must not destroy the source Mesh.
  const deformNode=new Node('SourceDeformV2'),deformRenderer=deformNode.addComponent(MeshRenderer);
- const deform=deformNode.addComponent(SplineMeshDeformV2);
- assert(deform instanceof SplineMeshGeneratorV2);
- assert(!(deform instanceof SplineRoadV2));
+ const deform=deformNode.addComponent(SplineMeshDeform);
+ assert(deform instanceof MeshGenerator);
+ assert(!(deform instanceof SplineRoad));
  assert.equal('knots' in deform,false,'Deform has no Knot list');
  assert.equal('width' in deform,false);
  assert.equal('roadSidewalkWidth' in deform,false);
  deform.pathSource=generatorPath;deform.sampleStep=.5;
- deform.surfaceMode=2;deform.meshMode=SplineV2MeshMode.Baked;deform.bakedMesh=saved;
+ deform.surfaceMode=2;deform.meshMode=MeshMode.Baked;deform.bakedMesh=saved;
  const dAsset=new Mesh();
  dAsset.attributes={
   a_position:new Float32Array([-1,0,0,1,0,0,-1,0,10,1,0,10]),
@@ -521,13 +521,13 @@ try{
  // Junction Patch must preserve Manual/Baked runtime gate and use exactly
  // the Road's trimmed end ring, with no hidden runtime mesh generation.
  const patchNode=new Node('JunctionV2'),patchRenderer=patchNode.addComponent(MeshRenderer);
- const patch=patchNode.addComponent(SplineJunctionPatchV2);
- assert(patch instanceof SplineMeshGeneratorV2);
- assert(!(patch instanceof SplineRoadV2),'Junction must not inherit Road');
+ const patch=patchNode.addComponent(JunctionPatch);
+ assert(patch instanceof MeshGenerator);
+ assert(!(patch instanceof SplineRoad),'Junction must not inherit Road');
  assert.equal('width' in patch,false,'Junction must not inherit Road width');
  assert.equal('knots' in patch,false,'Junction must not own Road Knot nodes');
  assert.equal('roadSidewalkWidth' in patch,false);
- patch.meshMode=SplineV2MeshMode.Baked;patch.bakedMesh=saved;
+ patch.meshMode=MeshMode.Baked;patch.bakedMesh=saved;
  const savedCount=generated.length;
  env.EDITOR_NOT_IN_PREVIEW=false;
  patch.onEnable();assert.equal(generated.length,savedCount);
@@ -538,16 +538,16 @@ try{
   const angle=2*Math.PI*i/3,out=knot();
   out.worldPosition=new Vec3(Math.sin(angle)*12,0,Math.cos(angle)*12);
   const n=new Node('Arm'+i);n.addComponent(MeshRenderer);
-  const arm=n.addComponent(SplineRoadV2);
-  const armPath=new Node('ArmPath'+i).addComponent(SplinePathV2);
+  const arm=n.addComponent(SplineRoad);
+  const armPath=new Node('ArmPath'+i).addComponent(SplinePath);
   armPath.knots=[shared,out];armPath.interpolation=0;
   arm.pathSource=armPath;arm.surfaceMode=2;arm.junctionStartTrim=3;
   arm.sampleStep=.25;arm.width=4;
-  const link=new JunctionRoadLinkV2();link.road=arm;link.atEnd=false;arms.push(link);
+  const link=new JunctionRoadLink();link.road=arm;link.atEnd=false;arms.push(link);
  }
  patch.branches=arms;
  env.EDITOR_NOT_IN_PREVIEW=true;
- const boundary=arms[0].road.sampleJunctionEndV2(false);
+ const boundary=arms[0].road.sampleJunctionEnd(false);
  assert(Math.abs(boundary.left.uv0.y-.6)<1e-5,'Road UV must retain 3m original path distance');
  const {geometry:patchMesh}=patch.generate();
  assert.equal(patchMesh.triangleCount,27);
@@ -564,7 +564,7 @@ try{
  patch.generateJunctionMarkings=true;
  patch.generateStopBars=true;
  patch.generateCrosswalks=true;
- const guide=new JunctionTurnGuideV2();
+ const guide=new JunctionTurnGuide();
  guide.fromBranch=0;guide.toBranch=1;
  patch.turnGuides=[guide];
  assert.equal(patch.inspectBake().stale,true,'Paint settings invalidate baked geometry');
@@ -591,14 +591,14 @@ try{
  patch.branches=arms.slice(0,2);
  assert.throws(()=>patch.generate(),/3 or 4/);
  patch.branches=arms;
- // Profiled Junction regression through REAL SplineRoadV2 sampled rings.
+ // Profiled Junction regression through REAL SplineRoad sampled rings.
  // All profile UVs must be copied at the authored trim edge, including
  // left/right height-duplicate curb wall vertices.
  for(const link of arms){
   link.road.shoulderWidth=.45;link.road.curbWidth=.22;
   link.road.curbHeight=.16;link.road.junctionStartTrim=4;
  }
- const ring=arms[0].road.sampleJunctionEndV2(false);
+ const ring=arms[0].road.sampleJunctionEnd(false);
  assert(ring.profile&&ring.profile.vertices.length>3);
  assert(ring.profile.edgeMaterials.includes(1));
  assert(ring.profile.edgeMaterials.includes(2));
