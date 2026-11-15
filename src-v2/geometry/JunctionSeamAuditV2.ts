@@ -1,4 +1,5 @@
 import {type MeshDataV2,type Vec3MeshV2,type Vec2MeshV2} from './MeshData';
+import {inspectJunctionAsphaltOverlapV2} from './JunctionAsphaltOverlapV2';
 import {type JunctionRoadBranchV2,type JunctionRoadEdgeV2} from './JunctionPatchV2';
 
 /**
@@ -37,6 +38,9 @@ export interface JunctionSeamAuditReportV2 {
     /** Diagnostics only: split walls and multi-material edges may be legitimate. */
     readonly nonManifoldEdges:number;
     readonly duplicatedTriangles:number;
+    readonly overlappingAsphaltPairs:number;
+    readonly maximumAsphaltOverlapArea:number;
+    readonly asphaltOverlapChecked:boolean;
     readonly materialSlots:ReadonlyArray<number>;
     readonly details:ReadonlyArray<JunctionSeamBranchAuditV2>;
     readonly notes:ReadonlyArray<string>;
@@ -170,6 +174,7 @@ export function auditJunctionSeamsV2(
             maxPositionGap:branchMaxGap,maxUVPhaseError:branchMaxUV});
     }
     const topology=countTopologyIssues(mesh);
+    const asphalt=inspectJunctionAsphaltOverlapV2(mesh);
     const notes:string[]=[];
     if(!uvPhaseChecked)
         notes.push('World Projected UV is not Road-matched; seamless Repeat UV cannot be certified');
@@ -185,13 +190,19 @@ export function auditJunctionSeamsV2(
         notes.push('Mesh contains coincident triangles; inspect possible overlapping surfaces');
     if(topology.nonManifoldEdges)
         notes.push('Mesh contains high-valence physical edges; inspect split material and curb topology');
+    if(!asphalt.checked)
+        notes.push(asphalt.skippedReason||'Asphalt intersection audit could not certify topology');
+    if(asphalt.overlappingPairs)
+        notes.push('Junction asphalt triangles overlap in positive surface area; check corner triangulation and Road trim');
     const ok=matchedGeometry===boundaryVertices&&uvPhaseChecked&&
         matchedUV===boundaryVertices&&inconsistentUVBranches===0&&
-        topology.degenerateTriangles===0;
+        topology.degenerateTriangles===0&&asphalt.checked&&asphalt.overlappingPairs===0;
     return {ok,uvPhaseChecked,branches:branches.length,
         boundaryVertices,matchedGeometry,matchedUV,
         maxPositionGap,maxUVPhaseError,inconsistentUVBranches,
-        ...topology,
+        ...topology,overlappingAsphaltPairs:asphalt.overlappingPairs,
+        maximumAsphaltOverlapArea:asphalt.maximumOverlapArea,
+        asphaltOverlapChecked:asphalt.checked,
         materialSlots:mesh.submeshes.map(g=>g.materialSlot),
         details,notes};
 }
