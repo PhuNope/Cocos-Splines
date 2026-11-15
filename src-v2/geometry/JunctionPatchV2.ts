@@ -1,4 +1,5 @@
 import {buildJunctionProfilePatchV2} from './JunctionProfilePatchV2';
+import {smoothJunctionInteriorUVRingV2} from './JunctionInteriorUVV2';
 import {buildMeshV2,type MeshDataV2,type Vec2MeshV2,type Vec3MeshV2} from './MeshData';
 
 export interface JunctionRoadEdgeV2 {readonly position:Vec3MeshV2;readonly uv0:Vec2MeshV2;}
@@ -28,6 +29,8 @@ export interface JunctionPatchOptionsV2 {
     readonly uvMode?:'matched'|'projected';
     readonly uvMetersPerRepeat?:number;
     readonly uvBlendStart?:number;
+    /** Opt-in 0..0.5 diffusion of PLAIN asphalt interior UV only; perimeter stays exact. */
+    readonly uvInteriorSmoothing?:number;
     readonly endpointTolerance?:number;
     readonly flatTolerance?:number;
     /** Opt-in bounded gradients between the snapped center and trimmed Road rings; banked cross-sections remain unsupported. */
@@ -68,6 +71,7 @@ export interface JunctionPatchOptionsV2 {
 export interface JunctionPatchReportV2 {
     readonly branches:number;
     readonly matchedUV:boolean;
+    readonly uvInteriorSmoothing?:number;
     readonly polygonVertices:number;
     readonly triangles:number;
     readonly minimumWedgeDegrees:number;
@@ -107,11 +111,14 @@ export function buildJunctionPatchV2(
     if(n!==3&&n!==4)throw new Error('Junction V2 needs 3 or 4 Road branches');
     const mode=options.uvMode??'matched';
     const uvRepeat=options.uvMetersPerRepeat??5,blend=options.uvBlendStart??.55;
+    const uvSmoothing=options.uvInteriorSmoothing??0;
     const tolerance=options.endpointTolerance??.25,flat=options.flatTolerance??.1;
     const gradeMode=options.gradeMode??'flat',maxGrade=options.maxGrade??.15;
     const lift=options.surfaceLift??0,slot=options.materialSlot??0;
     if(mode!=='matched'&&mode!=='projected'||!finite(uvRepeat)||uvRepeat<=0||
-       !finite(blend)||blend<.05||blend>.95||!finite(tolerance)||tolerance<=0||
+       !finite(blend)||blend<.05||blend>.95||
+       !finite(uvSmoothing)||uvSmoothing<0||uvSmoothing>.5||
+       (uvSmoothing>0&&mode!=='matched')||!finite(tolerance)||tolerance<=0||
        !finite(flat)||flat<=0||
        (gradeMode!=='flat'&&gradeMode!=='gentle')||!finite(maxGrade)||maxGrade<=0||maxGrade>.35||
        (options.curbCornerMode!==undefined&&options.curbCornerMode!=='radial'&&options.curbCornerMode!=='rounded')||
@@ -158,7 +165,11 @@ export function buildJunctionPatchV2(
         if(offset<width*.6)
             throw new Error('Junction V2 Road trim is too short for its width; increase Junction Start/End Trim');
     }
-    if(branches.some(b=>b.profile))return buildJunctionProfilePatchV2(branches,options,center);
+    if(branches.some(b=>b.profile)){
+        if(uvSmoothing>0)
+            throw new Error('Junction interior UV smoothing supports plain asphalt only; disable for Road profiles');
+        return buildJunctionProfilePatchV2(branches,options,center);
+    }
     // One INTEGER UV offset per branch: matches the existing material under a
     // Repeat sampler but never wraps left/right independently.
     const first=branches[0],reference={
@@ -207,16 +218,14 @@ export function buildJunctionPatchV2(
         uv2.push({x:.5+(p.x-center.x)/(uvRepeat*2*n),y:.5+(p.z-center.z)/(uvRepeat*2*n)});
     };
     for(const p of points)push(p.position,p.uv0);
-    for(const p of points){
+    const innerUV=smoothJunctionInteriorUVRingV2(points.map(p=>p.uv0),origin,blend,uvSmoothing);
+    for(const [index,p] of points.entries()){
         const position={
             x:center.x+(p.position.x-center.x)*blend,
             y:center.y+(p.position.y-center.y)*blend,
             z:center.z+(p.position.z-center.z)*blend
         };
-        push(position,{
-            x:origin.x+(p.uv0.x-origin.x)*blend,
-            y:origin.y+(p.uv0.y-origin.y)*blend
-        });
+        push(position,innerUV[index]);
     }
     const indices:number[]=[];
     for(let i=0;i<m;i++){
@@ -248,5 +257,6 @@ export function buildJunctionPatchV2(
     }
     const mesh=buildMeshV2({positions,normals,uv0,uv2,submeshes:[{materialSlot:slot,indices}]});
     return {mesh,report:{branches:n,matchedUV:mode==='matched',polygonVertices:m,
-        triangles:mesh.triangleCount,minimumWedgeDegrees:minWedge*180/Math.PI}};
+        triangles:mesh.triangleCount,minimumWedgeDegrees:minWedge*180/Math.PI,
+        ...(uvSmoothing>0?{uvInteriorSmoothing:uvSmoothing}:{})}};
 }
