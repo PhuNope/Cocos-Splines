@@ -1,16 +1,16 @@
-# SplinePathV2 — one authoritative spline source
+# SplinePath — one authoritative spline source
 
 **Development branch:** `v2.0.0`. Clean breaking test build; no legacy UUID migration, tag, or Release.
 
 ## Design
 
-`SplinesV2.SplinePath` is the **only** authored source. The `knots`
-array contains serialized `SplineKnotRecordV2` records with
+`Spline.Path` is the **only** authored source. The `knots`
+array contains serialized `SplineKnot` records with
 `position: Vec3`, `handleIn: Vec3`, `handleOut: Vec3`,
 `mode` (Auto/Free/Aligned/Mirrored) and `tension`. **No Knot Node
 references exist**. Positions are local to the Path's own Node.
 
-`SplinePathV2.getSplineDataV2(consumer)` samples the same Path into
+`SplinePath.getSplineData(consumer)` samples the same Path into
 each Road/Extrude/Deform consumer's local coordinate space. Junction
 takes world-space endpoints from its linked Road Paths. The Path
 owns Gizmos editing and emits preview invalidation.
@@ -19,7 +19,7 @@ See [Pure Vec3 Knot workflow](PURE_VEC3_KNOTS.md).
 
 ## How to author
 
-1. Create one Node with `SplinesV2.SplinePath`.
+1. Create one Node with `Spline.Path`.
 2. Open its custom Inspector and press **+ Add Knot** to create at
    least two Knot records. Edit **Position X/Y/Z** on each card; use
    Duplicate, Remove, ↑/↓, + After and Select to manage the list.

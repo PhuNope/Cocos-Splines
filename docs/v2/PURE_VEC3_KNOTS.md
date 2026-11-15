@@ -5,13 +5,13 @@ legacy Knot-Node data migration or UUID preservation requirement.
 
 ## New source model
 
-A `SplinesV2.SplinePath` owns **serialized Knot value records**, not
+A `Spline.Path` owns **serialized Knot value records**, not
 `Node[]` references. Each record is a small Cocos-serializable
-`SplineKnotRecordV2`:
+`SplineKnot`:
 
 ```ts
-@ccclass('SplinesV2.Knot')
-class SplineKnotRecordV2 {
+@ccclass('Spline.Knot')
+class SplineKnot {
   position: Vec3;        // local to the SplinePath Node
   mode: TangentMode;     // Auto / Free / Aligned / Mirrored
   handleIn: Vec3;        // relative to position
@@ -21,17 +21,17 @@ class SplineKnotRecordV2 {
 }
 ```
 
-`knots: SplineKnotRecordV2[]` is the one source of truth. No Knot child
+`knots: SplineKnot[]` is the one source of truth. No Knot child
 Nodes or independent tangent records are needed. Reordering the array
 reorders the **whole Knot record**, preserving its position and handles.
-`SplinePathV2.getSplineDataV2(consumerNode)` transforms local control
+`SplinePath.getSplineData(consumerNode)` transforms local control
 points through Path World → consumer Local. Every Road, Extrude and Mesh
 Deform continues to read the same snapshot. Junction uses the converted
 world-space endpoint of each Road's linked Path.
 
 ## Custom Inspector
 
-Add `SplinesV2.SplinePath` to one Node. Its dedicated Inspector offers:
+Add `Spline.Path` to one Node. Its dedicated Inspector offers:
 
 - **Spline**: Interpolation and Closed.
 - **Gizmos**: active Knot, visibility, point limit, editing toggles,

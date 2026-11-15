@@ -47,7 +47,7 @@ Follower, Junction routing and population depend only on Spline Core, not Mesh P
 
 ## Engine bridge experimental vertical slice
 
-The `assets/splines-v2` AssetDB mount mirrors `src-v2/core` and `src-v2/geometry` without changing these pure TypeScript modules. A CI regression checks mirror identity. `SplinesV2.SplineRoad` owns a transient renderer for Dynamic/Editor preview; Manual/Baked only use an imported glTF Mesh subasset. A custom Inspector triggers explicit Rebuild/Bake/Check actions through main -> scene messages. Automatic glTF subasset binding and Cocos Editor smoke validation remain open.
+The `assets/splines-v2` AssetDB mount mirrors `src-v2/core` and `src-v2/geometry` without changing these pure TypeScript modules. A CI regression checks mirror identity. `Spline.Road` owns a transient renderer for Dynamic/Editor preview; Manual/Baked only use an imported glTF Mesh subasset. A custom Inspector triggers explicit Rebuild/Bake/Check actions through main -> scene messages. Automatic glTF subasset binding and Cocos Editor smoke validation remain open.
 
 ## Geometry and AssetDB binding follow-up
 

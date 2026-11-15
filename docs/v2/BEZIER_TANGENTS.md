@@ -1,10 +1,10 @@
-# Bézier tangents in SplinePathV2
+# Bézier tangents in SplinePath
 
 **Branch:** `v2.0.0` — development test build, no tag or release.
 
 ## Design
 
-Each `SplineKnotRecordV2` holds its own serialized Path-local
+Each `SplineKnot` holds its own serialized Path-local
 `position`, `handleIn`, `handleOut`, `mode` and `tension`.
 There are no references to Knot Nodes and no independent tangent list.
 Reordering the records preserves all control data.

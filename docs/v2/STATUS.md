@@ -33,7 +33,7 @@
   for authored topology; all position, tangent and Roll fields are copied.
 - Active Knot selection is a separate non-recorded property change; it
   does **not** rebuild all linked generator previews.
-- `SplinePathV2.onRestore()` drops stale Gizmos/HUD drag targets after
+- `SplinePath.onRestore()` drops stale Gizmos/HUD drag targets after
   Undo/reload and forces linked temporary previews. Generators can
   rebind a restored Path Source on their `onRestore()`, dispose stale
   temporary meshes and retain their saved Baked Mesh.
@@ -76,7 +76,7 @@
 
 ## Pure Vec3 Knot / custom Inspector checkpoint (2026-11-15)
 
-- `SplinePathV2.knots` now holds pure serialized `SplineKnotRecordV2[]`
+- `SplinePath.knots` now holds pure serialized `SplineKnot[]`
   (Path-local position, tangent offsets/mode and Catmull tension).
   **No child Knot Nodes, independent tangent records or legacy UUID
   compatibility**.
@@ -91,7 +91,7 @@
 
 ## Bézier tangent authoring checkpoint (2026-11-15)
 
-- `SplinePathV2` now stores tangent data directly inside each serialized Vec3 Knot record, with Auto/Free/Aligned/Mirrored modes and visible In/Out handles (selected Path only).
+- `SplinePath` now stores tangent data directly inside each serialized Vec3 Knot record, with Auto/Free/Aligned/Mirrored modes and visible In/Out handles (selected Path only).
 - Handles are relative to each Knot in Path-local coordinates and are transformed correctly into each generator's local mesh coordinates; changes affect actual Road geometry, UV tessellation and explicit glTF Bake.
 - Gizmos begin/update/end/cancel supports an explicit tangent-state snapshot. Escape removes newly-created manual records when returning to Auto, or restores the prior mode and offsets, so a canceled drag does not silently freeze future tangents.
 - CI covers consumer conversion, modes, reorder, invalid duplicates, Play guard, Editor Inspector watcher, Path-to-Road bake and transient previews. Native Creator Undo/Redo, save/reopen and real mouse picking remain **manual acceptance gates**. [Guide](BEZIER_TANGENTS.md).
@@ -106,7 +106,7 @@
 ## Breaking clean rewrite step (2026-11-14)
 
 - The user explicitly authorized dropping legacy `Splines.*`, old component UUID/meta and compatibility/migration code. **The packaged test ZIP** now contains only `assets/splines-v2` and v2-only Editor entrypoints/Inspector/actions, with a self-contained bundle smoke test.
-- `SplinePathV2` is now the owning Gizmos edit target. Linked `SplineRoadV2` hides its old Knot handles and receives Path editor updates via registered consumers. The Path has its own Scene HUD and indexed multi-Knot points.
+- `SplinePath` is now the owning Gizmos edit target. Linked `SplineRoad` hides its old Knot handles and receives Path editor updates via registered consumers. The Path has its own Scene HUD and indexed multi-Knot points.
 - The repository still contains historical 0.9.x sources for reference, and the rewritten pure geometry modules are retained. Do not mistake a clean package for completion of all roadmap milestones. Actual Creator 3.8.x Undo/Redo/visual validation is outstanding.
 - [Breaking rewrite charter / implementation plan](REBUILD_BREAKING.md).
 
@@ -118,10 +118,10 @@
 
 ## Latest editor step (2026-11-14)
 
-- `SplinePathV2` is the only Knot, interpolation and closed source. Road/Extrude/Deform require `pathSource`; Road's previous self-owned Knot fields and Gizmos callbacks have been removed, not hidden.
+- `SplinePath` is the only Knot, interpolation and closed source. Road/Extrude/Deform require `pathSource`; Road's previous self-owned Knot fields and Gizmos callbacks have been removed, not hidden.
 - Dragging Cocos-Gizmos handles triggers throttled live **transient** preview updates (default 100 ms). `end`/`cancel` force a final rebuild; invalid in-progress bends leave last valid preview visible. Persisted baked mesh remains unchanged until explicitly rebaked.
 - Multiple Roads registered to the same SplinePath receive Editor live-preview invalidations. Validation is from automated Cocos mocks/geometry regression, not visual Cocos Creator 3.8.x certification.
-- Extrude/Mesh Deform/Junction now inherit the common independent `SplineMeshGeneratorV2`. Path watches native Node Transform/Inspector changes and forces a settled mesh after idle; regression pass. Cross-Node Undo/Redo and real Scene save/reopen are not yet certified.
+- Extrude/Mesh Deform/Junction now inherit the common independent `MeshGenerator`. Path watches native Node Transform/Inspector changes and forces a settled mesh after idle; regression pass. Cross-Node Undo/Redo and real Scene save/reopen are not yet certified.
 
 ## Next recommended implementation
 
@@ -143,7 +143,7 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
 - **Experimental alpha.** Junction Inspector now offers **Check Road Network**, **Check Endpoint Snap** and **Apply Endpoint Snap**. No bottom Inspector debug/log panel; diagnostics are written to Editor Console on explicit button actions.
 - The read-only network graph scans supported open ConstantWidth Road Paths in the active Scene (bounded to 10000 Nodes/256 Roads) and groups endpoints within strict position + height tolerances, excluding transitive near-point chains. It reports groups without serializing links or changing anything.
 - Endpoint Snap uses 3/4 explicitly linked Junction Road branches. It validates correct `At End`, unique Road and Path sources, displacement <= `Endpoint Snap Max Distance`, flat-height tolerance and noncollapsing interior samples. It converts the Junction world center into Path-local coordinates, including rotated/scaled Path Nodes. It **does not** move Nodes or modify other Knots.
-- Apply preflights every Path's typed Creator node dump, then records only changed `SplinesV2.Knot.position` values through whole-array `scene.set-property(record:true)` writes. Other serialized values (handles, mode, tension, bank/Roll and unknown metadata) remain untouched. Each Path edit has its own Undo history entry; a multi-Path atomic Undo group is **not** claimed.
+- Apply preflights every Path's typed Creator node dump, then records only changed `Spline.Knot.position` values through whole-array `scene.set-property(record:true)` writes. Other serialized values (handles, mode, tension, bank/Roll and unknown metadata) remain untouched. Each Path edit has its own Undo history entry; a multi-Path atomic Undo group is **not** claimed.
 - Each Path gets a live preview refresh; the Junction rebuild is attempted, but trim or geometry validation can still refuse an unfinished Junction. Baked Mesh assets are **never** overwritten by Snap; manually rebake later.
 - No automatic branch links, topology Boolean union, shared Path multi-road snap, dynamic traffic graph or native Creator Editor certification yet.
 
@@ -194,3 +194,10 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
 - `PathV2Dump` uses this codec for **Add, Insert, Duplicate, Move, Remove**; **Select** no longer validates the geometry of *other* knots. Invalid records fail before any recorded Scene write and now name the offending Knot index and **shape only**; raw property payloads and numeric values are not logged.
 - The Inspector Knot card labels, Junction Endpoint Snap and Junction Bézier Tangent Apply now use the same vector decoder so they cannot disagree about an authored Path's nested Vec3 fields.
 - This fix is **not a data migration** and does not replace saved Script component UUIDs or rewrite Scene assets. Native Cocos Creator **3.8.8** acceptance still requires testing with the exact `scene.query-node` dumps from the affected local Scene. CI has synthetic compatibility fixtures and Editor mock flows but no access to that user Scene dump.
+
+## Local mesh generation & concise component rename (2026-11-15)
+
+- Default generator **Coordinate Space = Local**: local Path Vec3 knots become local mesh coordinates; World mode explicitly keeps Path.world → Generator.local mapping. Shared Road/Extrude/Deform base delegates to Path with the selected mode. No Knot Node introduction and no changes to serialized Vec3 values.
+- Junction Road end-ring sampling uses the Road's actual generated geometry and its Node World matrix, so endpoint snap/Auto Trim/Auto Connect and generated Junction boundaries remain consistent for Local and World. Tangent alignment and Endpoint Snap change the correct local Knot handles/position based on the Road's coordinate mode.
+- Breaking rename removes V2 from **public TS component class/enum names, script file names and registered `@ccclass` identifiers**. New class identities use `Spline.*` to avoid conflicting with earlier `Splines.*` legacy scripts. Existing `SplinesV2.*` serialized scene records are not automatically migrated. Internal geometry/math helpers and test-build action names may still carry V2 for branch provenance; they do not appear as component names or Inspector labels.
+- The Inspector header uses clean component names and exposes Coordinate Space for all direct Path consumers. CI uses typed mocks, so validating actual 3.8.8 Prefab/component reattachment, material assignment, UV quality and Undo/Redo remains mandatory.

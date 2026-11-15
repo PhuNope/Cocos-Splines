@@ -59,7 +59,7 @@ Do not copy/paste a second material or create a separate Material instance for e
 
 ## Cocos v2 Road bridge (prototype)
 
-- Add `SplinesV2.SplineRoad` to a Node with a MeshRenderer. Assign ordered knot Nodes in the Inspector (positions are transformed to the Road node's local coordinates).
+- Add `Spline.Road` to a Node with a MeshRenderer. Assign ordered knot Nodes in the Inspector (positions are transformed to the Road node's local coordinates).
 - **Rebuild preview** creates transient meshes, never a persisted asset. Dynamic creates and releases temporary meshes in Play. Temporary child renderers are flagged DontSave/HideInHierarchy in Editor.
 - **Bake glTF asset** exports a content-fingerprinted `.gltf` to `db://assets/SplineV2_...gltf` through `asset-db` main-process messages. It contains actual primitive geometry, UV0/UV2, normals, tangent handedness and material indices.
 - **Important manual step:** after Creator imports the glTF, expand it under Assets, drag the generated `.mesh` subasset into **Baked Mesh**. Choose **Manual** or **Baked**. Both modes only read this saved Mesh during Play and do not run `generate()`.
@@ -69,12 +69,12 @@ Do not copy/paste a second material or create a separate Material instance for e
 ### Dynamic UV2 and Play lifecycle validation
 
 - The Dynamic geometry adapter writes UV2 as a Cocos `customAttributes` attribute with `gfx.AttributeName.ATTR_TEX_COORD1` and `gfx.Format.RG32F` (the correct secondary-UV vertex semantic); glTF Bake writes `TEXCOORD_1`.
-- `tests/v2-road-play-mode.test.cjs` compiles and exercises `SplineRoadV2` against Cocos mocks: Manual and Baked never invoke geometry generation in Play, Dynamic meshes are disposed, scene meshes are not destroyed, and Editor-only commands reject Play calls. A real Creator project test remains required.
+- `tests/v2-road-play-mode.test.cjs` compiles and exercises `SplineRoad` against Cocos mocks: Manual and Baked never invoke geometry generation in Play, Dynamic meshes are disposed, scene meshes are not destroyed, and Editor-only commands reject Play calls. A real Creator project test remains required.
 
 ## v2 Road profile / tube and automatic asset binding (next milestone)
 
 - `ProfileSweep.ts` implements piecewise cross-section sweeps along rotation-minimizing spline frames. Road geometry adds shoulder and curb bands with **shared material slots**: asphalt 0, shoulder 1, curb 2. Each band has independent vertices for hard edges/UV seams.
-- `SplineExtrudeV2` uses the same base rendering/persistence component with circle profile, adjustable radius/sides and convex end caps. It supports steep/helical paths. An over-wide tube can still geometrically self-intersect; no Boolean solver is included.
+- `SplineExtrude` uses the same base rendering/persistence component with circle profile, adjustable radius/sides and convex end caps. It supports steep/helical paths. An over-wide tube can still geometrically self-intersect; no Boolean solver is included.
 - Bake asks AssetDB for the imported `.gltf`'s `subAssets`. Only **exactly one** asset of type `cc.Mesh` is eligible. It sets the native scene dump `bakedMesh` field by UUID, then saves its fingerprint, URL and Baked mode via scene messages. No UUID guesses or runtime loading.
 - If the glTF import is still pending or has ambiguous Mesh subassets, the Inspector reports the pending asset and exposes **Bind Imported Mesh** retry. Existing linked Mesh and its fingerprint are left untouched until a verified binding succeeds.
 - Bake fingerprints and pending pointers are separate. Changes to spline/source while importing prohibit automatic binding of stale geometry. Previous glTF assets are never overwritten.
@@ -161,7 +161,7 @@ Continuous `RoadStrip` now writes **left, centre, right** vertices per sample, w
 
 ## Road v2 adaptive sampling, UV across compensation and optional separate markings
 
-A field-wiring error was found in `SplineRoadV2.generate()`: the **plain Road strip branch** passed `cornerMode` but omitted `surfaceMode`, `clearanceSafety`, `widthSlope` and the continuous report callback. Because `buildRoadStripV2()` defaults to `clip` for pure callers, an Inspector reading **Surface Mode = Continuous** could still generate the **old clipping pipeline**, which explains repeated UV breaks in the user's road screenshots. Both plain Road and RoadProfile now forward the same complete options.
+A field-wiring error was found in `SplineRoad.generate()`: the **plain Road strip branch** passed `cornerMode` but omitted `surfaceMode`, `clearanceSafety`, `widthSlope` and the continuous report callback. Because `buildRoadStripV2()` defaults to `clip` for pure callers, an Inspector reading **Surface Mode = Continuous** could still generate the **old clipping pipeline**, which explains repeated UV breaks in the user's road screenshots. Both plain Road and RoadProfile now forward the same complete options.
 
 ### Adaptive mesh subdivision
 
@@ -205,7 +205,7 @@ The sample three Knot positions K0=(-1.701,0,-7.206), K1=(-3.869,0,3.720), K2=(5
 
 ## Mesh Source Deform V2 — experimental (SplineArchitect-style technique)
 
-A NEW `SplinesV2.SplineMeshDeform` component bends an already-authored source Mesh along the spline without reconstructing its original UV0/UV2 islands. This is separate from `SplineRoadV2`, whose surface mesh comes from a generated ribbon. For Road with precise edge paint and atlas UVs, this allows UV layout to remain as authored in DCC software. The technique is similar to source-mesh deformation workflows, but the implementation uses our original Cocos v2 geometry/frame pipeline.
+A NEW `Spline.MeshDeform` component bends an already-authored source Mesh along the spline without reconstructing its original UV0/UV2 islands. This is separate from `SplineRoad`, whose surface mesh comes from a generated ribbon. For Road with precise edge paint and atlas UVs, this allows UV layout to remain as authored in DCC software. The technique is similar to source-mesh deformation workflows, but the implementation uses our original Cocos v2 geometry/frame pipeline.
 
 Creator 3.8.2's `Mesh.readAttribute(primitive, attributeName)` and `Mesh.readIndices(primitive)` APIs are used through `SourceMeshRead.ts`. Each source primitive's indexed vertex streams are copied and offset into `MeshDataV2`, preserving material slot = source primitive index, UV0/UV2 and normals/tangents. Missing UV0, unreadable POSITION data, invalid indices, or inconsistent per-primitive UV2 cause an actionable error rather than silently rewriting UV or lightmap channels. **The imported source Mesh is never modified or destroyed.**
 
@@ -219,7 +219,7 @@ Existing Baked/Manual v2 playback lifecycle is inherited: no source mesh readbac
 
 ## Junction Patch V2: matched trimmed Road endings — experimental
 
-Version 2 now includes a separate flat `SplinesV2.JunctionPatch` component. The initial milestone supports **3- or 4-way Junctions only** with open `SplinesV2.SplineRoad` branches in `Surface Mode=ConstantWidth`, asphalt only (no shoulders/curbs). It is intentionally separate from the legacy `Splines.SplineJunctionMesh`, does not change old UUIDs or existing scenes and uses no automatic runtime editor warnings.
+Version 2 now includes a separate flat `Spline.Junction` component. The initial milestone supports **3- or 4-way Junctions only** with open `Spline.Road` branches in `Surface Mode=ConstantWidth`, asphalt only (no shoulders/curbs). It is intentionally separate from the legacy `Splines.SplineJunctionMesh`, does not change old UUIDs or existing scenes and uses no automatic runtime editor warnings.
 
 ### Trim the Road first — no overlay Z-fighting
 
@@ -241,7 +241,7 @@ Tests cover pure XZ 3-/4-way geometry and mock Cocos component lifecycle, but do
 
 ## Junction Markings V2: stop bars, zebra crossing, explicit turn guides — experimental
 
-The v2 `SplinesV2.JunctionPatch` now supports an **opt-in paint overlay** generated as separate geometry appended to the same junction MeshData. The existing asphalt and source Road UV0/UV2 are not modified; the component still accepts only flat 3-/4-way Junctions with trimmed, open ConstantWidth Road arms.
+The v2 `Spline.Junction` now supports an **opt-in paint overlay** generated as separate geometry appended to the same junction MeshData. The existing asphalt and source Road UV0/UV2 are not modified; the component still accepts only flat 3-/4-way Junctions with trimmed, open ConstantWidth Road arms.
 
 The Inspector toggle `Generate Junction Markings` is **off by default**, so upgrading an old scene does not change its geometry or material requirements. With paint enabled, it can create:
 - **Stop Bars**: one short white bar per enabled JunctionRoadLink, placed a specified distance inwards from the trimmed Road boundary, on the triangular central-to-Road wedge.
@@ -258,7 +258,7 @@ Geometry is constructed in local XZ from exactly the Road boundary vertices and 
 
 ## Flat Junction v2 full-section shoulder / curb transition — test milestone
 
-`JunctionPatchV2` no longer rejects every `SplineRoadV2` with `Shoulder Width`, `Curb Width`, or `Curb Height`. It can now bridge the **full cross-section of trimmed ConstantWidth Road ends** in a flat 3-/4-way intersection, while retaining the legacy asphalt-only behavior bit-for-bit when no branch has an extra profile.
+`JunctionPatchV2` no longer rejects every `SplineRoad` with `Shoulder Width`, `Curb Width`, or `Curb Height`. It can now bridge the **full cross-section of trimmed ConstantWidth Road ends** in a flat 3-/4-way intersection, while retaining the legacy asphalt-only behavior bit-for-bit when no branch has an extra profile.
 
 The Cocos Road component samples the same `roadProfileLayoutV2()` data used by `buildRoadProfileV2()`. It reads the actual indexed end ring for **every profile edge**, including duplicated vertices at vertical curb walls and their authored UV0. For edge (k), the source mesh uses vertex indices `k*2*ringCount + 2*endpointRing + endpointIndex`, so no UVs/positions are reprojected from guessed width or new knots. All positions are transformed from Road local to Junction local.
 

@@ -33,13 +33,13 @@ mouse picking, native Undo history, saving or reimporting .gltf assets.
 
 ## Setup — Pure Vec3 Path
 
-1. Create one Node `SplinePath` with `SplinesV2.SplinePath`.
+1. Create one Node `SplinePath` with `Spline.Path`.
 2. Open the custom Path Inspector; add Knot records, enter `Vec3`
    positions `(0,0,0)`, `(0,0,10)`, `(10,0,10)` and configure
    Closed/Interpolation, tangent modes and tension.
 3. Reorder, Duplicate, Insert After, Select and Remove Knot cards.
    **No child Knot Nodes should be added to Scene Hierarchy**.
-4. Create `SplineRoadV2` + MeshRenderer, assign Path Source and Rebuild.
+4. Create `SplineRoad` + MeshRenderer, assign Path Source and Rebuild.
    Test a shared Path with two Roads, Extrude and Mesh Deform.
 5. With Gizmos installed, select **Path** and drag an active Vec3 Knot
    or one of the secondary points. Check that the generated mesh follows
@@ -143,12 +143,12 @@ Using a 3-Knot open Path and Road:
 
 ## Independent Extrude and Mesh Deform
 
-Extrude now extends `SplineMeshGeneratorV2` directly, NOT Road. Its
+Extrude now extends `MeshGenerator` directly, NOT Road. Its
 Inspector should contain **Path Source, Radius, Sides, Caps, UV axis,
 sampling, materials and Bake** — not Width/Shoulder/Curb/Junction fields.
 Try a helix and a straight tube with and without end caps.
 
-Mesh Deform also extends `SplineMeshGeneratorV2` directly. Assign
+Mesh Deform also extends `MeshGenerator` directly. Assign
 a readable imported `sourceMesh`, configure longitudinal axis (X/Z),
 repeat and UV mode. Verify no source Mesh asset is ever destroyed,
 UV0/UV2, normals/tangents and multi-submesh material slots remain valid.
@@ -163,7 +163,7 @@ auto-Bake an imported glTF asset**.
    Configure **open ConstantWidth Roads** with matching positive
    Start/End Trim distances at the Junction. Do not link a Road
    without a valid Path.
-2. Add `SplinesV2.JunctionPatch` on a Junction Node and connect
+2. Add `Spline.Junction` on a Junction Node and connect
    the trimmed Roads in Branches. Click Rebuild Preview and inspect
    exact end-ring UV0 continuity, footprint, normals and unwelded
    material seam cracks.
@@ -223,16 +223,16 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 
 ## Junction Auto Connect (new alpha)
 
-1. Create a Junction Node with `SplinesV2.JunctionPatch`. Leave `Branches` empty or partially populated. Place **3 or 4 different** open ConstantWidth Roads near the Junction; each Road needs its own `SplinePath`. Road and Junction may be on different Nodes; connect endpoints to within 0.75 world units.
+1. Create a Junction Node with `Spline.Junction`. Leave `Branches` empty or partially populated. Place **3 or 4 different** open ConstantWidth Roads near the Junction; each Road needs its own `SplinePath`. Road and Junction may be on different Nodes; connect endpoints to within 0.75 world units.
 2. Set `Auto Connect Search Radius` to include those endpoints but exclude unrelated Roads. Click **Check Auto Connect**. Verify exactly 3/4 candidate Road **component** references, correct `At End` orientation and a deterministic angular order in the Editor Console; Check must not dirty the Scene.
-3. Click **Apply Auto Connect**. Confirm the Inspector `Branches` CCClass array is populated, the old Road-specific Stop Bar/Crosswalk settings survive and new links reference the correct `SplinesV2.SplineRoad` component. Perform Ctrl+Z and Ctrl+Shift+Z, Save/Close/Reopen and Prefab instance override tests **in actual Cocos Creator 3.8.x**.
+3. Click **Apply Auto Connect**. Confirm the Inspector `Branches` CCClass array is populated, the old Road-specific Stop Bar/Crosswalk settings survive and new links reference the correct `Spline.Road` component. Perform Ctrl+Z and Ctrl+Shift+Z, Save/Close/Reopen and Prefab instance override tests **in actual Cocos Creator 3.8.x**.
 4. Click **Check Endpoint Snap** then **Apply Endpoint Snap** if any attached Path endpoint is offset from Junction center. Click **Check Auto Trim**, then **Apply Auto Trim** to create proper Road cuts. Use **Rebuild Preview** to visually inspect Junction UV, curb/sidewalk seams. Bake separately only after verifying paint/materials in the Scene.
 5. Test failure cases: five nearby Roads, a single Road whose two ends both fall inside the radius, shared Path between Roads, nearly identical approach bearings, stale existing links, out-of-radius Roads, elevated overpasses, and a Junction with active `turnGuides`/`curbRamps`. Apply must reject ambiguity without deleting authored data.
 6. No traffic lane routing, automatic tangential continuity, non-planar Junction Boolean/welding or native Editor certification is claimed. Headless tests do not prove real component-reference linking/Undo.
 
 ## Align Junction Bézier endpoint tangents (experimental)
 
-1. Link exactly 3 or 4 separate `SplineRoadV2` components to Junction `branches` with correct `At End`. Set each linked `SplinePathV2` to **Bezier**, open, with distinct Path Nodes.
+1. Link exactly 3 or 4 separate `SplineRoad` components to Junction `branches` with correct `At End`. Set each linked `SplinePath` to **Bezier**, open, with distinct Path Nodes.
 2. Perform **Endpoint Snap** first. Set `Tangent Endpoint Tolerance` to a small positive distance (default 0.05) and `Tangent Angle Tolerance Degrees` to the desired angular threshold (default 3°).
 3. Set at least one endpoint Knot tangent mode to **Free**, **Aligned** or **Mirrored**, with an authored handle visibly rotated away from the next Road Knot. Click **Check Align Tangents**; verify correct Path UUID, Start/End handle side, angular difference and proposed handle length in the Editor Console. Check does not mutate any Vec3.
 4. Click **Apply Align Tangents**. Only Start `handleOut` or End `handleIn` should change, potentially changing that terminal Knot's mode to Free. Unused opposite handle, every Knot position, Roll, tension, saved Baked Mesh and source materials remain unchanged. Auto-mode endpoints remain Auto.
@@ -267,3 +267,11 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 3. Test **Undo/Redo**, Save/Reopen, Prefab override, and preview rebuilding from the linked Road / Extrude / Junction in the actual Editor. The pure codec does not touch live Script component values directly.
 4. Check **Endpoint Snap** and **Align Tangents** if the Scene contains Junctions; they now use the same Vec3 nesting decoder for the affected Path fields.
 5. If an individual record really is malformed, the new Editor message identifies the Knot index and a short **structural shape** hint without modifying it. Record that new message and, if possible, a sanitized excerpt of the affected `query-node` Knot object to resolve any additional Creator-specific representation. Do not edit raw Scene JSON simply to silence the error.
+
+## Local versus World mesh generation (breaking authoring update)
+
+- Each `SplinePath` keeps pure local Vec3 Knots. **SplineRoad**, **SplineExtrude**, and **SplineMeshDeform** now expose **Coordinate Space** in the Inspector. Default **Local** uses those Vec3 coordinates directly as mesh vertices in the *generator Node's local space*, ignoring Path Node translation/rotation/scale. **World** preserves the previous behavior, transforming from Path Node World into the generator Node's local space.
+- Try a Path with two knots (0,0,0) and (0,0,10), place the Path Node at (20,0,0) and Road Node at (3,0,0). In **Local**, the road vertices appear around generator Node X=3 in world coordinates. In **World**, they appear around Path Node X=20; the mesh vertex data is expressed locally relative to Road Node X=3.
+- Junction always builds Road endpoints from the actual chosen Road Coordinate Space, converts Road end-ring vertices into Junction Node local coordinates, and uses the correct transform to compute Endpoint Snap and tangent alignment. Test different Path/Road Node transforms for both modes.
+- Switch Coordinate Space then click **Rebuild Preview**. The saved Baked Mesh asset remains unchanged until **Bake glTF Asset**; don't expect existing Bake to update automatically.
+- **BREAKING `@ccclass` rename** (no automatic migration): `Spline.Path`, `Spline.Road`, `Spline.Extrude`, `Spline.MeshDeform`, `Spline.Junction` and `Spline.Knot`. Back up existing Scenes and Prefabs before installing this ZIP. If the old `SplinesV2.*` components appear as missing scripts after replacement, reattach the new components and reassign the Path/Materials/Knots. No promise of preserving old serialized CCClass name references.

@@ -12,12 +12,12 @@ component properties, Inspector labels or bridge class names.
 
 | Component | Scene behavior |
 |---|---|
-| `SplinePathV2` | **Editable** XYZ/plane Move handles for one active Knot, optional other Knot points and two Bézier tangent points (purple incoming, cyan outgoing); HUD selects active Knot and controls tangents |
-| `SplineRoadV2` | **Read-only** centerline, approximate road edges and trim bars; has no Knot editing callbacks |
-| `SplineJunctionPatchV2` | **Read-only** junction center, cut rings and optional curb markers |
+| `SplinePath` | **Editable** XYZ/plane Move handles for one active Knot, optional other Knot points and two Bézier tangent points (purple incoming, cyan outgoing); HUD selects active Knot and controls tangents |
+| `SplineRoad` | **Read-only** centerline, approximate road edges and trim bars; has no Knot editing callbacks |
+| `JunctionPatch` | **Read-only** junction center, cut rings and optional curb markers |
 | Extrude / Mesh Deform | Mesh previews update from Path; they have no separate Knot handles |
 
-Only `SplinePathV2` implements `onGizmoHandles()`,
+Only `SplinePath` implements `onGizmoHandles()`,
 `onGizmoHudControls()`, `onGizmoChanged()` for editing.
 Road and Junction may implement `onDrawGizmosSelected()` for visual guides.
 
@@ -76,7 +76,7 @@ Road `gizmoLiveMesh` and `gizmoMeshIntervalMs` configure only the
 
 ## Manual Creator 3.8.x smoke test
 
-1. Add `SplinePathV2` and three Vec3 Knot records using its custom Inspector. Add a separate Road with
+1. Add `SplinePath` and three Vec3 Knot records using its custom Inspector. Add a separate Road with
    `pathSource` linked and click **Rebuild Preview**.
 2. Select Path, drag the active Knot with Move or another Knot with a point
    handle. The Road mesh should follow. Escape should restore both the

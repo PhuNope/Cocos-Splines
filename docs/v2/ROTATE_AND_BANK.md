@@ -10,7 +10,7 @@ SDK exposes `Gizmos2D.rotate()` and `Gizmos3D.rotate()`. The
 than creating a fake disk/rotation ring. It does not import or bundle the
 SDK, and missing SDK functionality returns no rotation handles.
 
-On the `SplinePathV2` Inspector set **Gizmos Rotation Mode**:
+On the `SplinePath` Inspector set **Gizmos Rotation Mode**:
 
 | Mode | Interaction |
 |---|---|
@@ -41,7 +41,7 @@ heading of a horizontal XZ Road, use **Spatial3D** and rotate about Y.
 
 ## Knot Roll / banked mesh
 
-Each serialized `SplineKnotRecordV2` now also has
+Each serialized `SplineKnot` now also has
 `Roll Degrees` in the existing custom Inspector card. This is
 **not** the Path Node Euler rotation.
 

@@ -48,7 +48,7 @@
 - [ ] Global road-road self-intersection Boolean/junction topology (not part of local fillet).
 
 - [x] Source Mesh Deform v2 (experimental): import readable Cocos Mesh, preserve authored UV0/UV2, normals and material slots, optional repeat/UV phase, X/Z length axes.
-- [x] Separate `SplinesV2.SplineMeshDeform` component and Inspector using existing Manual/Dynamic/Baked lifecycle, editor-only preview and glTF Bake.
+- [x] Separate `Spline.MeshDeform` component and Inspector using existing Manual/Dynamic/Baked lifecycle, editor-only preview and glTF Bake.
 - [ ] Visual certification against real Creator 3.8.x source mesh with imported FBX/glTF CPU readback, normal maps, lightmap UV and reimport.
 - [ ] Source-mesh geometry adaptive subdivision and UV2 unwrap after tiling; current generator deforms original vertex tessellation only.
 
@@ -65,13 +65,13 @@
 
 - [ ] Full sidewalk network Boolean joins, Terrain triangulation/heightmap editing, vehicle/pedestrian ramp cross-section standards and real Editor scene certification; outer boundary touching sampled Terrain is NOT terrain mesh CSG.
 - [x] Read-only selected Scene Gizmo guides for v2 Road/Junction: bounded curve/border/trim/curb visualization via optional SDK drawing interface; no new mesh or Play work, regression tests.
-- [x] Integrate Gizmos SDK drawing callbacks and Move handles on `SplinePathV2`; Road/Junction draw **read-only** geometry guides. Path owns begin/update/end/cancel and indexed Knot rollback, with no Road-owned handle or position proxy.
+- [x] Integrate Gizmos SDK drawing callbacks and Move handles on `SplinePath`; Road/Junction draw **read-only** geometry guides. Path owns begin/update/end/cancel and indexed Knot rollback, with no Road-owned handle or position proxy.
 - [x] Optional Gizmos multi-Knot pickable points via its native indexed Vec3[] descriptor API, now bound to serialized Vec3 Knot records, with stable record pinning and Escape rollback regression. Active XYZ handle and HUD index slider; gizmo allocation bounded 32.
 - [x] Gizmos live Road mesh preview: throttle transient rebuild during `onGizmoChanged(update)`, force end/cancel, keep prior mesh on invalid geometry, do not Bake or generate in Play; regression.
 - [x] Enforce **required SplinePath source** on Road, Extrude and Mesh Deform. Road no longer serializes Knots/interpolation/closed or exposes active Knot Gizmos/HUD. Junction samples Road end rings through each Road's linked Path. Clean test ZIP has no legacy script/UUID requirement.
-- [x] Share `SplineMeshGeneratorV2` lifecycle across independent Road, Extrude, Mesh Deform and Junction. Path subscribes previews and **observes native Knot Transform/Inspector edits** at bounded Editor tick rate; settle forces the final mesh after idle. Regression covers two linked Roads, Play guard and throttled rebuild.
+- [x] Share `MeshGenerator` lifecycle across independent Road, Extrude, Mesh Deform and Junction. Path subscribes previews and **observes native Knot Transform/Inspector edits** at bounded Editor tick rate; settle forces the final mesh after idle. Regression covers two linked Roads, Play guard and throttled rebuild.
 - [x] Path Bézier tangents in serialized Knot records: Auto, Free, Aligned, Mirrored modes, Path-local In/Out point handles, separate colored guide rails, Path→generator transforms, Escape snapshot restoration and Road Bake regression.
-- [x] Replace `SplinePathV2` Knot Nodes with pure, Path-local serializable `Vec3` Knot records; move tangent modes into each record; make Road/Junction consume correctly transformed world endpoints; add Path-only custom Inspector and topology commands.
+- [x] Replace `SplinePath` Knot Nodes with pure, Path-local serializable `Vec3` Knot records; move tangent modes into each record; make Road/Junction consume correctly transformed world endpoints; add Path-only custom Inspector and topology commands.
 - [x] Integrate native Gizmos 2D Z and 3D XYZ Rotate presets on selected Path Node, angle snap and Escape rollback, without misrepresenting the Node-origin SDK ring as a Knot pivot.
 - [x] Serialize per-Knot Roll Degrees and interpolate shortest signed roll on rotation-minimizing frames. Preserve bank values in the immutable cache and through Road and Mesh Deform fillet sampling; add Road mesh/UV/Bake and seam regression.
 - [x] Expose live per-Knot bank via native Gizmos HUD roll slider: pin record during drag, throttle linked previews, force End/Cancel, Escape rollback and guard Play/runtime. Draw banked Right/Up cross-section guide on the exact Knot station; headless regression.

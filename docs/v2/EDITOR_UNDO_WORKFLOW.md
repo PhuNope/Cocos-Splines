@@ -4,7 +4,7 @@ Branch: `v2.0.0`. Development test ZIP only, not a release.
 
 ## How the Path Inspector writes topology edits
 
-SplinePath owns a Cocos-serializable `SplineKnotRecordV2[]`:
+SplinePath owns a Cocos-serializable `SplineKnot[]`:
 local Vec3 position, tangent mode, in/out handles, tension and Roll.
 
 For the **Add, Insert After, Duplicate, Remove and Up/Down** buttons:
@@ -19,7 +19,7 @@ For the **Add, Insert After, Duplicate, Remove and Up/Down** buttons:
    dump:typedArray, record:true})` request.
 4. It updates `gizmoKnotIndex` via its own queried property type with
    `record:false`. The selection is not a second Undo step.
-5. A lightweight Scene method calls `SplinePathV2.onRestore()`
+5. A lightweight Scene method calls `SplinePath.onRestore()`
    **only for topology changes** to refresh linked temporary previews.
    Selecting a Knot merely changes handles; it does not rebuild Road,
    Extrude and Mesh Deform meshes.
@@ -40,14 +40,14 @@ property commit flow, rather than a custom uncontrolled input.
 
 ## Restore and Preview
 
-`SplinePathV2.onRestore()` clears stale references to a previous
+`SplinePath.onRestore()` clears stale references to a previous
 dragged Knot, tangent handles, Roll HUD target and Path Euler rotation
 gesture. This matters if Creator replaces the serialized Knot records
 on undo/reload; a subsequent Gizmos drag must target the newly
 restored records, not detached JavaScript objects.
 
 Linked Road/Extrude/MeshDeform consumers receive one forced preview
-refresh. `SplineMeshGeneratorV2.onRestore()` also unsubscribes its old
+refresh. `MeshGenerator.onRestore()` also unsubscribes its old
 Path Source and rebinds the newly restored one, or displays the saved
 Baked Mesh if the linked Path has been removed. A recovered preview
 does not overwrite the imported Baked Mesh.
