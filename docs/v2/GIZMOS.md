@@ -224,3 +224,20 @@ indexed callback identity and HUD Roll. **Native Creator 3.8.8 Undo
 grouping, Scene Save/Reopen and Prefab history still require Editor
 acceptance**. Inspector Group Nudge remains the explicitly recordable
 one-step group translation path.
+
+### P0 exact Local/World gesture ownership (2026-11-15)
+
+A Local and World Gizmo for the same Knot intentionally target the same
+serialized Path-local record, but they are **distinct SDK gestures**.
+During an active drag, the Path now accepts writes and end/cancel/update
+callbacks only from the exact initiating proxy name (including the World
+suffix). Indexed Knot handles additionally require the exact pinned index
+even for callback settlement; a missing index cannot end the drag.
+A foreign Local/World descriptor cannot commit or cancel a grouped move,
+change Bézier tangent offsets, or silently settle preview/history.
+
+Regression covers World group move, indexed peer handles, tangent editing,
+foreign callbacks, missing index, and Escape. This does **not** certify a
+single native Creator history entry for Group Drag. Inspector Group Nudge
+remains the verified recordable path; test native history and Prefab
+overrides in Creator 3.8.8 before a release.

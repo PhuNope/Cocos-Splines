@@ -220,7 +220,13 @@ try {
      'World tangent position must preserve Path-local offset');
    pathComp.pathGizmoTangentOutWorld=new Vec3(14,0,0);
    pathComp.onGizmoChanged('pathGizmoTangentOutWorld','begin');
+   pathComp.pathGizmoTangentOut=new Vec3(99,99,0);
+   assert.deepEqual({...k0.handleOut},{x:2,y:0,z:0},
+     'Local tangent proxy cannot edit a World tangent gesture');
+   pathComp.onGizmoChanged('pathGizmoTangentOut','end');
    pathComp.pathGizmoTangentOutWorld=new Vec3(16,4,0);
+   assert.deepEqual({...k0.handleOut},{x:3,y:2,z:0},
+     'World tangent remains editable after a foreign Local callback');
    pathComp.onGizmoChanged('pathGizmoTangentOutWorld','cancel');
    assert.equal(k0.mode,TangentMode.Free);
    assert.deepEqual({...k0.handleOut},{x:2,y:0,z:0});
@@ -249,9 +255,15 @@ try {
    pathComp.onGizmoHudAction('path-group-clear');
    assert.deepEqual(pathComp.selectedGroupIndices(),[0,1],
      'Selection changes are refused during drag');
+   // A delayed Local descriptor cannot write or finalize the World gesture.
+   pathComp.pathGizmoKnotPosition=new Vec3(90,0,0);
+   assert.deepEqual({...k0.position},group0,'Local proxy cannot write during World drag');
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','end');
    pathComp.pathGizmoKnotPositionWorld=new Vec3(18,0,0);
    assert.equal(k0.position.x,4,'World group delta must convert into Path local');
    assert.equal(k1.position.x,10,'World group move includes second Knot');
+   pathComp.onGizmoChanged('pathGizmoKnotPosition','cancel');
+   assert.equal(k1.position.x,10,'Foreign Local Cancel must not settle World drag');
    pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','update');
    pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
    assert.deepEqual({...k0.position},group0,'Escape restores group origin');
@@ -304,10 +316,16 @@ try {
    pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','begin',1);
    pathComp.pathGizmoKnotPositionsWorld[0]=new Vec3(99,0,0);
    assert.deepEqual({...k0.position},indexed0);
+   pathComp.pathGizmoKnotPositions[1]=new Vec3(777,0,0);
+   assert.deepEqual({...k1.position},indexed1,
+     'Local indexed proxy cannot write the same Knot in a World drag');
+   pathComp.onGizmoChanged('pathGizmoKnotPositions','end',1);
    pathComp.pathGizmoKnotPositionsWorld[1]=new Vec3(32,0,0);
    assert.notDeepEqual({...k1.position},indexed1);
    pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','cancel',0);
    assert.notDeepEqual({...k1.position},indexed1,'Wrong index cannot settle drag');
+   pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','end');
+   assert.notDeepEqual({...k1.position},indexed1,'Missing index cannot settle drag');
    pathComp.onGizmoChanged('pathGizmoKnotPositionsWorld','cancel',1);
    assert.deepEqual({...k0.position},indexed0);
    assert.deepEqual({...k1.position},indexed1,'Correct indexed Cancel restores Knot');
