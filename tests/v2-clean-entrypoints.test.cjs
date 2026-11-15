@@ -57,7 +57,7 @@ try{
  const scene=require(path.join(root,'src/v2/clean-scene.js'));
  const keys=Object.keys(scene.methods).sort();
  assert.deepEqual(keys,[
-  'inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
+  'inspectV2JunctionSeams','inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
   'planV2JunctionEndpointSnap','planV2JunctionTangents','prepareV2RoadBake','rebuildV2Road',
   'refreshV2JunctionAutoConnect','refreshV2JunctionAutoTrim','refreshV2JunctionEndpointSnap',
   'refreshV2Path','restoreV2RoadBaked']);
@@ -113,7 +113,7 @@ try{
   };
   assert.deepEqual(Object.keys(main.methods).sort(),[
    'applyV2JunctionAutoConnect','applyV2JunctionAutoTrim','applyV2JunctionEndpointSnap','applyV2JunctionTangents','bakeV2Road',
-   'bindV2RoadMesh','checkV2RoadBake','editV2Path','inspectV2RoadNetwork',
+   'bindV2RoadMesh','checkV2RoadBake','editV2Path','inspectV2JunctionSeams','inspectV2RoadNetwork',
    'planV2JunctionAutoConnect','planV2JunctionAutoTrim','planV2JunctionEndpointSnap','planV2JunctionTangents',
    'rebuildV2Road','restoreV2RoadBaked']);
   assert.equal((await main.methods.rebuildV2Road()).ok,true);
@@ -181,6 +181,8 @@ try{
  assert(fs.existsSync(path.join(installed,'dist/v2/JunctionAutoConnectDump.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/JunctionTangentDump.js')));
  assert(pkg.contributions.messages['apply-v2-junction-tangents']);
+ assert(pkg.contributions.messages['inspect-v2-junction-seams']);
+ assert(fs.existsSync(path.join(installed,'assets/splines-v2/geometry/JunctionSeamAuditV2.ts')));
  assert(pkg.contributions.messages['apply-v2-junction-auto-connect']);
  assert(pkg.contributions.messages['apply-v2-junction-endpoint-snap']);
  assert(pkg.contributions.messages['inspect-v2-road-network']);
