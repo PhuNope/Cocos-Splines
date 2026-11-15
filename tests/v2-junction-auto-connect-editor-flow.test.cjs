@@ -16,7 +16,7 @@ const roadNodes=['W','N','E'].map(name=>({
 const junction={className:'SplinesV2.JunctionPatch',uuid:'junction-component',
  branches:[{road:roadNodes[1].components[0],atEnd:false,
   stopBarEnabled:false,crosswalkEnabled:true}],
- previews:0,bakedMesh:{uuid:'baked-junction'},onRestore(){this.previews++;},
+ previews:0,bakedMesh:{uuid:'baked-junction'},rebuildPreview(){this.previews++;},
  planAutoConnectV2(){
   const names=['W','N','E'];
   return {center:{x:0,y:0,z:0},searchRadius:.75,scannedRoads:3,skipped:[],
