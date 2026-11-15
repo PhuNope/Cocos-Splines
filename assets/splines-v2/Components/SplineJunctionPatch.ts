@@ -1,13 +1,13 @@
 import {_decorator,Enum,MeshRenderer,Vec3,Mat4,Terrain,director} from 'cc';
 import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV2} from '../geometry/JunctionPatchV2';
 import {auditJunctionSeamsV2,type JunctionSeamAuditReportV2} from '../geometry/JunctionSeamAuditV2';
-import {SplineRoadV2} from './SplineRoadV2';
+import {SplineRoad} from './SplineRoad';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
 import {planJunctionAutoConnectV2,type JunctionConnectCandidateV2} from '../geometry/JunctionAutoConnectV2';
 import {planJunctionTangentAlignmentV2} from '../geometry/JunctionTangentAlignV2';
-import {SplinePathCurveModeV2,SplineSpace} from './SplinePathV2';
-import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
+import {CurveMode,SplineSpace} from './SplinePath';
+import {MeshGenerator} from './MeshGenerator';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
@@ -15,10 +15,10 @@ import {availableGizmoBackend,drawSplineSceneGizmos} from './SplineGizmoBridge';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
-@ccclass('SplinesV2.JunctionRoadLink')
-export class JunctionRoadLinkV2 {
-    @property({type:SplineRoadV2,tooltip:'An open, flat ConstantWidth SplineRoadV2 with junction trim on its connected endpoint.'})
-    road:SplineRoadV2|null=null;
+@ccclass('Spline.JunctionRoadLink')
+export class JunctionRoadLink {
+    @property({type:SplineRoad,tooltip:'An open, flat ConstantWidth SplineRoad with junction trim on its connected endpoint.'})
+    road:SplineRoad|null=null;
     @property({tooltip:'When true use the end of Road. When false use the start.'})
     atEnd=false;
     @property({tooltip:'Include a white stop bar on this approach when Stop Bars is enabled.'})
@@ -26,24 +26,24 @@ export class JunctionRoadLinkV2 {
     @property({tooltip:'Include a zebra crossing on this approach when Crosswalks is enabled.'})
     crosswalkEnabled=true;
 }
-@ccclass('SplinesV2.JunctionTurnGuide')
-export class JunctionTurnGuideV2 {
+@ccclass('Spline.JunctionTurnGuide')
+export class JunctionTurnGuide {
     @property({min:0,max:3,step:1,tooltip:'Index of entry Road in Branches (0-based).'})
     fromBranch=0;
     @property({min:0,max:3,step:1,tooltip:'Index of exit Road in Branches (0-based), different from entry.'})
     toBranch=1;
 }
-@ccclass('SplinesV2.JunctionCurbRampLink')
-export class JunctionCurbRampLinkV2 {
+@ccclass('Spline.JunctionCurbRampLink')
+export class JunctionCurbRampLink {
     @property({min:0,max:3,step:1,tooltip:'Index of the first Road from the Branches array (0-based).'})
     fromBranch=0;
     @property({min:0,max:3,step:1,tooltip:'Index of its adjacent Road from the Branches array. Order does not matter.'})
     toBranch=1;
 }
-export enum JunctionUVModeV2 {MatchedRepeat=0,WorldProjected=1}
-export enum JunctionGradeModeV2 {Flat=0,Gentle=1}
-export enum JunctionCurbCornerModeV2 {RadialLegacy=0,RoundedContinuous=1}
-export enum JunctionTerrainEdgeModeV2 {FlatHeight=0,SampleTerrain=1}
+export enum JunctionUVMode {MatchedRepeat=0,WorldProjected=1}
+export enum JunctionGradeMode {Flat=0,Gentle=1}
+export enum JunctionCurbCornerMode {RadialLegacy=0,RoundedContinuous=1}
+export enum JunctionTerrainEdgeMode {FlatHeight=0,SampleTerrain=1}
 /**
  * Flat 3- or 4-way junction bridging genuine trimmed Road endpoints.
  * Independent Junction mesh generator, not a Road subclass.
@@ -51,15 +51,15 @@ export enum JunctionTerrainEdgeModeV2 {FlatHeight=0,SampleTerrain=1}
  * Knot, surface mode, fillet, sidewalk or Gizmo editing properties.
  * Reads only explicitly linked Road end rings; never changes Road data.
  */
-@ccclass('SplinesV2.JunctionPatch')
-@menu('Cocos Splines V2/Junction Patch')
+@ccclass('Spline.Junction')
+@menu('Cocos Splines/Junction Patch')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
-export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
-    @property({type:[JunctionRoadLinkV2],tooltip:'Three or four Road links sharing one junction center.'})
-    branches:JunctionRoadLinkV2[]=[];
-    @property({type:Enum(JunctionUVModeV2),tooltip:'Matched Repeat uses original trimmed Road edge UV0 modulo whole tiles; projected uses world XZ UV.'})
-    junctionUVMode=JunctionUVModeV2.MatchedRepeat;
+export class JunctionPatch extends MeshGenerator {
+    @property({type:[JunctionRoadLink],tooltip:'Three or four Road links sharing one junction center.'})
+    branches:JunctionRoadLink[]=[];
+    @property({type:Enum(JunctionUVMode),tooltip:'Matched Repeat uses original trimmed Road edge UV0 modulo whole tiles; projected uses world XZ UV.'})
+    junctionUVMode=JunctionUVMode.MatchedRepeat;
     @property({min:.05,max:.95,step:.05,tooltip:'Inner transition radius for the central shared UV patch.'})
     junctionUVBlend=.55;
     @property({min:0,max:.5,step:.025,tooltip:'Optional angular UV smoothing for PLAIN asphalt Junction only (0 = legacy UV). Never changes Road cut-ring UV; unavailable with shoulder/curb profiles or Projected UV.'})
@@ -76,8 +76,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     tangentAngleToleranceDegrees=3;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units; in Gentle Grade, also caps crossfall (max .03).'})
     flatTolerance=.1;
-    @property({type:Enum(JunctionGradeModeV2),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
-    gradeMode=JunctionGradeModeV2.Flat;
+    @property({type:Enum(JunctionGradeMode),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
+    gradeMode=JunctionGradeMode.Flat;
     @property({min:.01,max:.35,step:.01,tooltip:'Largest allowed rise per horizontal metre from center to each trimmed Road ring (Gentle Grade only).'})
     maxGrade=.15;
     @property({min:-.2,max:.2,step:.001,tooltip:'Optional small lift in local Y; normally 0 because Roads have already been trimmed.'})
@@ -86,14 +86,14 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     strictRoadSeams=false;
     @property({min:.01,max:2,step:.01,tooltip:'Maximum curb lip height above flat asphalt supported by the radial shoulder/curb transition.'})
     maxCurbHeight=.6;
-    @property({type:Enum(JunctionCurbCornerModeV2),tooltip:'Radial Legacy: taper curb to center. Rounded Continuous: smooth top and vertical wall around flat junction corners, all Roads need curb.'})
-    curbCornerMode=JunctionCurbCornerModeV2.RadialLegacy;
+    @property({type:Enum(JunctionCurbCornerMode),tooltip:'Radial Legacy: taper curb to center. Rounded Continuous: smooth top and vertical wall around flat junction corners, all Roads need curb.'})
+    curbCornerMode=JunctionCurbCornerMode.RadialLegacy;
     @property({min:4,max:48,step:1,tooltip:'Geometry divisions in each rounded curb corner. Active only for Rounded Continuous.'})
     curbCornerSegments=12;
     @property({min:.1,max:.7,step:.01,tooltip:'Cubic corner inward tangent pull (0.1..0.7). Active only for Rounded Continuous.'})
     curbCornerPull=.32;
-    @property({type:[JunctionCurbRampLinkV2],tooltip:'Opt-in lowered corner pairs from original Branches indices. Only adjacent pairs in Rounded Continuous Curb / Flat mode.'})
-    curbRamps:JunctionCurbRampLinkV2[]=[];
+    @property({type:[JunctionCurbRampLink],tooltip:'Opt-in lowered corner pairs from original Branches indices. Only adjacent pairs in Rounded Continuous Curb / Flat mode.'})
+    curbRamps:JunctionCurbRampLink[]=[];
     @property({min:.005,max:.08,step:.005,tooltip:'Residual positive curb lip in middle of selected lowered corners, metres in Road-local coordinates.'})
     curbRampMinLip=.015;
     @property({min:.02,max:.6,step:.01,tooltip:'Upper limit of the local ramp top longitudinal rise/run. Unsafe short corners reject instead of folding.'})
@@ -104,8 +104,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     sidewalkTerrainHeightOffset=0;
     @property({min:.02,max:1,step:.01,tooltip:'Maximum vertical rise per horizontal metre from rounded curb outer rail to apron terrain edge.'})
     sidewalkMaxCrossSlope=.35;
-    @property({type:Enum(JunctionTerrainEdgeModeV2),tooltip:'Flat Height: old manually entered Y. Sample Terrain: read each outer apron vertex from a linked 3.8.x Terrain at Rebuild/Bake time.'})
-    sidewalkTerrainMode=JunctionTerrainEdgeModeV2.FlatHeight;
+    @property({type:Enum(JunctionTerrainEdgeMode),tooltip:'Flat Height: old manually entered Y. Sample Terrain: read each outer apron vertex from a linked 3.8.x Terrain at Rebuild/Bake time.'})
+    sidewalkTerrainMode=JunctionTerrainEdgeMode.FlatHeight;
     @property({type:Terrain,tooltip:'Optional Cocos Terrain component, only read when Sample Terrain is active. Its node must remain upright; no terrain geometry is modified.'})
     sidewalkTerrainSource:Terrain|null=null;
     @property({min:.02,max:1,step:.01,tooltip:'Reject steep height differences between consecutive sampled Terrain edge vertices.'})
@@ -127,8 +127,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     @property({min:.05,max:5,step:.05}) zebraStartSetback=.65;
     @property({min:1,max:20,step:1}) zebraStripeCount=3;
     @property({min:0,max:1,step:.01}) markingLateralInset=.13;
-    @property({type:[JunctionTurnGuideV2],tooltip:'Explicit branch pairs for curved yellow guide lines. Leave empty to omit guides.'})
-    turnGuides:JunctionTurnGuideV2[]=[];
+    @property({type:[JunctionTurnGuide],tooltip:'Explicit branch pairs for curved yellow guide lines. Leave empty to omit guides.'})
+    turnGuides:JunctionTurnGuide[]=[];
     @property({min:.02,max:.6,step:.01}) guideLineWidth=.10;
     @property({tooltip:'Show read-only junction center, trimmed Road rings and curb end guides when selected.'})
     showJunctionSceneGizmos=true;
@@ -152,7 +152,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             const entries:JunctionRoadBranchV2[]=this.branches.map(link=>{
                 if(!link.road||!link.road.node.isValid)
                     throw new Error('Road link missing');
-                const ring=link.road.sampleJunctionEndV2(!!link.atEnd);
+                const ring=link.road.sampleJunctionEnd(!!link.atEnd);
                 return {endpoint:local(ring.endpoint),
                     left:{position:local(ring.left.position),uv0:ring.left.uv0},
                     middle:{position:local(ring.middle.position),uv0:ring.middle.uv0},
@@ -175,13 +175,13 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
      * creates meshes. Caller must commit values through Creator property
      * history and then explicitly refresh the temporary mesh previews.
      */
-    public planAutomaticTrimsV2(){
+    public planAutomaticTrims(){
         if(!EDITOR_NOT_IN_PREVIEW)
             throw new Error('Junction Auto Trim is Editor-only');
         const roads=this.branches.map((link,index)=>{
             if(!link?.road?.node?.isValid)
                 throw new Error('Missing Junction Road branch '+index);
-            return link.road.junctionAutoTrimCandidateV2(link.road.node.uuid);
+            return link.road.junctionAutoTrimCandidate(link.road.node.uuid);
         });
         const plan=planJunctionAutoTrimV2(roads,{
             center:this.node.worldPosition,
@@ -201,14 +201,14 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
      * and converts one world-space Junction center into each Path-local
      * position. Does not mutate Scene serialization or any Baked meshes.
      */
-    public planEndpointSnapsV2(){
+    public planEndpointSnaps(){
         if(!EDITOR_NOT_IN_PREVIEW)
             throw new Error('Endpoint Snap is Editor-only');
         const inputs=this.branches.map((link,index)=>{
             const road=link?.road;
             if(!road?.node?.isValid||!road.pathSource?.node?.isValid)
                 throw new Error('Endpoint Snap missing Road/Path source at branch '+index);
-            return {...road.junctionAutoTrimCandidateV2(road.node.uuid),
+            return {...road.junctionAutoTrimCandidate(road.node.uuid),
                 pathId:road.pathSource.node.uuid,atEnd:!!link.atEnd};
         });
         const plan=planJunctionEndpointSnapV2(inputs,{
@@ -248,7 +248,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
      * Only the active endpoint handle changes; no Path position, Knot bank,
      * opposite handle, geometry, connection or Baked Mesh is modified.
      */
-    public planTangentAlignmentV2(){
+    public planTangentAlignment(){
         if(!EDITOR_NOT_IN_PREVIEW)
             throw new Error('Junction Align Tangents is Editor-only');
         const seenPaths=new Set<string>();
@@ -256,7 +256,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             const road=link?.road,path=road?.pathSource;
             if(!road?.node?.isValid||!path?.node?.isValid)
                 throw new Error('Missing Road/Path in tangent branch '+index);
-            if(path.closed||path.interpolation!==SplinePathCurveModeV2.Bezier)
+            if(path.closed||path.interpolation!==CurveMode.Bezier)
                 throw new Error('Junction tangent alignment requires an open Bezier SplinePath (branch '+index+')');
             if(seenPaths.has(path.node.uuid))
                 throw new Error('Junction tangent alignment requires one distinct Path per Road');
@@ -286,7 +286,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                 z:currentWorld.z-endpoint.z
             };
             // Validate the linked Road's Road-specific assumptions too.
-            road.junctionAutoTrimCandidateV2(road.node.uuid);
+            road.junctionAutoTrimCandidate(road.node.uuid);
             return {road,path,knot,knotIndex,handleSide,basis,
                 endpoint:{x:endpoint.x,y:endpoint.y,z:endpoint.z},
                 adjacent:{x:adjacent.x,y:adjacent.y,z:adjacent.z},
@@ -334,7 +334,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
      * Input is serialized Road/Path component identity plus WORLD positions.
      * Invalid distant Roads are reported as skipped, never implicitly linked.
      */
-    public planAutoConnectV2(){
+    public planAutoConnect(){
         if(!EDITOR_NOT_IN_PREVIEW)
             throw new Error('Junction Auto Connect is Editor-only');
         const root=director.getScene();
@@ -350,7 +350,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             for(const child of node.children)stack.push(child);
             const comps=(node as unknown as {components:unknown[]}).components||[];
             for(const item of comps){
-                if(!(item instanceof SplineRoadV2))continue;
+                if(!(item instanceof SplineRoad))continue;
                 if(++scanned>256)
                     throw new Error('Auto Connect Scene scan exceeded 256 Roads');
                 try{
@@ -359,7 +359,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                     const componentUuid=(item as unknown as {uuid?:string}).uuid;
                     if(!componentUuid)
                         throw new Error('Road component UUID unavailable');
-                    candidates.push({...item.junctionAutoTrimCandidateV2(node.uuid),
+                    candidates.push({...item.junctionAutoTrimCandidate(node.uuid),
                         pathId:item.pathSource.node.uuid,componentUuid});
                 }catch(error){
                     skipped.push({roadId:node.uuid,
@@ -379,7 +379,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             }))};
     }
     /** Read-only Scene Road adjacency scan. Does not auto-link components. */
-    public inspectRoadNetworkV2(){
+    public inspectRoadNetwork(){
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Road Network is Editor-only');
         const root=director.getScene();
         if(!root)throw new Error('No active Cocos Scene for Network scan');
@@ -393,13 +393,13 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             for(const child of node.children)stack.push(child);
             const comps=(node as unknown as {components:unknown[]}).components||[];
             for(const candidate of comps){
-                if(!(candidate instanceof SplineRoadV2))continue;
+                if(!(candidate instanceof SplineRoad))continue;
                 if(candidates.length+skipped.length>=256)
                     throw new Error('Network scan exceeded 256 Roads');
                 try{
                     if(!candidate.pathSource?.node?.isValid)
                         throw new Error('Missing Path Source');
-                    candidates.push({...candidate.junctionAutoTrimCandidateV2(node.uuid),
+                    candidates.push({...candidate.junctionAutoTrimCandidate(node.uuid),
                         pathId:candidate.pathSource.node.uuid});
                 }catch(error){
                     skipped.push({roadId:node.uuid,
@@ -414,7 +414,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     }
     /** Read-only inspect: builds CPU geometry but never creates GPU meshes,
      * changes Road trims/Knots or modifies the saved Baked asset. */
-    public inspectJunctionSeamsV2():JunctionSeamAuditReportV2 {
+    public inspectJunctionSeams():JunctionSeamAuditReportV2 {
         if(!EDITOR_NOT_IN_PREVIEW)
             throw new Error('Junction Seam Audit is Editor-only');
         this._lastSeamAudit=null;
@@ -431,7 +431,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     protected generate(){
         if(this.branches.length!==3&&this.branches.length!==4)
             throw new Error('Junction V2 needs exactly 3 or 4 Road branches');
-        const seen=new Set<SplineRoadV2>();
+        const seen=new Set<SplineRoad>();
         const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
         const local=(p:{x:number;y:number;z:number})=>{
             const at=Vec3.transformMat4(new Vec3(),new Vec3(p.x,p.y,p.z),inverse);
@@ -442,7 +442,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             if(!road||!road.node?.isValid)throw new Error('Junction V2 Road link '+index+' is missing');
             if(seen.has(road))throw new Error('Junction V2 cannot link a Road twice');
             seen.add(road);
-            const edge=road.sampleJunctionEndV2(!!link.atEnd);
+            const edge=road.sampleJunctionEnd(!!link.atEnd);
             return {endpoint:local(edge.endpoint),
                 ...(edge.sidewalkStation===undefined?{}:{sidewalkStation:edge.sidewalkStation}),
                 left:{position:local(edge.left.position),uv0:edge.left.uv0},
@@ -455,9 +455,9 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                     edgeMaterials:edge.profile.edgeMaterials
                 }}:{})};
         });
-        const sampleTerrain=this.sidewalkTerrainMode===JunctionTerrainEdgeModeV2.SampleTerrain;
+        const sampleTerrain=this.sidewalkTerrainMode===JunctionTerrainEdgeMode.SampleTerrain;
         if(this.joinRoadSidewalks){
-            if(this.curbCornerMode!==JunctionCurbCornerModeV2.RoundedContinuous||
+            if(this.curbCornerMode!==JunctionCurbCornerMode.RoundedContinuous||
                this.sidewalkApronWidth<=0)
                 throw new Error('Junction Road Sidewalk join requires Rounded Continuous Curb with Sidewalk Apron Width > 0');
             const unitScale=(m:Mat4)=>{
@@ -516,16 +516,16 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
             };
         }
         const result=buildJunctionPatchV2(entries,{
-            uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?'projected':'matched',
+            uvMode:this.junctionUVMode===JunctionUVMode.WorldProjected?'projected':'matched',
             uvMetersPerRepeat:this.uvMetersPerRepeat,
             uvBlendStart:this.junctionUVBlend,
             uvInteriorSmoothing:this.junctionUVInteriorSmoothing,
             endpointTolerance:this.endpointTolerance,
             flatTolerance:this.flatTolerance,
-            gradeMode:this.gradeMode===JunctionGradeModeV2.Gentle?'gentle':'flat',
+            gradeMode:this.gradeMode===JunctionGradeMode.Gentle?'gentle':'flat',
             maxGrade:this.maxGrade,surfaceLift:this.patchLift,materialSlot:0,
             maxCurbHeight:this.maxCurbHeight,
-            curbCornerMode:this.curbCornerMode===JunctionCurbCornerModeV2.RoundedContinuous?'rounded':'radial',
+            curbCornerMode:this.curbCornerMode===JunctionCurbCornerMode.RoundedContinuous?'rounded':'radial',
             curbCornerSegments:this.curbCornerSegments,curbCornerPull:this.curbCornerPull,
             curbRampPairs:this.curbRamps.map(pair=>({fromBranch:pair.fromBranch,toBranch:pair.toBranch})),
             curbRampMinLip:this.curbRampMinLip,curbRampMaxSlope:this.curbRampMaxSlope,
@@ -542,7 +542,7 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
         // visually cracked/mismatched end rings, without moving any vertex.
         if(EDITOR_NOT_IN_PREVIEW&&(this.strictRoadSeams||this._seamAuditRequested)){
             const seam=auditJunctionSeamsV2(result.mesh,entries,{
-                uvMode:this.junctionUVMode===JunctionUVModeV2.WorldProjected?
+                uvMode:this.junctionUVMode===JunctionUVMode.WorldProjected?
                     'projected':'matched'
             });
             this._lastSeamAudit=seam;

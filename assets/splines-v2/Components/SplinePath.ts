@@ -10,9 +10,9 @@ import {availableGizmoBackend,buildSplineKnotMoveGizmos,
 
 const {ccclass,property,executeInEditMode,menu}=_decorator;
 
-export enum SplinePathCurveModeV2 {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
-export enum SplineBezierTangentModeV2 {Auto=0,Free=1,Aligned=2,Mirrored=3}
-export enum SplinePathRotationModeV2 {Knots=0,Planar2D=1,Spatial3D=2}
+export enum CurveMode {Linear=0,Bezier=1,CatmullRom=2,Centripetal=3}
+export enum TangentMode {Auto=0,Free=1,Aligned=2,Mirrored=3}
+export enum RotationMode {Knots=0,Planar2D=1,Spatial3D=2}
 /** Coordinates used by consuming mesh generators; authored Path Knots always remain local. */
 export enum SplineSpace {Local=0,World=1}
 
@@ -21,12 +21,12 @@ export enum SplineSpace {Local=0,World=1}
  * position/handleIn/handleOut are Path-local Vec3, not world coordinates.
  * The record object itself is a stable identity during reorder and Gizmos drag.
  */
-@ccclass('SplinesV2.Knot')
-export class SplineKnotRecordV2 {
+@ccclass('Spline.Knot')
+export class SplineKnot {
     @property({type:Vec3,tooltip:'Knot position, relative to the SplinePath Node.'})
     position:Vec3=new Vec3();
-    @property({type:Enum(SplineBezierTangentModeV2)})
-    mode=SplineBezierTangentModeV2.Auto;
+    @property({type:Enum(TangentMode)})
+    mode=TangentMode.Auto;
     @property({type:Vec3,tooltip:'Incoming Bezier offset relative to Knot, in Path-local units.'})
     handleIn:Vec3=new Vec3(-1,0,0);
     @property({type:Vec3,tooltip:'Outgoing Bezier offset relative to Knot, in Path-local units.'})
@@ -42,8 +42,8 @@ type PathGizmoProperty=
     'pathGizmoKnotPosition'|'pathGizmoKnotPositions'|
     'pathGizmoTangentIn'|'pathGizmoTangentOut';
 type DragSnapshot={
-    knot:SplineKnotRecordV2;
-    position:Vec3;mode:SplineBezierTangentModeV2;
+    knot:SplineKnot;
+    position:Vec3;mode:TangentMode;
     handleIn:Vec3;handleOut:Vec3;rollDegrees:number;
 };
 interface PreviewConsumer {
@@ -57,15 +57,15 @@ const scale=(p:V3,k:number):V3=>({x:p.x*k,y:p.y*k,z:p.z*k});
 const length=(p:V3):number=>Math.hypot(p.x,p.y,p.z);
 const finite=(p:V3):boolean=>p!=null&&[p.x,p.y,p.z].every(Number.isFinite);
 
-@ccclass('SplinesV2.SplinePath')
-@menu('Cocos Splines V2/Path')
+@ccclass('Spline.Path')
+@menu('Cocos Splines/Path')
 @executeInEditMode(true)
-export class SplinePathV2 extends Component {
-    @property({type:[SplineKnotRecordV2],
+export class SplinePath extends Component {
+    @property({type:[SplineKnot],
         tooltip:'Ordered Path-local Vec3 Knot records. No child Knot Nodes required.'})
-    knots:SplineKnotRecordV2[]=[];
-    @property({type:Enum(SplinePathCurveModeV2)})
-    interpolation=SplinePathCurveModeV2.Centripetal;
+    knots:SplineKnot[]=[];
+    @property({type:Enum(CurveMode)})
+    interpolation=CurveMode.Centripetal;
     @property({tooltip:'Connect the last Knot to the first Knot.'})
     closed=false;
     @property() gizmoShowPath=true;
@@ -79,21 +79,21 @@ export class SplinePathV2 extends Component {
     @property({min:.1,max:20,step:.1,
         tooltip:'Half-width of the selected Knot roll guide in Path-local units.'})
     gizmoRollGuideSize=2;
-    @property({type:Enum(SplinePathRotationModeV2),
+    @property({type:Enum(RotationMode),
         tooltip:'Knots: edit points. Planar2D: rotate the Path Node around Z. Spatial3D: rotate the Path Node around XYZ.'})
-    gizmoRotationMode=SplinePathRotationModeV2.Knots;
+    gizmoRotationMode=RotationMode.Knots;
     @property({min:0,max:90,step:1,
         tooltip:'Rotation snap in degrees; 0 is continuous.'})
     gizmoRotationSnap=0;
 
     private _consumers=new Set<PreviewConsumer>();
-    private _dragKnot:SplineKnotRecordV2|null=null;
+    private _dragKnot:SplineKnot|null=null;
     private _dragProperty:PathGizmoProperty|null=null;
     private _dragIndex=-1;
     private _dragSnapshot:DragSnapshot|null=null;
     private _rotationDragging=false;
     private _rotationStart:Vec3|null=null;
-    private _hudRollKnot:SplineKnotRecordV2|null=null;
+    private _hudRollKnot:SplineKnot|null=null;
     private _hudRollStart=0;
     private _observed:string|null=null;
     private _lastScan=Number.NEGATIVE_INFINITY;
@@ -111,7 +111,7 @@ export class SplinePathV2 extends Component {
         const count=this.knots.length;
         if(operation==='add'||operation==='insert'||operation==='duplicate'){
             if(count>=128)throw new Error('SplinePath supports at most 128 Knots');
-            const next=new SplineKnotRecordV2();
+            const next=new SplineKnot();
             if(operation==='duplicate'&&count){
                 const k=this.knots[Math.min(index,count-1)];
                 Object.assign(next,{
@@ -217,14 +217,14 @@ export class SplinePathV2 extends Component {
     protected onDestroy():void {
         this.onDisable();this._consumers.clear();
     }
-    private knotAt(index:number,property:PathGizmoProperty):SplineKnotRecordV2|null {
+    private knotAt(index:number,property:PathGizmoProperty):SplineKnot|null {
         if(this._dragKnot&&property===this._dragProperty)
             return property!=='pathGizmoKnotPositions'||this._dragIndex===index?
                 this._dragKnot:null;
         return Number.isSafeInteger(index)&&index>=0?this.knots[index]??null:null;
     }
-    private tangentOffset(knot:SplineKnotRecordV2,side:TangentSide):V3 {
-        if(knot.mode!==SplineBezierTangentModeV2.Auto)
+    private tangentOffset(knot:SplineKnot,side:TangentSide):V3 {
+        if(knot.mode!==TangentMode.Auto)
             return side==='in'?knot.handleIn:knot.handleOut;
         const i=this.knots.indexOf(knot),n=this.knots.length;
         if(i<0||n<2)return {x:0,y:0,z:0};
@@ -238,16 +238,16 @@ export class SplinePathV2 extends Component {
         }
         return scale(sub(this.knots[target].position,knot.position),sign/3);
     }
-    public setBezierTangentMode(index:number,mode:SplineBezierTangentModeV2):void {
+    public setBezierTangentMode(index:number,mode:TangentMode):void {
         const k=this.knots[index];
         if(!k||!Number.isInteger(mode)||mode<0||mode>3)
             throw new Error('Invalid Bezier Knot index or tangent mode');
         const hin=vec(this.tangentOffset(k,'in'));
         const hout=vec(this.tangentOffset(k,'out'));
         k.mode=mode;k.handleIn=hin;k.handleOut=hout;
-        if(mode===SplineBezierTangentModeV2.Mirrored)
+        if(mode===TangentMode.Mirrored)
             k.handleIn=vec(scale(hout,-1));
-        else if(mode===SplineBezierTangentModeV2.Aligned){
+        else if(mode===TangentMode.Aligned){
             const l=length(hout);
             if(l>1e-9)k.handleIn=vec(scale(hout,-length(hin)/l));
         }
@@ -261,23 +261,23 @@ export class SplinePathV2 extends Component {
     }
     private writeTangent(side:TangentSide,point:Vec3):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!this.gizmoEditTangents||
-            this.interpolation!==SplinePathCurveModeV2.Bezier||!finite(point))return;
+            this.interpolation!==CurveMode.Bezier||!finite(point))return;
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
         const k=this.knotAt(this.gizmoKnotIndex,field);
         if(!k)return;
-        if(k.mode===SplineBezierTangentModeV2.Auto){
+        if(k.mode===TangentMode.Auto){
             k.handleIn=vec(this.tangentOffset(k,'in'));
             k.handleOut=vec(this.tangentOffset(k,'out'));
-            k.mode=SplineBezierTangentModeV2.Free;
+            k.mode=TangentMode.Free;
         }
         const picked=side==='in'?'handleIn':'handleOut';
         const other=side==='in'?'handleOut':'handleIn';
         const oppositeLength=length(k[other]);
         k[picked]=vec(sub(point,k.position));
-        if(k.mode===SplineBezierTangentModeV2.Mirrored||
-           k.mode===SplineBezierTangentModeV2.Aligned){
+        if(k.mode===TangentMode.Mirrored||
+           k.mode===TangentMode.Aligned){
             const l=length(k[picked]);
-            const newLength=k.mode===SplineBezierTangentModeV2.Mirrored?l:oppositeLength;
+            const newLength=k.mode===TangentMode.Mirrored?l:oppositeLength;
             k[other]=l>1e-9?vec(scale(k[picked],-newLength/l)):new Vec3();
         }
     }
@@ -286,7 +286,7 @@ export class SplinePathV2 extends Component {
     public get pathGizmoTangentOut():Vec3{return this.readTangent('out');}
     public set pathGizmoTangentOut(v:Vec3){this.writeTangent('out',v);}
 
-    public getSplineDataV2(consumer:Node,space:SplineSpace=SplineSpace.World):SplineDataV2 {
+    public getSplineData(consumer:Node,space:SplineSpace=SplineSpace.World):SplineDataV2 {
         if(!consumer?.isValid||!this.node?.isValid)
             throw new Error('SplinePath and consumer require valid Nodes');
         if(this.knots.length<2||this.knots.some(k=>!k||!finite(k.position)))
@@ -316,7 +316,7 @@ export class SplinePathV2 extends Component {
             const position={x:local.x,y:local.y,z:local.z};
             const tension=k.tension,rollDegrees=k.rollDegrees;
             if(type!=='bezier')return {position,tension,rollDegrees};
-            if(k.mode===SplineBezierTangentModeV2.Auto)return {position,tension,rollDegrees};
+            if(k.mode===TangentMode.Auto)return {position,tension,rollDegrees};
             const toRelative=(offset:V3):V3=>{
                 if(!inverse)return {x:offset.x,y:offset.y,z:offset.z};
                 const control=Vec3.transformMat4(new Vec3(),
@@ -335,9 +335,9 @@ export class SplinePathV2 extends Component {
     }
     public set pathGizmoRotationEuler(value:Vec3) {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
-           this.gizmoRotationMode===SplinePathRotationModeV2.Knots||
+           this.gizmoRotationMode===RotationMode.Knots||
            !finite(value))return;
-        if(this.gizmoRotationMode===SplinePathRotationModeV2.Planar2D){
+        if(this.gizmoRotationMode===RotationMode.Planar2D){
             const original=this.node.eulerAngles;
             this.node.setRotationFromEuler(new Vec3(original.x,original.y,value.z));
         }else this.node.setRotationFromEuler(vec(value));
@@ -382,9 +382,9 @@ export class SplinePathV2 extends Component {
     }
     public onGizmoHandles():SplineGizmoHandle[] {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid)return [];
-        if(this.gizmoRotationMode!==SplinePathRotationModeV2.Knots){
-            const mode=this.gizmoRotationMode===SplinePathRotationModeV2.Planar2D?
-                '2d':this.gizmoRotationMode===SplinePathRotationModeV2.Spatial3D?
+        if(this.gizmoRotationMode!==RotationMode.Knots){
+            const mode=this.gizmoRotationMode===RotationMode.Planar2D?
+                '2d':this.gizmoRotationMode===RotationMode.Spatial3D?
                 '3d':null;
             return mode?buildSplinePathRotateGizmos('pathGizmoRotationEuler',
                 mode,this.gizmoRotationSnap):[];
@@ -400,7 +400,7 @@ export class SplinePathV2 extends Component {
                 .filter(i=>i!==this.gizmoKnotIndex);
             handles.push(...buildSplineKnotPointGizmos('pathGizmoKnotPositions',indices));
         }
-        if(this.interpolation===SplinePathCurveModeV2.Bezier&&this.gizmoEditTangents){
+        if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
             handles.push(
                 {id:'path-tangent-in',property:'pathGizmoTangentIn',
                     visual:'point',plane:'view',space:'local',
@@ -467,7 +467,7 @@ export class SplinePathV2 extends Component {
                 max:Math.min(this.knots.length-1,127),step:1,order:1},
             {type:'toggle',id:'path-other-knots',text:'Other Knots',
                 property:'gizmoMultiKnotPoints',order:2},
-            ...(this.interpolation===SplinePathCurveModeV2.Bezier?
+            ...(this.interpolation===CurveMode.Bezier?
                 [{type:'toggle' as const,id:'path-tangent-handles',
                     text:'Tangents',property:'gizmoEditTangents',order:3}]:[]),
             {type:'slider',id:'path-knot-roll',text:'Knot Roll (deg)',
@@ -541,7 +541,7 @@ export class SplinePathV2 extends Component {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoShowPath||
             !this.node?.isValid||!availableGizmoBackend()||this.knots.length<2)return;
         try{
-            const source=this.getSplineDataV2(this.node);
+            const source=this.getSplineData(this.node);
             const cache=buildSplineCacheV2(source);
             const frames=buildSplineFramesV2(cache,{maxStep:Math.max(.2,cache.length/64)});
             const guide=buildRoadSceneGuideV2(frames.frames,
@@ -550,7 +550,7 @@ export class SplinePathV2 extends Component {
             const knot=this.knots[this.gizmoKnotIndex];
             const k=knot;
             const lines=[...guide.lines],dots=[...guide.dots];
-            if(this.interpolation===SplinePathCurveModeV2.Bezier&&
+            if(this.interpolation===CurveMode.Bezier&&
                 this.gizmoEditTangents&&k){
                 const tangentIn=add(k.position,this.tangentOffset(k,'in'));
                 const tangentOut=add(k.position,this.tangentOffset(k,'out'));

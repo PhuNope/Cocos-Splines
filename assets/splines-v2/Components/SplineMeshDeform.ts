@@ -3,13 +3,13 @@ import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildRoadFilletCacheV2} from '../geometry/RoadFillet';
 import {readSourceMeshV2} from '../geometry/SourceMeshRead';
 import {deformSourceMeshV2,type MeshDeformReportV2} from '../geometry/SourceMeshDeform';
-import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
-import {SplineV2SurfaceMode} from './SplineGeometrySettingsV2';
+import {MeshGenerator} from './MeshGenerator';
+import {SurfaceMode} from './SplineGeometrySettingsV2';
 
 const {ccclass,property,menu,requireComponent,executeInEditMode}=_decorator;
-export enum SplineV2DeformSourceAxis {Z=0,X=1}
-export enum SplineV2DeformUVTileMode {Preserve=0,Advance=1}
-export enum SplineV2DeformUVAxis {V=0,U=1}
+export enum DeformSourceAxis {Z=0,X=1}
+export enum DeformUVTileMode {Preserve=0,Advance=1}
+export enum DeformUVAxis {V=0,U=1}
 /**
  * Engine source Mesh -> immutable MeshData -> deform along the v2 spline.
  *
@@ -17,19 +17,19 @@ export enum SplineV2DeformUVAxis {V=0,U=1}
  * uses the already-imported Baked mesh and never reads a source asset.
  * Source mesh must be CPU-readable in Cocos 3.8.2+.
  */
-@ccclass('SplinesV2.SplineMeshDeform')
-@menu('Cocos Splines V2/Mesh Source Deformer')
+@ccclass('Spline.MeshDeform')
+@menu('Cocos Splines/Mesh Source Deformer')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
-export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
+export class SplineMeshDeform extends MeshGenerator {
     @property({tooltip:'Adaptive sampling for source geometry deformation.'})
     adaptiveSampling=true;
     @property({min:1,max:90,step:1})
     maxTurnAngleDegrees=6;
     @property({min:.001,max:1,step:.005})
     maxChordError=.03;
-    @property({type:Enum(SplineV2SurfaceMode),tooltip:'ConstantWidth inserts a fillet into the sampling curve; Continuous/ClipOverlaps use the original curve.'})
-    surfaceMode=SplineV2SurfaceMode.Continuous;
+    @property({type:Enum(SurfaceMode),tooltip:'ConstantWidth inserts a fillet into the sampling curve; Continuous/ClipOverlaps use the original curve.'})
+    surfaceMode=SurfaceMode.Continuous;
     @property({min:1.02,max:6,step:.05})
     filletRadiusScale=1.35;
     @property({min:.5,max:45,step:.5})
@@ -38,14 +38,14 @@ export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
     filletChordError=.015;
     @property({type:Mesh,tooltip:'Imported Mesh with authored UV0 (and optional UV2). Source asset is never modified.'})
     sourceMesh:Mesh|null=null;
-    @property({type:Enum(SplineV2DeformSourceAxis),tooltip:'Local axis along the authored source mesh length: Z or X.'})
-    sourceLongitudinalAxis=SplineV2DeformSourceAxis.Z;
-    @property({type:Enum(SplineV2DeformUVAxis),tooltip:'Which original UV0 axis advances between mesh copies.'})
-    sourceLongitudinalUVAxis=SplineV2DeformUVAxis.V;
+    @property({type:Enum(DeformSourceAxis),tooltip:'Local axis along the authored source mesh length: Z or X.'})
+    sourceLongitudinalAxis=DeformSourceAxis.Z;
+    @property({type:Enum(DeformUVAxis),tooltip:'Which original UV0 axis advances between mesh copies.'})
+    sourceLongitudinalUVAxis=DeformUVAxis.V;
     @property({min:1,max:128,step:1,tooltip:'Number of copies along the entire spline. 1 stretches the authored mesh across the path.'})
     repeatCount=1;
-    @property({type:Enum(SplineV2DeformUVTileMode),tooltip:'Preserve authored UV0 exactly, or Advance UV0 by the original tile span for each repeat.'})
-    uvTileMode=SplineV2DeformUVTileMode.Preserve;
+    @property({type:Enum(DeformUVTileMode),tooltip:'Preserve authored UV0 exactly, or Advance UV0 by the original tile span for each repeat.'})
+    uvTileMode=DeformUVTileMode.Preserve;
     @property({tooltip:'Align lateral midpoint of source mesh to spline centre.'})
     centerSourceLateral=true;
     @property({tooltip:'Vertical offset of source vertices along transported spline up.'})
@@ -73,8 +73,8 @@ export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
         });
         const pathData=this.source();
         let cache=buildSplineCacheV2(pathData);
-        if(this.surfaceMode===SplineV2SurfaceMode.ConstantWidth){
-            const halfWidth=this.sourceLongitudinalAxis===SplineV2DeformSourceAxis.Z
+        if(this.surfaceMode===SurfaceMode.ConstantWidth){
+            const halfWidth=this.sourceLongitudinalAxis===DeformSourceAxis.Z
                 ?(source.max.x-source.min.x)*.5
                 :(source.max.z-source.min.z)*.5;
             if(halfWidth<=1e-5)throw new Error('Source Mesh has zero lateral width for ConstantWidth Fillet');
@@ -86,15 +86,15 @@ export class SplineMeshDeformV2 extends SplineMeshGeneratorV2 {
             }).cache;
         }
         const output=deformSourceMeshV2(cache,source,{
-            longitudinalAxis:this.sourceLongitudinalAxis===SplineV2DeformSourceAxis.X?'x':'z',
-            longitudinalUVAxis:this.sourceLongitudinalUVAxis===SplineV2DeformUVAxis.U?'u':'v',
+            longitudinalAxis:this.sourceLongitudinalAxis===DeformSourceAxis.X?'x':'z',
+            longitudinalUVAxis:this.sourceLongitudinalUVAxis===DeformUVAxis.U?'u':'v',
             repeatCount:this.repeatCount,
-            uvTileMode:this.uvTileMode===SplineV2DeformUVTileMode.Advance?'advance':'preserve',
+            uvTileMode:this.uvTileMode===DeformUVTileMode.Advance?'advance':'preserve',
             centerLateral:this.centerSourceLateral,
             verticalOffset:this.deformVerticalOffset,
             maxFrameStep:this.sampleStep,
             rollSource:pathData,
-            ...(this.adaptiveSampling&&this.surfaceMode!==SplineV2SurfaceMode.ConstantWidth?{
+            ...(this.adaptiveSampling&&this.surfaceMode!==SurfaceMode.ConstantWidth?{
                 maxAngleDegrees:this.maxTurnAngleDegrees,
                 maxChordError:this.maxChordError
             }:{})

@@ -1,6 +1,6 @@
 import {_decorator,Component,Node,Mesh,MeshRenderer,Material,Enum,CCObject,utils,gfx} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {SplinePathV2,SplineSpace} from './SplinePathV2';
+import {SplinePath,SplineSpace} from './SplinePath';
 import {type SplineDataV2} from '../core/SplineCurves';
 import {type MeshDataV2} from '../geometry/MeshData';
 import {createMeshBuildPlanV2} from '../geometry/MeshBuildPlan';
@@ -17,19 +17,19 @@ const {ccclass,property}=_decorator;
  * No legacy SplineContainer dependency. No automatic Play rebuild in
  * Manual/Baked mode. All temp render parts are nonserialized in Editor.
  */
-export enum SplineV2MeshMode {Dynamic=0,Manual=1,Baked=2}
-@ccclass('SplinesV2.MeshGeneratorBase')
-export abstract class SplineMeshGeneratorV2 extends Component {
-    @property({type:SplinePathV2,tooltip:'Required shared spline source: Path owns serialized Vec3 Knot records, interpolation and Gizmos editing.'})
-    pathSource:SplinePathV2|null=null;
+export enum MeshMode {Dynamic=0,Manual=1,Baked=2}
+@ccclass('Spline.Generator')
+export abstract class MeshGenerator extends Component {
+    @property({type:SplinePath,tooltip:'Required shared spline source: Path owns serialized Vec3 Knot records, interpolation and Gizmos editing.'})
+    pathSource:SplinePath|null=null;
     @property({type:Enum(SplineSpace),tooltip:'Local (default): generate at Path Knot local coordinates in this generator Node. World: place mesh by the Path Node world transform, converted to this Node local.'})
     coordinateSpace=SplineSpace.Local;
     @property({min:0.01,tooltip:'Maximum frame step for generated path-following geometry.'})
     sampleStep=.5;
     @property({min:0.01,tooltip:'Distance in local units per longitudinal UV repeat.'})
     uvMetersPerRepeat=5;
-    @property({type:Enum(SplineV2MeshMode)})
-    meshMode=SplineV2MeshMode.Manual;
+    @property({type:Enum(MeshMode)})
+    meshMode=MeshMode.Manual;
     @property({type:[Material],tooltip:'Shared material indexed by geometry materialSlot.'})
     materials:Material[]=[];
     @property({type:Mesh,tooltip:'Imported glTF Mesh subasset from an explicit Bake.'})
@@ -46,7 +46,7 @@ export abstract class SplineMeshGeneratorV2 extends Component {
     private _ownedNodes:Node[]=[];
     private _primaryMesh:Mesh|null=null;
     protected _gizmoLastMeshAt=Number.NEGATIVE_INFINITY;
-    private _registeredPath:SplinePathV2|null=null;
+    private _registeredPath:SplinePath|null=null;
     private _gizmoPreviewError:unknown=null;
 
     /** Forget the previous Path when a generator is relinked or unlinked. */
@@ -58,8 +58,8 @@ export abstract class SplineMeshGeneratorV2 extends Component {
         if(this._registeredPath!==this.pathSource)
             this.unlinkPathPreviewConsumer();
         if(!this.pathSource)
-            throw new Error('Assign a SplinePathV2 Path Source before generating geometry');
-        const source=this.pathSource.getSplineDataV2(this.node,this.coordinateSpace);
+            throw new Error('Assign a SplinePath Path Source before generating geometry');
+        const source=this.pathSource.getSplineData(this.node,this.coordinateSpace);
         if(EDITOR_NOT_IN_PREVIEW){
             this.pathSource.registerPreviewConsumer(this);
             this._registeredPath=this.pathSource;
@@ -96,7 +96,7 @@ export abstract class SplineMeshGeneratorV2 extends Component {
 
     /** Only runs automatically in Dynamic mode outside the editing scene. */
     protected onEnable():void {
-        if(!EDITOR_NOT_IN_PREVIEW&&this.meshMode===SplineV2MeshMode.Dynamic)
+        if(!EDITOR_NOT_IN_PREVIEW&&this.meshMode===MeshMode.Dynamic)
             this.rebuildDynamic();
         else this.showSavedMesh();
     }
@@ -133,7 +133,7 @@ export abstract class SplineMeshGeneratorV2 extends Component {
 
     private renderer():MeshRenderer {
         const r=this.getComponent(MeshRenderer);
-        if(!r)throw new Error('SplineMeshGeneratorV2 requires MeshRenderer');
+        if(!r)throw new Error('MeshGenerator requires MeshRenderer');
         return r;
     }
     private applyMaterials(renderer:MeshRenderer):void {
@@ -195,7 +195,7 @@ export abstract class SplineMeshGeneratorV2 extends Component {
             for(let i=0;i<plan.parts.length;i++){
                 let target=primary;
                 if(i){
-                    const child=new Node('__SplineV2DrawPart_'+i);
+                    const child=new Node('__SplineDrawPart_'+i);
                     if(EDITOR_NOT_IN_PREVIEW)
                         child.hideFlags=CCObject.Flags.DontSave|CCObject.Flags.HideInHierarchy;
                     child.setParent(this.node);
