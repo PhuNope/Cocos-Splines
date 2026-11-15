@@ -7,38 +7,38 @@ const {style,callEditor}=require('./common');
 async function dispatchV2(inspector,action){
     const result=await callEditor(inspector,action);
     if(result?.ok===false){
-        console.warn('[Cocos Splines V2] '+String(result.error||'Editor action failed'));
+        console.warn('[Cocos Splines] '+String(result.error||'Editor action failed'));
     }else if(result?.shortKnotFallback){
-        console.warn('[Cocos Splines V2] Short Knot: ConstantWidth cannot fit; generated a seamless Continuous Road with adaptive width. '+result.shortKnotFallback);
+        console.warn('[Cocos Splines] Short Knot: ConstantWidth cannot fit; generated a seamless Continuous Road with adaptive width. '+result.shortKnotFallback);
     }else if(action==='plan-v2-junction-auto-trim'&&result?.ok){
-        console.info('[Cocos Splines V2] Junction Auto Trim proposal:',result.plan);
+        console.info('[Cocos Splines] Junction Auto Trim proposal:',result.plan);
     }else if(action==='apply-v2-junction-auto-trim'&&result?.ok){
-        console.info('[Cocos Splines V2] Applied '+result.changed+' Road trims; Baked assets unchanged');
+        console.info('[Cocos Splines] Applied '+result.changed+' Road trims; Baked assets unchanged');
     }else if(action==='plan-v2-junction-auto-connect'&&result?.ok){
-        console.info('[Cocos Splines V2] Auto Connect preview (no Scene edits):',result.plan);
+        console.info('[Cocos Splines] Auto Connect preview (no Scene edits):',result.plan);
     }else if(action==='apply-v2-junction-auto-connect'&&result?.ok){
-        console.info('[Cocos Splines V2] Junction Auto Connect: '+(result.changed?'recorded':'unchanged')+
+        console.info('[Cocos Splines] Junction Auto Connect: '+(result.changed?'recorded':'unchanged')+
             ', '+result.branches+' linked Roads; Path Knots and Baked Mesh unchanged');
         if(result.warnings?.length)
-            console.warn('[Cocos Splines V2] Junction preview warnings:',result.warnings);
+            console.warn('[Cocos Splines] Junction preview warnings:',result.warnings);
     }else if(action==='plan-v2-junction-endpoint-snap'&&result?.ok){
-        console.info('[Cocos Splines V2] Junction Endpoint Snap (read-only):',result.plan);
+        console.info('[Cocos Splines] Junction Endpoint Snap (read-only):',result.plan);
     }else if(action==='apply-v2-junction-endpoint-snap'&&result?.ok){
-        console.info('[Cocos Splines V2] Recorded '+result.changed+' Pure Vec3 Path snaps; Baked Mesh untouched');
-        if(result.warnings?.length)console.warn('[Cocos Splines V2] Preview warnings:',result.warnings);
+        console.info('[Cocos Splines] Recorded '+result.changed+' Pure Vec3 Path snaps; Baked Mesh untouched');
+        if(result.warnings?.length)console.warn('[Cocos Splines] Preview warnings:',result.warnings);
     }else if(action==='inspect-v2-road-network'&&result?.ok){
-        console.info('[Cocos Splines V2] Scene Road connectivity (read-only):',result.report);
+        console.info('[Cocos Splines] Scene Road connectivity (read-only):',result.report);
     }else if(action==='inspect-v2-junction-seams'&&result?.ok){
-        console.info('[Cocos Splines V2] Road-Junction boundary XYZ/UV seam audit:',result.report);
+        console.info('[Cocos Splines] Road-Junction boundary XYZ/UV seam audit:',result.report);
         if(!result.report?.ok)
-            console.warn('[Cocos Splines V2] Junction seams not certified:',result.report?.notes);
+            console.warn('[Cocos Splines] Junction seams not certified:',result.report?.notes);
     }else if(action==='plan-v2-junction-tangents'&&result?.ok){
-        console.info('[Cocos Splines V2] Junction Bezier tangent alignment (read-only):',result.plan);
+        console.info('[Cocos Splines] Junction Bezier tangent alignment (read-only):',result.plan);
     }else if(action==='apply-v2-junction-tangents'&&result?.ok){
-        console.info('[Cocos Splines V2] Recorded '+result.changed+' Path endpoint tangent edits; baked geometry unchanged');
-        if(result.warnings?.length)console.warn('[Cocos Splines V2] Tangent mesh preview:',result.warnings);
+        console.info('[Cocos Splines] Recorded '+result.changed+' Path endpoint tangent edits; baked geometry unchanged');
+        if(result.warnings?.length)console.warn('[Cocos Splines] Tangent mesh preview:',result.warnings);
     }else if(action==='check-v2-road-bake'&&result?.ok){
-        console.info('[Cocos Splines V2] Bake status:',result);
+        console.info('[Cocos Splines] Bake status:',result);
     }
     return result;
 }
@@ -55,17 +55,17 @@ function makeV2Inspector(kind='road'){
              'zebraStripeCount','markingLateralInset','turnGuides','guideLineWidth']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         deform?
-        [['Spline Source',['pathSource']],
+        [['Spline Source',['pathSource','coordinateSpace']],
          ['Mesh deformation',['sourceMesh','sourceLongitudinalAxis','sourceLongitudinalUVAxis','repeatCount','uvTileMode','centerSourceLateral','deformVerticalOffset']],
          ['Sampling & fillets',['sampleStep','adaptiveSampling','maxTurnAngleDegrees','maxChordError','surfaceMode','filletRadiusScale','filletArcAngleDegrees','filletChordError']],
          ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         tube?
-        [['Spline Source',['pathSource']],
+        [['Spline Source',['pathSource','coordinateSpace']],
          ['Tube profile',['radius','sides','capEnds','flipFaces','sampleStep','uvMetersPerRepeat','uvLongitudinalAxis']],
          ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
-        [['Spline source',['pathSource']],
+        [['Spline source',['pathSource','coordinateSpace']],
          ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
          ['Road Gizmos',['showSceneGizmos','gizmoSteps','gizmoEdges',
              'gizmoLiveMesh','gizmoMeshIntervalMs']],
@@ -91,7 +91,7 @@ function makeV2Inspector(kind='road'){
     return {
         style,
         template:`<div class="spl-inspector">
-          <div class="spl-header"><strong>∿ Spline ${tube?'Extrude':deform?'Mesh Deform':junction?'Junction Patch':'Road'} V2</strong></div>
+          <div class="spl-header"><strong>∿ Spline ${tube?'Extrude':deform?'Mesh Deform':junction?'Junction Patch':'Road'}</strong></div>
           ${sections}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-autotrim-plan">Check Auto Trim</button><button type="button" class="spl-btn spl-v2-autotrim-apply">Apply Auto Trim</button></div>':''}
           ${junction?'<div class="spl-btns"><button type="button" class="spl-btn spl-v2-connect-plan">Check Auto Connect</button><button type="button" class="spl-btn spl-v2-connect-apply">Apply Auto Connect</button></div>':''}
