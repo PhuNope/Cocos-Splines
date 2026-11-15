@@ -6,6 +6,9 @@ const inspector=require(path.join(root,'src/contributions/inspector/PathV2.js'))
 assert.match(inspector.template,/Vec3 Knots/);
 assert.match(inspector.template,/spl-path-items/);
 assert.match(inspector.template,/spl-path-add/);
+assert.match(inspector.template,/Group Nudge/);
+for(const axis of ['x-','x+','y-','y+','z-','z+'])
+ assert(inspector.template.includes('data-nudge="'+axis+'"'));
 assert.doesNotMatch(inspector.template,/Raw Knot Data|spl-path-knots/);
 assert(!('knots' in inspector.$),'Raw Knot dump selector must not exist');
 for(const field of ['gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap']){
@@ -27,7 +30,8 @@ const items={
 };
 const count={textContent:''};
 const add={addEventListener(type,handler){bindings.add=handler;}};
-const $={items,count,add};
+const nudge={addEventListener(type,handler){bindings.nudge=handler;}};
+const $={items,count,add,nudge};
 for(const name of ['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
@@ -61,4 +65,5 @@ assert.equal(fake._cardSelected,1);
 inspector.ready.call(fake);
 assert.equal(typeof bindings.add,'function');
 assert.equal(typeof bindings.items,'function');
+assert.equal(typeof bindings.nudge,'function');
 console.log('V2 PATH CUSTOM INSPECTOR PASS: Vec3 cards, topology buttons, focus-stable refresh, native dump fields.');

@@ -275,6 +275,35 @@ try {
    pathComp.onGizmoHudAction('path-group-clear');
    assert.deepEqual(pathComp.selectedGroupIndices(),[]);
    pathComp.gizmoKnotIndex=0;
+   // Group Nudge produces a read-only local delta for one recordable
+   // serialized-CCClass write in extension main (not a live Scene mutation).
+   pathComp.onGizmoHudAction('path-group-toggle');
+   pathComp.gizmoKnotIndex=1;
+   pathComp.onGizmoHudAction('path-group-toggle');
+   pathComp.gizmoPositionSnap=.5;
+   const sourcePositions=pathComp.knots.map(k=>({...k.position}));
+   const nudgeLocal=pathComp.planGroupNudge('x+');
+   assert.deepEqual(nudgeLocal.deltaLocal,{x:.5,y:0,z:0});
+   assert.deepEqual(nudgeLocal.indices,[0,1]);
+   assert.deepEqual(pathComp.knots.map(k=>({...k.position})),sourcePositions,
+     'Preview Group Nudge proposal cannot mutate source Knot records');
+   pathComp.pathHudPositionWorld=true;
+   const nudgeWorld=pathComp.planGroupNudge('x+');
+   assert.deepEqual(nudgeWorld.deltaLocal,{x:.25,y:0,z:0},
+     'World Nudge converts the vector using Path Node scale');
+   assert.throws(()=>pathComp.planGroupNudge('invalid'),/Invalid Group Nudge/);
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','begin');
+   assert.throws(()=>pathComp.planGroupNudge('x+'),/active drag/);
+   pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','cancel');
+   pathComp.onRestore();
+   assert.deepEqual(pathComp.selectedGroupIndices(),[],
+     'Deserializing CCClass records invalidates transient group identities');
+   pathComp.restoreGroupSelection([0,1]);
+   assert.deepEqual(pathComp.selectedGroupIndices(),[0,1]);
+   pathComp.pathHudPositionLocal=true;
+   pathComp.gizmoPositionSnap=0;
+   pathComp.onGizmoHudAction('path-group-clear');
+   pathComp.gizmoKnotIndex=0;
    const rollCallsBefore=calls.length;
    pathComp.gizmoKnotIndex=0;
    pathComp.onGizmoHudChanged('pathGizmoActiveRoll','begin',0);

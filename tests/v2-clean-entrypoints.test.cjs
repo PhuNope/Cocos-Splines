@@ -58,9 +58,9 @@ try{
  const keys=Object.keys(scene.methods).sort();
  assert.deepEqual(keys,[
   'inspectV2JunctionSeams','inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
-  'planV2JunctionEndpointSnap','planV2JunctionTangents','prepareV2RoadBake','rebuildV2Road',
+  'planV2JunctionEndpointSnap','planV2JunctionTangents','planV2PathGroupNudge','prepareV2RoadBake','rebuildV2Road',
   'refreshV2JunctionAutoConnect','refreshV2JunctionAutoTrim','refreshV2JunctionEndpointSnap',
-  'refreshV2Path','restoreV2RoadBaked']);
+  'refreshV2Path','refreshV2PathGroup','restoreV2RoadBaked']);
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
  assert.equal(scene.methods.prepareV2RoadBake('road-node').componentIndex,0);
@@ -115,7 +115,7 @@ try{
    'applyV2JunctionAutoConnect','applyV2JunctionAutoTrim','applyV2JunctionEndpointSnap','applyV2JunctionTangents','bakeV2Road',
    'bindV2RoadMesh','checkV2RoadBake','editV2Path','inspectV2JunctionSeams','inspectV2RoadNetwork',
    'planV2JunctionAutoConnect','planV2JunctionAutoTrim','planV2JunctionEndpointSnap','planV2JunctionTangents',
-   'rebuildV2Road','restoreV2RoadBaked']);
+   'nudgeV2PathGroup','rebuildV2Road','restoreV2RoadBaked']);
   assert.equal((await main.methods.rebuildV2Road()).ok,true);
   assert.equal((await main.methods.checkV2RoadBake()).ok,true);
   assert.equal((await main.methods.restoreV2RoadBaked()).ok,true);
@@ -171,12 +171,14 @@ try{
  assert.equal(Object.keys(pkg.contributions.inspector.section.node).length,5);
  assert(pkg.contributions.inspector.section.node['Spline.Path'].includes('PathV2.js'));
  assert(pkg.contributions.messages['edit-v2-path']);
+ assert(pkg.contributions.messages['nudge-v2-path-group']);
  assert.equal(pkg.contributions.menu,undefined);
  assert(!JSON.stringify(pkg).includes('Splines.SplineContainer'));
  assert(fs.existsSync(path.join(installed,'assets/splines-v2/Components/SplinePath.ts')));
  assert(fs.existsSync(path.join(installed,'dist/contributions/inspector/PathV2.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/EditorAssetBind.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathV2Dump.js')));
+ assert(fs.existsSync(path.join(installed,'dist/v2/PathGroupNudgeDump.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathKnotDumpCodec.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/PathEndpointSnapDump.js')));
  assert(fs.existsSync(path.join(installed,'dist/v2/JunctionAutoConnectDump.js')));
