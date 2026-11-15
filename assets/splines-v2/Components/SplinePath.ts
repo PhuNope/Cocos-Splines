@@ -87,6 +87,9 @@ export class SplinePath extends Component {
     gizmoRotationSnap=0;
     @property({type:Enum(SplineSpace),tooltip:'Move Gizmos axes and numeric position in Path Local or World coordinates.'})
     gizmoPositionSpace=SplineSpace.Local;
+    @property({min:0,max:20,step:.05,
+        tooltip:'Position snap for Knot Move and Bézier tangent point handles. 0 = continuous; units follow Position Local/World.'})
+    gizmoPositionSnap=0;
     @property({type:Enum(SplineSpace),tooltip:'Rotate Gizmos axes and Euler edit in Path Local or World coordinates.'})
     gizmoRotationSpace=SplineSpace.Local;
 
@@ -450,8 +453,11 @@ export class SplinePath extends Component {
         if(!this.gizmoEditKnots||!this.knots[this.gizmoKnotIndex])return [];
         const world=this.gizmoPositionSpace===SplineSpace.World;
         const space=world?'world':'local';
+        const snap=Number.isFinite(this.gizmoPositionSnap)&&
+            this.gizmoPositionSnap>=0&&this.gizmoPositionSnap<=20?
+            this.gizmoPositionSnap:0;
         const active=buildSplineKnotMoveGizmos(
-            world?'pathGizmoKnotPositionWorld':'pathGizmoKnotPosition',space);
+            world?'pathGizmoKnotPositionWorld':'pathGizmoKnotPosition',space,snap);
         if(!active.length)return [];
         const handles=[...active];
         if(this.gizmoMultiKnotPoints){
@@ -460,15 +466,16 @@ export class SplinePath extends Component {
             const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
                 .filter(i=>i!==this.gizmoKnotIndex);
             handles.push(...buildSplineKnotPointGizmos(
-                world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',indices,space));
+                world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',
+                indices,space,snap));
         }
         if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
             handles.push(
                 {id:'path-tangent-in',property:world?'pathGizmoTangentInWorld':'pathGizmoTangentIn',
-                    visual:'point',plane:'view',space,
+                    visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
                     color:'#b58cff',hoverColor:'#fff269',pickSize:24},
                 {id:'path-tangent-out',property:world?'pathGizmoTangentOutWorld':'pathGizmoTangentOut',
-                    visual:'point',plane:'view',space,
+                    visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
                     color:'#48d8e6',hoverColor:'#fff269',pickSize:24});
         }
         return handles;
@@ -532,6 +539,8 @@ export class SplinePath extends Component {
                 property:'pathHudRotationLocal',group:'rotation-space',order:-2},
             {type:'toggle',id:'rotation-world',text:'Rotation · World',
                 property:'pathHudRotationWorld',group:'rotation-space',order:-1},
+            {type:'slider',id:'path-position-snap',text:'Position Snap',
+                property:'gizmoPositionSnap',min:0,max:5,step:.05,order:0},
             {type:'slider',id:'path-active-knot',text:'Active Knot',
                 property:'gizmoKnotIndex',min:0,
                 max:Math.min(this.knots.length-1,127),step:1,order:1},
