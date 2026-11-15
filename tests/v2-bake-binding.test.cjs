@@ -21,6 +21,7 @@ const comp=(type='Spline.Road',pendingSlots='[0,3,4]')=>({type,value:{
  meshMode:{value:1}
 }});
 let scene={__comps__:[comp()]},calls=[],assetResponses=[meshInfo];
+let injectedWriteFailure=null;
 function makeEditor(){
  return {Message:{request:async(channel,method,payload)=>{
    calls.push({channel,method,payload});
@@ -30,7 +31,11 @@ function makeEditor(){
    if(channel==='scene'&&method==='set-property'){
      const match=/^__comps__\.(\d+)\.([a-zA-Z]+)$/.exec(payload.path);
      if(!match)throw Error('Invalid property '+payload.path);
+     const failure=injectedWriteFailure?.(match[2],payload);
+     if(failure==='before')throw Error('Injected native set-property rejection');
+     if(failure==='false')return false;
      scene.__comps__[Number(match[1])].value[match[2]]={value:payload.dump.value};
+     if(failure==='after')throw Error('Injected failure after Scene mutation');
      return true;
    }
    throw Error('Unexpected '+channel+':'+method);
@@ -144,7 +149,73 @@ function makeEditor(){
  assert.equal(verified.ok,true);
  assert.equal(scene.__comps__[0].value.bakedMaterialSlots.value,'[0,3,4]');
  assert.equal(calls.filter(c=>c.method==='set-property').length,8);
+ // Inject failures into every setter, before/after mutation and via false.
+ // All previous baked fields AND pending import fields must be restored.
+ for(const mode of ['before','after','false']){
+  for(let failureStep=1;failureStep<=8;failureStep++){
+   scene={__comps__:[comp()]};calls=[];assetResponses=[meshInfo];
+   const originalFields=JSON.stringify(scene.__comps__[0].value);
+   let writes=0,fired=false;
+   injectedWriteFailure=()=>{
+    if(++writes===failureStep&&!fired){fired=true;return mode;}
+   };
+   let denied;
+   try{
+    denied=await bindImportedMesh(makeEditor(),{
+     nodeUuid,componentIndex:0,assetUrl,fingerprint:fp,materialSlots:'[0,3,4]'
+    });
+   }finally{injectedWriteFailure=null;}
+   assert.equal(fired,true,'Expected native failure at step '+failureStep);
+   assert.equal(denied.ok,false);
+   assert.equal(denied.pending,false);
+   assert.equal(denied.rolledBack,true,JSON.stringify(denied));
+   assert.equal(denied.recoveryRequired,false);
+   assert.equal(denied.uuid,'old-mesh');
+   assert.equal(JSON.stringify(scene.__comps__[0].value),originalFields,
+    'Failed Bind must preserve all Baked and pending serialized fields');
+  }
+ }
+ // Persistent rollback failure needs explicit manual-recovery reporting.
+ scene={__comps__:[comp()]};calls=[];assetResponses=[meshInfo];
+ let stopped=false;
+ injectedWriteFailure=(key,payload)=>{
+  if(key==='bakedMesh'&&!stopped){stopped=true;return 'before';}
+  if(stopped&&key==='bakedSourceUrl'&&payload.dump.value==='')return 'false';
+ };
+ let incomplete;
+ try{
+  incomplete=await bindImportedMesh(makeEditor(),{
+   nodeUuid,componentIndex:0,assetUrl,fingerprint:fp,materialSlots:'[0,3,4]'
+  });
+ }finally{injectedWriteFailure=null;}
+ assert.equal(incomplete.ok,false);
+ assert.equal(incomplete.rolledBack,false);
+ assert.equal(incomplete.recoveryRequired,true);
+ assert.match(incomplete.reason,/Unrestored bakedSourceUrl/);
+ assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,'old-mesh');
+ assert.equal(scene.__comps__[0].value.pendingBakeUrl.value,assetUrl);
+ // A third-party edit during failure cannot be overwritten by rollback.
+ scene={__comps__:[comp()]};calls=[];assetResponses=[meshInfo];stopped=false;
+ injectedWriteFailure=key=>{
+  if(key==='bakedMesh'&&!stopped){
+   stopped=true;
+   scene.__comps__[0].value.bakedSourceUrl.value='db://assets/user-change.gltf';
+   return 'before';
+  }
+ };
+ let conflict;
+ try{
+  conflict=await bindImportedMesh(makeEditor(),{
+   nodeUuid,componentIndex:0,assetUrl,fingerprint:fp,materialSlots:'[0,3,4]'
+  });
+ }finally{injectedWriteFailure=null;}
+ assert.equal(conflict.ok,false);
+ assert.equal(conflict.recoveryRequired,true);
+ assert.match(conflict.reason,/Concurrent change at bakedSourceUrl/);
+ assert.equal(scene.__comps__[0].value.bakedSourceUrl.value,
+  'db://assets/user-change.gltf');
+
  scene={__comps__:[comp('Other.Component')]};assetResponses=[meshInfo];
  await assert.rejects(()=>bindImportedMesh(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp}),/Component changed/);
- console.log('V2 BAKE BIND PASS: cc.Mesh UUID, sparse slot persistence, import retries, superseded pending Bake/source guard, and Scene serialization.');
+ console.log('V2 BAKE BIND PASS: sparse slots, stale import checks, every native write failure, rollback/conflict reporting and serialized persistence.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

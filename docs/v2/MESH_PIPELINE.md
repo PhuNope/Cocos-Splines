@@ -397,3 +397,41 @@ bound renderer's dense material indices. Previously an early return
 could leave stale materials from the last valid Baked/Preview mesh
 visible on the wrong submeshes. The Inspector's existing
 `materialMapStatus: invalid` diagnostic remains available.
+
+### Compensating rollback for mid-Bind Editor failures (2026-11-16, P1)
+
+The Scene `set-property` API used by Creator 3.8.8 is **not a
+single atomic multi-field transaction**. An imported glTF may be ready
+but a subsequent metadata assignment can fail after the first property
+has already changed. Previously `bakedMesh` was written first and
+could be left paired with an earlier source fingerprint or material
+slot map.
+
+Before writing, the Binder now captures the original serialized
+`bakedMesh`, source URL/fingerprint, primitive material slots,
+`meshMode` (when Baked is requested) and all three pending-import
+fields. It refuses the Bind if any required original value cannot
+be captured. It stages the source metadata and slot map first,
+swaps `bakedMesh` only once prepared, and clears the pending import
+at the end. A failed setter (including one that **mutated before
+throwing**) triggers compensating restoration of attempted fields,
+followed by a fresh `query-node` verification of the entire saved
+state. Rollback does not overwrite a value already changed by another
+Editor operation during the failed Bind.
+
+The result always returns `ok:false` on a failed Bind and
+distinguishes `rolledBack:true` from
+`recoveryRequired:true` (partial/uncertain restoration).
+The Inspector emits a prominent Console error when user recovery is
+required. This avoids a misleading success and protects prior saved
+Baked bindings in ordinary single-failure cases. These compensating
+writes can themselves fail and appear as separate native Undo
+entries; they are **not a guarantee of atomic Creator history or
+Prefab overrides**. Multi-writer races after the read-before-write
+check are also possible without a native Scene transaction.
+
+Headless failure injection covers all eight writes in Baked mode,
+including rejected requests, thrown errors before mutation,
+errors after mutation, a persistent rollback failure and a
+concurrent third-party edit. Real Creator 3.8.8 Save/Reopen,
+Prefab history and native reject/Undo behavior still need acceptance.

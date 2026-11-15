@@ -65,6 +65,8 @@ async function bindV2RoadMesh(){
             verifyCurrent:()=>scene('inspectV2RoadBake',uuid)
         },{attempts:1});
         if(!result.ok)return {ok:false,pending:!!result.pending,
+            rolledBack:result.rolledBack===true,
+            recoveryRequired:result.recoveryRequired===true,
             error:result.reason||'AssetDB import is not ready'};
         const restored=await scene('restoreV2RoadBaked',uuid);
         if(!restored?.ok)throw new Error(restored?.error||'Cannot restore Baked Mesh');
@@ -108,6 +110,8 @@ async function bakeV2Road(){
         },{attempts:10,delayMs:200});
         if(!bound.ok){
             if(!bound.pending)return {ok:false,bound:false,url:assetUrl,
+                rolledBack:bound.rolledBack===true,
+                recoveryRequired:bound.recoveryRequired===true,
                 error:bound.reason||'Bake source changed during import'};
             return {ok:true,bound:false,url:assetUrl,
                 message:'Exported glTF. Click Bind Imported Mesh after AssetDB import.'};

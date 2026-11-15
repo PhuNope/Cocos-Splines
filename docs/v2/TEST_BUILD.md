@@ -447,3 +447,23 @@ a prior preview. Check Bake Status must report
 `materialMapStatus: invalid`. Native Cocos Creator 3.8.8 tests are
 still required; mocked CI cannot make Editor operations atomic or
 prove the importer preserves primitive order.
+
+## Mid-Bind failure recovery — Windows Creator 3.8.8 manual checklist
+
+1. Start from a previously bound Road Mesh with known source fingerprint,
+   material slots (such as 0/3/4) and saved Baked mode.
+2. Stage a new Bake and deliberately interrupt or reject a property
+   assignment during **Bind Imported Mesh** (use a disposable project).
+   Check that an ordinary failure leaves the previous Mesh, source
+   metadata, mode and pending Bake identical to their pre-Bind values.
+3. Verify both `bakedMaterialSlots` and `pendingBakeMaterialSlots`
+   across Save/Reopen. A failed Bind must not be reported as success.
+4. Exercise native Undo/Redo and Prefab Overrides. The headless
+   rollback is a compensating sequence, **not one Creator history
+   transaction**: if property restoration or verification fails,
+   expect `recoveryRequired:true` and restore the Scene manually.
+5. Perform a successful fresh Bake/Bind after an injected failure;
+   verify the newly imported Mesh uses the correct material order,
+   with no unintended source regeneration in Play.
+
+Do not certify Release Candidate from these mocked tests alone.

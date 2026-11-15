@@ -8,6 +8,11 @@ async function dispatchV2(inspector,action){
     const result=await callEditor(inspector,action);
     if(result?.ok===false){
         console.warn('[Cocos Splines] '+String(result.error||'Editor action failed'));
+        if(result.recoveryRequired)
+            console.error('[Cocos Splines] Bind rollback is incomplete. '+
+                'Inspect Baked Mesh, source fingerprint and pending Bake fields '+
+                'in the Scene; use Creator Undo/Redo or restore a saved Scene '+
+                'before attempting another Bind. No success was recorded.');
     }else if(result?.shortKnotFallback){
         console.warn('[Cocos Splines] Short Knot: ConstantWidth cannot fit; generated a seamless Continuous Road with adaptive width. '+result.shortKnotFallback);
     }else if(action==='plan-v2-junction-auto-trim'&&result?.ok){

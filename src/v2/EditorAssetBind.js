@@ -79,23 +79,83 @@ async function bindImportedMesh(editor,params){
     if(!pendingBakeMatches(comp,assetUrl,fingerprint,slotMap))
         return {ok:false,pending:false,
             reason:'A newer Bake replaced the pending import; refusing stale Mesh binding'};
-    const old=comp.value?.bakedMesh?.value;
-    // Never assume the glTF imported mesh actually has an alias to its parent
-    // model UUID; only the concrete child asset UUID is acceptable.
-    await setComponentField(editor,nodeUuid,componentIndex,'bakedMesh',{uuid:target.uuid},'cc.Mesh');
+    // A glTF import can succeed while an individual native set-property
+    // fails. Capture all serialized fields BEFORE any write so the prior
+    // Baked reference, metadata, mode and pending import can be restored.
+    // Refuse to write if Creator cannot supply a complete original dump.
+    const planned=[
+        ['bakedSourceUrl',assetUrl,'String'],
+        ['bakedSourceFingerprint',fingerprint,'String'],
+        ['bakedMaterialSlots',slotMap,'String'],
+        ['bakedMesh',{uuid:target.uuid},'cc.Mesh'],
+        ...(mode===2?[['meshMode',2,'Enum']]:[]),
+        ['pendingBakeUrl','','String'],
+        ['pendingBakeFingerprint','','String'],
+        ['pendingBakeMaterialSlots','','String']
+    ];
+    const copy=value=>JSON.parse(JSON.stringify(value));
+    const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    const original=new Map();
+    for(const [key,,type] of planned){
+        const field=comp.value?.[key];
+        if(!field||!Object.prototype.hasOwnProperty.call(field,'value')||
+           field.value===undefined)
+            return {ok:false,pending:false,
+                reason:'Cannot safely snapshot '+key+' before Bake binding; reopen the Scene'};
+        original.set(key,{type,value:copy(field.value)});
+    }
+    const old=original.get('bakedMesh').value;
+    // Stage metadata first. Swap the Mesh only after its mapping is ready;
+    // clear pending import fields last. On failure, undo attempted writes.
+    // Creator set-property calls are NOT an atomic history transaction.
+    const attempted=[];
     try{
-        await setComponentField(editor,nodeUuid,componentIndex,'bakedSourceUrl',assetUrl,'String');
-        await setComponentField(editor,nodeUuid,componentIndex,'bakedSourceFingerprint',fingerprint,'String');
-        // Commit the layout only alongside the newly bound cc.Mesh.
-        // Never derive this from the current (possibly edited) Spline Path.
-        await setComponentField(editor,nodeUuid,componentIndex,'bakedMaterialSlots',slotMap,'String');
-        if(mode===2)await setComponentField(editor,nodeUuid,componentIndex,'meshMode',2,'Enum');
-        await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeUrl','','String');
-        await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeFingerprint','','String');
-        await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeMaterialSlots','','String');
+        for(const [key,value,type] of planned){
+            attempted.push({key,value,type}); // A failed call may already mutate.
+            await setComponentField(editor,nodeUuid,componentIndex,key,value,type);
+        }
     }catch(error){
-        // The scene remains dirty and can be undone; never claim a full bind.
-        return {ok:false,pending:false,reason:'Mesh reference applied but metadata update failed: '+String(error),uuid:target.uuid};
+        const issues=[];
+        let current;
+        try{
+            current=componentDump(
+                await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+        }catch(readError){issues.push('Cannot inspect changed Scene: '+String(readError));}
+        if(current){
+            // Never overwrite a value changed by another Editor action.
+            // Only revert a field that still equals our attempted value.
+            for(const {key,value} of attempted.reverse()){
+                const was=original.get(key);
+                const live=current.value?.[key]?.value;
+                if(same(live,was.value))continue;
+                if(!same(live,value)){
+                    issues.push('Concurrent change at '+key);continue;
+                }
+                try{
+                    await setComponentField(editor,nodeUuid,componentIndex,
+                        key,copy(was.value),was.type);
+                }catch(restoreError){
+                    issues.push('Restore failed at '+key+': '+String(restoreError));
+                }
+            }
+            // Verify the whole original binding, including pending state.
+            try{
+                const after=componentDump(
+                    await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+                for(const [key,was] of original)
+                    if(!same(after.value?.[key]?.value,was.value))
+                        issues.push('Unrestored '+key);
+            }catch(verifyError){
+                issues.push('Cannot verify restored Scene: '+String(verifyError));
+            }
+        }
+        const rolledBack=issues.length===0;
+        return {ok:false,pending:false,rolledBack,recoveryRequired:!rolledBack,
+            reason:'Bake bind property write failed: '+String(error)+
+                (rolledBack?'; previous Baked binding restored':
+                 '; automatic restore incomplete — inspect Scene/Undo manually: '+
+                    issues.join('; ')),
+            uuid:old?.uuid||null};
     }
     return {ok:true,uuid:target.uuid,url:target.url,assetUrl,replacedUuid:old?.uuid||null};
 }
