@@ -59,10 +59,10 @@ try {
    if(id==='cc/env')return env;
    return original.apply(this,arguments);
  };
- let SplinePath,CurveMode,TangentMode,SplineKnot,RotationMode,evaluateSplineV2;
+ let SplinePath,CurveMode,TangentMode,SplineKnot,RotationMode,SplineSpace,evaluateSplineV2;
  try{
    ({SplinePath,CurveMode,TangentMode,
-     SplineKnot,RotationMode}=require(path.join(dir,'Components/SplinePath.js')));
+     SplineKnot,RotationMode,SplineSpace}=require(path.join(dir,'Components/SplinePath.js')));
    ({evaluateSplineV2}=require(path.join(dir,'core/SplineCurves.js')));
  }finally{Module._load=original;}
  const eq=(a,b,e=1e-5)=>assert(Math.abs(a-b)<=e,`expected ${a} ~ ${b}`);
@@ -74,7 +74,24 @@ try {
  const pathComp=pathNode.addComponent(SplinePath);
  pathComp.knots=[k0,k1];pathComp.interpolation=CurveMode.Bezier;
  // Auto tangents exactly match core's natural 1/3 chord fallback.
- const auto=pathComp.getSplineData(consumer);
+ // Path authoring is always local. The public method and all generators
+ // default to local data, regardless of Path/consumer Node transforms.
+ const local=pathComp.getSplineData(consumer);
+ assert.equal(SplineSpace.Local,0);
+ assert.deepEqual(local.knots.map(k=>k.position),
+   [{x:0,y:0,z:0},{x:6,y:0,z:0}]);
+ const explicitWorld=pathComp.getSplineData(consumer,SplineSpace.World);
+ assert.deepEqual(explicitWorld.knots.map(k=>k.position),
+   [{x:12,y:0,z:0},{x:24,y:0,z:0}],
+   'World mode maps Path world to Road local coordinates');
+ k0.mode=TangentMode.Free;
+ k0.handleOut=new Vec3(2,0,0);
+ assert.deepEqual(pathComp.getSplineData(consumer).knots[0].handleOut,
+   {x:2,y:0,z:0},'Local mode must preserve authored Bézier offset');
+ assert.deepEqual(pathComp.getSplineData(consumer,SplineSpace.World).knots[0].handleOut,
+   {x:4,y:0,z:0},'World mode transforms control offsets with Path scale');
+ k0.mode=TangentMode.Auto;
+ const auto=pathComp.getSplineData(consumer,SplineSpace.World);
  assert.equal(auto.type,'bezier');
  assert.equal(auto.knots[0].handleOut,undefined);
  assert.equal(auto.knots[1].handleIn,undefined);

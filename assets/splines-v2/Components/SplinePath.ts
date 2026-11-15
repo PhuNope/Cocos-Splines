@@ -286,7 +286,7 @@ export class SplinePath extends Component {
     public get pathGizmoTangentOut():Vec3{return this.readTangent('out');}
     public set pathGizmoTangentOut(v:Vec3){this.writeTangent('out',v);}
 
-    public getSplineData(consumer:Node,space:SplineSpace=SplineSpace.World):SplineDataV2 {
+    public getSplineData(consumer:Node,space:SplineSpace=SplineSpace.Local):SplineDataV2 {
         if(!consumer?.isValid||!this.node?.isValid)
             throw new Error('SplinePath and consumer require valid Nodes');
         if(this.knots.length<2||this.knots.some(k=>!k||!finite(k.position)))

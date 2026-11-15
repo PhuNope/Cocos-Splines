@@ -56,6 +56,10 @@ try{
  const component=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
  const generator=fs.readFileSync(path.join(root,'assets/splines-v2/Components/MeshGenerator.ts'),'utf8');
  assert(generator.includes('this.meshMode===MeshMode.Dynamic'),'No shared Dynamic gate');
+ assert(generator.includes('coordinateSpace=SplineSpace.Local'),
+    'Shared generators must default to Path-local mesh generation');
+ assert(generator.includes('getSplineData(this.node,this.coordinateSpace)'),
+    'Generator must use selected Local/World coordinate conversion');
  assert(generator.includes('else this.showSavedMesh();'),'Manual/Baked must restore saved Mesh');
  assert(generator.includes('if(!EDITOR_NOT_IN_PREVIEW)'), 'No Editor-only Bake guard');
  assert(component.includes('extends MeshGenerator'),'Road must use shared Mesh lifecycle');
@@ -72,6 +76,7 @@ try{
  assert.match(inspector.template,/spl-v2-junctionStartTrim/);
  assert.match(inspector.template,/spl-v2-junctionEndTrim/);
  assert.match(inspector.template,/spl-v2-pathSource/);
+ assert.match(inspector.template,/spl-v2-coordinateSpace/);
  assert.match(inspector.template,/spl-v2-gizmoLiveMesh/);
  assert.match(inspector.template,/spl-v2-gizmoMeshIntervalMs/);
  assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplinePath.ts.meta')));
