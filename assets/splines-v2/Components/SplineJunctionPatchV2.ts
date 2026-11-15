@@ -3,6 +3,7 @@ import {buildJunctionPatchV2,type JunctionRoadBranchV2,type JunctionPatchReportV
 import {SplineRoadV2} from './SplineRoadV2';
 import {planJunctionAutoTrimV2} from '../geometry/JunctionAutoTrimV2';
 import {planJunctionEndpointSnapV2,buildSplineRoadNetworkV2,type RoadNetworkCandidateV2} from '../geometry/SplineRoadNetworkV2';
+import {planJunctionAutoConnectV2,type JunctionConnectCandidateV2} from '../geometry/JunctionAutoConnectV2';
 import {SplineMeshGeneratorV2} from './SplineMeshGeneratorV2';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
@@ -62,6 +63,8 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
     endpointTolerance=.25;
     @property({min:.05,max:5,step:.05,tooltip:'Editor-only maximum distance to move a linked Pure Vec3 Path endpoint when applying Junction Endpoint Snap.'})
     endpointSnapMaxDistance=.75;
+    @property({min:.05,max:5,step:.05,tooltip:'Editor-only search radius for 3- or 4-way Auto Connect. It links references but never moves Path endpoints.'})
+    autoConnectSearchRadius=.75;
     @property({min:.01,max:1,step:.01,tooltip:'Maximum flat-plane height difference in local units; in Gentle Grade, also caps crossfall (max .03).'})
     flatTolerance=.1;
     @property({type:Enum(JunctionGradeModeV2),tooltip:'Flat is the legacy default. Gentle Grade supports longitudinal slopes only; banking and steep transitions are rejected.'})
@@ -223,6 +226,55 @@ export class SplineJunctionPatchV2 extends SplineMeshGeneratorV2 {
                 expectedLocal:{x:source.position.x,y:source.position.y,z:source.position.z},
                 targetLocal:{x:target.x,y:target.y,z:target.z}};
         })};
+    }
+    /**
+     * Discover nearby Road references without modifying any Scene property.
+     * Input is serialized Road/Path component identity plus WORLD positions.
+     * Invalid distant Roads are reported as skipped, never implicitly linked.
+     */
+    public planAutoConnectV2(){
+        if(!EDITOR_NOT_IN_PREVIEW)
+            throw new Error('Junction Auto Connect is Editor-only');
+        const root=director.getScene();
+        if(!root)throw new Error('Auto Connect requires an active Cocos Scene');
+        const candidates:JunctionConnectCandidateV2[]=[];
+        const skipped:Array<{roadId:string;reason:string}>=[];
+        const stack=[root];
+        let visited=0,scanned=0;
+        while(stack.length){
+            const node=stack.pop()!;
+            if(++visited>10000)
+                throw new Error('Auto Connect Scene scan exceeded 10000 Nodes');
+            for(const child of node.children)stack.push(child);
+            const comps=(node as unknown as {components:unknown[]}).components||[];
+            for(const item of comps){
+                if(!(item instanceof SplineRoadV2))continue;
+                if(++scanned>256)
+                    throw new Error('Auto Connect Scene scan exceeded 256 Roads');
+                try{
+                    if(!item.pathSource?.node?.isValid)
+                        throw new Error('Missing Path Source');
+                    const componentUuid=(item as unknown as {uuid?:string}).uuid;
+                    if(!componentUuid)
+                        throw new Error('Road component UUID unavailable');
+                    candidates.push({...item.junctionAutoTrimCandidateV2(node.uuid),
+                        pathId:item.pathSource.node.uuid,componentUuid});
+                }catch(error){
+                    skipped.push({roadId:node.uuid,
+                        reason:String(error instanceof Error?error.message:error)});
+                }
+            }
+        }
+        const plan=planJunctionAutoConnectV2(candidates,{
+            center:this.node.worldPosition,
+            searchRadius:this.autoConnectSearchRadius,
+            maxHeightDelta:this.flatTolerance
+        });
+        return {...plan,scannedRoads:scanned,skipped,
+            expectedLinks:this.branches.map(link=>({
+                componentUuid:(link?.road as unknown as {uuid?:string}|null)?.uuid||'',
+                atEnd:!!link?.atEnd
+            }))};
     }
     /** Read-only Scene Road adjacency scan. Does not auto-link components. */
     public inspectRoadNetworkV2(){
