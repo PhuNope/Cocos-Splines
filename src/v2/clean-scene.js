@@ -136,8 +136,29 @@ function refreshV2JunctionEndpointSnap(uuid){
         return {ok:true,refreshedPaths:paths.size,warnings};
     });
 }
+/** Read-only Junction auto-link proposal; never mutate the live Branches array. */
+function planV2JunctionAutoConnect(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planAutoConnectV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        return {ok:true,plan:c.planAutoConnectV2()};
+    });
+}
+/** Called only after Creator's recorded Branches property commit. */
+function refreshV2JunctionAutoConnect(uuid){
+    return run(uuid,(_node,c)=>{
+        if(typeof c.planAutoConnectV2!=='function')
+            throw new Error('Select a Junction Patch component');
+        const warnings=[];
+        try{c.onRestore();}catch(error){
+            warnings.push(String(error instanceof Error?error.message:error));
+        }
+        return {ok:true,branchCount:c.branches.length,warnings};
+    });
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
     inspectV2RoadBake,refreshV2Path,planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
-    planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap};
+    planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap,
+    planV2JunctionAutoConnect,refreshV2JunctionAutoConnect};
 exports.load=function(){};
 exports.unload=function(){};
