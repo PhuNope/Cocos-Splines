@@ -21,6 +21,8 @@ function encodeBase64(bytes:Uint8Array):string {
  */
 export function exportMeshGltfV2(mesh:MeshDataV2,sourceRevision=''):{
     readonly json:string;readonly fingerprint:string;readonly primitiveCount:number;
+    /** Source material slot for each glTF primitive, including chunk repeats. */
+    readonly primitiveMaterialSlots:ReadonlyArray<number>;
 } {
     const plan=createMeshBuildPlanV2(mesh,{mode:'baked',sourceRevision});
     const data:number[]=[];
@@ -92,5 +94,7 @@ export function exportMeshGltfV2(mesh:MeshDataV2,sourceRevision=''):{
         bufferViews:views,accessors,
         extras:{cocosSplinesV2:{fingerprint:plan.fingerprint,sourceRevision,materialSlots:Array.from(materialMap.keys())}}
     };
-    return {json:JSON.stringify(gltf),fingerprint:plan.fingerprint,primitiveCount:primitiveList.length};
+    return {json:JSON.stringify(gltf),fingerprint:plan.fingerprint,
+        primitiveCount:primitiveList.length,
+        primitiveMaterialSlots:plan.parts.map(part=>part.materialSlot)};
 }

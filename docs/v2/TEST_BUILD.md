@@ -391,3 +391,27 @@ Record U/V, Repeat/Clamp, Constant Width/Continuous, Profile/markings,
 Dynamic/Baked, Save/Reopen, Prefab Overrides and native Undo/Redo
 separately. CI validates only headless geometry and mocked Editor
 workflows, **not** native Creator 3.8.8 rendering.
+
+## Sparse glTF material slots — Creator 3.8.8 manual acceptance
+
+1. Build a Road using `Materials[0]` for asphalt, `Materials[3]`
+   for line markings and `Materials[4]` for edge paint. Enable
+   markings, Rebuild Preview and confirm three distinct draw parts.
+2. Bake glTF, bind the imported `.mesh` subasset, then inspect
+   whether its actual submesh order matches primitive indices
+   0/1/2 from authored slots 0/3/4. The imported Creator
+   submesh order requires native verification, not only CI.
+3. Switch to Baked, Save/Reopen and enter Play. Confirm asphalt,
+   lines and paint match Dynamic Preview without rebuilding.
+4. Edit paint material only. The imported submesh at index 2
+   should update, with the geometry fingerprint unchanged.
+5. Change source geometry. Check Bake Status must report stale
+   without changing the saved primitive map or imported Mesh.
+6. Validate a deliberately mismatched imported submesh count.
+   Check Bake Status should show `materialMapStatus: invalid`;
+   no guessed slot assignment should silently shift materials.
+7. Verify legacy manually bound Mesh references, Undo/Redo and
+   Prefab Overrides continue working as before.
+
+Record screenshots and logs for Play/Dynamic/Baked and Save/Reopen.
+The headless regression does not certify GPU rendering.

@@ -105,6 +105,27 @@ try{
    'Road must reject geometry without its authoritative SplinePath');
  road.pathSource=currentPath;
  const saved=new Mesh();road.bakedMesh=saved;
+ // Imported glTF primitive order is dense 0/1/2, while authored Road
+ // materials use sparse source slots 0/3/4. Manual/Baked never rebuild.
+ const asphalt=new Material(),lines=new Material(),paint=new Material();
+ saved.subMeshCount=3;
+ road.materials[0]=asphalt;road.materials[3]=lines;road.materials[4]=paint;
+ road.bakedMaterialSlots='[0,3,4]';
+ road.showSavedMesh();
+ assert.strictEqual(renderer.materials[0],asphalt);
+ assert.strictEqual(renderer.materials[1],lines);
+ assert.strictEqual(renderer.materials[2],paint);
+ road.materials[4]=new Material();
+ road.showSavedMesh();
+ assert.strictEqual(renderer.materials[2],road.materials[4],
+  'Switching paint material updates dense imported primitive 2');
+ road.bakedMaterialSlots='[0,3]';
+ renderer.materials=[];
+ road.showSavedMesh();
+ assert.equal(renderer.materials.length,0,
+  'Invalid primitive count must not guess and assign mismatched materials');
+ road.bakedMaterialSlots='';
+ road.materials=[];renderer.materials=[];saved.subMeshCount=1;
  const originalGenerate=road.generate;
  road.generate=()=>{throw new Error('Manual/Baked must never generate');};
  for(const mode of [MeshMode.Manual,MeshMode.Baked]){
@@ -454,6 +475,12 @@ try{
  assert.equal(bakePlan.fingerprint,dynamicPlan.fingerprint,
   'Dynamic Preview and glTF Bake must share the mesh fingerprint');
  assert.deepEqual(dynamicPlan.parts.map(part=>part.materialSlot),[0,3,4]);
+ assert.deepEqual(bakePlan.primitiveMaterialSlots,[0,3,4],
+  'Bake metadata must retain each primitive original sparse slot');
+ const parsedGltf=JSON.parse(bakePlan.content);
+ assert.deepEqual(parsedGltf.meshes[0].primitives.map(p=>p.material),[0,1,2],
+  'glTF importer binds dense indices, not original 0/3/4');
+ assert.deepEqual(parsedGltf.extras.cocosSplinesV2.materialSlots,[0,3,4]);
  assert.equal(bakePlan.primitiveCount,dynamicPlan.parts.length);
  // Failing second GPU allocation destroys earlier staged meshes, while
  // keeping the valid prior preview (and imported Baked asset) intact.
@@ -497,6 +524,12 @@ try{
  const baked=road.prepareBake();assert.equal(JSON.parse(baked.content).asset.version,'2.0');
  road.bakedSourceFingerprint=baked.fingerprint;
  assert.equal(road.inspectBake().stale,false);
+ assert.equal(road.inspectBake().materialMapStatus,'legacy');
+ road.bakedMaterialSlots='[0,3,4]';saved.subMeshCount=3;
+ assert.equal(road.inspectBake().materialMapStatus,'mapped');
+ road.bakedMaterialSlots='[0,3]';
+ assert.equal(road.inspectBake().materialMapStatus,'invalid');
+ road.bakedMaterialSlots='';saved.subMeshCount=1;
  road.uvLongitudinalAxis=1;assert.equal(road.inspectBake().stale,true,'Switching to U must invalidate baked UV0');
  road.uvLongitudinalAxis=0;assert.equal(road.inspectBake().stale,false,'Restoring V keeps previous mapping');
  road.width=5;assert.equal(road.inspectBake().stale,true);

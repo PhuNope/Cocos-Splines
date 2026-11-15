@@ -350,3 +350,31 @@ No Preview is serialized and no Baked Mesh asset is silently
 rewritten. Real GPU-driver failure/recovery, multi-material imported
 MeshRenderer bindings and Creator 3.8.8 Save/Reopen remain manual
 acceptance requirements.
+
+### Sparse material slots through glTF Bake and Save/Reopen (2026-11-15, P1)
+
+Dynamic Preview uses authored material slots such as **0, 3, 4**,
+but glTF exports those draw parts with dense material indices
+**0, 1, 2**. The exporter now returns a `primitiveMaterialSlots`
+array in exact glTF primitive order (including repeated slots after
+mesh chunking). **Bake glTF Asset** saves this order to
+`pendingBakeMaterialSlots`, then **Bind Imported Mesh** commits the
+map as `bakedMaterialSlots` alongside the imported `cc.Mesh` UUID
+and clears pending state.
+
+Baked/Manual renderers use the saved per-primitive map to assign
+`materials[originalSlot]` to imported submesh index, without reading
+the potentially edited Path or generating a mesh during Play.
+Empty material slots are actively cleared. A mismatched imported
+`subMeshCount` causes material assignment to **fail closed**
+rather than guessing the mapping; an explicit **Check Bake Status**
+reports `materialMapStatus: invalid` and warns in the Editor
+Console. An empty/legacy map retains the previous identity mapping.
+Rebinding an old legacy mesh clears an obsolete sparse mapping.
+
+Mock tests cover slots 0/3/4, imported material indices 0/1/2,
+repeated source slots, changing paint material without rebuilding
+geometry, invalid submesh count, persistence after Scene serialization
+and legacy replacement. The glTF document and geometry fingerprint
+are unchanged by storing metadata separately; actual Creator 3.8.8
+glTF importer submesh ordering still needs native verification.

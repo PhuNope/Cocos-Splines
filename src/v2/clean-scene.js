@@ -56,6 +56,7 @@ function inspectV2RoadBake(uuid){
             shortKnotFallback:c.getShortKnotFallback?.()||null,
             pendingUrl:c.pendingBakeUrl||'',
             pendingFingerprint:c.pendingBakeFingerprint||'',
+            pendingMaterialSlots:c.pendingBakeMaterialSlots||'',
             cornerRisk,closedLoopUV:cornerRisk?.closedLoopUV??null,
             junctionReport:c.inspectJunction?.()||null};
     });

@@ -16,7 +16,9 @@ assert.equal(discoverMeshSubasset(meshInfo).uuid,meshUuid);
 const comp=(type='Spline.Road')=>({type,value:{
  bakedMesh:{value:{uuid:'old-mesh'}},bakedSourceUrl:{value:''},
  bakedSourceFingerprint:{value:''},pendingBakeUrl:{value:assetUrl},
- pendingBakeFingerprint:{value:fp},meshMode:{value:1}
+ pendingBakeFingerprint:{value:fp},
+ bakedMaterialSlots:{value:'[9]'},pendingBakeMaterialSlots:{value:'[0,3,4]'},
+ meshMode:{value:1}
 }});
 let scene={__comps__:[comp()]},calls=[],assetResponses=[meshInfo];
 function makeEditor(){
@@ -36,7 +38,8 @@ function makeEditor(){
 }
 (async()=>{
  let editor=makeEditor();
- let result=await bindImportedMesh(editor,{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp});
+ let result=await bindImportedMesh(editor,{nodeUuid,componentIndex:0,
+  assetUrl,fingerprint:fp,materialSlots:'[0,3,4]'});
  assert(result.ok);assert.equal(result.uuid,meshUuid);
  const fields=scene.__comps__[0].value;
  assert.equal(fields.bakedMesh.value.uuid,meshUuid);
@@ -45,23 +48,30 @@ function makeEditor(){
  assert.equal(fields.bakedSourceUrl.value,assetUrl);
  assert.equal(fields.pendingBakeUrl.value,'');
  assert.equal(fields.pendingBakeFingerprint.value,'');
- assert.equal(calls.filter(x=>x.method==='set-property').length,6);
+ assert.equal(fields.bakedMaterialSlots.value,'[0,3,4]');
+ assert.equal(fields.pendingBakeMaterialSlots.value,'');
+ assert.equal(calls.filter(x=>x.method==='set-property').length,8);
  // Save/restore the serialized dump; UUID survives without rebuilding geometry.
  const persisted=JSON.stringify(scene);scene=JSON.parse(persisted);
  assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
+ assert.equal(scene.__comps__[0].value.bakedMaterialSlots.value,'[0,3,4]',
+  'Saved/reopened Scene retains exact original primitive material slots');
  calls=[];scene={__comps__:[comp('Spline.Extrude')]};
  assetResponses=[{uuid:'model-importing',subAssets:{}},meshInfo];
  result=await bindWhenImported(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp},
    {attempts:2,delayMs:0});
  assert(result.ok);
  assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
- assert.equal(calls.filter(x=>x.method==='set-property').length,6,'No mutation during import wait');
+ assert.equal(scene.__comps__[0].value.bakedMaterialSlots.value,'',
+  'Binding a legacy Bake must clear a previous sparse slot map');
+ assert.equal(calls.filter(x=>x.method==='set-property').length,8,
+  'No mutation during import wait');
  for(const kind of ['Spline.MeshDeform','Spline.Junction']){
    calls=[];scene={__comps__:[comp(kind)]};assetResponses=[meshInfo];
    result=await bindImportedMesh(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp});
    assert.equal(result.ok,true,kind+' must bind saved glTF Mesh');
    assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,meshUuid);
-   assert.equal(calls.filter(x=>x.method==='set-property').length,6);
+   assert.equal(calls.filter(x=>x.method==='set-property').length,8);
  }
 
  // Existing mesh remains untouched if no unique import can be proven.
@@ -73,7 +83,20 @@ function makeEditor(){
  assert.equal(scene.__comps__[0].value.bakedMesh.value.uuid,'old-mesh');
  assert.equal(calls.filter(x=>x.method==='set-property').length,0);
  await assert.rejects(()=>bindImportedMesh(makeEditor(),{nodeUuid,componentIndex:0,assetUrl:'db://internal/x.gltf',fingerprint:fp}),/project glTF/);
+ calls=[];scene={__comps__:[comp()]};assetResponses=[meshInfo];
+ for(const bad of ['[0,-1,4]','[0,1.5,4]','[0,4294967296]','[0,null,4]','{bad json}']){
+  await assert.rejects(()=>bindImportedMesh(makeEditor(),{
+   nodeUuid,componentIndex:0,assetUrl,fingerprint:fp,materialSlots:bad
+  }),/material slot map/);
+ }
+ assert.equal(calls.length,0,'Invalid material metadata may not touch AssetDB or Scene');
+ const repeated=await bindImportedMesh(makeEditor(),{
+  nodeUuid,componentIndex:0,assetUrl,fingerprint:fp,materialSlots:'[3,3,4]'
+ });
+ assert.equal(repeated.ok,true);
+ assert.equal(scene.__comps__[0].value.bakedMaterialSlots.value,'[3,3,4]',
+  'Chunked primitives may repeat the same authored material slot');
  scene={__comps__:[comp('Other.Component')]};assetResponses=[meshInfo];
  await assert.rejects(()=>bindImportedMesh(makeEditor(),{nodeUuid,componentIndex:0,assetUrl,fingerprint:fp}),/Component changed/);
- console.log('V2 BAKE BIND PASS: exact cc.Mesh UUID, no premature mutation, importer retry, scene serialization and ambiguous subassets.');
+ console.log('V2 BAKE BIND PASS: cc.Mesh UUID, primitive material slot persistence, legacy reset, importer retry, invalid metadata and Scene serialization.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

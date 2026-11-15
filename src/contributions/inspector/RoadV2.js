@@ -39,6 +39,8 @@ async function dispatchV2(inspector,action){
         if(result.warnings?.length)console.warn('[Cocos Splines] Tangent mesh preview:',result.warnings);
     }else if(action==='check-v2-road-bake'&&result?.ok){
         console.info('[Cocos Splines] Bake status:',result);
+        if(result.materialMapStatus==='invalid')
+            console.warn('[Cocos Splines] Baked Mesh submesh count differs from saved material slots. Skipped guessed material mapping; reimport and bind the correct Mesh.');
     }
     // Report only on explicit Check Bake Status, never during Play/preview.
     // CPU UV phases cannot certify the material's GPU sampler wrap mode.

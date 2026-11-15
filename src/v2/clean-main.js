@@ -60,7 +60,8 @@ async function bindV2RoadMesh(){
             return {ok:false,error:'Path changed since Bake; export again'};
         const result=await bindWhenImported(Editor,{
             nodeUuid:uuid,componentIndex:status.componentIndex,
-            assetUrl:status.pendingUrl,fingerprint:status.pendingFingerprint
+            assetUrl:status.pendingUrl,fingerprint:status.pendingFingerprint,
+            materialSlots:status.pendingMaterialSlots||''
         },{attempts:1});
         if(!result.ok)return {ok:false,pending:!!result.pending,
             error:result.reason||'AssetDB import is not ready'};
@@ -75,7 +76,11 @@ async function bakeV2Road(){
         const uuid=currentNode();
         const output=await scene('prepareV2RoadBake',uuid);
         if(!output?.ok||!output.content||!output.fingerprint||
-            !Number.isInteger(output.componentIndex))
+            !Number.isInteger(output.componentIndex)||
+            !Array.isArray(output.primitiveMaterialSlots)||
+            output.primitiveMaterialSlots.length!==output.primitiveCount||
+            !output.primitiveMaterialSlots.every(x=>Number.isSafeInteger(x)&&
+                x>=0&&x<=0xffffffff))
             throw new Error(output?.error||'Cannot build V2 geometry');
         const safeId=uuid.replace(/[^\w-]/g,'').slice(0,45);
         const assetUrl='db://assets/SplineV2_'+safeId+'_'+output.fingerprint+'.gltf';
@@ -88,13 +93,16 @@ async function bakeV2Road(){
         // No stale fingerprint is committed until Mesh subasset binds.
         await property(uuid,output.componentIndex,'pendingBakeUrl',assetUrl);
         await property(uuid,output.componentIndex,'pendingBakeFingerprint',output.fingerprint);
+        await property(uuid,output.componentIndex,'pendingBakeMaterialSlots',
+            JSON.stringify(output.primitiveMaterialSlots));
         await snapshot();
         const latest=await scene('inspectV2RoadBake',uuid);
         if(!latest?.ok||latest.fingerprint!==output.fingerprint)
             return {ok:false,error:'Spline changed during glTF creation; rebake',url:assetUrl};
         const bound=await bindWhenImported(Editor,{
             nodeUuid:uuid,componentIndex:output.componentIndex,
-            assetUrl,fingerprint:output.fingerprint
+            assetUrl,fingerprint:output.fingerprint,
+            materialSlots:JSON.stringify(output.primitiveMaterialSlots)
         },{attempts:10,delayMs:200});
         if(!bound.ok)return {ok:true,bound:false,url:assetUrl,
             message:'Exported glTF. Click Bind Imported Mesh after AssetDB import.'};

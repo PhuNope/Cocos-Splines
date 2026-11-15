@@ -12,9 +12,11 @@ const road={
   className:'Spline.Road',
   preview:0,restore:0,
   pendingBakeUrl:'',pendingBakeFingerprint:'',
+  pendingBakeMaterialSlots:'[0]',
   rebuildPreview(){this.preview++;},
   restoreBakedPreview(){this.restore++;},
-  prepareBake(){return {content:'{"asset":{"version":"2.0"}}',fingerprint:'abcd',primitiveCount:1};},
+  prepareBake(){return {content:'{"asset":{"version":"2.0"}}',fingerprint:'abcd',
+   primitiveCount:1,primitiveMaterialSlots:[0]};},
   inspectBake(){return {stale:true,hasMesh:false,url:'',fingerprint:'abcd'};},
   inspectCornerRisk(){return {closedLoopUV:{
    enabled:false,longitudinalTiles:2.35,phaseErrorTiles:.35,
@@ -65,10 +67,13 @@ try{
   'refreshV2Path','refreshV2PathGroup','restoreV2RoadBaked']);
  assert.equal(scene.methods.rebuildV2Road('road-node').ok,true);
  assert.equal(road.preview,1);
- assert.equal(scene.methods.prepareV2RoadBake('road-node').componentIndex,0);
+ const prepared=scene.methods.prepareV2RoadBake('road-node');
+ assert.equal(prepared.componentIndex,0);
+ assert.deepEqual(prepared.primitiveMaterialSlots,[0]);
  const sceneReport=scene.methods.inspectV2RoadBake('road-node');
  assert.equal(sceneReport.fingerprint,'abcd');
  assert.equal(sceneReport.closedLoopUV.phaseMismatch,true);
+ assert.equal(sceneReport.pendingMaterialSlots,'[0]');
  assert.strictEqual(sceneReport.cornerRisk.closedLoopUV,sceneReport.closedLoopUV,
   'Check Bake exposes one read-only Closed Loop UV report');
  assert.equal(scene.methods.restoreV2RoadBaked('road-node').ok,true);

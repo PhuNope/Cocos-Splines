@@ -4,10 +4,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-mesh-'));
 try{
     cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--outDir',temp,
-        ...['MeshData','MeshProcessing','MeshBuildPlan'].map(n=>path.resolve(__dirname,'../src-v2/geometry/'+n+'.ts'))],{stdio:'pipe'});
+        ...['MeshData','MeshProcessing','MeshBuildPlan','GltfExporter'].map(n=>path.resolve(__dirname,'../src-v2/geometry/'+n+'.ts'))],{stdio:'pipe'});
     const {buildMeshV2,validateMeshInputV2}=require(path.join(temp,'MeshData.js'));
     const {splitMeshV2,inspectMeshV2,buildMeshColliderDataV2}=require(path.join(temp,'MeshProcessing.js'));
     const {fingerprintMeshV2,createMeshBuildPlanV2}=require(path.join(temp,'MeshBuildPlan.js'));
+    const {exportMeshGltfV2}=require(path.join(temp,'GltfExporter.js'));
     const p=(x,y=0,z=0)=>({x,y,z}),uv=(x,y)=>({x,y});
     const near=(a,b,t=1e-5)=>assert(Math.abs(a-b)<=t,`${a} != ${b}`);
     const input={
@@ -84,6 +85,23 @@ try{
     assert(hugeChunks.every(c=>c.mesh.vertexCount<=65535 && c.mesh.submeshes.every(s=>s.indices instanceof Uint16Array)));
     assert.deepEqual(hugeChunks.flatMap(c=>c.mesh.submeshes.map(s=>s.materialSlot)),[2,7]);
 
+    // glTF primitive indices are dense; return source slots in the exact
+    // primitive order, including repeated groups from the same material.
+    const bake=exportMeshGltfV2(mesh);
+    assert.deepEqual(bake.primitiveMaterialSlots,[2,7]);
+    const bakedDoc=JSON.parse(bake.json);
+    assert.deepEqual(bakedDoc.meshes[0].primitives.map(x=>x.material),[0,1]);
+    assert.deepEqual(bakedDoc.extras.cocosSplinesV2.materialSlots,[2,7]);
+    assert.equal(bake.primitiveCount,bake.primitiveMaterialSlots.length);
+    const repeated=buildMeshV2({...input,submeshes:[
+     {materialSlot:2,indices:[0,2,1]},
+     {materialSlot:2,indices:[1,2,3]},
+     {materialSlot:7,indices:[0,3,2]}
+    ]});
+    const repeatedBake=exportMeshGltfV2(repeated),repeatedDoc=JSON.parse(repeatedBake.json);
+    assert.deepEqual(repeatedBake.primitiveMaterialSlots,[2,2,7]);
+    assert.deepEqual(repeatedDoc.meshes[0].primitives.map(x=>x.material),[0,0,1]);
+    assert.deepEqual(repeatedDoc.extras.cocosSplinesV2.materialSlots,[2,7]);
     const fingerprint=fingerprintMeshV2(mesh);
     assert.equal(fingerprint,fingerprintMeshV2(mesh));
     assert.notEqual(fingerprint,fingerprintMeshV2(mesh,'new profile'));

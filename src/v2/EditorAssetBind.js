@@ -28,14 +28,25 @@ async function setComponentField(editor,nodeUuid,index,key,value,type){
     });
     if(result===false||result==null)throw new Error('Scene set-property failed: '+key);
 }
+function validateMaterialSlots(raw){
+    if(raw==='')return ''; // Existing test builds / manually bound legacy Mesh.
+    if(typeof raw!=='string')throw new Error('Invalid Baked material slot map');
+    let slots;
+    try{slots=JSON.parse(raw);}catch{throw new Error('Invalid Baked material slot map');}
+    if(!Array.isArray(slots)||!slots.length||
+       !slots.every(x=>Number.isSafeInteger(x)&&x>=0&&x<=0xffffffff))
+        throw new Error('Invalid Baked material slot map');
+    return JSON.stringify(slots);
+}
 async function bindImportedMesh(editor,params){
-    const {nodeUuid,componentIndex,assetUrl,fingerprint,mode=2}=params;
+    const {nodeUuid,componentIndex,assetUrl,fingerprint,mode=2,materialSlots=''}=params;
     if(typeof nodeUuid!=='string'||!nodeUuid||!Number.isInteger(componentIndex)||componentIndex<0)
         throw new Error('Invalid node/component for binding');
     if(typeof assetUrl!=='string'||!assetUrl.startsWith('db://assets/')||!assetUrl.endsWith('.gltf'))
         throw new Error('Only imported project glTF assets may be bound');
     if(typeof fingerprint!=='string'||!/^[0-9a-f]{16}$/.test(fingerprint))
         throw new Error('Invalid bake fingerprint');
+    const slotMap=validateMaterialSlots(materialSlots);
     const info=await editor.Message.request('asset-db','query-asset-info',assetUrl);
     const target=discoverMeshSubasset(info);
     if(!target.ok)return {ok:false,pending:true,reason:target.reason,assetUrl};
@@ -48,9 +59,13 @@ async function bindImportedMesh(editor,params){
     try{
         await setComponentField(editor,nodeUuid,componentIndex,'bakedSourceUrl',assetUrl,'String');
         await setComponentField(editor,nodeUuid,componentIndex,'bakedSourceFingerprint',fingerprint,'String');
+        // Commit the layout only alongside the newly bound cc.Mesh.
+        // Never derive this from the current (possibly edited) Spline Path.
+        await setComponentField(editor,nodeUuid,componentIndex,'bakedMaterialSlots',slotMap,'String');
         if(mode===2)await setComponentField(editor,nodeUuid,componentIndex,'meshMode',2,'Enum');
         await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeUrl','','String');
         await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeFingerprint','','String');
+        await setComponentField(editor,nodeUuid,componentIndex,'pendingBakeMaterialSlots','','String');
     }catch(error){
         // The scene remains dirty and can be undone; never claim a full bind.
         return {ok:false,pending:false,reason:'Mesh reference applied but metadata update failed: '+String(error),uuid:target.uuid};

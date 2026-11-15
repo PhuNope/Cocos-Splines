@@ -38,6 +38,10 @@ export abstract class MeshGenerator extends Component {
     @property({visible:false}) bakedSourceUrl='';
     @property({visible:false}) pendingBakeUrl='';
     @property({visible:false}) pendingBakeFingerprint='';
+    /** JSON source material slots ordered by the imported glTF primitive. */
+    @property({visible:false}) bakedMaterialSlots='';
+    /** Serialized with a pending import; never overwrite the bound mapping early. */
+    @property({visible:false}) pendingBakeMaterialSlots='';
     @property({tooltip:'Rebuild temporary Scene mesh on Path Gizmos updates, never auto-Bake.'})
     gizmoLiveMesh=true;
     @property({min:50,max:400,step:10,tooltip:'Minimum milliseconds between Path Gizmos preview rebuilds; End/Cancel always forces one.'})
@@ -136,7 +140,29 @@ export abstract class MeshGenerator extends Component {
         if(!r)throw new Error('MeshGenerator requires MeshRenderer');
         return r;
     }
+    /** Stored per-primitive order is independent from the CURRENT source Path.
+     * In particular, sparse slots 0/3/4 must map to imported indices 0/1/2.
+     * A mismatched import must never get a guessed, incorrect assignment. */
+    private importedMaterialSlots():number[]|null {
+        if(!this.bakedMesh||!this.bakedMaterialSlots)return null;
+        try{
+            const value:unknown=JSON.parse(this.bakedMaterialSlots);
+            if(!Array.isArray(value)||value.length!==this.bakedMesh.subMeshCount||
+                !value.every(slot=>typeof slot==='number'&&
+                    Number.isSafeInteger(slot)&&slot>=0&&slot<=0xffffffff))
+                return null;
+            return value as number[];
+        }catch{return null;}
+    }
     private applyMaterials(renderer:MeshRenderer):void {
+        if(this.bakedMaterialSlots){
+            const slots=this.importedMaterialSlots();
+            if(!slots)return; // Fail closed on invalid metadata / importer count.
+            for(let i=0;i<slots.length;i++)
+                renderer.setSharedMaterial(this.materials[slots[i]]??null,i);
+            return;
+        }
+        // Legacy/hand-authored Mesh: original identity material layout.
         for(let i=0;i<this.materials.length;i++)
             if(this.materials[i])renderer.setSharedMaterial(this.materials[i],i);
     }
@@ -229,17 +255,22 @@ export abstract class MeshGenerator extends Component {
         }
     }
     /** Caller must persist the generated .gltf through AssetDB (Editor main). */
-    public prepareBake():{content:string;fingerprint:string;primitiveCount:number} {
+    public prepareBake():{content:string;fingerprint:string;primitiveCount:number;
+        primitiveMaterialSlots:ReadonlyArray<number>} {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Bake is Editor-only');
         const {geometry}=this.generate();
         const asset=exportMeshGltfV2(geometry);
-        return {content:asset.json,fingerprint:asset.fingerprint,primitiveCount:asset.primitiveCount};
+        return {content:asset.json,fingerprint:asset.fingerprint,
+            primitiveCount:asset.primitiveCount,primitiveMaterialSlots:asset.primitiveMaterialSlots};
     }
     /** Checks source drift; does NOT rebuild or load mesh in Manual/Baked. */
-    public inspectBake():{stale:boolean;hasMesh:boolean;url:string;fingerprint:string} {
+    public inspectBake():{stale:boolean;hasMesh:boolean;url:string;fingerprint:string;
+        materialMapStatus:'legacy'|'mapped'|'invalid'} {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Bake status is Editor-only');
         const fingerprint=this.getCurrentFingerprint();
         return {stale:!this.bakedSourceFingerprint||this.bakedSourceFingerprint!==fingerprint,
-            hasMesh:!!this.bakedMesh,url:this.bakedSourceUrl,fingerprint};
+            hasMesh:!!this.bakedMesh,url:this.bakedSourceUrl,fingerprint,
+            materialMapStatus:!this.bakedMaterialSlots?'legacy':
+                this.importedMaterialSlots()?'mapped':'invalid'};
     }
 }
