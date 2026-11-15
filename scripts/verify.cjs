@@ -38,4 +38,6 @@ checkRel('assets/splines-v2/geometry/JunctionAutoConnectV2.ts.meta');
 checkRel('assets/splines-v2/geometry/JunctionTangentAlignV2.ts');
 checkRel('assets/splines-v2/geometry/JunctionTangentAlignV2.ts.meta');
 checkRel('src/v2/JunctionTangentDump.js');
+checkRel('assets/splines-v2/geometry/JunctionSeamAuditV2.ts');
+checkRel('assets/splines-v2/geometry/JunctionSeamAuditV2.ts.meta');
 console.log('VERIFY PASS: Editor manifest, scripts, asset DB and UUID metadata.');
