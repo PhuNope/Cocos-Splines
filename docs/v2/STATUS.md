@@ -201,3 +201,20 @@ Keep `v2.0.0` as the development branch. No tags and no GitHub Releases without 
 - Junction Road end-ring sampling uses the Road's actual generated geometry and its Node World matrix, so endpoint snap/Auto Trim/Auto Connect and generated Junction boundaries remain consistent for Local and World. Tangent alignment and Endpoint Snap change the correct local Knot handles/position based on the Road's coordinate mode.
 - Breaking rename removes V2 from **public TS component class/enum names, script file names and registered `@ccclass` identifiers**. New class identities use `Spline.*` to avoid conflicting with earlier `Splines.*` legacy scripts. Existing `SplinesV2.*` serialized scene records are not automatically migrated. Internal geometry/math helpers and test-build action names may still carry V2 for branch provenance; they do not appear as component names or Inspector labels.
 - The Inspector header uses clean component names and exposes Coordinate Space for all direct Path consumers. CI uses typed mocks, so validating actual 3.8.8 Prefab/component reattachment, material assignment, UV quality and Undo/Redo remains mandatory.
+
+
+## Path HUD coordinate-frame authoring (2026-11-15)
+
+- Added two independent HUD toggle pairs (Position Local/World, Rotation
+  Local/World). Local vs World Position uses computed Node matrix proxies for
+  selected Knot, indexed Knot points and Bezier tangents; serialized Knot
+  Vec3/Bezier handles continue to be local.
+- Node rotation supports parent-local Euler or World Euler and respects the
+  existing 2D/3D rotate mode and snap. Drag/Cancel restore local Node
+  rotation; no toggle switches are permitted during active drags.
+- Removed the Inspector's redundant raw serialized Knot array panel,
+  preserving editable per-Knot controls and native Creator Undo path.
+- Added regression assertions for HUD toggle grouping, Local/World numeric
+  conversion, indexed points, tangent drags, rotation with rotated parent,
+  Cancel/drag locking and concise Inspector. No public `@ccclass` name
+  changes in this checkpoint; no release/tag.

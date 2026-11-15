@@ -275,3 +275,31 @@ See [Current status](STATUS.md), [Architecture](REBUILD_BREAKING.md),
 - Junction always builds Road endpoints from the actual chosen Road Coordinate Space, converts Road end-ring vertices into Junction Node local coordinates, and uses the correct transform to compute Endpoint Snap and tangent alignment. Test different Path/Road Node transforms for both modes.
 - Switch Coordinate Space then click **Rebuild Preview**. The saved Baked Mesh asset remains unchanged until **Bake glTF Asset**; don't expect existing Bake to update automatically.
 - **BREAKING `@ccclass` rename** (no automatic migration): `Spline.Path`, `Spline.Road`, `Spline.Extrude`, `Spline.MeshDeform`, `Spline.Junction` and `Spline.Knot`. Back up existing Scenes and Prefabs before installing this ZIP. If the old `SplinesV2.*` components appear as missing scripts after replacement, reattach the new components and reassign the Path/Materials/Knots. No promise of preserving old serialized CCClass name references.
+
+
+## Scene HUD — Position / Rotation Local / World (Creator 3.8.8)
+
+1. On a new test Scene, create `Spline.Path` with two or more local Vec3
+   Knots and enable Cocos-Gizmos in the Scene process.
+2. In Path HUD check the two toggle pairs **Position · Local / World** and
+   **Rotation · Local / World**. Only one button in each pair should remain
+   active; changing Position must not change Rotation and vice versa.
+3. Set the Path Node at World X=10 with scale X=2; choose
+   **Position · World** and move Knot 0 to World X=14. The saved
+   `Knot[0].position.x` should become **2** (Path local), not 14.
+   Toggle back to **Local** and ensure the handle is at local X=2.
+4. Use Bezier interpolation and verify tangent World drags convert to
+   local offsets. Drag and Cancel/Escape; both position and tangent mode must
+   revert without generating extra Knot records. Try a non-uniformly scaled,
+   rotated Path Node and additional indexed Knot handles.
+5. Rotate the Path Node's parent by Z=25°; choose
+   **Rotation · World**, choose 2D or 3D Rotate mode and apply Z=90°
+   in World. The Path's local Euler Z must be 65°. Check Local mode,
+   Undo/Redo and Escape. Do not switch coordinate space during a drag.
+6. Open the custom Path Inspector: the **Raw Knot Data** section must be
+   absent. Individual editable Knot records, toolbar actions and
+   spline settings remain; no bottom status description/log is rendered.
+7. Rebuild linked Road / Extrude / Mesh Deform previews after authoring.
+   Their **Coordinate Space** setting is independent from HUD's axis space;
+   they should only change when Path content or transform relevant to their
+   own generation mode changes.

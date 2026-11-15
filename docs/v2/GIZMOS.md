@@ -104,3 +104,36 @@ SDK reference sources:
 [Move handles](https://github.com/PhuNope/Cocos-Gizmos/blob/v3/docs/MOVE_GIZMO.md).
 
 Authored Bézier tangent handles and mode controls are now available on Path: [Bezier Tangents](BEZIER_TANGENTS.md). Still pending: Creator Undo/Redo certification, production Junction/Sidewalk terrain joins and advanced mesh colliders.
+
+
+## HUD Local / World toggle groups (2026-11-15)
+
+The Path's Scene HUD now shows **Position · Local / Position · World** and
+**Rotation · Local / Rotation · World** as two independent, mutually exclusive
+toggle pairs (one active choice in each pair). They are available only with
+the optional Gizmos Scene SDK and an editable Path of at least two Knots.
+Position/Rotation here describe the **authoring Gizmo's coordinate frame**,
+NOT the mesh generator's separate `Coordinate Space` option.
+
+- **Position Local**: move the active Knot and additional point/tangent handles
+  in SplinePath Node-local coordinates. Values are saved directly in
+  `SplineKnot.position/handleIn/handleOut` as pure local `Vec3`.
+- **Position World**: the proxy reads/writes actual World XYZ using the
+  Path Node's `worldMatrix` and its inverse. This correctly supports a
+  translated, rotated, or scaled Path Node while keeping serialized Knot
+  records in Path-local space.
+- **Rotation Local**: rotate the Path Node in its parent's local axes, using
+  the existing 2D Z or 3D XYZ mode.
+- **Rotation World**: rotate the Path Node in World Euler space using
+  Creator `worldRotation`, `Quat.toEuler` and
+  `setWorldRotationFromEuler`; parent rotations are accounted for.
+- Switching a toggle does **not** rewrite Knot positions or bake a new mesh.
+  Switching is refused during an active Gizmo/roll drag, preventing mid-drag
+  space changes. Cancel/Escape restores the local Knot snapshot or the Node's
+  local Euler, even when dragging in World coordinates.
+- **Inspector cleanup**: the duplicate collapsible `Raw Knot Data` dump is
+  removed. Editable per-Knot fields and Add/Insert/Duplicate/Remove/Order
+  operations remain in the compact Knot cards; no status panel is introduced.
+- Live Creator 3.8.8 certification of HUD layout/group support, SDK
+  world-space proxy values and Prefab Undo/Redo is still needed; headless
+  test mocks verify the proxy math, group invariants and lifecycle.
