@@ -8,6 +8,7 @@ const NAME='cocos-splines';
 const {bindWhenImported}=require('./EditorAssetBind');
 const {planPathEditDump}=require('./PathV2Dump');
 const {planEndpointSnapDump}=require('./PathEndpointSnapDump');
+const {planJunctionAutoConnectDump}=require('./JunctionAutoConnectDump');
 const selected=()=>Editor.Selection.getSelected('node')||[];
 async function scene(method,uuid,...args){
     return Editor.Message.request('scene','execute-scene-script',{
@@ -252,8 +253,48 @@ async function applyV2JunctionEndpointSnap(){
             detail+(changed?' ('+changed+' Path edits were recorded; Undo each or inspect Scene)':'')));
     }
 }
+async function planV2JunctionAutoConnect(){
+    try{
+        const result=await scene('planV2JunctionAutoConnect',currentNode());
+        if(!result?.ok)
+            throw new Error(result?.error||'Junction Auto Connect scan rejected');
+        return result;
+    }catch(e){return fail('check Auto Connect',e);}
+}
+/**
+ * Creator's recorded typed IProperty Branches dump is authoritative.
+ * No direct scene-process CCClass array writes or implicit Knot movement.
+ */
+async function applyV2JunctionAutoConnect(){
+    let changed=false;
+    try{
+        const uuid=currentNode();
+        const result=await scene('planV2JunctionAutoConnect',uuid);
+        if(!result?.ok)
+            throw new Error(result?.error||'Junction Auto Connect scan rejected');
+        const dump=await Editor.Message.request('scene','query-node',uuid);
+        const plan=planJunctionAutoConnectDump(dump,result.plan);
+        if(plan.noOp)return {ok:true,changed:false,branches:plan.count,plan:result.plan};
+        const accepted=await Editor.Message.request('scene','set-property',{
+            uuid,path:'__comps__.'+plan.componentIndex+'.branches',
+            dump:plan.dump,record:true
+        });
+        if(accepted===false)throw new Error('Creator rejected Junction Branches edit');
+        changed=true;
+        const refresh=await scene('refreshV2JunctionAutoConnect',uuid);
+        if(!refresh?.ok)
+            throw new Error(refresh?.error||'Junction links saved but preview could not refresh');
+        return {ok:true,changed:true,branches:plan.count,plan:result.plan,
+            warnings:refresh.warnings||[]};
+    }catch(e){
+        const detail=String(e instanceof Error?e.message:e);
+        return fail('apply Auto Connect',new Error(detail+
+            (changed?' (Junction links were recorded; Undo or inspect Scene)':'')));
+    }
+}
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
     bindV2RoadMesh,bakeV2Road,editV2Path,planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
-    planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork};
+    planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork,
+    planV2JunctionAutoConnect,applyV2JunctionAutoConnect};
 exports.load=function(){};
 exports.unload=function(){};
