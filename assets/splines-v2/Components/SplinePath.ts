@@ -416,6 +416,49 @@ export class SplinePath extends Component {
         const selected=new Set(this.selectedGroupKnots());
         return this.knots.flatMap((k,i)=>selected.has(k)?[i]:[]);
     }
+    /** Plan-only helper for one recordable Inspector group nudge. */
+    public planGroupNudge(axis:string):{
+        knotCount:number;indices:number[];
+        expectedPositions:V3[];deltaLocal:V3
+    } {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||!this.gizmoEditKnots||
+           this._dragKnot||this._rotationDragging||this._hudRollKnot)
+            throw new Error('Group Nudge is unavailable during Play or an active drag');
+        if(!/^[xyz][+-]$/.test(axis))
+            throw new Error('Invalid Group Nudge axis');
+        const indices=this.selectedGroupIndices();
+        if(indices.length<2||indices.length>32)
+            throw new Error('Select at least two Knots using the HUD group buttons');
+        const raw=this.gizmoPositionSnap;
+        if(!Number.isFinite(raw)||raw<0||raw>20)
+            throw new Error('Invalid Path Position Snap');
+        const step=raw>0?raw:1;
+        const vector:V3={x:0,y:0,z:0};
+        vector[axis[0] as keyof V3]=axis[1]==='+'?step:-step;
+        const world=this.gizmoPositionSpace===SplineSpace.World;
+        const origin=this.fromGizmoPoint({x:0,y:0,z:0},world);
+        const destination=this.fromGizmoPoint(vector,world);
+        const deltaLocal=sub(destination,origin);
+        if(!finite(deltaLocal)||length(deltaLocal)<=1e-9)
+            throw new Error('Group Nudge requires an invertible Path transform');
+        const expectedPositions=indices.map(index=>{
+            const point=this.knots[index].position;
+            if(!finite(point))throw new Error('Group contains invalid Knot Vec3');
+            return {x:point.x,y:point.y,z:point.z};
+        });
+        return {knotCount:this.knots.length,indices,
+            expectedPositions,deltaLocal};
+    }
+    /** Rebind transient selection after Creator replaces serialized Knot data. */
+    public restoreGroupSelection(indices:ReadonlyArray<number>):void {
+        this._selectedGroup.clear();
+        if(!EDITOR_NOT_IN_PREVIEW||!Array.isArray(indices)||
+           indices.length<2||indices.length>32)return;
+        const unique=new Set(indices);
+        if(unique.size!==indices.length||indices.some(i=>
+            !Number.isSafeInteger(i)||i<0||i>=this.knots.length))return;
+        for(const index of indices)this._selectedGroup.add(this.knots[index]);
+    }
     public onGizmoHudAction(id:string):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
            !this.gizmoEditKnots||this._dragKnot||
