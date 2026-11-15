@@ -109,3 +109,11 @@
 - [x] Mock Creator Check/Apply/Undo regression and clean extension test-bundle wiring; no tag or GitHub Release.
 - [ ] Certify actual Creator 3.8.x component-reference dump schema, native Undo/Redo, Scene Save/Reopen and Prefab overrides.
 - [ ] World-space tangent alignment options, geometric/UV seam certification, dynamic Road Network graph persistence and automated 3D Junction mesh topology.
+
+## Junction Bézier tangent alignment checkpoint (2026-11-15)
+
+- [x] Authoring-only Bezier terminal tangent alignment (Check/Apply), Path-local handle conversion, maximum handle length and slope guards, correct Start/End mapping, preserve Auto.
+- [x] Record typed `SplinePath.knots` IProperty array through Creator history; preserve position/bank/tension/opposite handle; no-op and Editor-console diagnostics.
+- [x] Pure planner, typed dump, mock Editor transaction regression, clean v2 test ZIP wiring.
+- [ ] Certify Creator 3.8.x Editor Undo/Redo, prefab overrides, save/reopen and viewport mesh/paint/UV seams.
+- [ ] Automatic multi-road C1/G1 blending, collision-aware banked Junction corner surfaces and true surface Boolean/topology joins.
