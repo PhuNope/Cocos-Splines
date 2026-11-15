@@ -11,6 +11,7 @@ const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
     'gizmoRotationMode','gizmoRotationSnap',
+    'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
     'gizmoShowRollGuide','gizmoRollGuideSize'];
 const $={items:'.spl-path-items',
     count:'.spl-path-count',add:'.spl-path-add'};
@@ -20,6 +21,7 @@ const sections=[
  ['Gizmos',['gizmoKnotIndex','gizmoShowPath','gizmoEditKnots',
      'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents',
      'gizmoRotationMode','gizmoRotationSnap',
+     'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
      'gizmoShowRollGuide','gizmoRollGuideSize']]
 ];
 const rows=sections.map(([name,fields])=>
