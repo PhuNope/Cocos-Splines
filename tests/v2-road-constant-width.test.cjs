@@ -71,6 +71,28 @@ try{
   knots:[knot(0,0,0),knot(12,0,0),knot(12,0,12),knot(0,0,12)]});
  assert.equal(buildRoadFilletCacheV2(square,2,{maxArcStep:.4}).report.filletedCorners,4);
  assert(buildRoadStripV2(square,{...opts,step:.4}).triangleCount>0);
+ // Profile/markings use the filleted centreline length, NOT guide knots.
+ for(const axis of ['u','v']){
+  const settings={...opts,step:.4,shoulderWidth:1,curbWidth:.3,curbHeight:.2,
+   generateMarkings:true,uvLongitudinalAxis:axis};
+  const base=buildRoadProfileV2(square,settings);
+  const fitted=buildRoadProfileV2(square,{...settings,closedLoopUVRepeat:true});
+  const fillet=buildRoadFilletCacheV2(square,3.3,{maxArcStep:.4});
+  const tiles=Math.max(1,Math.round(fillet.cache.length/5));
+  const frames=buildSplineFramesV2(fillet.cache,{maxStep:.4}).frames;
+  const lng=axis==='u'?0:1,lastRingVertex=2*(frames.length-1);
+  assert(Math.abs(fitted.uv0[2*lastRingVertex+lng]-tiles)<2e-5);
+  assert(Math.abs(base.uv0[2*lastRingVertex+lng]-fillet.cache.length/5)<2e-5);
+  assert.deepEqual(Array.from(fitted.positions),Array.from(base.positions));
+  assert.deepEqual(Array.from(fitted.uv2),Array.from(base.uv2));
+  assert.deepEqual(fitted.submeshes.map(s=>s.materialSlot),[0,1,2,3,4]);
+  const edges=fitted.submeshes.find(s=>s.materialSlot===4);
+  assert(edges&&edges.indices.length>0);
+  let maxMark=-Infinity;
+  for(const ix of edges.indices)maxMark=Math.max(maxMark,fitted.uv0[2*ix+lng]);
+  assert(Math.abs(maxMark-tiles)<2e-5,'Markings must share fitted UV0 repeat');
+  assert.equal(JSON.parse(exportMeshGltfV2(fitted).json).meshes[0].primitives.length,5);
+ }
  const grade=buildSplineCacheV2({type:'linear',closed:false,
   knots:[knot(0,0,0),knot(0,1,12),knot(12,3,12)]});
  assert(buildRoadStripV2(grade,opts).positions.every(Number.isFinite));

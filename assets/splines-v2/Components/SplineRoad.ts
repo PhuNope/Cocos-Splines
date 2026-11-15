@@ -90,6 +90,8 @@ export class SplineRoad extends MeshGenerator {
     uvCrossMode=UVCrossMode.Legacy;
     @property({type:Enum(UVAxis),tooltip:'Which UV0 texture axis repeats along the spline: V = image Y, U = image X.'})
     uvLongitudinalAxis=UVAxis.V;
+    @property({tooltip:'Closed Road only: fit longitudinal UV0 to integer Repeat tiles after fillets. Requires Repeat texture wrap; UV2 unchanged. Off preserves existing scenes.'})
+    closedLoopUVRepeat=false;
     @property({min:0,max:6,step:.05,tooltip:'Road-length sidewalk both sides (material slot 5). Set 0 to disable. Requires open ConstantWidth Road with full curb.'})
     roadSidewalkWidth=0;
     @property({type:Enum(RoadTerrainMode),tooltip:'Flat local height or per-vertex Cocos Terrain sampling for Road sidewalk outer edges.'})
@@ -217,6 +219,7 @@ export class SplineRoad extends MeshGenerator {
             dashLength:this.markingDashLength,dashGap:this.markingDashGap};
         const roadSampling={junctionStartTrim:this.junctionStartTrim,junctionEndTrim:this.junctionEndTrim,
             generateMarkings:this.generateMarkings,markingOptions,
+            closedLoopUVRepeat:this.closedLoopUVRepeat,
             adaptiveSampling:this.adaptiveSampling,
             maxTurnAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError,uvCrossMode};
         const corners=this.cornerSettings();

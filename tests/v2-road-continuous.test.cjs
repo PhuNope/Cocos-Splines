@@ -139,6 +139,35 @@ try{
    assert(Math.abs(mesh.uv2[2*lastVertex+1]-1)<2e-6);
   }
  }
+ // Opt-in closed-loop integer tile UVs; geometry and UV2 must be identical.
+ const tiles=Math.max(1,Math.round(loop.length/5));
+ assert(Math.abs(loop.length/5-tiles)>.01,'Fixture must have noninteger default repeats');
+ for(const axis of ['u','v']){
+  const settings={width:4,step:.2,surfaceMode:'continuous',uvLongitudinalAxis:axis};
+  const before=buildRoadStripV2(loop,settings);
+  const after=buildRoadStripV2(loop,{...settings,closedLoopUVRepeat:true});
+  const frames=buildSplineFramesV2(loop,{maxStep:.2}).frames;
+  const lng=axis==='u'?0:1;
+  assert.deepEqual(Array.from(after.positions),Array.from(before.positions));
+  assert.deepEqual(Array.from(after.uv2),Array.from(before.uv2));
+  assert.equal(after.triangleCount,before.triangleCount);
+  assert.notDeepEqual(Array.from(after.uv0),Array.from(before.uv0));
+  for(let i=0;i<frames.length;i++)for(let side=0;side<3;side++){
+   const at=2*(3*i+side);
+   assert(Math.abs(after.uv0[at+lng]-frames[i].distance/loop.length*tiles)<2e-5);
+   assert(Math.abs(after.uv0[at+1-lng]-side/2)<2e-6);
+  }
+  const last=2*(after.vertexCount-1)+lng;
+  assert(Math.abs(after.uv0[last]-tiles)<2e-5);
+  assert(Math.abs(before.uv0[last]-loop.length/5)<2e-5);
+  const gltf=JSON.parse(exportMeshGltfV2(after).json);
+  assert(gltf.meshes[0].primitives[0].attributes.TEXCOORD_0!==undefined);
+  assert(gltf.meshes[0].primitives[0].attributes.TEXCOORD_1!==undefined);
+ }
+ const open=buildSplineCacheV2({type:'linear',closed:false,knots:[k(0,0),k(0,13)]});
+ assert.deepEqual(
+  Array.from(buildRoadStripV2(open,{width:4,surfaceMode:'continuous'}).uv0),
+  Array.from(buildRoadStripV2(open,{width:4,surfaceMode:'continuous',closedLoopUVRepeat:true}).uv0));
  const tube=buildTubeV2(hairpin,{radius:.5,step:.25,sides:12});
  assert(tube.vertexCount>0,'Extrude tube must remain independent');
  function fakeClosed(x,z,distance){return {position:{x,y:0,z},up:{x:0,y:1,z:0},

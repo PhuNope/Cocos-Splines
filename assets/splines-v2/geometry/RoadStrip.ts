@@ -14,6 +14,8 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousO
     readonly uvMetersPerRepeat?:number;
     /** UV0 coordinate that repeats along road; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
+    /** Closed road: fit UV0 along the loop to integer Repeat tiles. */
+    readonly closedLoopUVRepeat?:boolean;
     readonly step?:number;
     readonly materialSlot?:number;
     /** Remove near-coplanar duplicate Road surfaces; enabled for JoinAndTrim by default. */
@@ -33,15 +35,31 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousO
     readonly generateMarkings?:boolean;
     readonly markingOptions?:RoadMarkingOptionsV2;
 }
+/** Fit the closed Road's longitudinal UV0 to whole Repeat tiles.
+ * Always use generated length (including fillets), not guide Knot distance.
+ * Open roads or disabled settings retain their authored UVs. */
+export function roadUVMetersForClosedLoopV2(
+    length:number,requested:number,closed:boolean,enabled=false
+):number {
+    if(!Number.isFinite(requested)||requested<=0)
+        throw new Error('uvMetersPerRepeat must be positive');
+    if(!Number.isFinite(length)||length<=1e-9)
+        throw new Error('Road requires positive spline length');
+    if(!closed||!enabled)return requested;
+    const tiles=Math.max(1,Math.round(length/requested));
+    if(!Number.isSafeInteger(tiles)||tiles>16777216)
+        throw new Error('Closed Road exceeds Float32 UV repeat precision');
+    return length/tiles;
+}
 /**
  * Minimal v2 road geometry generator. Uses the same stable frames as followers,
  * and Mesh Pipeline 2 to preserve UV0, UV2, normal and tangent channels.
  * Applies local miter-and-inside-trim by default; full junction CSG is separate.
  */
 export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2):MeshDataV2 {
-    const width=options.width,uvMeters=options.uvMetersPerRepeat??5,step=options.step??.5,materialSlot=options.materialSlot??0;
+    const width=options.width,requestedUVMeters=options.uvMetersPerRepeat??5,step=options.step??.5,materialSlot=options.materialSlot??0;
     if(!Number.isFinite(width)||width<=0)throw new Error('Road width must be positive');
-    if(!Number.isFinite(uvMeters)||uvMeters<=0)throw new Error('uvMetersPerRepeat must be positive');
+    if(!Number.isFinite(requestedUVMeters)||requestedUVMeters<=0)throw new Error('uvMetersPerRepeat must be positive');
     if(!Number.isFinite(step)||step<=0)throw new Error('Road sampling step must be positive');
     const axis=options.uvLongitudinalAxis??'v';
     if(axis!=='u'&&axis!=='v')throw new Error('Road UV axis must be u or v');
@@ -57,6 +75,8 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     const fillet=mode==='fillet'?buildRoadFilletCacheV2(cache,width*.5,{...options,maxArcStep:step}):null;
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
+    const uvMeters=roadUVMetersForClosedLoopV2(workingCache.length,requestedUVMeters,
+        workingCache.spline.closed,options.closedLoopUVRepeat===true);
     const table=buildSplineFramesV2(workingCache,{maxStep:step,
         rollSource:cache.spline,
         ...(options.adaptiveSampling&&mode!=='fillet'?{

@@ -66,7 +66,7 @@ function makeV2Inspector(kind='road'){
          ['Live Editor mesh',['gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Materials and persistence',['meshMode','materials','bakedMesh']]]:
         [['Spline source',['pathSource','coordinateSpace']],
-         ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
+         ['Road and cross-section',['width','shoulderWidth','curbWidth','curbHeight','sampleStep','junctionStartTrim','junctionEndTrim','adaptiveSampling','maxTurnAngleDegrees','maxChordError','cornerMode','cornerTrimSafety','cornerMiterLimit','surfaceMode','filletRadiusScale','shortKnotMode','filletArcAngleDegrees','filletChordError','clearanceSafety','widthSlope','resolvePlanarOverlaps','stitchCutUV','uvMetersPerRepeat','uvLongitudinalAxis','closedLoopUVRepeat','uvCrossMode','generateMarkings','markingLineWidth','markingDashLength','markingDashGap']],
          ['Road Gizmos',['showSceneGizmos','gizmoSteps','gizmoEdges',
              'gizmoLiveMesh','gizmoMeshIntervalMs']],
          ['Road sidewalk (optional, material 5)',['roadSidewalkWidth','roadSidewalkTerrainMode',

@@ -7,6 +7,7 @@ import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinu
 import {buildRoadMarkingsV2,appendRoadMarkingsV2,type RoadMarkingOptionsV2} from './RoadMarkings';
 import {buildRoadFilletCacheV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
 import {trimmedRoadFramesV2,type RoadJunctionTrimV2} from './RoadJunctionTrim';
+import {roadUVMetersForClosedLoopV2} from './RoadStrip';
 
 export interface ProfileVertexV2 {readonly x:number;readonly y:number;}
 export interface ProfileSweepOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2 {
@@ -49,6 +50,8 @@ export interface RoadProfileOptionsV2 extends RoadCornerOptionsV2, RoadContinuou
     readonly uvMetersPerRepeat?:number;
     /** UV0 coordinate that repeats longitudinally; default v. */
     readonly uvLongitudinalAxis?:'u'|'v';
+    /** Closed Road profile: integer longitudinal UV0 Repeat tiles. */
+    readonly closedLoopUVRepeat?:boolean;
 }
 export interface TubeOptionsV2 {
     readonly radius:number;
@@ -253,6 +256,8 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
     const fillet=mode==='fillet'?buildRoadFilletCacheV2(cache,totalHalfExtent,{...options,maxArcStep:options.step??.5}):null;
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
+    const uvMeters=roadUVMetersForClosedLoopV2(workingCache.length,options.uvMetersPerRepeat??5,
+        workingCache.spline.closed,options.closedLoopUVRepeat===true);
     const fullFrames=buildSplineFramesV2(workingCache,{maxStep:options.step??.5,
         rollSource:cache.spline,
         ...(options.adaptiveSampling&&mode!=='fillet'?{
@@ -265,7 +270,7 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
         frames,totalHalfExtent,{...options,cornerSections,closed:workingCache.spline.closed}):null;
     if(continuous)options.onContinuousReport?.(continuous.report);
     const {points:pts,edgeMaterials:slots}=roadProfileLayoutV2(width,shoulder,curb,height,mode==='continuous'||mode==='fillet');
-    const mesh=buildProfileSweepV2(workingCache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:options.uvMetersPerRepeat,
+    const mesh=buildProfileSweepV2(workingCache,{points:pts,edgeMaterials:slots,step:options.step,uvMetersPerRepeat:uvMeters,
         uvLongitudinalAxis:options.uvLongitudinalAxis,
         cornerMode:mode==='fillet'?'legacy':options.cornerMode??'join-trim',
         cornerTrimSafety:options.cornerTrimSafety,
@@ -280,7 +285,7 @@ export function buildRoadProfileV2(cache:SplineCacheV2,options:RoadProfileOption
                 slopeSafetyCapped:false,minimumWidthRatio:1,impossibleCrossings:0,hitSafetyLimit:false}
         };
         const markings=buildRoadMarkingsV2(frames,cornerSections,fullWidthSections,half,totalHalfExtent,{...options.markingOptions,
-            uvMetersPerRepeat:options.uvMetersPerRepeat,uvLongitudinalAxis:options.uvLongitudinalAxis});
+            uvMetersPerRepeat:uvMeters,uvLongitudinalAxis:options.uvLongitudinalAxis});
         return appendRoadMarkingsV2(mesh,markings);
     }
     if(options.generateMarkings)throw new Error('Separate Road markings require Continuous or Constant Width mode');

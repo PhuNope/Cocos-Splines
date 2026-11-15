@@ -305,3 +305,23 @@ length divided by `uvMetersPerRepeat`: a perfectly repeating
 texture across a closed loop also requires an integer repeat count
 or suitable material mapping. This is a headless mesh/UV regression,
 not yet a certification of materials in Creator 3.8.8.
+
+### Closed Loop UV Repeat (2026-11-15, opt-in)
+
+Road V2 exposes **Closed Loop UV Repeat**, default **Off**.
+A closed path with this option fits an integer number of UV0 tiles
+over the *generated* centreline:
+`tileCount = max(1, round(generatedLength / UV Meters Per Repeat))`.
+The length is measured after any Constant Width fillet. Asphalt,
+shoulder/curb Profile and separate marking meshes share the same
+effective `generatedLength / tileCount` metres per tile. UV0 may
+repeat along U or V; cross UV0, positions, UV2 and material slots
+are unchanged. Open Roads and Tube Extrude are unaffected.
+
+This matches Repeat texture *phase*, not paint direction. Enable
+Repeat sampler on the longitudinal axis. Short loops may change
+visual texture scale noticeably. Off preserves legacy UVs and
+existing Bake fingerprints; opt-in requires Rebuild and explicit
+new Bake, never modifies saved meshes during Play. Regression covers
+Closed Continuous/Fillet, Profile+markings, both axes, UV2 and glTF.
+Creator 3.8.8 material/Prefab verification remains outstanding.
