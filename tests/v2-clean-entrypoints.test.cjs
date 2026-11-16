@@ -44,10 +44,11 @@ const knotDump=k=>wrap('Spline.Knot',{position:wrap('cc.Vec3',k.position),
   mode:wrap('Enum',k.mode),handleIn:wrap('cc.Vec3',k.handleIn),
   handleOut:wrap('cc.Vec3',k.handleOut),tension:wrap('Float',k.tension),
   rollDegrees:wrap('Float',k.rollDegrees)});
+let inspectorInterpolation=3;
 const nodeDump=()=>({__comps__:[
  {type:'cc.MeshRenderer',value:{}},
  {type:'Spline.Path',value:{
-  interpolation:wrap('Enum',3),
+  interpolation:wrap('Enum',inspectorInterpolation),
   gizmoKnotIndex:wrap('Integer',pathComponent.gizmoKnotIndex),
   knots:{type:'Array',isArray:true,elementTypeData:knotDump(knot(0,0,0)),
     value:pathComponent.knots.map(knotDump)}
@@ -176,6 +177,18 @@ try{
     'Changing active editor selection is not a separate undoable change');
   assert(pathComponent.restores>previousRestoreCount,
     'Each edit asks Scene to resynchronize generator previews');
+  // Exact Bézier split uses the existing typed Creator edit pipeline.
+  // One recorded whole-Knot-array update + a non-recorded index select.
+  inspectorInterpolation=1;
+  const editCount=updates.length;
+  const split=await main.methods.editV2Path('split',0);
+  assert.equal(split.ok,true,JSON.stringify(split));
+  assert.equal(pathComponent.knots.length,3);
+  assert.equal(pathComponent.gizmoKnotIndex,1);
+  assert.equal(pathComponent.knots[1].position.z,2.5);
+  assert.equal(updates.slice(editCount).filter(u=>u.record===true).length,1,
+   'Exact split cannot emit a separate history record for each endpoint');
+  inspectorInterpolation=3;
   selectedUuid='road-node';
   assert(calls.filter(c=>c.method==='execute-scene-script').every(c=>
    !/Splines\.Spline/.test(JSON.stringify(c.payload))),

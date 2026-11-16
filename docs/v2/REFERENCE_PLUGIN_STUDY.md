@@ -88,3 +88,44 @@ Keep the public `@ccclass` names exactly `Spline.Path`,
 `Spline.Knot`, `Spline.Road`, `Spline.Extrude`,
 `Spline.MeshDeform`, and `Spline.Junction`. No tags or Releases
 are authorized by this study.
+
+## Curve-preserving insertion: one-step De Casteljau split
+
+The next original implementation adds **Split 50%** to the
+Inspector for every existing Bézier segment. Dreamteck and Curvy
+both expose spline split/insert workflows; this feature uses
+standard cubic mathematics, without incorporating either plugin's
+source or resources.
+
+For a segment with four Bézier control points `P0, P1, P2, P3`,
+the Editor evaluates De Casteljau at `t=0.5` and writes
+three modified `Spline.Knot` CCClass records atomically **as one
+serialized Knot-array value** (not as multiple scene properties).
+The original segment is replaced by two exact cubic halves:
+no position/tangent displacement, no UV arc-length jump, no
+new Knot Nodes. The source endpoints become Free where needed,
+and their *unaffected opposite side* handles are materialized
+if the endpoint had been Auto. This prevents altering adjacent
+segments when inserting at an existing automatic Bézier Knot.
+An inserted Knot is itself Free.
+
+**Split 50%** is offered for Bézier only, including the closing
+segment of a closed Path. **+ After** remains available for
+ordinary midpoint insertion, where changing spline shape may
+be intentional. No shape-preservation claim is made for Catmull
+or Centripetal insertion: inserting a new Knot changes their
+automatic derivative neighborhood, so these modes do not show
+Split 50%.
+
+The same `edit-v2-path` bridge handles the new operation,
+using `scene.set-property(record:true)` for the full typed
+Knot array, then `record:false` for the active Knot index,
+and a separate read-only preview refresh. The operation
+never alters an existing Baked Mesh. Native Editor history and
+Prefab Save/Reopen still require Creator 3.8.8 acceptance.
+
+Regression samples all old segments at many parameters and
+compares them against the corresponding new Bézier halves.
+It includes open/closed, end-seam splits, Auto/Free/Aligned/
+Mirrored source modes, unknown CCClass metadata, native Undo
+payload shape, malformed handles and the 128-Knot limit.

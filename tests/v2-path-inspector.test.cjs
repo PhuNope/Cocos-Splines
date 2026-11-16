@@ -67,6 +67,8 @@ assert.match(items.innerHTML,/Knot 1/);
 assert.match(items.innerHTML,/data-operation="remove"/);
 assert.match(items.innerHTML,/data-operation="select"/);
 assert.match(items.innerHTML,/data-operation="group-toggle"/);
+assert.doesNotMatch(items.innerHTML,/data-operation="split"/,
+ 'Exact curve split must not be offered for Centripetal');
 assert.match(curveHint.textContent,/Enable Editable Catmull Tangents/);
 dump.value.editableCatmullTangents.value=true;
 inspector.update.call(fake,dump);
@@ -90,4 +92,14 @@ assert.equal(typeof bindings.groupRefresh,'function');
 dump.value.interpolation.value=1;
 inspector.update.call(fake,dump);
 assert.match(curveHint.textContent,/Free\/Aligned\/Mirrored/);
+assert.equal((items.innerHTML.match(/data-operation="split"/g)||[]).length,1,
+ 'Open two-Knot Bézier has one splittable segment');
+dump.value.closed.value=true;
+inspector.update.call(fake,dump);
+assert.equal((items.innerHTML.match(/data-operation="split"/g)||[]).length,2,
+ 'Closed two-Knot Bézier has two splittable segments, including seam');
+dump.value.interpolation.value=2;
+inspector.update.call(fake,dump);
+assert.doesNotMatch(items.innerHTML,/data-operation="split"/,
+ 'Do not claim Catmull segment insertion preserves curve');
 console.log('V2 PATH CUSTOM INSPECTOR PASS: Vec3 cards, topology buttons, focus-stable refresh, native dump fields.');

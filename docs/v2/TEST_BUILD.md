@@ -586,3 +586,25 @@ test `Spline.Path → Editable Catmull Tangents`:
    seam is unchanged by a no-op Auto tangent edit.
 
 [Uploaded plugin review and decision matrix](REFERENCE_PLUGIN_STUDY.md)
+
+## Creator 3.8.8: exact Bézier Split 50% acceptance
+
+1. Select a Path with Bézier interpolation and multiple curved
+   segments, including Auto/Aligned/Mirrored tangent modes.
+   Save a screenshot of Path and Road before editing.
+2. Click **Split 50%** next to Knot 0. Expect a new Knot
+   **on the exact curve**, and the Road/Gizmo shape and UV
+   arc length should remain unchanged. The two shorter
+   segments must reproduce the original cubic curve.
+3. Undo once: all affected Knot positions, modes and
+   handles return together. Redo once: they split again.
+   Selection of the new Knot should not be a separate
+   Undo transaction.
+4. Close the Path and split its last segment. Check
+   continuity around the seam, generator UVs, and the
+   originally saved Baked Mesh.
+5. Switch to Centripetal/Catmull: **Split 50%** is not shown;
+   **+ After** continues to be the non-preserving insertion.
+6. Save/Reopen and test on Prefab instances, including
+   multiple segments with non-default Roll Degrees.
+   Mocked tests do not substitute for these native checks.

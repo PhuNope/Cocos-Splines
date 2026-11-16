@@ -295,3 +295,23 @@ serialized handles for later editing. Existing Baked Mesh assets
 are never overwritten automatically.
 
 [Reference plugin design review](REFERENCE_PLUGIN_STUDY.md)
+
+### Split 50% on curve — editor-preserving insertion
+
+In the `Vec3 Knots` Inspector, use **Split 50%** on a Bézier
+Knot card to insert another Knot halfway along its outgoing
+segment while **preserving the entire Bézier path**.
+This is different from **+ After**, which inserts the position
+midpoint and may reshape a curved path. The split adjusts
+the start outgoing handle, end incoming handle and the new
+Knot's two handles using De Casteljau's exact cubic split.
+It also preserves the opposite side of any automatic endpoint
+that must switch to manual `Free` mode.
+
+For a closed Path, the last Knot also offers Split 50% to split
+the wraparound segment. Split is hidden for Linear/Catmull/
+Centripetal; their ordinary insertion can change the
+curve. Each successful split records one entire Knot array
+through Creator's property history; selecting the new Knot
+does not add another history entry. Dynamic previews update,
+but Baked Mesh remains untouched.

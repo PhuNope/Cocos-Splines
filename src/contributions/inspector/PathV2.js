@@ -32,7 +32,7 @@ const rows=sections.map(([name,fields])=>
         '<ui-prop type="dump" class="spl-prop spl-path-'+field+'"></ui-prop>'
     ).join('')+'</details>'
 ).join('');
-const names=['select','insert','duplicate','remove','up','down'];
+const names=['select','insert','split','duplicate','remove','up','down'];
 const nudgeDirections=['x-','x+','y-','y+','z-','z+'];
 function escapeText(s){
     return String(s).replace(/[&<>"']/g,c=>({
@@ -129,6 +129,7 @@ module.exports={
          <button type="button" class="spl-btn spl-path-add">+ Add Knot</button>
       </div>
       <small class="spl-path-curve-hint spl-path-note"></small>
+      <small class="spl-path-note">Bézier: Split 50% adds a Knot exactly ON the curve without changing its shape. + After inserts an ordinary position midpoint, which can reshape the Path.</small>
       <div class="spl-path-items"></div>
    </details>
  </div>`,
@@ -141,6 +142,8 @@ module.exports={
     const prop=dump?.value?.knots;
     const entries=Array.isArray(prop?.value)?prop.value:[];
     const selected=Number(dump?.value?.gizmoKnotIndex?.value)||0;
+    const bezier=Number(dump?.value?.interpolation?.value)===1;
+    const closed=!!dump?.value?.closed?.value;
     this.$.count.textContent='('+entries.length+')';
     if(this.$.curveHint){
         const interp=Number(dump?.value?.interpolation?.value);
@@ -161,6 +164,8 @@ module.exports={
           button('select',i,'Select')+
           button('group-toggle',i,'+ Group')+
           button('insert',i,'+ After')+
+          (bezier&&entries.length<128&&(closed||i<entries.length-1)?
+              button('split',i,'Split 50%'):'')+
           button('duplicate',i,'Duplicate')+
           button('up',i,'↑')+button('down',i,'↓')+
           button('remove',i,'× Remove')+
@@ -170,10 +175,13 @@ module.exports={
     ).join('');
     // Recreate DOM only when cards/selection change: frequent Inspector
     // refresh must not steal focus from an in-progress Vec3 numeric edit.
-    if(this._cardCount!==entries.length||this._cardSelected!==selected){
+    if(this._cardCount!==entries.length||this._cardSelected!==selected||
+       this._cardBezier!==bezier||this._cardClosed!==closed){
         this.$.items.innerHTML=html;
         this._cardCount=entries.length;
         this._cardSelected=selected;
+        this._cardBezier=bezier;
+        this._cardClosed=closed;
     }
     paintGroup(this,this._groupIndices||[]);
     entries.forEach((entry,i)=>{
