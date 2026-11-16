@@ -62,7 +62,7 @@ const eulerQuat=(e:V3):QuaternionV2=>{
     const x=e.x*Math.PI/360,y=e.y*Math.PI/360,z=e.z*Math.PI/360;
     const sx=Math.sin(x),cx=Math.cos(x),sy=Math.sin(y),cy=Math.cos(y),
         sz=Math.sin(z),cz=Math.cos(z);
-    // Match Gizmos v3 Euler orientation composition.
+    // Match the native rotation solver's Euler orientation composition.
     return {x:sx*cy*cz+cx*sy*sz,y:cx*sy*cz+sx*cy*sz,
         z:cx*cy*sz-sx*sy*cz,w:cx*cy*cz-sx*sy*sz};
 };
