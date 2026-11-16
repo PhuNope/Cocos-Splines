@@ -467,3 +467,26 @@ prove the importer preserves primitive order.
    with no unintended source regeneration in Play.
 
 Do not certify Release Candidate from these mocked tests alone.
+
+## Pending Bake metadata transaction — Windows Creator 3.8.8
+
+1. Begin with a bound Road Mesh, its source fingerprint, slots 0/3/4
+   and saved Baked mode. Stage a new Bake; verify the pending URL,
+   fingerprint and primitive slot map all reference that same export,
+   while the previous Baked Mesh remains unchanged before Bind.
+2. In a disposable project, simulate a rejected Scene
+   `set-property` while staging the pending URL, fingerprint or
+   primitive slot map. Save/Reopen and inspect all three fields:
+   they should have reverted together, or the operation must
+   explicitly report `recoveryRequired` rather than success.
+3. Change the Path during glTF creation/staging. The new pending
+   tuple must not be considered valid for the modified Path.
+   Repeat with two overlapping Bake requests and confirm no
+   false completion message or silent loss of a newer pending URL.
+4. Retry a valid Bake and Bind, then check imported submesh order,
+   the old and new Baked Mesh references, native Undo/Redo, and
+   Prefab Overrides. A generated glTF left unused by a failed
+   stage must not alter the saved Scene.
+
+These steps are not marked complete by green CI; the test suite
+exercises a mocked Creator Editor API only.

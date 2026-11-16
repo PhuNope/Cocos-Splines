@@ -159,6 +159,98 @@ async function bindImportedMesh(editor,params){
     }
     return {ok:true,uuid:target.uuid,url:target.url,assetUrl,replacedUuid:old?.uuid||null};
 }
+/**
+ * Stage an exported glTF as pending metadata without touching the existing
+ * imported Baked Mesh. Three native set-property calls are NOT atomic; if
+ * one fails (even after mutation), restore the earlier serialized tuple.
+ * Reject stale geometry both before and after the staged writes.
+ */
+async function stagePendingBake(editor,params){
+    const {nodeUuid,componentIndex,assetUrl,fingerprint,materialSlots,verifyCurrent}=params;
+    if(typeof nodeUuid!=='string'||!nodeUuid||
+       !Number.isSafeInteger(componentIndex)||componentIndex<0)
+        throw new Error('Invalid node/component for pending Bake');
+    if(typeof assetUrl!=='string'||!assetUrl.startsWith('db://assets/')||
+       !assetUrl.endsWith('.gltf'))
+        throw new Error('Only project glTF assets can be staged');
+    if(typeof fingerprint!=='string'||!/^[0-9a-f]{16}$/.test(fingerprint))
+        throw new Error('Invalid pending Bake fingerprint');
+    const slots=validateMaterialSlots(materialSlots);
+    if(!slots)throw new Error('Pending Bake requires its primitive material slots');
+    if(typeof verifyCurrent!=='function')
+        throw new Error('Pending Bake requires a source fingerprint verifier');
+    const fresh=async()=>{
+        const state=await verifyCurrent();
+        return state?.ok===true&&state.componentIndex===componentIndex&&
+            state.fingerprint===fingerprint;
+    };
+    if(!await fresh())return {ok:false,rolledBack:true,recoveryRequired:false,
+        reason:'Spline changed during glTF export; pending Bake was not staged'};
+    const names=['pendingBakeUrl','pendingBakeFingerprint','pendingBakeMaterialSlots'];
+    const values=[assetUrl,fingerprint,slots];
+    const dump=componentDump(
+        await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+    const original=new Map();
+    for(const key of names){
+        const field=dump.value?.[key];
+        if(!field||!Object.prototype.hasOwnProperty.call(field,'value')||
+           typeof field.value!=='string')
+            return {ok:false,rolledBack:true,recoveryRequired:false,
+                reason:'Cannot snapshot '+key+' before staging pending Bake'};
+        original.set(key,field.value);
+    }
+    const attempted=[];
+    try{
+        for(let i=0;i<names.length;i++){
+            attempted.push({key:names[i],value:values[i]});
+            await setComponentField(editor,nodeUuid,componentIndex,
+                names[i],values[i],'String');
+        }
+        if(!await fresh())throw new Error('Spline changed during pending Bake staging');
+        const confirmed=componentDump(
+            await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+        for(let i=0;i<names.length;i++)
+            if(confirmed.value?.[names[i]]?.value!==values[i])
+                throw new Error('Pending Bake was superseded during staging');
+        return {ok:true,assetUrl,fingerprint,materialSlots:slots};
+    }catch(error){
+        const issues=[];
+        for(const {key,value} of attempted.reverse()){
+            let live;
+            try{
+                const current=componentDump(
+                    await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+                live=current.value?.[key]?.value;
+            }catch(readError){
+                issues.push('Cannot inspect '+key+': '+String(readError));continue;
+            }
+            if(live===original.get(key))continue;
+            if(live!==value){
+                issues.push('Concurrent change at '+key);continue;
+            }
+            try{
+                await setComponentField(editor,nodeUuid,componentIndex,
+                    key,original.get(key),'String');
+            }catch(restoreError){
+                issues.push('Restore failed at '+key+': '+String(restoreError));
+            }
+        }
+        try{
+            const restored=componentDump(
+                await editor.Message.request('scene','query-node',nodeUuid),componentIndex);
+            for(const [key,value] of original)
+                if(restored.value?.[key]?.value!==value)
+                    issues.push('Unrestored '+key);
+        }catch(verifyError){
+            issues.push('Cannot verify pending Bake rollback: '+String(verifyError));
+        }
+        const rolledBack=issues.length===0;
+        return {ok:false,rolledBack,recoveryRequired:!rolledBack,
+            reason:'Pending Bake metadata staging failed: '+String(error)+
+                (rolledBack?'; previous pending Bake restored':
+                    '; recovery required: '+issues.join('; '))};
+    }
+}
 /** Bound retries are for import latency only. No mutation until a valid Mesh is found. */
 async function bindWhenImported(editor,params,opts={}){
     const attempts=opts.attempts??8,delayMs=opts.delayMs??250;
@@ -170,4 +262,4 @@ async function bindWhenImported(editor,params,opts={}){
     }
     return {ok:false,pending:true,reason:'AssetDB has not imported a unique Mesh subasset yet'};
 }
-module.exports={discoverMeshSubasset,bindImportedMesh,bindWhenImported,componentDump};
+module.exports={discoverMeshSubasset,bindImportedMesh,bindWhenImported,stagePendingBake,componentDump};

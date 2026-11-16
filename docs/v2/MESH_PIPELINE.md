@@ -435,3 +435,41 @@ including rejected requests, thrown errors before mutation,
 errors after mutation, a persistent rollback failure and a
 concurrent third-party edit. Real Creator 3.8.8 Save/Reopen,
 Prefab history and native reject/Undo behavior still need acceptance.
+
+### Recovery-safe pending Bake staging (2026-11-16, P1)
+
+The initial **Bake glTF Asset** step must stage three serialized
+fields: `pendingBakeUrl`, `pendingBakeFingerprint` and
+`pendingBakeMaterialSlots`. Previously these were three independent
+recorded Creator property writes without failure compensation.
+If the second or third setter failed after the first was committed,
+a later **Bind Imported Mesh** could see inconsistent pending data.
+
+The Editor now calls `stagePendingBake`, which validates the
+generated source fingerprint before staging, captures all three
+original string fields from the Scene dump, writes the pending
+tuple, and rechecks the source fingerprint **after** the writes.
+If a setter rejects, mutates and then throws, or the Path changes
+during staging, it restores attempted fields in reverse order and
+verifies the *whole* original pending tuple from a fresh Scene
+dump. Existing `bakedMesh`, `bakedSourceFingerprint`, mode and
+imported material mapping are never touched during this stage.
+
+A concurrent newer Editor value is left untouched rather than
+overwritten: the result then has `recoveryRequired:true`.
+Only an exact verified staging returns `ok:true` and triggers
+a Scene snapshot and AssetDB Bind attempts. A failed stage is
+reported with `ok:false`, `rolledBack` and
+`recoveryRequired`, never as a successful export/bind.
+The already created glTF asset may remain in AssetDB, but no
+partial pending tuple is knowingly committed.
+
+CI runs an independent regression covering 9 simulated setter
+failure points (before mutation, after mutation, and false
+rejection across three setters), source drift before and after
+staging, concurrent overwrites, a failing compensating write,
+missing serialized fields and a successful handoff to
+`bindImportedMesh`. This is **compensating rollback**, not an
+atomic native Creator Undo transaction. Actual Creator 3.8.8
+AssetDB, Scene Save/Reopen and Prefab override behavior still
+require Windows acceptance.

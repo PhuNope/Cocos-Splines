@@ -5,7 +5,7 @@
  * No legacy containers, panel state, UUID migration or old menu methods.
  */
 const NAME='cocos-splines';
-const {bindWhenImported}=require('./EditorAssetBind');
+const {bindWhenImported,stagePendingBake}=require('./EditorAssetBind');
 const {planPathEditDump}=require('./PathV2Dump');
 const {planPathGroupNudgeDump}=require('./PathGroupNudgeDump');
 const {planEndpointSnapDump}=require('./PathEndpointSnapDump');
@@ -21,13 +21,6 @@ function currentNode(){
     const uuid=selected()[0];
     if(!uuid)throw new Error('Select a Spline V2 Road / Extrude / Deform / Junction Node.');
     return uuid;
-}
-async function property(uuid,index,name,value){
-    const result=await Editor.Message.request('scene','set-property',{
-        uuid,path:'__comps__.'+index+'.'+name,
-        dump:{type:'String',value},record:true
-    });
-    if(result===false)throw new Error('Failed to set '+name+' on Spline V2 component');
 }
 async function snapshot(){await Editor.Message.request('scene','snapshot');}
 function fail(action,error){
@@ -93,15 +86,28 @@ async function bakeV2Road(){
                 assetUrl,output.content);
             if(!created)throw new Error('AssetDB glTF creation failed');
         }
-        // No stale fingerprint is committed until Mesh subasset binds.
-        await property(uuid,output.componentIndex,'pendingBakeUrl',assetUrl);
-        await property(uuid,output.componentIndex,'pendingBakeFingerprint',output.fingerprint);
-        await property(uuid,output.componentIndex,'pendingBakeMaterialSlots',
-            JSON.stringify(output.primitiveMaterialSlots));
+        // Pending URL/fingerprint/primitive slots are a serialized tuple.
+        // Recover the previous tuple if any of Creator's three native
+        // set-property calls fails; never commit partial pending metadata.
+        const slots=JSON.stringify(output.primitiveMaterialSlots);
+        const staged=await stagePendingBake(Editor,{
+            nodeUuid:uuid,componentIndex:output.componentIndex,
+            assetUrl,fingerprint:output.fingerprint,materialSlots:slots,
+            verifyCurrent:()=>scene('inspectV2RoadBake',uuid)
+        });
+        if(!staged.ok)return {ok:false,bound:false,url:assetUrl,
+            rolledBack:staged.rolledBack===true,
+            recoveryRequired:staged.recoveryRequired===true,
+            error:staged.reason||'Cannot stage pending Bake metadata'};
         await snapshot();
         const latest=await scene('inspectV2RoadBake',uuid);
-        if(!latest?.ok||latest.fingerprint!==output.fingerprint)
-            return {ok:false,error:'Spline changed during glTF creation; rebake',url:assetUrl};
+        if(!latest?.ok||latest.fingerprint!==output.fingerprint||
+           latest.pendingUrl!==assetUrl||
+           latest.pendingFingerprint!==output.fingerprint||
+           latest.pendingMaterialSlots!==slots)
+            return {ok:false,bound:false,
+                error:'Spline or pending Bake changed after staging; rebake',
+                url:assetUrl};
         const bound=await bindWhenImported(Editor,{
             nodeUuid:uuid,componentIndex:output.componentIndex,
             assetUrl,fingerprint:output.fingerprint,
