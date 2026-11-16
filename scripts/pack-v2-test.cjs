@@ -30,6 +30,7 @@ copy('assets/splines-v2');
 copy('docs/v2');
 copy('src/v2/clean-main.js','dist/v2/clean-main.js');
 copy('src/v2/PathV2Dump.js','dist/v2/PathV2Dump.js');
+copy('src/v2/BezierCurveSplit.js','dist/v2/BezierCurveSplit.js');
 copy('src/v2/PathGroupNudgeDump.js','dist/v2/PathGroupNudgeDump.js');
 copy('src/v2/PathKnotDumpCodec.js','dist/v2/PathKnotDumpCodec.js');
 copy('src/v2/PathEndpointSnapDump.js','dist/v2/PathEndpointSnapDump.js');
@@ -90,6 +91,12 @@ fs.writeFileSync(path.join(target,'README.md'),
     '5. Enable Cocos-Gizmos separately for Scene editing.\n\n'+
     '**This is a test artifact, not a release. Existing legacy scenes are not supported.**\n'+
     'Full instructions: docs/v2/TEST_BUILD.md and docs/v2/REBUILD_BREAKING.md.\n','utf8');
+// Smoke load the packed Editor topology planner, not just its own file.
+ // Missing relative dependencies must fail CI rather than ship a ZIP
+ // that crashes when the user clicks any Knot Inspector action.
+const packedPathPlanner=require(path.join(target,'dist/v2/PathV2Dump.js'));
+assert.equal(typeof packedPathPlanner.planPathEditDump,'function',
+    'Packed Path planner must load all of its runtime dependencies');
 const assertFile=rel=>assert(fs.statSync(path.join(target,rel)).isFile(),
     'Missing required clean bundle file '+rel);
 for(const rel of [
@@ -97,6 +104,7 @@ for(const rel of [
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePath.ts',
  'dist/v2/PathV2Dump.js',
+ 'dist/v2/BezierCurveSplit.js',
  'dist/v2/PathGroupNudgeDump.js',
  'dist/v2/PathKnotDumpCodec.js',
  'dist/v2/PathEndpointSnapDump.js',
