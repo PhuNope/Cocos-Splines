@@ -13,7 +13,7 @@ import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClea
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
-import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,RoadFilletSpacingErrorV2,RoadAuthoredCurveFoldErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
+import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,validateRoadAuthoredWidthV2,RoadFilletSpacingErrorV2,RoadAuthoredCurveFoldErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {type JunctionRoadCandidateV2} from '../geometry/JunctionAutoTrimV2';
@@ -70,7 +70,7 @@ export class SplineRoad extends MeshGenerator {
     followSourceCurveInConstantWidth=true;
     @property({min:1.02,max:6,step:.05,tooltip:'Minimum circular turn radius = full half-width (including shoulder/curb) times this factor. Larger values need more knot spacing.'})
     filletRadiusScale=1.35;
-    @property({type:Enum(ShortKnotMode),tooltip:'Auto Continuous: preserve seamless UV by smoothly adapting width only if a ConstantWidth fillet cannot fit nearby Knots. Strict: report the spacing error. Junction Trim and Road Sidewalk never auto-fallback.'})
+    @property({type:Enum(ShortKnotMode),tooltip:'Auto: first round a tight nonlinear Knot corner at FULL width, accepting local centreline deviation. If rounding cannot fit, use Continuous adaptive width. Strict: reject impossible geometry.'})
     shortKnotMode=ShortKnotMode.AutoContinuous;
     @property({min:0.5,max:45,step:.5,tooltip:'Maximum angle for each tangent Bezier fillet segment in degrees.'})
     filletArcAngleDegrees=4;
@@ -127,6 +127,40 @@ export class SplineRoad extends MeshGenerator {
     private _lastShortKnotFallback:string|null=null;
     /** Only reported after a successful rebuild; not serialized or shown under Inspector. */
     public getShortKnotFallback():string|null{return this._lastShortKnotFallback;}
+    /** Use the same effective rounded route for read-only Scene guides and
+     * Inspector reports when full-width source offsets self-fold. */
+    private preferredRoundedCache(cache:ReturnType<typeof buildSplineCacheV2>,
+        halfExtent:number):ReturnType<typeof buildRoadFilletCacheV2>|null {
+        if(this.surfaceMode!==SurfaceMode.ConstantWidth)return null;
+        let shouldRound=!roadConstantWidthFollowsSourceV2(cache,
+            this.followSourceCurveInConstantWidth);
+        if(!shouldRound&&this.canAutoContinuousShortKnot()&&
+            cache.spline.type!=='bezier'){
+            try{
+                const frameTable=buildSplineFramesV2(cache,{maxStep:this.sampleStep,
+                    rollSource:cache.spline,
+                    ...(this.adaptiveSampling?{
+                        maxAngleDegrees:this.maxTurnAngleDegrees,
+                        maxChordError:this.maxChordError
+                    }:{})});
+                validateRoadAuthoredWidthV2(frameTable.frames,halfExtent);
+            }catch(error){
+                if(error instanceof RoadAuthoredCurveFoldErrorV2)shouldRound=true;
+                else throw error;
+            }
+        }
+        if(!shouldRound)return null;
+        try{return buildRoadFilletCacheV2(cache,halfExtent,{
+            minimumRadiusScale:this.filletRadiusScale,
+            maxArcAngleDegrees:this.filletArcAngleDegrees,
+            maxArcChordError:this.filletChordError,
+            maxArcStep:this.sampleStep});
+        }catch(error){
+            if(!(error instanceof RoadFilletSpacingErrorV2)||
+               !this.canAutoContinuousShortKnot())throw error;
+            return null;
+        }
+    }
     private canAutoContinuousShortKnot():boolean {
         return this.shortKnotMode===ShortKnotMode.AutoContinuous&&
             this.junctionStartTrim<=0&&this.junctionEndTrim<=0&&
@@ -143,21 +177,7 @@ export class SplineRoad extends MeshGenerator {
             const source=this.source();
             const cache=buildSplineCacheV2(source);
             const totalWidth=this.width*.5+this.shoulderWidth+this.curbWidth;
-            let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
-            if(this.surfaceMode===SurfaceMode.ConstantWidth&&
-               !roadConstantWidthFollowsSourceV2(cache,this.followSourceCurveInConstantWidth)){
-                try{fillet=buildRoadFilletCacheV2(cache,totalWidth,{
-                    minimumRadiusScale:this.filletRadiusScale,
-                    maxArcAngleDegrees:this.filletArcAngleDegrees,
-                    maxArcChordError:this.filletChordError,
-                    maxArcStep:this.sampleStep
-                });}
-                catch(error){
-                    if(!(error instanceof RoadFilletSpacingErrorV2||
-                error instanceof RoadAuthoredCurveFoldErrorV2)||
-                       !this.canAutoContinuousShortKnot())throw error;
-                }
-            }
+            const fillet=this.preferredRoundedCache(cache,totalWidth);
             const working=fillet?.cache??cache;
             const steps=Math.max(8,Math.min(192,Math.floor(this.gizmoSteps)));
             const frames=buildSplineFramesV2(working,{
@@ -181,22 +201,8 @@ export class SplineRoad extends MeshGenerator {
     public inspectCornerRisk():(RoadCornerReportV2&{closedLoopUV:RoadLoopUVReportV2|null})|null {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
-        let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
-        if(this.surfaceMode===SurfaceMode.ConstantWidth&&
-           !roadConstantWidthFollowsSourceV2(cache,this.followSourceCurveInConstantWidth)){
-            try{fillet=buildRoadFilletCacheV2(cache,
-                this.width*.5+this.shoulderWidth+this.curbWidth,{
-                    minimumRadiusScale:this.filletRadiusScale,
-                    maxArcAngleDegrees:this.filletArcAngleDegrees,
-                    maxArcChordError:this.filletChordError,
-                    maxArcStep:this.sampleStep
-                });}
-            catch(error){
-                if(!(error instanceof RoadFilletSpacingErrorV2||
-                error instanceof RoadAuthoredCurveFoldErrorV2)||
-                   !this.canAutoContinuousShortKnot())throw error;
-            }
-        }
+        const fillet=this.preferredRoundedCache(cache,
+            this.width*.5+this.shoulderWidth+this.curbWidth);
         const testedCache=fillet?.cache??cache;
         const frameTable=buildSplineFramesV2(testedCache,{maxStep:this.sampleStep,
             rollSource:cache.spline,
@@ -245,20 +251,23 @@ export class SplineRoad extends MeshGenerator {
             maxArcAngleDegrees:this.filletArcAngleDegrees,maxArcChordError:this.filletChordError,onFilletReport};
         const surfaceMode=this.surfaceMode===SurfaceMode.ConstantWidth?'fillet' as const:
             this.surfaceMode===SurfaceMode.Continuous?'continuous' as const:'clip' as const;
-        const makeRoad=(mode:'fillet'|'continuous'|'clip')=>
+        const makeRoad=(mode:'fillet'|'continuous'|'clip',
+            followSource=this.followSourceCurveInConstantWidth)=>
             this.shoulderWidth>0||this.curbWidth>0||this.curbHeight>0?
             buildRoadProfileV2(cache,{
                 width:this.width,shoulderWidth:this.shoulderWidth,curbWidth:this.curbWidth,
                 curbHeight:this.curbHeight,uvMetersPerRepeat:this.uvMetersPerRepeat,step:this.sampleStep,
                 uvLongitudinalAxis,resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
                 onContinuousReport,surfaceMode:mode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
-                ...roadSampling,...filletSettings,...corners
+                ...roadSampling,followSourceCurveInConstantWidth:followSource,
+                ...filletSettings,...corners
             }):buildRoadStripV2(cache,{
                 width:this.width,uvMetersPerRepeat:this.uvMetersPerRepeat,
                 step:this.sampleStep,materialSlot:0,uvLongitudinalAxis,
                 resolvePlanarOverlaps:this.resolvePlanarOverlaps,stitchCutUV:this.stitchCutUV,onOverlapReport,
                 onContinuousReport,surfaceMode:mode,clearanceSafety:this.clearanceSafety,widthSlope:this.widthSlope,
-                ...roadSampling,...filletSettings,...corners
+                ...roadSampling,followSourceCurveInConstantWidth:followSource,
+                ...filletSettings,...corners
             });
         let geometry:ReturnType<typeof buildRoadStripV2>;
         try{geometry=makeRoad(surfaceMode);}
@@ -267,12 +276,28 @@ export class SplineRoad extends MeshGenerator {
                !(error instanceof RoadFilletSpacingErrorV2||
                 error instanceof RoadAuthoredCurveFoldErrorV2)||
                !this.canAutoContinuousShortKnot())throw error;
-            // Exact-source Constant Width must not emit missing inner faces:
-            // the explicit AutoContinuous policy keeps the centreline but
-            // narrows the road only where its full width cannot fit.
-            // A radius smaller than the road half-width could fold the inside
-            // mesh. Use the proven one-strip Continuous width solver instead.
-            // No triangle clipping; UV0/UV2 remain continuous along the Road.
+            // The authored curve is tighter than its full-width offset.
+            // First try a tangent rounded centreline at the FULL requested
+            // width, with no UV cuts or width taper. This deliberately
+            // deviates near the Knot but avoids the pinched shoulder.
+            if(error instanceof RoadAuthoredCurveFoldErrorV2&&
+               cache.spline.type!=='bezier'){
+                try{
+                    this._lastFilletReport=null;
+                    geometry=makeRoad('fillet',false);
+                    this._lastContinuousReport=null;
+                    this._lastShortKnotFallback=error.message+
+                        ' Auto rounded Knot corner at FULL WIDTH (local '+
+                        'centreline deviation); use Continuous to keep the '+
+                        'exact authored curve with adaptive width.';
+                }catch(roundError){
+                    if(!(roundError instanceof RoadFilletSpacingErrorV2))
+                        throw roundError;
+                }
+                if(this._lastShortKnotFallback)return {geometry};
+            }
+            // If the circular join cannot fit nearby Knots, preserve a
+            // continuous surface by adapting width as a last resort.
             this._lastFilletReport=null;
             geometry=makeRoad('continuous');
             // onContinuousReport executes inside makeRoad(). A type

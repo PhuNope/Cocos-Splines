@@ -538,3 +538,33 @@ documented AutoContinuous policy. The profile receives the same
 preflight, preventing a side curb/shoulder from extending beyond
 the safe offset. This is **not** a general 3D self-union algorithm,
 and it does not certify Creator 3.8.8 native rendering.
+
+### Constant Width priority on too-tight authored curves (2026-11-16)
+
+Creator screenshot acceptance showed that `Follow Source Curve = On`
+at Road Width 4 could exceed the source curve's inside bend radius.
+The prior `Short Knot Mode = AutoContinuous` fallback kept the
+centreline exact but shrank the inside asphalt band, producing an
+unwanted narrow wedge.
+
+Now, for a **non-Bézier nonlinear source** that cannot support its
+full-width offset, the default Auto mode FIRST attempts the
+constant-width circular fillet route. It preserves the full requested
+width, continuous UV0/UV2 and triangles, but necessarily rounds
+the local corner *away from the authored centreline*. Scene Road
+guides and Inspector diagnostics use the same effective filleted
+route. The Editor Console explicitly distinguishes this
+`FULL WIDTH rounded corner` result from a true Continuous width
+fallback. A strict setting still reports the geometric impossibility
+without silently changing geometry. If the Knot spacing cannot fit
+even the circular join, AutoContinuous remains the last resort.
+
+**There is no mathematically general solution that preserves all
+three at arbitrary radius:** exact source centreline, full Road width
+and no overlapping/inverted inner faces. To truly have all three
+on a particular road, move/add/soften Knots or reduce Width so
+the curvature radius exceeds the full transverse half-extent.
+For authored Bézier curves with overly tight curvature, the
+fallback still uses Continuous because a chord fillet would
+discard hand-authored tangent detail. Dynamic Preview and Baked
+Mesh are separate and must be rebaked explicitly.

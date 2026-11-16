@@ -5,7 +5,8 @@ import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
 import {availableGizmoBackend,buildSplineKnotMoveGizmos,
-    buildSplineKnotPointGizmos,buildSplinePathRotateGizmos,drawSplineSceneGizmos,
+    buildSplineKnotPointGizmos,buildSplinePathRotateGizmos,
+    buildSplineKnotTangentRotateGizmos,drawSplineSceneGizmos,
     type SplineGizmoHandle} from './SplineGizmoBridge';
 
 const {ccclass,property,executeInEditMode,menu}=_decorator;
@@ -40,7 +41,7 @@ export class SplineKnot {
 type TangentSide='in'|'out';
 type PathGizmoProperty=
     'pathGizmoKnotPosition'|'pathGizmoKnotPositions'|
-    'pathGizmoTangentIn'|'pathGizmoTangentOut';
+    'pathGizmoTangentIn'|'pathGizmoTangentOut'|'pathGizmoKnotTangentEuler';
 type DragSnapshot={
     knot:SplineKnot;
     position:Vec3;mode:TangentMode;
@@ -56,6 +57,27 @@ const sub=(a:V3,b:V3):V3=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const scale=(p:V3,k:number):V3=>({x:p.x*k,y:p.y*k,z:p.z*k});
 const length=(p:V3):number=>Math.hypot(p.x,p.y,p.z);
 const finite=(p:V3):boolean=>p!=null&&[p.x,p.y,p.z].every(Number.isFinite);
+type QuaternionV2={x:number;y:number;z:number;w:number};
+const eulerQuat=(e:V3):QuaternionV2=>{
+    const x=e.x*Math.PI/360,y=e.y*Math.PI/360,z=e.z*Math.PI/360;
+    const sx=Math.sin(x),cx=Math.cos(x),sy=Math.sin(y),cy=Math.cos(y),
+        sz=Math.sin(z),cz=Math.cos(z);
+    // Match Gizmos v3 Euler orientation composition.
+    return {x:sx*cy*cz+cx*sy*sz,y:cx*sy*cz+sx*cy*sz,
+        z:cx*cy*sz-sx*sy*cz,w:cx*cy*cz-sx*sy*sz};
+};
+const mulQuat=(a:QuaternionV2,b:QuaternionV2):QuaternionV2=>({
+    x:a.w*b.x+a.x*b.w+a.y*b.z-a.z*b.y,
+    y:a.w*b.y-a.x*b.z+a.y*b.w+a.z*b.x,
+    z:a.w*b.z+a.x*b.y-a.y*b.x+a.z*b.w,
+    w:a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z
+});
+const rotatedVec=(v:V3,q:QuaternionV2):Vec3=>{
+    const cross=(a:V3,b:V3):V3=>({
+        x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x});
+    const t=scale(cross(q,v),2);
+    return vec(add(v,add(scale(t,q.w),cross(q,t))));
+};
 
 @ccclass('Spline.Path')
 @menu('Cocos Splines/Path')
@@ -74,6 +96,8 @@ export class SplinePath extends Component {
     @property() gizmoMultiKnotPoints=true;
     @property({min:2,max:32,step:1}) gizmoPointLimit=16;
     @property() gizmoEditTangents=true;
+    @property({tooltip:'Show XYZ Rotate rings at the active Knot when using Bézier. The rings rotate its tangent handles, not its Position or the Path Node.'})
+    gizmoRotateKnotTangents=true;
     @property({tooltip:'Show the selected Knot bank cross-section and up vector in the Scene.'})
     gizmoShowRollGuide=true;
     @property({min:.1,max:20,step:.1,
@@ -103,6 +127,8 @@ export class SplinePath extends Component {
     private _dragGroupPositions:Array<{knot:SplineKnot;position:Vec3}>=[];
     private _rotationDragging=false;
     private _rotationStart:Vec3|null=null;
+    /** Temporary Euler proxy for the selected Bezier tangent pair. */
+    private _knotTangentEuler=new Vec3();
     private _hudRollKnot:SplineKnot|null=null;
     private _hudRollStart=0;
     /** SDK gestures can outlive a Creator Undo/onRestore() replacement. */
@@ -228,6 +254,7 @@ export class SplinePath extends Component {
     protected onDisable():void {
         this._dragKnot=null;this._dragProperty=null;this._dragSnapshot=null;
         this._dragGroupPositions=[];this._selectedGroup.clear();
+        this._knotTangentEuler=new Vec3();
         this._rotationDragging=false;this._rotationStart=null;
         this._hudRollKnot=null;this._hudRollStart=0;
         this._gizmoGestureName=null;this._discardedGizmo=null;
@@ -328,6 +355,30 @@ export class SplinePath extends Component {
             const newLength=k.mode===TangentMode.Mirrored?l:oppositeLength;
             k[other]=l>1e-9?vec(scale(k[picked],-newLength/l)):new Vec3();
         }
+    }
+    /** Knot-pivoted rotate handles steer authored Bezier tangent vectors.
+     * No child Node or misleading serialized Knot Euler field is created. */
+    public get pathGizmoKnotTangentEuler():Vec3 {
+        return vec(this._knotTangentEuler);
+    }
+    public set pathGizmoKnotTangentEuler(value:Vec3) {
+        if(!EDITOR_NOT_IN_PREVIEW||this.interpolation!==CurveMode.Bezier||
+           !this.gizmoEditKnots||!this.gizmoEditTangents||
+           !this.gizmoRotateKnotTangents||!finite(value)||
+           !this._dragKnot||this._dragProperty!=='pathGizmoKnotTangentEuler'||
+           !this.gizmoWriteAllowed('pathGizmoKnotTangentEuler',this._dragIndex))return;
+        const k=this._dragKnot;
+        if(k.mode===TangentMode.Auto){
+            const hin=vec(this.tangentOffset(k,'in'));
+            const hout=vec(this.tangentOffset(k,'out'));
+            k.handleIn=hin;k.handleOut=hout;k.mode=TangentMode.Free;
+        }
+        const q0=eulerQuat(this._knotTangentEuler),q1=eulerQuat(value);
+        const delta=mulQuat(q1,{x:-q0.x,y:-q0.y,z:-q0.z,w:q0.w});
+        const nextIn=rotatedVec(k.handleIn,delta),nextOut=rotatedVec(k.handleOut,delta);
+        if(!finite(nextIn)||!finite(nextOut))return;
+        k.handleIn=nextIn;k.handleOut=nextOut;
+        this._knotTangentEuler=vec(value);
     }
     public get pathGizmoTangentIn():Vec3{return this.readTangent('in');}
     public set pathGizmoTangentIn(v:Vec3){this.writeTangent('in',v);}
@@ -604,6 +655,11 @@ export class SplinePath extends Component {
                 indices,space,snap,this.selectedGroupIndices()));
         }
         if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
+            if(this.gizmoRotateKnotTangents)
+                handles.push(...buildSplineKnotTangentRotateGizmos(
+                    'pathGizmoKnotTangentEuler','pathGizmoKnotPosition',
+                    this.gizmoRotationSnap,
+                    this.gizmoRotationSpace===SplineSpace.World?'world':'local'));
             handles.push(
                 {id:'path-tangent-in',property:world?'pathGizmoTangentInWorld':'pathGizmoTangentIn',
                     visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
@@ -775,7 +831,8 @@ export class SplinePath extends Component {
             pathGizmoTangentIn:'pathGizmoTangentIn',
             pathGizmoTangentInWorld:'pathGizmoTangentIn',
             pathGizmoTangentOut:'pathGizmoTangentOut',
-            pathGizmoTangentOutWorld:'pathGizmoTangentOut'
+            pathGizmoTangentOutWorld:'pathGizmoTangentOut',
+            pathGizmoKnotTangentEuler:'pathGizmoKnotTangentEuler'
         } as const;
         if(!(name in proxy))return;
         const field=proxy[name as keyof typeof proxy] as PathGizmoProperty;
@@ -789,6 +846,7 @@ export class SplinePath extends Component {
             const knot=this.knots[i];
             if(!knot)return;
             this._dragKnot=knot;this._dragProperty=field;this._dragIndex=i;
+            if(field==='pathGizmoKnotTangentEuler')this._knotTangentEuler=new Vec3();
             this._gizmoGestureName=name;
             this._dragSnapshot={
                 knot,position:vec(knot.position),mode:knot.mode,
@@ -824,6 +882,7 @@ export class SplinePath extends Component {
                 this._dragKnot=null;this._dragProperty=null;
                 this._dragSnapshot=null;this._dragGroupPositions=[];
                 this._dragIndex=-1;this._gizmoGestureName=null;
+                this._knotTangentEuler=new Vec3();
             }
         }
     }
@@ -895,6 +954,7 @@ export class SplinePath extends Component {
         this._dragKnot=null;this._dragProperty=null;
         this._dragSnapshot=null;this._dragIndex=-1;
         this._dragGroupPositions=[];this._selectedGroup.clear();
+        this._knotTangentEuler=new Vec3();
         this._rotationDragging=false;this._rotationStart=null;
         this._hudRollKnot=null;this._hudRollStart=0;
         this._lastScan=Number.NEGATIVE_INFINITY;

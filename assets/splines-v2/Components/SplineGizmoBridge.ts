@@ -31,9 +31,13 @@ export interface SplineGizmoHandle {
     color?:string;
     hoverColor?:string;
     pickSize?:number;
+    pivotProperty?:string;
+    pivotSpace?:'local'|'world';
 }
 export interface SplineGizmoRotateOptions {
     space:'local'|'world';
+    pivotProperty?:string;
+    pivotSpace?:'local'|'world';
     ringSize?:number;
     pickSize?:number;
     snap?:number;
@@ -42,6 +46,7 @@ export interface SplineSceneGizmo2DBackend {
     rotate?(property:string,options?:SplineGizmoRotateOptions):SplineGizmoHandle[];
 }
 export interface SplineSceneGizmoBackend {
+    supportsRotationPivot?:boolean;
     beginColor(owner:Node,color:Color):void;
     drawLine(owner:Node,a:Vec3,b:Vec3):void;
     drawSphere?(owner:Node,p:Vec3,radius:number,wire?:boolean,
@@ -80,6 +85,23 @@ export function buildSplinePathRotateGizmos(
     }).Gizmos2D;
     return typeof sdk2d?.rotate==='function'?
         sdk2d.rotate(property,options):[];
+}
+/** Native SDK v3 ring pivot follows a Knot's Vec3 property while the
+ * Euler proxy rotates its pair of authored Bézier tangent handles. Never
+ * draw misleading Node-origin rings when the SDK lacks pivot support. */
+export function buildSplineKnotTangentRotateGizmos(
+    rotationProperty:string,pivotProperty:string,
+    snapDegrees=0,space:'local'|'world'='local'
+):SplineGizmoHandle[] {
+    if(!Number.isFinite(snapDegrees)||snapDegrees<0||snapDegrees>90)
+        throw new Error('Knot tangent rotation snap must be within 0..90');
+    const sdk=availableGizmoBackend();
+    if(!sdk?.supportsRotationPivot||typeof sdk.rotate!=='function')return [];
+    const rings=sdk.rotate(rotationProperty,{
+        space,ringSize:60,pickSize:13,pivotProperty,pivotSpace:'local',
+        ...(snapDegrees>0?{snap:snapDegrees}:{})
+    });
+    return Array.isArray(rings)?rings:[];
 }
 /** Gizmos3D.move('Vec3-property',options) provided by Cocos-Gizmos.
  * A missing/older SDK simply offers no handles.

@@ -14,7 +14,11 @@ async function dispatchV2(inspector,action){
                 'in the Scene; use Creator Undo/Redo or restore a saved Scene '+
                 'before attempting another Bind. No success was recorded.');
     }else if(result?.shortKnotFallback){
-        console.warn('[Cocos Splines] Short Knot: ConstantWidth cannot fit; generated a seamless Continuous Road with adaptive width. '+result.shortKnotFallback);
+        const rounded=String(result.shortKnotFallback).includes('Auto rounded Knot corner');
+        console.warn('[Cocos Splines] '+(rounded?
+            'Constant Width: preserved full Width with a rounded corner; centreline deviates near Knot. ':
+            'Constant Width: even rounded corner cannot fit; using Continuous adaptive Width. ')+
+            String(result.shortKnotFallback));
     }else if(action==='plan-v2-junction-auto-trim'&&result?.ok){
         console.info('[Cocos Splines] Junction Auto Trim proposal:',result.plan);
     }else if(action==='apply-v2-junction-auto-trim'&&result?.ok){

@@ -536,3 +536,27 @@ missing triangles. In Strict Constant Width, expect an
 actionable fold warning and the previous valid preview to
 remain intact. Explicitly Rebuild and inspect Dynamic/Baked,
 UV0 Repeat U/V, UV2, marked lane continuity and Undo/Redo.
+
+## Screenshot follow-up: full width and Knot rotation handles
+
+1. Install the matching **Cocos-Gizmos v3** and **Cocos-Splines v2**
+   test ZIPs, restart Creator 3.8.8, select Path.
+2. In **Bézier** interpolation set **Gizmos Rotation Mode = Knots**,
+   **Gizmo Edit Tangents = On** and
+   **Gizmo Rotate Knot Tangents = On**.
+   Select Knot 1: expect XYZ rings at its position plus the
+   two separate purple/cyan tangent points. Drag a ring, then Escape:
+   both tangent vectors return to their originals. Drag again and
+   commit: the Road Preview follows. Roll remains a different control.
+3. Select a Road with `Follow Source Curve = On` and
+   `Short Knot Mode = AutoContinuous`, Width 4 and the
+   three-Knot sharp curve. Rebuild. Expect smooth FULL-width
+   circular rounding with a Console note that the centreline
+   deviates locally; **no pinched width wedge**. Check U/V
+   UV0, UV2, uninterrupted triangles and Scene guides.
+4. Reduce Width / soften the curve until the source offset is
+   feasible: at that point Constant Width follows the original
+   centreline without a fallback warning. Strict mode must
+   reject an impossible full-width source curve rather than
+   silently narrow it. Verify Undo/Redo, Save/Reopen and Prefabs
+   on Windows; mocked CI alone cannot verify native gizmo picking.

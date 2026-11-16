@@ -9,7 +9,7 @@ const {style,callEditor}=require('./common');
 const {knotPosition}=require('../../v2/PathKnotDumpCodec');
 const simple=['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
-    'gizmoPointLimit','gizmoEditTangents',
+    'gizmoPointLimit','gizmoEditTangents','gizmoRotateKnotTangents',
     'gizmoRotationMode','gizmoRotationSnap',
     'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
     'gizmoShowRollGuide','gizmoRollGuideSize'];
@@ -21,7 +21,7 @@ for(const field of simple)$[field]='.spl-path-'+field;
 const sections=[
  ['Spline',['interpolation','closed']],
  ['Gizmos',['gizmoKnotIndex','gizmoShowPath','gizmoEditKnots',
-     'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents',
+     'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents','gizmoRotateKnotTangents',
      'gizmoRotationMode','gizmoRotationSnap',
      'gizmoPositionSpace','gizmoRotationSpace','gizmoPositionSnap',
      'gizmoShowRollGuide','gizmoRollGuideSize']]

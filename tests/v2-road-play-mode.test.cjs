@@ -192,31 +192,29 @@ try{
  k2.worldPosition=new Vec3(5.82,0,4.347);
  authoredPath.knots=[a,b,k2];road.surfaceMode=2;authoredPath.interpolation=3;
  road.width=4;road.sampleStep=.25;
- // The default Constant Width route must sample the real Centripetal curve.
+ // The authored 3-Knot Centripetal centreline folds a 4m offset.
+ // Auto now prefers an undistorted FULL WIDTH tangent fillet rather
+ // than the visibly pinched Continuous width response.
  road.followSourceCurveInConstantWidth=true;
  const followed=road.generate().geometry;
- assert.match(road.getShortKnotFallback(),/folds its inside edge/,
-  'An impossible 4m offset must AutoContinuous instead of emitting holes');
+ assert.match(road.getShortKnotFallback(),/FULL WIDTH/,
+  'Default fallback must preserve full width and report centreline deviation');
+ assert.equal(followed.triangleCount,4*(followed.vertexCount/3-1),
+  'A rounded constant-width Road must have no missing faces');
+ env.EDITOR_NOT_IN_PREVIEW=true;
+ assert.equal(road.inspectCornerRisk().filletReport.filletedCorners,1,
+  'Read-only Scene guides must reflect the effective rounded route');
  const oldStrict=road.shortKnotMode;
  road.shortKnotMode=1;
  assert.throws(()=>road.generate(),/folds its inside edge/,
-  'Strict Constant Width should ask user to reduce width or soften knots');
+  'Strict mode reports the impossible source offset rather than deforming');
  road.shortKnotMode=oldStrict;
- const {buildSplineCacheV2}=require(path.join(temp,'core/SplineCache.js'));
- const {buildSplineFramesV2}=require(path.join(temp,'core/SplineFrames.js'));
- const trueCache=buildSplineCacheV2(road.source());
- const realFrames=buildSplineFramesV2(trueCache,{maxStep:.25,
-  maxAngleDegrees:road.maxTurnAngleDegrees,maxChordError:road.maxChordError}).frames;
- assert.equal(followed.vertexCount,realFrames.length*3);
- for(let i=0;i<realFrames.length;i++){
-  const mid=3*(3*i+1);
-  assert(Math.abs(followed.positions[mid]-realFrames[i].position.x)<4e-5);
-  assert(Math.abs(followed.positions[mid+2]-realFrames[i].position.z)<4e-5);
- }
- // Explicit opt-out retains the legacy round-corner Knot-chord fillet.
+ // Explicit opt-out uses the same fixed-width rounded centreline.
  road.followSourceCurveInConstantWidth=false;
  const filletRoad=road.generate().geometry;
  assert(filletRoad.vertexCount>100);
+ assert.deepEqual(Array.from(followed.positions),Array.from(filletRoad.positions),
+  'Auto full-width rounding equals the deliberate round-corner route');
  assert.equal(filletRoad.triangleCount,4*(filletRoad.vertexCount/3-1),
    'Cocos component fillet must preserve every quad on the exact 3-Knot road');
  env.EDITOR_NOT_IN_PREVIEW=true;

@@ -21,13 +21,28 @@ On the `SplinePath` Inspector set **Gizmos Rotation Mode**:
 **Gizmos Rotation Snap** is measured in degrees. Set `0` for continuous
 angles, or a positive number such as `15` for snapping.
 
-The presets edit `pathGizmoRotationEuler`, an Editor-only computed
-proxy to the **Path Node's local Euler angles**. Cocos
-`Node.setRotationFromEuler()` applies the actual transform. The
-native preset rotation rings are **centered on the Path Node's origin**,
-not an individual Vec3 Knot: the current SDK does not provide a custom
-Knot pivot option. The rings are rendered on world axes to avoid
-double-applying the Node's own Euler rotation to the SDK frame.
+In **Planar2D / Spatial3D**, the presets edit
+`pathGizmoRotationEuler`, an Editor-only computed proxy to the
+**Path Node's Euler angles**. Cocos `Node.setRotationFromEuler()`
+applies the actual transform; the rings remain at the Path Node origin.
+
+When **Knots + Bézier** is active and the installed Gizmos v3 SDK
+reports `supportsRotationPivot`, the selected Knot also gets
+**three XYZ tangent-rotation rings centered at its own position**.
+The rings steer the incoming/outgoing Bézier handle vectors as a
+pair around that Knot. These are real pickable SDK rotation controls,
+not a visual simulation. An Auto Bezier Knot becomes Free when first
+rotated. They do **not** create independent Knot Euler orientation
+fields, move the Knot, or modify Path Node rotation. Banking the Road
+remains the Knot's `Roll Degrees`.
+
+This pivot functionality requires an updated
+`PhuNope/Cocos-Gizmos` v3 extension (feature probe); on earlier
+SDK builds, these specific Knot rings are hidden instead of being
+misleadingly displayed around the Node origin. Direct incoming
+purple/outgoing cyan tangent point handles are still available on
+the active Knot in Bezier mode. Centripetal/Catmull tangents are
+automatic: select Bézier to edit their handles manually.
 
 Rotation begins a Path edit session, notifies all registered Road,
 Extrude and Deform preview consumers during updates and forces a final
@@ -121,3 +136,23 @@ computed proxy onto a nested Knot record.
 [Path authoring](PURE_VEC3_KNOTS.md) ·
 [Gizmos](GIZMOS.md) · [Test guide](TEST_BUILD.md) ·
 [Current status](STATUS.md)
+
+## Native Knot rotation / Bezier tangent pivot acceptance
+
+1. Update **both** Cocos-Gizmos v3 and Cocos-Splines development
+   extensions; restart Creator 3.8.8 to reload Scene Gizmos scripts.
+2. Select Path and choose **Interpolation = Bézier**,
+   **Gizmo Rotation Mode = Knots**, **Gizmo Rotate Knot Tangents = On**.
+   Select Knot 1. Expect three pickable rotation rings at the Knot,
+   not at the Path Node origin, alongside purple/cyan point handles.
+3. Drag X, Y, Z separately. They rotate both tangent vectors
+   around selected Knot, preserving their distances and position,
+   and update Road Preview. Test Rotation Local/World frame selection,
+   snap (e.g. 15 degrees), Escape/cancel, and final commit.
+4. Select Knot 0 and repeat; changing active Knot must retarget
+   pivot and tangent pair without altering Knot 1. Switch to
+   Centripetal: tangent rings and manual handles must disappear;
+   the source spline remains fully automatic.
+5. Test saved Scene, native Undo/Redo/Prefab Overrides and an
+   interrupted gesture after OnRestore. Headless tests check the
+   pure data invariants, but native Editor history is not certified.

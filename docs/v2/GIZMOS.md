@@ -37,11 +37,12 @@ Planar2D (Z ring on the Path Node) or Spatial3D (X/Y/Z rings on the
 Path Node). **Gizmos Rotation Snap** controls angular snap in degrees,
 with 0 indicating continuous rotation.
 
-Rotation affects the entire Path Node transform, not an individual
-Vec3 Knot. **The SDK places rotation rings at the selected Node origin**;
-it does not provide a per-Knot pivot option. Escape restores the Node's
-previous rotation, and linked mesh previews rebuild. See the
-[Rotate and banking guide](ROTATE_AND_BANK.md) for examples.
+In Planar2D/Spatial3D, rotation affects the Path Node and rings remain
+at its origin. In **Knots + Bézier**, the updated Gizmos v3 SDK can
+place **Knot tangent rotation rings at the selected Knot's Vec3 pivot**;
+these rotate the pair of Bezier handles, not the Node or a fake Knot
+Euler orientation. Escape restores both handles. Requires the SDK's
+`supportsRotationPivot` capability; see [Rotate and banking](ROTATE_AND_BANK.md).
 
 ## Scene Roll editing
 

@@ -149,7 +149,8 @@ try {
      id:property+i,property,space:opts.space,snap:opts.snap,visual:'axis',plane:'xy'
    })),
    rotate:(property,opts)=>['x','y','z'].map(axis=>({
-     property,axis,visual:'rotation',snap:opts.snap,space:opts.space
+     property,axis,visual:'rotation',snap:opts.snap,space:opts.space,
+     pivotProperty:opts.pivotProperty,pivotSpace:opts.pivotSpace
    }))};
  globalThis.Gizmos2D={
    rotate:(property,opts)=>[{property,axis:'z',visual:'rotation',
@@ -164,6 +165,36 @@ try {
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
+   // A new Gizmos v3 SDK can pivot native XYZ rings around the selected
+   // Knot instead of the Path Node. No updated SDK => fail closed.
+   globalThis.Gizmos3D.supportsRotationPivot=true;
+   const tangentRings=pathComp.onGizmoHandles().filter(h=>
+     h.property==='pathGizmoKnotTangentEuler');
+   assert.equal(tangentRings.length,3);
+   assert(tangentRings.every(h=>h.visual==='rotation'));
+   assert(tangentRings.every(h=>h.pivotProperty==='pathGizmoKnotPosition'));
+   assert(tangentRings.every(h=>h.pivotSpace==='local'));
+   const beforeRotateIn={...k0.handleIn},beforeRotateOut={...k0.handleOut};
+   pathComp.onGizmoChanged('pathGizmoKnotTangentEuler','begin');
+   pathComp.pathGizmoKnotTangentEuler=new Vec3(0,0,90);
+   eq(k0.handleOut.x,0);eq(k0.handleOut.y,2);
+   eq(k0.handleIn.x,0);eq(k0.handleIn.y,-2);
+   assert.equal(k0.mode,TangentMode.Free,'Rotating Auto handles enables manual Bézier mode');
+   pathComp.onGizmoChanged('pathGizmoKnotTangentEuler','cancel');
+   assert.deepEqual({...k0.handleIn},beforeRotateIn);
+   assert.deepEqual({...k0.handleOut},beforeRotateOut);
+   assert.equal(k0.mode,TangentMode.Auto);
+   assert.deepEqual({...pathComp.pathGizmoKnotTangentEuler},{x:0,y:0,z:0});
+   pathComp.onGizmoChanged('pathGizmoKnotTangentEuler','begin');
+   pathComp.pathGizmoKnotTangentEuler=new Vec3(0,0,90);
+   pathComp.onGizmoChanged('pathGizmoKnotTangentEuler','end');
+   eq(k0.handleOut.x,0);eq(k0.handleOut.y,2);
+   assert.equal(k0.mode,TangentMode.Free);
+   // Reset to the prior authored state for the existing Move/HUD fixtures.
+   k0.handleIn=new Vec3(beforeRotateIn.x,beforeRotateIn.y,beforeRotateIn.z);
+   k0.handleOut=new Vec3(beforeRotateOut.x,beforeRotateOut.y,beforeRotateOut.z);
+   k0.mode=TangentMode.Auto;
+   globalThis.Gizmos3D.supportsRotationPivot=false;
    assert.equal(pathComp.onGizmoHudControls().length,12);
    assert.deepEqual(pathComp.onGizmoHudControls().slice(-2).map(x=>x.id),
      ['path-group-toggle','path-group-clear']);
