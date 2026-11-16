@@ -168,6 +168,15 @@ async function editV2Path(operation,index){
         return {ok:true,index:plan.index,count:plan.count};
     }catch(e){return fail('edit path',e);}
 }
+/** Direct Inspector Group selection: no extra serialized Knot fields.
+ * HUD and Inspector both mutate the same transient selection Set. */
+async function editV2PathGroup(operation,index){
+    try{
+        const result=await scene('editV2PathGroup',currentNode(),operation,index);
+        if(!result?.ok)throw new Error(result?.error||'Group selection unavailable');
+        return result;
+    }catch(e){return fail('edit Group selection',e);}
+}
 /** Group Nudge: one native Creator history transaction for all selected Knots. */
 async function nudgeV2PathGroup(axis){
     try{
@@ -403,7 +412,7 @@ async function inspectV2JunctionSeams(){
     }catch(e){return fail('inspect Junction seams',e);}
 }
 exports.methods={rebuildV2Road,restoreV2RoadBaked,checkV2RoadBake,
-    bindV2RoadMesh,bakeV2Road,editV2Path,nudgeV2PathGroup,
+    bindV2RoadMesh,bakeV2Road,editV2Path,editV2PathGroup,nudgeV2PathGroup,
     planV2JunctionAutoTrim,applyV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,applyV2JunctionEndpointSnap,inspectV2RoadNetwork,
     planV2JunctionAutoConnect,applyV2JunctionAutoConnect,

@@ -453,7 +453,7 @@ export class SplinePath extends Component {
             throw new Error('Invalid Group Nudge axis');
         const indices=this.selectedGroupIndices();
         if(indices.length<2||indices.length>32)
-            throw new Error('Select at least two Knots using the HUD group buttons');
+            throw new Error('Select two or more Knots using Group in each Inspector Knot card, or HUD Toggle Active Group');
         const raw=this.gizmoPositionSnap;
         if(!Number.isFinite(raw)||raw<0||raw>20)
             throw new Error('Invalid Path Position Snap');
@@ -485,22 +485,39 @@ export class SplinePath extends Component {
             !Number.isSafeInteger(i)||i<0||i>=this.knots.length))return;
         for(const index of indices)this._selectedGroup.add(this.knots[index]);
     }
+    /** Select any Knot from Inspector without changing the active
+     * handle or serializing a second selection array. */
+    public toggleGroupKnot(index:number):number[] {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||!this.gizmoEditKnots||
+           this._dragKnot||this._rotationDragging||this._hudRollKnot||
+           this._discardedGizmo||this._discardedHudRoll)
+            throw new Error('Group selection unavailable during Play or a Gizmos drag');
+        if(!Number.isSafeInteger(index)||index<0||index>=this.knots.length)
+            throw new Error('Invalid Group Knot index');
+        const knot=this.knots[index];
+        if(this._selectedGroup.has(knot))this._selectedGroup.delete(knot);
+        else if(this.selectedGroupKnots().length<32)this._selectedGroup.add(knot);
+        else throw new Error('Group selection supports at most 32 Knots');
+        return this.selectedGroupIndices();
+    }
+    public clearGroupKnots():number[] {
+        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
+           this._dragKnot||this._rotationDragging||this._hudRollKnot||
+           this._discardedGizmo||this._discardedHudRoll)
+            throw new Error('Cannot clear Knot selection during a Gizmos drag');
+        this._selectedGroup.clear();
+        return [];
+    }
     public onGizmoHudAction(id:string):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
            !this.gizmoEditKnots||this._dragKnot||
            this._rotationDragging||this._hudRollKnot)return;
         if(id==='path-group-clear'){
-            this._selectedGroup.clear();
+            this.clearGroupKnots();
             return;
         }
         if(id!=='path-group-toggle')return;
-        const active=this.knots[this.gizmoKnotIndex];
-        if(!active)return;
-        if(this._selectedGroup.has(active)){
-            this._selectedGroup.delete(active);
-        }else if(this.selectedGroupKnots().length<32){
-            this._selectedGroup.add(active);
-        }
+        this.toggleGroupKnot(this.gizmoKnotIndex);
     }
     public get pathGizmoKnotPosition():Vec3 {
         return this.read(this.gizmoKnotIndex,'pathGizmoKnotPosition');

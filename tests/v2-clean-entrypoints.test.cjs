@@ -29,7 +29,15 @@ const knot=(x,y,z)=>({position:{x,y,z},mode:0,
 const pathComponent={
   className:'Spline.Path',
   knots:[knot(0,0,0),knot(0,0,5)],gizmoKnotIndex:0,restores:0,
-  onRestore(){this.restores++;}
+  group:new Set(),
+ selectedGroupIndices(){return [...this.group].sort((a,b)=>a-b);},
+ toggleGroupKnot(i){
+  if(!Number.isSafeInteger(i)||i<0||i>=this.knots.length)throw Error('Bad Knot index');
+  if(this.group.has(i))this.group.delete(i);else this.group.add(i);
+  return this.selectedGroupIndices();
+ },
+ clearGroupKnots(){this.group.clear();return [];},
+ onRestore(){this.restores++;}
 };
 const wrap=(type,value)=>({type,value});
 const knotDump=k=>wrap('Spline.Knot',{position:wrap('cc.Vec3',k.position),
@@ -61,7 +69,7 @@ try{
  const scene=require(path.join(root,'src/v2/clean-scene.js'));
  const keys=Object.keys(scene.methods).sort();
  assert.deepEqual(keys,[
-  'inspectV2JunctionSeams','inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
+  'editV2PathGroup','inspectV2JunctionSeams','inspectV2RoadBake','inspectV2RoadNetwork','planV2JunctionAutoConnect','planV2JunctionAutoTrim',
   'planV2JunctionEndpointSnap','planV2JunctionTangents','planV2PathGroupNudge','prepareV2RoadBake','rebuildV2Road',
   'refreshV2JunctionAutoConnect','refreshV2JunctionAutoTrim','refreshV2JunctionEndpointSnap',
   'refreshV2Path','refreshV2PathGroup','restoreV2RoadBaked']);
@@ -84,6 +92,11 @@ try{
  assert.equal(scene.methods.refreshV2Path('missing').ok,false);
  assert.equal(pathComponent.knots.length,2,
    'Scene refresh must never mutate serialized Knot geometry');
+ assert.deepEqual(scene.methods.editV2PathGroup('path-node','query',0).indices,[]);
+ assert.deepEqual(scene.methods.editV2PathGroup('path-node','toggle',0).indices,[0]);
+ assert.deepEqual(scene.methods.editV2PathGroup('path-node','toggle',1).indices,[0,1]);
+ assert.deepEqual(scene.methods.editV2PathGroup('path-node','clear',0).indices,[]);
+ assert.equal(scene.methods.editV2PathGroup('path-node','toggle',99).ok,false);
  const oldEditor=globalThis.Editor;
  let selectedUuid='road-node';
  try{
@@ -124,7 +137,7 @@ try{
   };
   assert.deepEqual(Object.keys(main.methods).sort(),[
    'applyV2JunctionAutoConnect','applyV2JunctionAutoTrim','applyV2JunctionEndpointSnap','applyV2JunctionTangents','bakeV2Road',
-   'bindV2RoadMesh','checkV2RoadBake','editV2Path','inspectV2JunctionSeams','inspectV2RoadNetwork',
+   'bindV2RoadMesh','checkV2RoadBake','editV2Path','editV2PathGroup','inspectV2JunctionSeams','inspectV2RoadNetwork',
    'nudgeV2PathGroup',
    'planV2JunctionAutoConnect','planV2JunctionAutoTrim','planV2JunctionEndpointSnap','planV2JunctionTangents',
    'rebuildV2Road','restoreV2RoadBaked']);
@@ -132,6 +145,13 @@ try{
   assert.equal((await main.methods.checkV2RoadBake()).ok,true);
   assert.equal((await main.methods.restoreV2RoadBaked()).ok,true);
   selectedUuid='path-node';
+  const countBefore=updates.length;
+  assert.deepEqual((await main.methods.editV2PathGroup('toggle',0)).indices,[0]);
+  assert.deepEqual((await main.methods.editV2PathGroup('toggle',1)).indices,[0,1]);
+  assert.deepEqual((await main.methods.editV2PathGroup('query',0)).indices,[0,1]);
+  assert.deepEqual((await main.methods.editV2PathGroup('clear',0)).indices,[]);
+  assert.equal((await main.methods.editV2PathGroup('toggle',999)).ok,false);
+  assert.equal(updates.length,countBefore,'Group selection cannot serialize Scene data');
   const before=JSON.stringify(pathComponent.knots);
   const previousRestoreCount=pathComponent.restores;
   assert.equal((await main.methods.editV2Path('add',0)).ok,true);

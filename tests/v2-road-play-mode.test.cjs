@@ -192,6 +192,22 @@ try{
  k2.worldPosition=new Vec3(5.82,0,4.347);
  authoredPath.knots=[a,b,k2];road.surfaceMode=2;authoredPath.interpolation=3;
  road.width=4;road.sampleStep=.25;
+ // The default Constant Width route must sample the real Centripetal curve.
+ road.followSourceCurveInConstantWidth=true;
+ const followed=road.generate().geometry;
+ const {buildSplineCacheV2}=require(path.join(temp,'core/SplineCache.js'));
+ const {buildSplineFramesV2}=require(path.join(temp,'core/SplineFrames.js'));
+ const trueCache=buildSplineCacheV2(road.source());
+ const realFrames=buildSplineFramesV2(trueCache,{maxStep:.25,
+  maxAngleDegrees:road.maxTurnAngleDegrees,maxChordError:road.maxChordError}).frames;
+ assert.equal(followed.vertexCount,realFrames.length*3);
+ for(let i=0;i<realFrames.length;i++){
+  const mid=3*(3*i+1);
+  assert(Math.abs(followed.positions[mid]-realFrames[i].position.x)<4e-5);
+  assert(Math.abs(followed.positions[mid+2]-realFrames[i].position.z)<4e-5);
+ }
+ // Explicit opt-out retains the legacy round-corner Knot-chord fillet.
+ road.followSourceCurveInConstantWidth=false;
  const filletRoad=road.generate().geometry;
  assert(filletRoad.vertexCount>100);
  assert.equal(filletRoad.triangleCount,4*(filletRoad.vertexCount/3-1),

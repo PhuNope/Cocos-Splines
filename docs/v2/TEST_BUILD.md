@@ -490,3 +490,37 @@ Do not certify Release Candidate from these mocked tests alone.
 
 These steps are not marked complete by green CI; the test suite
 exercises a mocked Creator Editor API only.
+
+## Three-Knot Creator screenshot — Path/Group/Constant Width (2026-11-16)
+
+1. On **Spline.Path**, `Interpolation = Centripetal` provides
+   automatic tangents: no manual tangent handle is displayed.
+   To edit tangents, choose `Bézier`, expand `Vec3 Knots`
+   and select `Free` / `Aligned` / `Mirrored` Mode.
+   Then enable `Gizmo Edit Tangents` and move the incoming
+   purple/outgoing cyan handles in Scene.
+2. There is no independent XYZ rotation for a pure Vec3 Knot.
+   `Roll Degrees` inside the Knot card / the Scene Roll slider
+   rotates its cross-section around the spline forward tangent.
+   `Rotation Local/World` selects the rotate Gizmo's frame;
+   `Planar2D/Spatial3D` rotate the entire Path Node.
+3. Click **+ Group** on Knot 0 and Knot 1 in the Inspector.
+   Confirm the `Group Nudge` section says **2 selected**,
+   then press X/Y/Z +/- for one recordable group move.
+   `Clear Group` resets it, and `Refresh Group` synchronizes
+   buttons with HUD-only selection.
+4. On the Road with `Surface Mode = ConstantWidth`,
+   keep **Follow Source Curve in Constant Width = On**
+   for Centripetal (the default). Rebuild Preview.
+   The centre of the Road must pass through all three
+   source Knot positions and follow the same curved path
+   shown by the Path Gizmo, rather than rounded chord fillets.
+5. Toggle **Follow Source Curve in Constant Width** Off,
+   rebuild and compare: this intentionally restores the old
+   circular Knot-chord route, which can deviate from the
+   authored spline. For very tight curves, expect an offset
+   self-overlap risk; try Continuous or reduce Width.
+6. Test U and V UV axes, Roll, dynamic editor rebuilds,
+   Undo/Redo, Save/Reopen, Baked asset unchanged until
+   explicit re-Bake, and Prefab Overrides. Record the
+   Creator version and a Scene screenshot for acceptance.

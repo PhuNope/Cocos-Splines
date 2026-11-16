@@ -55,6 +55,7 @@ pkg.contributions={
         'bake-v2-road':{methods:['bakeV2Road']},
         'bind-v2-road-mesh':{methods:['bindV2RoadMesh']},
         'edit-v2-path':{methods:['editV2Path']},
+        'edit-v2-path-group':{methods:['editV2PathGroup']},
         'nudge-v2-path-group':{methods:['nudgeV2PathGroup']},
         'plan-v2-junction-auto-trim':{methods:['planV2JunctionAutoTrim']},
         'apply-v2-junction-auto-trim':{methods:['applyV2JunctionAutoTrim']},

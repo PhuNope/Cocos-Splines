@@ -5,7 +5,7 @@ import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type Roa
 import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2} from './RoadContinuous';
 import {buildRoadMarkingsV2,appendRoadMarkingsV2,type RoadMarkingOptionsV2} from './RoadMarkings';
-import {buildRoadFilletCacheV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
+import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
 import {trimmedRoadFramesV2,type RoadJunctionTrimV2} from './RoadJunctionTrim';
 export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2, RoadFilletOptionsV2, RoadJunctionTrimV2 {
     /** Total asphalt width in spline-local units. */
@@ -25,6 +25,8 @@ export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousO
     readonly onOverlapReport?:(report:RoadOverlapReportV2)=>void;
     /** Continuous Road strip with smooth width adaptation; no UV/mesh clipping. */
     readonly surfaceMode?:'clip'|'continuous'|'fillet';
+    /** Preserve source Catmull/Centripetal/Bezier centreline in Constant Width. Default true; false keeps chord fillets. */
+    readonly followSourceCurveInConstantWidth?:boolean;
     readonly onFilletReport?:(report:RoadFilletReportV2)=>void;
     readonly onContinuousReport?:(report:RoadContinuousReportV2)=>void;
     readonly adaptiveSampling?:boolean;
@@ -99,14 +101,17 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
     if(mode!=='clip'&&mode!=='continuous'&&mode!=='fillet')throw new Error('Unknown Road surface mode');
     if(mode!=='fillet'&&((options.junctionStartTrim??0)>0||(options.junctionEndTrim??0)>0))
         throw new Error('Junction trim needs ConstantWidth Road mode');
-    const fillet=mode==='fillet'?buildRoadFilletCacheV2(cache,width*.5,{...options,maxArcStep:step}):null;
+    const followAuthored=mode==='fillet'&&roadConstantWidthFollowsSourceV2(cache,
+        options.followSourceCurveInConstantWidth);
+    const fillet=mode==='fillet'&&!followAuthored?
+        buildRoadFilletCacheV2(cache,width*.5,{...options,maxArcStep:step}):null;
     if(fillet)options.onFilletReport?.(fillet.report);
     const workingCache=fillet?.cache??cache;
     const uvMeters=roadUVMetersForClosedLoopV2(workingCache.length,requestedUVMeters,
         workingCache.spline.closed,options.closedLoopUVRepeat===true);
     const table=buildSplineFramesV2(workingCache,{maxStep:step,
         rollSource:cache.spline,
-        ...(options.adaptiveSampling&&mode!=='fillet'?{
+        ...(options.adaptiveSampling&&(mode!=='fillet'||followAuthored)?{
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
         }:{})});
     const frames=trimmedRoadFramesV2(workingCache,table,options);

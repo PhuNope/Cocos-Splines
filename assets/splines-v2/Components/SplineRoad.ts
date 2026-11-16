@@ -13,7 +13,7 @@ import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClea
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
-import {buildRoadFilletCacheV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
+import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {type JunctionRoadCandidateV2} from '../geometry/JunctionAutoTrimV2';
@@ -66,6 +66,8 @@ export class SplineRoad extends MeshGenerator {
     resolvePlanarOverlaps=true;
     @property({type:Enum(SurfaceMode),tooltip:'ConstantWidth: round knot corners into tangent arcs without squeezing Road or cutting UV. Continuous: old adaptive width. ClipOverlaps: old mesh clipping.'})
     surfaceMode=SurfaceMode.ConstantWidth;
+    @property({tooltip:'Constant Width with Centripetal/Catmull/Bézier: follow the actual authored spline centreline with full width. Disable only to restore the legacy rounded Knot-chord route. Linear still uses round fillets; very tight bends can self-overlap.'})
+    followSourceCurveInConstantWidth=true;
     @property({min:1.02,max:6,step:.05,tooltip:'Minimum circular turn radius = full half-width (including shoulder/curb) times this factor. Larger values need more knot spacing.'})
     filletRadiusScale=1.35;
     @property({type:Enum(ShortKnotMode),tooltip:'Auto Continuous: preserve seamless UV by smoothly adapting width only if a ConstantWidth fillet cannot fit nearby Knots. Strict: report the spacing error. Junction Trim and Road Sidewalk never auto-fallback.'})
@@ -142,7 +144,8 @@ export class SplineRoad extends MeshGenerator {
             const cache=buildSplineCacheV2(source);
             const totalWidth=this.width*.5+this.shoulderWidth+this.curbWidth;
             let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
-            if(this.surfaceMode===SurfaceMode.ConstantWidth){
+            if(this.surfaceMode===SurfaceMode.ConstantWidth&&
+               !roadConstantWidthFollowsSourceV2(cache,this.followSourceCurveInConstantWidth)){
                 try{fillet=buildRoadFilletCacheV2(cache,totalWidth,{
                     minimumRadiusScale:this.filletRadiusScale,
                     maxArcAngleDegrees:this.filletArcAngleDegrees,
@@ -178,7 +181,8 @@ export class SplineRoad extends MeshGenerator {
         if(!EDITOR_NOT_IN_PREVIEW)throw new Error('Corner diagnostics are Editor-only');
         const cache=buildSplineCacheV2(this.source());
         let fillet:ReturnType<typeof buildRoadFilletCacheV2>|null=null;
-        if(this.surfaceMode===SurfaceMode.ConstantWidth){
+        if(this.surfaceMode===SurfaceMode.ConstantWidth&&
+           !roadConstantWidthFollowsSourceV2(cache,this.followSourceCurveInConstantWidth)){
             try{fillet=buildRoadFilletCacheV2(cache,
                 this.width*.5+this.shoulderWidth+this.curbWidth,{
                     minimumRadiusScale:this.filletRadiusScale,
@@ -224,6 +228,7 @@ export class SplineRoad extends MeshGenerator {
         const roadSampling={junctionStartTrim:this.junctionStartTrim,junctionEndTrim:this.junctionEndTrim,
             generateMarkings:this.generateMarkings,markingOptions,
             closedLoopUVRepeat:this.closedLoopUVRepeat,
+            followSourceCurveInConstantWidth:this.followSourceCurveInConstantWidth,
             adaptiveSampling:this.adaptiveSampling,
             maxTurnAngleDegrees:this.maxTurnAngleDegrees,maxChordError:this.maxChordError,uvCrossMode};
         const corners=this.cornerSettings();

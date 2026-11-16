@@ -24,7 +24,8 @@ try{
  near(fillet.report.minimumRadius,2.7);
  assert(fillet.report.maxKnotDeviation>.5);
  assert.equal(fillet.cache.spline.type,'bezier');
- const opts={width:4,step:.25,surfaceMode:'fillet',adaptiveSampling:true,uvMetersPerRepeat:5};
+ const opts={width:4,step:.25,surfaceMode:'fillet',adaptiveSampling:true,uvMetersPerRepeat:5,
+  followSourceCurveInConstantWidth:false};
  for(const axis of ['u','v']){
   let report=null;
   const mesh=buildRoadStripV2(source,{...opts,uvLongitudinalAxis:axis,onFilletReport:x=>report=x});
@@ -57,6 +58,34 @@ try{
   assert(gltf.meshes[0].primitives[0].attributes.TEXCOORD_1!==undefined);
   const fitted=buildRoadStripV2(source,{...opts,surfaceMode:'continuous',uvLongitudinalAxis:axis});
   assert.notEqual(fingerprintMeshV2(mesh),fingerprintMeshV2(fitted));
+ }
+ // By default Constant Width must follow the author's true
+ // Centripetal centreline (including its middle Knot), not Knot chords.
+ for(const axis of ['u','v']){
+  const settings={width:4,step:.25,surfaceMode:'fillet',adaptiveSampling:true,
+   maxTurnAngleDegrees:6,maxChordError:.03,uvMetersPerRepeat:5,
+   uvLongitudinalAxis:axis};
+  const frames=buildSplineFramesV2(source,{maxStep:.25,
+   maxAngleDegrees:6,maxChordError:.03}).frames;
+  const road=buildRoadStripV2(source,settings);
+  assert.equal(road.vertexCount,frames.length*3);
+  assert.equal(road.triangleCount,4*(frames.length-1));
+  const longitudinal=axis==='u'?0:1;
+  for(let i=0;i<frames.length;i++){
+   const f=frames[i],centre=3*(3*i+1),left=3*(3*i),right=3*(3*i+2);
+   for(let k=0;k<3;k++)near(road.positions[centre+k],
+    f.position[['x','y','z'][k]],4e-5);
+   near(Math.hypot(...[0,1,2].map(k=>road.positions[right+k]-road.positions[left+k])),4,4e-5);
+   near(road.uv0[2*(3*i+1)+longitudinal],f.distance/5,4e-5);
+   near(road.uv2[2*(3*i+1)+1],f.distance/source.length,4e-5);
+  }
+  const oldMesh=buildRoadStripV2(source,{...settings,followSourceCurveInConstantWidth:false});
+  assert.notDeepEqual(Array.from(road.positions),Array.from(oldMesh.positions));
+  const decorated=buildRoadProfileV2(source,{...settings,shoulderWidth:1,
+   curbWidth:.3,curbHeight:.2,generateMarkings:true});
+  assert.deepEqual(decorated.submeshes.map(x=>x.materialSlot),[0,1,2,3,4]);
+  assert.equal(JSON.parse(exportMeshGltfV2(decorated).json).meshes[0].primitives.length,5);
+  assert(decorated.uv2.every(Number.isFinite));
  }
  const profile=buildRoadProfileV2(source,{...opts,shoulderWidth:1,curbWidth:.3,
   curbHeight:.2,generateMarkings:true});
@@ -98,5 +127,9 @@ try{
  assert(buildRoadStripV2(grade,opts).positions.every(Number.isFinite));
  const bezier=buildSplineCacheV2({type:'bezier',closed:false,knots:[knot(0,0,0),knot(12,0,0)]});
  assert.throws(()=>buildRoadStripV2(bezier,opts),/Bezier handles/);
- console.log('V2 CONSTANT WIDTH PASS: exact Knot radius, fixed 4m full width, U/V uncut UV0, UV2, no lost triangles, profile material bands, paint and glTF Bake');
+ const bezierRoad=buildRoadStripV2(bezier,{width:4,step:.25,
+  surfaceMode:'fillet',adaptiveSampling:true});
+ assert(bezierRoad.vertexCount>0);
+ assert(bezierRoad.uv0.every(Number.isFinite));
+ console.log('V2 CONSTANT WIDTH PASS: authored curved centreline, fixed 4m width, legacy fillet opt-out, U/V UVs, profiles, Bezier and Bake');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

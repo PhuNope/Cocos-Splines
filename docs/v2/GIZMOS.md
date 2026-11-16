@@ -241,3 +241,33 @@ foreign callbacks, missing index, and Escape. This does **not** certify a
 single native Creator history entry for Group Drag. Inspector Group Nudge
 remains the verified recordable path; test native history and Prefab
 overrides in Creator 3.8.8 before a release.
+
+### Creator 3.8.8: Inspector Group selection and Knot orientation (2026-11-16)
+
+The Path Inspector now has a **+ Group** button on every Knot card.
+Click it on two or more cards; the `Group Nudge (Inspector + HUD)`
+section shows the exact selected indices. Group selection is the
+same transient set as the Scene HUD's `Toggle Active Group`, so
+it never creates additional Knot Nodes or Undo entries. Use
+**Refresh Group** to synchronize the Inspector with any selections
+made only in the HUD. **Clear Group** resets the shared selection.
+Group Nudge itself remains a single recordable Knot-array edit.
+Do not change Path selection halfway through a Gizmo drag.
+
+**Knot Rotation** is not an independent XYZ Euler property in v2:
+the tangent of the spline provides the Knot's forward heading and
+pitch; `rollDegrees` on each Knot controls banking around that
+tangent. In `Knots` Gizmos mode, the HUD slider edits active
+`Knot Roll (deg)`. `Planar2D` / `Spatial3D` rings rotate the
+*entire Path Node*, not one Knot. The Inspector now explains this
+distinction explicitly instead of presenting the Rotation Local/World
+space toggle as if it provided an XYZ Knot rotation.
+
+Centripetal/Catmull-Rom computes automatic tangents, and its
+`handleIn` / `handleOut` properties are not used. For manual
+tangent handles choose **Interpolation: Bézier**, then set
+the Knot Mode to `Free`, `Aligned` or `Mirrored`;
+enable `Gizmo Edit Tangents`, select the Path and use the
+purple/cyan tangent control points. Roll remains editable in
+all interpolation modes. Native Gizmos picking and Undo still need
+Creator 3.8.8 verification.

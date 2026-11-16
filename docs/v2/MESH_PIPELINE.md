@@ -473,3 +473,40 @@ missing serialized fields and a successful handoff to
 atomic native Creator Undo transaction. Actual Creator 3.8.8
 AssetDB, Scene Save/Reopen and Prefab override behavior still
 require Windows acceptance.
+
+### Constant Width follows the authored nonlinear Path (2026-11-16)
+
+A Path with Centripetal/Catmull-Rom (and authored Bézier handles)
+now defaults to **Follow Source Curve in Constant Width = On**.
+Instead of replacing the curve with circular joins between the
+straight Knot chords, the Road samples the same exact source spline
+as its Path gizmo: its centre strip vertex lies on each source
+frame, full width remains unchanged, and UV0/UV2 follow the
+actual curve's arc distance. Adaptive sampling remains enabled
+for curvature and chord error. The profile, curb, shoulder and
+optional lane markings use the identical curve and length.
+
+`Spline.Road` exposes a checkbox in its Inspector. Turn it
+**Off** only when deliberately preserving the old Knot-chord
+fillet geometry (and its changed centreline). For a **Linear**
+Path, Constant Width still rounds corners with tangent fillets,
+since the authored Path is a polyline with sharp joints; the
+checkbox does not change Linear behavior.
+
+An authored spline can turn more tightly than the Road's
+half-width; geometrically, a constant-width offset may
+self-overlap. This option prioritizes faithful centreline and
+width, not cutting geometry or secretly shrinking the road.
+If the inside edge folds at a very tight bend, reduce the Road
+Width, move/soften Knots, or choose **Continuous** to adapt
+width. Do not assume that identical centreline and perfect
+wide-road offsets are always simultaneously possible. The old
+chord fillet remains available for an intentionally changed
+centreline. The feature is a changed geometry fingerprint:
+existing saved Baked Mesh must be explicitly Rebaked.
+
+Regression compares centre vertices to sampled Centripetal
+frames on the reported three-Knot coordinates, fixed cross-section
+width, UV U/V and UV2 arc distance, profile/markings and glTF,
+and keeps a separate legacy fillet test. The native Editor
+view and material result still need to be validated.

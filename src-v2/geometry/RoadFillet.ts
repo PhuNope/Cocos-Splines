@@ -19,6 +19,14 @@ export class RoadFilletSpacingErrorV2 extends Error {
      this.name='RoadFilletSpacingErrorV2';
  }
 }
+/** Constant Width should follow the authored curve, not round Knot chords,
+ * unless the user explicitly asks to preserve the legacy chord fillet.
+ * Linear splines still need tangent circular joins at their sharp corners. */
+export function roadConstantWidthFollowsSourceV2(
+    source:SplineCacheV2,enabled=true
+):boolean {
+    return enabled!==false&&source.spline.type!=='linear';
+}
 export interface RoadFilletOptionsV2 {
  readonly minimumRadiusScale?:number;
  readonly maxArcAngleDegrees?:number;

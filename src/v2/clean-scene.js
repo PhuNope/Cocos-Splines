@@ -176,6 +176,23 @@ function inspectV2JunctionSeams(uuid){
         return {ok:true,report:c.inspectJunctionSeams()};
     });
 }
+/** In-memory group selection shared between HUD and Inspector cards.
+ * Never touches Knot serialized dumps or generates an Undo history entry. */
+function editV2PathGroup(uuid,operation,index){
+    const node=locate(uuid),{js}=require('cc');
+    const path=node?.components?.find(c=>js.getClassName(c)==='Spline.Path');
+    if(!path||typeof path.selectedGroupIndices!=='function')
+        return {ok:false,error:'Select a Spline.Path Node to edit Group selection'};
+    try{
+        const indices=operation==='toggle'?path.toggleGroupKnot(index):
+            operation==='clear'?path.clearGroupKnots():
+            operation==='query'?path.selectedGroupIndices():null;
+        if(!indices)throw new Error('Invalid Group selection operation');
+        return {ok:true,indices,count:indices.length};
+    }catch(error){
+        return {ok:false,error:String(error instanceof Error?error.message:error)};
+    }
+}
 /** Read-only plan; use Creator main to record the entire Knot array. */
 function planV2PathGroupNudge(uuid,axis){
     const node=locate(uuid),{js}=require('cc');
@@ -197,7 +214,7 @@ function refreshV2PathGroup(uuid,indices){
     return {...previous,groupCount:path.selectedGroupIndices().length};
 }
 exports.methods={rebuildV2Road,restoreV2RoadBaked,prepareV2RoadBake,
-    inspectV2RoadBake,refreshV2Path,planV2PathGroupNudge,refreshV2PathGroup,
+    inspectV2RoadBake,refreshV2Path,editV2PathGroup,planV2PathGroupNudge,refreshV2PathGroup,
     planV2JunctionAutoTrim,refreshV2JunctionAutoTrim,
     planV2JunctionEndpointSnap,inspectV2RoadNetwork,refreshV2JunctionEndpointSnap,
     planV2JunctionAutoConnect,refreshV2JunctionAutoConnect,planV2JunctionTangents,

@@ -7,6 +7,11 @@ assert.match(inspector.template,/Vec3 Knots/);
 assert.match(inspector.template,/spl-path-items/);
 assert.match(inspector.template,/spl-path-add/);
 assert.match(inspector.template,/Group Nudge/);
+assert.match(inspector.template,/Group Nudge \(Inspector \+ HUD\)/);
+assert.match(inspector.template,/spl-path-group-status/);
+assert.match(inspector.template,/spl-path-curve-hint/);
+assert.match(inspector.update.toString(),/group-toggle/);
+assert.match(inspector.update.toString(),/Roll Degrees/);
 for(const axis of ['x-','x+','y-','y+','z-','z+'])
  assert(inspector.template.includes('data-nudge="'+axis+'"'));
 assert.doesNotMatch(inspector.template,/Raw Knot Data|spl-path-knots/);
@@ -31,7 +36,11 @@ const items={
 const count={textContent:''};
 const add={addEventListener(type,handler){bindings.add=handler;}};
 const nudge={addEventListener(type,handler){bindings.nudge=handler;}};
-const $={items,count,add,nudge};
+const groupClear={addEventListener(type,handler){bindings.groupClear=handler;}};
+const groupRefresh={addEventListener(type,handler){bindings.groupRefresh=handler;}};
+const groupStatus={textContent:''};
+const curveHint={textContent:''};
+const $={items,count,add,nudge,groupClear,groupRefresh,groupStatus,curveHint};
 for(const name of ['interpolation','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
@@ -55,6 +64,9 @@ assert.match(items.innerHTML,/Knot 0/);
 assert.match(items.innerHTML,/Knot 1/);
 assert.match(items.innerHTML,/data-operation="remove"/);
 assert.match(items.innerHTML,/data-operation="select"/);
+assert.match(items.innerHTML,/data-operation="group-toggle"/);
+assert.match(curveHint.textContent,/Choose Bézier|Select Bézier/);
+assert.match(groupStatus.textContent,/0 selected/);
 const html=items.innerHTML;
 inspector.update.call(fake,dump);
 assert.equal(items.innerHTML,html,'Inspector cannot tear down active Vec3 editors per refresh');
@@ -66,4 +78,9 @@ inspector.ready.call(fake);
 assert.equal(typeof bindings.add,'function');
 assert.equal(typeof bindings.items,'function');
 assert.equal(typeof bindings.nudge,'function');
+assert.equal(typeof bindings.groupClear,'function');
+assert.equal(typeof bindings.groupRefresh,'function');
+dump.value.interpolation.value=1;
+inspector.update.call(fake,dump);
+assert.match(curveHint.textContent,/Free\/Aligned\/Mirrored/);
 console.log('V2 PATH CUSTOM INSPECTOR PASS: Vec3 cards, topology buttons, focus-stable refresh, native dump fields.');

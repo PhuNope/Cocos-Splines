@@ -235,7 +235,18 @@ try {
    pathComp.gizmoPositionSnap=0;
    assert(pathComp.onGizmoHandles().every(h=>h.snap===undefined),
       'Zero Position Snap must leave continuous movement intact');
-   // HUD multi-selection is transient; no new Knot Nodes or serialized
+   // Inspector + Group Nudge share the same transient Knot selection;
+ // clicking the Inspector Group button never changes active Gizmo index
+ // or serializes a second array of selection flags.
+ pathComp.gizmoKnotIndex=0;
+ assert.deepEqual(pathComp.toggleGroupKnot(0),[0]);
+ assert.equal(pathComp.gizmoKnotIndex,0);
+ assert.deepEqual(pathComp.toggleGroupKnot(1),[0,1]);
+ assert.deepEqual(pathComp.toggleGroupKnot(0),[1]);
+ assert.deepEqual(pathComp.clearGroupKnots(),[]);
+ assert.throws(()=>pathComp.toggleGroupKnot(-1),/Invalid Group Knot index/);
+ assert.throws(()=>pathComp.toggleGroupKnot(2),/Invalid Group Knot index/);
+ // HUD multi-selection is transient; no new Knot Nodes or serialized
    // group array. The active handle translates all selected records.
    pathComp.gizmoKnotIndex=0;
    assert.deepEqual(pathComp.selectedGroupIndices(),[]);
