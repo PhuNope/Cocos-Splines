@@ -608,3 +608,24 @@ test `Spline.Path → Editable Catmull Tangents`:
 6. Save/Reopen and test on Prefab instances, including
    multiple segments with non-default Roll Degrees.
    Mocked tests do not substitute for these native checks.
+
+## Verify Split → Merge Exact with Road and native Undo
+
+1. Open an authored Bézier Path with a connected Road, choose
+   **Split 50%** on a segment. The new Knot should show
+   **Merge Exact** in its Inspector card. Record the Road
+   centreline, edge UV and bank before the split.
+2. Click **Merge Exact** without moving any handle. The old
+   curve must return at its original Knot count and preserve
+   centreline samples and Road UV/roll. Compare with the
+   pre-split saved Scene.
+3. Undo once / Redo once to verify full-array native history.
+   Open Path endpoints never offer Merge Exact; closed seam
+   splitting should offer it for the newly inserted last Knot.
+4. Split again, change the middle tangent handle, then check
+   that Merge Exact disappears. Undo the handle edit and it
+   should reappear. Repeat after changing middle Roll or its
+   tangent mode.
+5. Save/Reopen and test Prefab Overrides and explicit Bake.
+   No automatic Baked Mesh overwrite is authorized; mock
+   regression verifies math and serialized dump only.

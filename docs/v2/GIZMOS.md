@@ -315,3 +315,23 @@ curve. Each successful split records one entire Knot array
 through Creator's property history; selecting the new Knot
 does not add another history entry. Dynamic previews update,
 but Baked Mesh remains untouched.
+
+### Merge Exact — safe reversal of Split 50%
+
+After **Split 50%** on a Bézier curve, the inserted Knot card
+shows **Merge Exact** as long as both half-segments still form
+one cubic and the middle Roll follows the original linear bank.
+Click to remove this Knot **without changing the centreline**.
+The two endpoint control handles are reconstructed from the
+outer half-segment derivatives; all unrelated Knot CCClass
+fields are retained. Undo records one complete array edit.
+
+If you move the newly inserted handle, change its tangent Mode
+or its Roll, the Inspector hides **Merge Exact**. This is
+intentional: removing that edited Knot could reshape the spline
+or alter Road banking. Use the ordinary **× Remove** only when
+such deformation is intended. Open first/last Knots cannot be
+merged. Closed-loop seam Knots work when the exact split
+geometry and bank still match. For other interpolation modes
+there is no Merge Exact because their automatic derivatives
+depend on adjacent Knot topology.

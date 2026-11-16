@@ -5,7 +5,7 @@
  * The returned dump keeps Cocos element metadata and nested IProperty types.
  * No engine objects are created in the extension main process.
  */
-const operations=new Set(['add','insert','split','duplicate','remove','up','down','select']);
+const operations=new Set(['add','insert','split','merge','duplicate','remove','up','down','select']);
 const clone=value=>JSON.parse(JSON.stringify(value));
 const {knotPosition:position,setKnotPosition:setPosition,knotVec3,setKnotVec3,knotDumpShape}=
     require('./PathKnotDumpCodec');
@@ -111,6 +111,68 @@ function splitCurveInDump(result,index,closed,selectionDump){
     selectionDump.value=at;
     return {index:at,count:knots.length};
 }
+/** Inverse of a two-half De Casteljau split at t=0.5.
+ * Fail closed: we only remove a middle Knot when the entire pair of
+ * cubics AND the Roll ramp can be reconstructed within float precision.
+ * This avoids silently changing Road centreline, tangent or banking. */
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+const double=p=>({x:p.x*2,y:p.y*2,z:p.z*2});
+function mergeCandidate(knots,index,closed){
+    const n=knots.length;
+    if(n<3||index<0||index>=n||(!closed&&(index===0||index===n-1)))
+        throw new Error('Merge Exact requires an interior Bezier Knot with two adjacent segments');
+    const ai=(index-1+n)%n,bi=(index+1)%n;
+    const a=knots[ai],middle=knots[index],b=knots[bi];
+    const modes=[a,middle,b].map(k=>scalarField(k,'mode')?.value);
+    if(modes.some(mode=>mode!==1))
+        throw new Error('Merge Exact requires Free tangent mode on the three involved Knots');
+    const p0=position(a),pm=position(middle),p3=position(b);
+    const aOut=knotVec3(a,'handleOut'),mIn=knotVec3(middle,'handleIn'),
+        mOut=knotVec3(middle,'handleOut'),bIn=knotVec3(b,'handleIn');
+    if(!p0||!pm||!p3||!aOut||!mIn||!mOut||!bIn)
+        throw new Error('Merge Exact requires valid 3D Bezier controls');
+    // The first and last child derivatives fix the unique parent's
+    // control handles at the known half-segment split parameter.
+    const parentOut=double(aOut),parentIn=double(bIn);
+    const expected=splitBezierCurve(p0,p3,parentOut,parentIn,.5);
+    const scale=Math.max(1,distance(p0,p3),
+        Math.hypot(parentOut.x,parentOut.y,parentOut.z),
+        Math.hypot(parentIn.x,parentIn.y,parentIn.z));
+    const tolerance=scale*1e-6;
+    if(distance(expected.position,pm)>tolerance||
+       distance(expected.startHandleOut,aOut)>tolerance||
+       distance(expected.endHandleIn,bIn)>tolerance||
+       distance(expected.handleIn,mIn)>tolerance||
+       distance(expected.handleOut,mOut)>tolerance)
+        throw new Error('Merge Exact refused: Knot handles no longer form one unmodified Bezier segment');
+    // A split introduces a linearly interpolated Roll record. Deleting
+    // a manually banked middle Knot would otherwise warp the Road.
+    const roll=[a,middle,b].map(k=>scalarField(k,'rollDegrees')?.value);
+    if(roll.some(v=>typeof v!=='number'||!Number.isFinite(v))||
+       Math.abs(roll[1]-(roll[0]+roll[2])/2)>1e-6)
+        throw new Error('Merge Exact refused: middle Knot Roll differs from the original linear bank');
+    return {ai,bi,parentOut,parentIn};
+}
+function canMergeBezierKnot(knots,index,closed){
+    try{
+        if(!Array.isArray(knots)||!Number.isSafeInteger(index)||
+           typeof closed!=='boolean')return false;
+        mergeCandidate(knots,index,closed);
+        return true;
+    }catch{return false;}
+}
+function mergeCurveInDump(result,index,closed,selectionDump){
+    const knots=result.value;
+    const merge=mergeCandidate(knots,index,closed);
+    setKnotVec3(knots[merge.ai],'handleOut',merge.parentOut);
+    setKnotVec3(knots[merge.bi],'handleIn',merge.parentIn);
+    knots.splice(index,1);
+    // The selected Knot becomes the surviving segment's starting Knot;
+    // closed-loop index 0 removals shift the previous last index.
+    const selected=merge.ai>index?merge.ai-1:merge.ai;
+    selectionDump.value=selected;
+    return {index:selected,count:knots.length};
+}
 function planPathEditDump(nodeDump,operation,index){
     if(!operations.has(operation)||!Number.isSafeInteger(index)||index<0)
         throw new Error('Unsupported Path edit operation or index');
@@ -141,10 +203,13 @@ function planPathEditDump(nodeDump,operation,index){
         throw new Error('SplinePath Knot '+broken+' has unsupported or invalid Vec3 dump ('+
             knotDumpShape(current[broken])+'). No Knot data was changed.');
     const result=clone(array),knots=result.value,n=knots.length;
-    if(operation==='split'){
+    if(operation==='split'||operation==='merge'){
         if(Number(props.interpolation?.value)!==1)
-            throw new Error('Exact Split On Curve requires Bézier interpolation; Catmull/Centripetal automatic neighbours would change');
-        const next=splitCurveInDump(result,index,props.closed?.value===true,selectionDump);
+            throw new Error('Exact Bézier Split/Merge requires Bézier interpolation');
+        const closed=props.closed?.value===true;
+        const next=operation==='split'?
+            splitCurveInDump(result,index,closed,selectionDump):
+            mergeCurveInDump(result,index,closed,selectionDump);
         return {field,componentIndex,dump:result,index:next.index,
             count:next.count,record:true,selectionDump};
     }
@@ -185,4 +250,4 @@ function planPathEditDump(nodeDump,operation,index){
     selectionDump.value=to;
     return {field,componentIndex,dump:result,index:to,count:n,record:true,selectionDump};
 }
-module.exports={planPathEditDump};
+module.exports={planPathEditDump,canMergeBezierKnot};

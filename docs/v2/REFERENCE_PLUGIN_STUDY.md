@@ -129,3 +129,47 @@ compares them against the corresponding new Bézier halves.
 It includes open/closed, end-seam splits, Auto/Free/Aligned/
 Mirrored source modes, unknown CCClass metadata, native Undo
 payload shape, malformed handles and the 128-Knot limit.
+
+## Exact Bézier Merge: reversible shape-preserving topology
+
+After introducing Split 50%, the Inspector now supports
+**Merge Exact** for compatible Bézier Knot triplets. This is an
+original inverse De Casteljau implementation and copies no source
+from the uploaded third-party Unity tools.
+
+Given a left cubic A→M and right cubic M→B, the original unsplit
+cubic's outgoing and incoming endpoint handles are uniquely
+reconstructed from the two outer half-derivatives. The planner
+then re-splits the candidate at t = 0.5 and verifies the middle
+position **and all four child control vectors** within a small,
+geometry-relative numerical tolerance. It also verifies that
+the middle Knot's `rollDegrees` is exactly the average of the
+two endpoint Rolls within numerical tolerance, protecting the
+Road's bank interpolation.
+
+The operation is **fail-closed**: A, M and B must all have Free
+tangent mode, the two halves must be geometrically compatible,
+and the middle Roll may not have been edited. Any unequal
+handle/roll or unsupported dump shape disables Merge Exact in
+the Inspector and causes explicit rejection if called directly.
+Ordinary Remove remains available for deliberate reshaping.
+Closed-seam merges and open interior merges are supported;
+open endpoints and a path with only two Knots are not.
+
+Only the two surviving endpoint handles are changed and the
+middle Knot is removed. All other Knot metadata is preserved.
+The entire typed CCClass array is committed through one native
+`scene.set-property(record:true)` call, with active selection
+updated separately without recording. No Baked Mesh asset is
+overwritten. A successful Merge preserves the original centreline,
+its UV distance, its endpoint Roll values and its sampled Bézier
+derivatives, but it does *not* promise to restore the original
+Auto/Aligned/Mirrored mode metadata: the two surviving knots
+remain Free after a prior Split. Native Creator Undo/Redo, Prefab
+Overrides and Save/Reopen still require Windows acceptance.
+
+Regression includes open and closed paths, the wraparound seam,
+source Auto/Free/Aligned/Mirrored handles, preservation of 3D
+centreline samples, full bank guard, deliberate tiny handle edits,
+mode changes, one recorded Knot-array update and the optional
+Inspector button's availability.

@@ -11,6 +11,7 @@ assert.match(inspector.template,/Group Nudge \(Inspector \+ HUD\)/);
 assert.match(inspector.template,/spl-path-group-status/);
 assert.match(inspector.template,/spl-path-curve-hint/);
 assert.match(inspector.template,/spl-path-editableCatmullTangents/);
+assert.match(inspector.template,/Merge Exact/);
 assert.match(inspector.update.toString(),/group-toggle/);
 assert.match(inspector.update.toString(),/Roll Degrees/);
 for(const axis of ['x-','x+','y-','y+','z-','z+'])
@@ -52,7 +53,8 @@ const fake={$, _cardCount:undefined,_cardSelected:undefined};
 const entry=(i)=>({name:'Knot'+i,value:{
     position:{value:{x:i,y:0,z:5*i}},
     mode:{value:0},handleIn:{value:{x:-1,y:0,z:0}},
-    handleOut:{value:{x:1,y:0,z:0}},tension:{value:0}}});
+    handleOut:{value:{x:1,y:0,z:0}},tension:{value:0},
+    rollDegrees:{value:0}}});
 const dump={value:{
     knots:{name:'Knots',value:[entry(0),entry(1)]},
     interpolation:{name:'Interpolation',value:3},
@@ -94,10 +96,25 @@ inspector.update.call(fake,dump);
 assert.match(curveHint.textContent,/Free\/Aligned\/Mirrored/);
 assert.equal((items.innerHTML.match(/data-operation="split"/g)||[]).length,1,
  'Open two-Knot Bézier has one splittable segment');
+assert.doesNotMatch(items.innerHTML,/data-operation="merge"/);
+const {planPathEditDump}=require('../src/v2/PathV2Dump');
+const knotNode={__comps__:[{type:'Spline.Path',value:dump.value}]};
+const split=planPathEditDump(knotNode,'split',0);
+dump.value.knots=split.dump;
+inspector.update.call(fake,dump);
+assert.equal((items.innerHTML.match(/data-operation="merge"/g)||[]).length,1,
+ 'The just-inserted exact midpoint should offer Merge Exact');
+dump.value.knots.value[1].value.rollDegrees.value+=5;
+inspector.update.call(fake,dump);
+assert.doesNotMatch(items.innerHTML,/data-operation="merge"/,
+ 'A manually banked Knot must not offer a shape-preserving Merge');
+dump.value.knots.value[1].value.rollDegrees.value-=5;
+inspector.update.call(fake,dump);
+assert.match(items.innerHTML,/data-operation="merge"/);
 dump.value.closed.value=true;
 inspector.update.call(fake,dump);
-assert.equal((items.innerHTML.match(/data-operation="split"/g)||[]).length,2,
- 'Closed two-Knot Bézier has two splittable segments, including seam');
+assert.equal((items.innerHTML.match(/data-operation="split"/g)||[]).length,3,
+ 'Closed three-Knot Bézier has three splittable segments, including seam');
 dump.value.interpolation.value=2;
 inspector.update.call(fake,dump);
 assert.doesNotMatch(items.innerHTML,/data-operation="split"/,

@@ -7,6 +7,7 @@
  */
 const {style,callEditor}=require('./common');
 const {knotPosition}=require('../../v2/PathKnotDumpCodec');
+const {canMergeBezierKnot}=require('../../v2/PathV2Dump');
 const simple=['interpolation','editableCatmullTangents','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents','gizmoRotateKnotTangents',
@@ -32,7 +33,7 @@ const rows=sections.map(([name,fields])=>
         '<ui-prop type="dump" class="spl-prop spl-path-'+field+'"></ui-prop>'
     ).join('')+'</details>'
 ).join('');
-const names=['select','insert','split','duplicate','remove','up','down'];
+const names=['select','insert','split','merge','duplicate','remove','up','down'];
 const nudgeDirections=['x-','x+','y-','y+','z-','z+'];
 function escapeText(s){
     return String(s).replace(/[&<>"']/g,c=>({
@@ -129,7 +130,7 @@ module.exports={
          <button type="button" class="spl-btn spl-path-add">+ Add Knot</button>
       </div>
       <small class="spl-path-curve-hint spl-path-note"></small>
-      <small class="spl-path-note">Bézier: Split 50% adds a Knot exactly ON the curve without changing its shape. + After inserts an ordinary position midpoint, which can reshape the Path.</small>
+      <small class="spl-path-note">Bézier: Split 50% inserts an exact on-curve Knot; Merge Exact reverses a compatible split without changing shape or Roll. + After and Remove can reshape the Path.</small>
       <div class="spl-path-items"></div>
    </details>
  </div>`,
@@ -144,6 +145,9 @@ module.exports={
     const selected=Number(dump?.value?.gizmoKnotIndex?.value)||0;
     const bezier=Number(dump?.value?.interpolation?.value)===1;
     const closed=!!dump?.value?.closed?.value;
+    const mergeable=bezier?entries.map((_,i)=>
+        canMergeBezierKnot(entries,i,closed)):[];
+    const mergeKey=mergeable.map(v=>v?'1':'0').join('');
     this.$.count.textContent='('+entries.length+')';
     if(this.$.curveHint){
         const interp=Number(dump?.value?.interpolation?.value);
@@ -166,6 +170,7 @@ module.exports={
           button('insert',i,'+ After')+
           (bezier&&entries.length<128&&(closed||i<entries.length-1)?
               button('split',i,'Split 50%'):'')+
+          (mergeable[i]?button('merge',i,'Merge Exact'):'')+
           button('duplicate',i,'Duplicate')+
           button('up',i,'↑')+button('down',i,'↓')+
           button('remove',i,'× Remove')+
@@ -176,12 +181,14 @@ module.exports={
     // Recreate DOM only when cards/selection change: frequent Inspector
     // refresh must not steal focus from an in-progress Vec3 numeric edit.
     if(this._cardCount!==entries.length||this._cardSelected!==selected||
-       this._cardBezier!==bezier||this._cardClosed!==closed){
+       this._cardBezier!==bezier||this._cardClosed!==closed||
+       this._cardMergeKey!==mergeKey){
         this.$.items.innerHTML=html;
         this._cardCount=entries.length;
         this._cardSelected=selected;
         this._cardBezier=bezier;
         this._cardClosed=closed;
+        this._cardMergeKey=mergeKey;
     }
     paintGroup(this,this._groupIndices||[]);
     entries.forEach((entry,i)=>{

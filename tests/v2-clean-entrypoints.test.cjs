@@ -188,6 +188,16 @@ try{
   assert.equal(pathComponent.knots[1].position.z,2.5);
   assert.equal(updates.slice(editCount).filter(u=>u.record===true).length,1,
    'Exact split cannot emit a separate history record for each endpoint');
+  // The reverse operation must restore the original curve from two
+  // half-segments with one more native history transaction.
+  const merged=await main.methods.editV2Path('merge',1);
+  assert.equal(merged.ok,true,JSON.stringify(merged));
+  assert.equal(pathComponent.knots.length,2);
+  assert.equal(pathComponent.gizmoKnotIndex,0);
+  assert.equal(updates.slice(editCount).filter(u=>u.record===true).length,2,
+   'Merge Exact must record only one whole-array property change');
+  assert.equal((await main.methods.editV2Path('merge',0)).ok,false,
+   'Open first Knot cannot be merged');
   inspectorInterpolation=3;
   selectedUuid='road-node';
   assert(calls.filter(c=>c.method==='execute-scene-script').every(c=>
