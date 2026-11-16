@@ -38,5 +38,49 @@ try{
   assert.throws(()=>validateSplineV2({type:'linear',closed:false,knots:[k(0)]}),/at least two/);
   assert.throws(()=>validateSplineV2({type:'linear',closed:false,knots:[k(Infinity),k(1)]}),/Non-finite/);
   assert.throws(()=>buildSplineLengthV2(curve,-1),/Tolerance/);
+  // Catmull handles are not used in existing scenes until explicitly opted in.
+  for(const type of ['catmull-rom','catmull-rom-centripetal']){
+   for(const closed of [false,true]){
+    const points=[k(0,0,0,{tension:.2,rollDegrees:10}),
+     k(4,0,6,{tension:.1,rollDegrees:-12}),
+     k(10,1,2,{tension:.45,rollDegrees:15}),
+     k(12,0,-4,{tension:0,rollDegrees:0})];
+    const base={type,closed,knots:points};
+    const inert={...base,knots:points.map(knot=>({
+     ...knot,handleIn:v(99,10),handleOut:v(20,-99)}))};
+    const manual={...base,editableCatmullTangents:true,
+     knots:points.map(knot=>({...knot}))};
+    for(let i=0;i<=80;i++){
+     const t=i/80,ref=evaluateSplineV2(base,t);
+     for(const other of [inert,manual]){
+      const result=evaluateSplineV2(other,t);
+      for(const axis of ['x','y','z']){
+       near(result.position[axis],ref.position[axis],1e-9);
+       near(result.tangent[axis],ref.tangent[axis],1e-9);
+      }
+     }
+    }
+    // Override only the outgoing tangent at Knot 1, preserving the
+    // curve's segment endpoint and its incoming neighbour.
+    manual.knots[1].handleOut=v(.25,1.5,.4);
+    const segments=points.length-(closed?0:1);
+    const join=1/segments;
+    const at=evaluateSplineV2(manual,join);
+    const before=evaluateSplineV2(base,join);
+    for(const axis of ['x','y','z'])near(at.position[axis],before.position[axis],1e-9);
+    const tangentAt=at.tangent;
+    near(tangentAt.x,.75,1e-7);
+    near(tangentAt.y,4.5,1e-7);
+    near(tangentAt.z,1.2,1e-7);
+    const next=evaluateSplineV2(manual,join+.12/segments).position;
+    const original=evaluateSplineV2(base,join+.12/segments).position;
+    assert(Math.hypot(next.x-original.x,next.y-original.y,next.z-original.z)>.005);
+    assert.equal(manual.knots[1].tension,.1);
+    assert.equal(manual.knots[1].rollDegrees,-12);
+    assert.throws(()=>validateSplineV2({...manual,knots:[
+      {...manual.knots[0],handleOut:v(NaN,0,0)},...manual.knots.slice(1)]}),
+      /Non-finite/);
+   }
+  }
   console.log('V2 CORE PASS: linear, Bezier, Catmull-Rom, adaptive length, closed/degenerate, invalid knot');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

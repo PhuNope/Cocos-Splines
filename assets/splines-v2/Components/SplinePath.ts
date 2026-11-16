@@ -1,6 +1,6 @@
 import {_decorator,Component,Node,Mat4,Quat,Vec3,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
+import {evaluateSplineSegmentV2,type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
@@ -88,6 +88,8 @@ export class SplinePath extends Component {
     knots:SplineKnot[]=[];
     @property({type:Enum(CurveMode)})
     interpolation=CurveMode.Centripetal;
+    @property({tooltip:'Opt in to editable tangent handles for Catmull-Rom and Centripetal. Automatic knots preserve the exact original curve; move a handle or rotate the selected Knot to activate manual Hermite tangents on that Knot. Existing scenes remain unchanged until enabled.'})
+    editableCatmullTangents=false;
     @property({tooltip:'Connect the last Knot to the first Knot.'})
     closed=false;
     @property() gizmoShowPath=true;
@@ -96,7 +98,7 @@ export class SplinePath extends Component {
     @property() gizmoMultiKnotPoints=true;
     @property({min:2,max:32,step:1}) gizmoPointLimit=16;
     @property() gizmoEditTangents=true;
-    @property({tooltip:'Show XYZ Rotate rings at the active Knot when using Bézier. The rings rotate its tangent handles, not its Position or the Path Node.'})
+    @property({tooltip:'Show XYZ Rotate rings for the selected Knot’s tangent handles in Bézier or opt-in manual Catmull/Centripetal mode. The rings do not rotate the Path Node or Knot position.'})
     gizmoRotateKnotTangents=true;
     @property({tooltip:'Show the selected Knot bank cross-section and up vector in the Scene.'})
     gizmoShowRollGuide=true;
@@ -212,7 +214,7 @@ export class SplinePath extends Component {
         ].join(','):'';
         const point=(p:V3|undefined)=>p?
             [p.x,p.y,p.z].join(','):'invalid';
-        return [this.interpolation,Number(this.closed),transform,
+        return [this.interpolation,Number(this.editableCatmullTangents),Number(this.closed),transform,
             ...this.knots.map(k=>k?
                 [point(k.position),k.mode,point(k.handleIn),
                     point(k.handleOut),k.tension,k.rollDegrees].join(':'):'invalid')
@@ -270,10 +272,31 @@ export class SplinePath extends Component {
                 this._dragKnot:null;
         return Number.isSafeInteger(index)&&index>=0?this.knots[index]??null:null;
     }
+    private hasManualTangentHandles():boolean {
+        return this.interpolation===CurveMode.Bezier||
+            (this.editableCatmullTangents&&
+             (this.interpolation===CurveMode.CatmullRom||
+              this.interpolation===CurveMode.Centripetal));
+    }
     private tangentOffset(knot:SplineKnot,side:TangentSide):V3 {
         if(knot.mode!==TangentMode.Auto)
             return side==='in'?knot.handleIn:knot.handleOut;
         const i=this.knots.indexOf(knot),n=this.knots.length;
+        if(this.editableCatmullTangents&&this.hasManualTangentHandles()&&
+           this.interpolation!==CurveMode.Bezier&&i>=0&&n>=2&&this.node?.isValid){
+            // The displayed Auto handle must match the *actual* curve's
+            // endpoint derivative. Merely using a neighbour chord / 3
+            // would make the first manual edit visibly jump the road.
+            const src=this.getSplineData(this.node);
+            const segments=this.closed?n:n-1;
+            const seg=side==='out'?
+                Math.min(i,segments-1):
+                i>0?i-1:this.closed?segments-1:0;
+            const t=side==='out'?(i>=segments?1:0):
+                i===0&&!this.closed?0:1;
+            const derivative=evaluateSplineSegmentV2(src,seg,t).tangent;
+            return scale(derivative,(side==='in'?-1:1)/3);
+        }
         if(i<0||n<2)return {x:0,y:0,z:0};
         let target:number,sign=1;
         if(side==='out'){
@@ -333,7 +356,7 @@ export class SplinePath extends Component {
     }
     private writeTangent(side:TangentSide,point:Vec3,world=false):void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||!this.gizmoEditTangents||
-            this.interpolation!==CurveMode.Bezier||!finite(point))return;
+            !this.hasManualTangentHandles()||!finite(point))return;
         const field=side==='in'?'pathGizmoTangentIn':'pathGizmoTangentOut';
         if(!this.gizmoWriteAllowed(field,this.gizmoKnotIndex,world))return;
         const k=this.knotAt(this.gizmoKnotIndex,field);
@@ -362,7 +385,7 @@ export class SplinePath extends Component {
         return vec(this._knotTangentEuler);
     }
     public set pathGizmoKnotTangentEuler(value:Vec3) {
-        if(!EDITOR_NOT_IN_PREVIEW||this.interpolation!==CurveMode.Bezier||
+        if(!EDITOR_NOT_IN_PREVIEW||!this.hasManualTangentHandles()||
            !this.gizmoEditKnots||!this.gizmoEditTangents||
            !this.gizmoRotateKnotTangents||!finite(value)||
            !this._dragKnot||this._dragProperty!=='pathGizmoKnotTangentEuler'||
@@ -406,7 +429,10 @@ export class SplinePath extends Component {
         // Compute the inverse only when World mapping is explicitly requested.
         const inverse=space===SplineSpace.World?
             Mat4.invert(new Mat4(),consumer.worldMatrix):null;
-        return {type,closed:this.closed,knots:this.knots.map(k=>{
+        return {type,closed:this.closed,
+            ...((type==='catmull-rom'||type==='catmull-rom-centripetal')&&
+               this.editableCatmullTangents?{editableCatmullTangents:true}:{}),
+            knots:this.knots.map(k=>{
             if(!Number.isInteger(k.mode)||k.mode<0||k.mode>3||
                 !finite(k.handleIn)||!finite(k.handleOut)||
                 !Number.isFinite(k.tension)||
@@ -418,7 +444,8 @@ export class SplinePath extends Component {
                     inverse):k.position;
             const position={x:local.x,y:local.y,z:local.z};
             const tension=k.tension,rollDegrees=k.rollDegrees;
-            if(type!=='bezier')return {position,tension,rollDegrees};
+            if(type!=='bezier'&&!this.editableCatmullTangents)
+                return {position,tension,rollDegrees};
             if(k.mode===TangentMode.Auto)return {position,tension,rollDegrees};
             const toRelative=(offset:V3):V3=>{
                 if(!inverse)return {x:offset.x,y:offset.y,z:offset.z};
@@ -654,7 +681,7 @@ export class SplinePath extends Component {
                 world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',
                 indices,space,snap,this.selectedGroupIndices()));
         }
-        if(this.interpolation===CurveMode.Bezier&&this.gizmoEditTangents){
+        if(this.hasManualTangentHandles()&&this.gizmoEditTangents){
             if(this.gizmoRotateKnotTangents)
                 handles.push(...buildSplineKnotTangentRotateGizmos(
                     'pathGizmoKnotTangentEuler','pathGizmoKnotPosition',
@@ -770,7 +797,7 @@ export class SplinePath extends Component {
                 max:Math.min(this.knots.length-1,127),step:1,order:1},
             {type:'toggle',id:'path-other-knots',text:'Other Knots',
                 property:'gizmoMultiKnotPoints',order:2},
-            ...(this.interpolation===CurveMode.Bezier?
+            ...(this.hasManualTangentHandles()?
                 [{type:'toggle' as const,id:'path-tangent-handles',
                     text:'Tangents',property:'gizmoEditTangents',order:3}]:[]),
             {type:'slider',id:'path-knot-roll',text:'Knot Roll (deg)',
@@ -899,7 +926,7 @@ export class SplinePath extends Component {
             const knot=this.knots[this.gizmoKnotIndex];
             const k=knot;
             const lines=[...guide.lines],dots=[...guide.dots];
-            if(this.interpolation===CurveMode.Bezier&&
+            if(this.hasManualTangentHandles()&&
                 this.gizmoEditTangents&&k){
                 const tangentIn=add(k.position,this.tangentOffset(k,'in'));
                 const tangentOut=add(k.position,this.tangentOffset(k,'out'));

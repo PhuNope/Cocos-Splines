@@ -10,6 +10,7 @@ assert.match(inspector.template,/Group Nudge/);
 assert.match(inspector.template,/Group Nudge \(Inspector \+ HUD\)/);
 assert.match(inspector.template,/spl-path-group-status/);
 assert.match(inspector.template,/spl-path-curve-hint/);
+assert.match(inspector.template,/spl-path-editableCatmullTangents/);
 assert.match(inspector.update.toString(),/group-toggle/);
 assert.match(inspector.update.toString(),/Roll Degrees/);
 for(const axis of ['x-','x+','y-','y+','z-','z+'])
@@ -41,7 +42,7 @@ const groupRefresh={addEventListener(type,handler){bindings.groupRefresh=handler
 const groupStatus={textContent:''};
 const curveHint={textContent:''};
 const $={items,count,add,nudge,groupClear,groupRefresh,groupStatus,curveHint};
-for(const name of ['interpolation','closed','gizmoKnotIndex',
+for(const name of ['interpolation','editableCatmullTangents','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents',
     'gizmoRotationMode','gizmoRotationSnap',
@@ -55,6 +56,7 @@ const entry=(i)=>({name:'Knot'+i,value:{
 const dump={value:{
     knots:{name:'Knots',value:[entry(0),entry(1)]},
     interpolation:{name:'Interpolation',value:3},
+    editableCatmullTangents:{name:'Editable Tangents',value:false},
     closed:{name:'Closed',value:false},
     gizmoKnotIndex:{name:'Selected',value:0}
 }};
@@ -65,7 +67,12 @@ assert.match(items.innerHTML,/Knot 1/);
 assert.match(items.innerHTML,/data-operation="remove"/);
 assert.match(items.innerHTML,/data-operation="select"/);
 assert.match(items.innerHTML,/data-operation="group-toggle"/);
-assert.match(curveHint.textContent,/Choose Bézier|Select Bézier/);
+assert.match(curveHint.textContent,/Enable Editable Catmull Tangents/);
+dump.value.editableCatmullTangents.value=true;
+inspector.update.call(fake,dump);
+assert.match(curveHint.textContent,/Editable Catmull\/Centripetal tangents ON/);
+dump.value.editableCatmullTangents.value=false;
+inspector.update.call(fake,dump);
 assert.match(groupStatus.textContent,/0 selected/);
 const html=items.innerHTML;
 inspector.update.call(fake,dump);

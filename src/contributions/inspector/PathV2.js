@@ -7,7 +7,7 @@
  */
 const {style,callEditor}=require('./common');
 const {knotPosition}=require('../../v2/PathKnotDumpCodec');
-const simple=['interpolation','closed','gizmoKnotIndex',
+const simple=['interpolation','editableCatmullTangents','closed','gizmoKnotIndex',
     'gizmoShowPath','gizmoEditKnots','gizmoMultiKnotPoints',
     'gizmoPointLimit','gizmoEditTangents','gizmoRotateKnotTangents',
     'gizmoRotationMode','gizmoRotationSnap',
@@ -19,7 +19,7 @@ const $={items:'.spl-path-items',
     groupRefresh:'.spl-path-group-refresh',curveHint:'.spl-path-curve-hint'};
 for(const field of simple)$[field]='.spl-path-'+field;
 const sections=[
- ['Spline',['interpolation','closed']],
+ ['Spline',['interpolation','editableCatmullTangents','closed']],
  ['Gizmos',['gizmoKnotIndex','gizmoShowPath','gizmoEditKnots',
      'gizmoMultiKnotPoints','gizmoPointLimit','gizmoEditTangents','gizmoRotateKnotTangents',
      'gizmoRotationMode','gizmoRotationSnap',
@@ -142,10 +142,17 @@ module.exports={
     const entries=Array.isArray(prop?.value)?prop.value:[];
     const selected=Number(dump?.value?.gizmoKnotIndex?.value)||0;
     this.$.count.textContent='('+entries.length+')';
-    if(this.$.curveHint)this.$.curveHint.textContent=
-        Number(dump?.value?.interpolation?.value)===1?
-        'Bézier: choose Free/Aligned/Mirrored Mode, then edit Handle In/Out. Roll Degrees banks this Knot.':
-        'Tangents are automatic here. Select Bézier to edit Handle In/Out. Roll Degrees works for each Knot.';
+    if(this.$.curveHint){
+        const interp=Number(dump?.value?.interpolation?.value);
+        const editable=!!dump?.value?.editableCatmullTangents?.value;
+        this.$.curveHint.textContent=interp===1?
+            'Bézier: choose Free/Aligned/Mirrored Mode or drag the selected Knot tangent handles. Roll Degrees banks this Knot.':
+            (interp===2||interp===3)?
+            editable?
+                'Editable Catmull/Centripetal tangents ON: automatic Knots keep the original curve. Drag an In/Out handle or Knot rotation ring to make that Knot Free. This changes only local segment tangents.':
+                'Automatic Catmull/Centripetal tangents. Enable Editable Catmull Tangents above to unlock Knot tangent handles without switching interpolation.':
+            'Linear paths have sharp segments; choose Centripetal/Catmull with Editable Tangents or Bézier to shape smooth turns.';
+    }
     const html=entries.map((entry,i)=>
       '<div class="spl-path-knot'+(i===selected?' active':'')+'">'+
         '<div class="spl-path-knot-head"><strong>Knot '+i+'</strong>'+

@@ -272,3 +272,26 @@ enable `Gizmo Edit Tangents`, select the Path and use the
 purple/cyan tangent control points. Roll remains editable in
 all interpolation modes. Native Gizmos picking and Undo still need
 Creator 3.8.8 verification.
+
+## Editable Catmull/Centripetal tangents (2026-11-16)
+
+The Path Inspector now exposes **Editable Catmull Tangents**, off by
+default for compatibility. Enable it with `Interpolation = Centripetal`
+or `CatmullRom` to edit the active Knot's purple incoming and cyan
+outgoing handles **without converting the entire Path to Bézier**.
+Auto Knots preserve their original analytical endpoint derivatives;
+the first tangent drag switches only its owning Knot to Free.
+Aligned/Mirrored pairing and native Undo responsibilities remain as
+for Bézier. The selected-Knot XYZ tangent rotation rings are also
+available when Cocos-Gizmos has `supportsRotationPivot`. The
+`Roll Degrees` bank stays separate.
+
+The analytic conversion is `handleOut = endpointStartTangent / 3`,
+`handleIn = -endpointEndTangent / 3` for each Hermite segment.
+An unchanged first handle drag is geometry-neutral, so it does not
+cause a sudden mesh jump. The option can be switched Off to
+restore the original Catmull/Centripetal output while retaining
+serialized handles for later editing. Existing Baked Mesh assets
+are never overwritten automatically.
+
+[Reference plugin design review](REFERENCE_PLUGIN_STUDY.md)

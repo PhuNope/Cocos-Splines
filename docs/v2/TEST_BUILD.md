@@ -560,3 +560,29 @@ UV0 Repeat U/V, UV2, marked lane continuity and Undo/Redo.
    reject an impossible full-width source curve rather than
    silently narrow it. Verify Undo/Redo, Save/Reopen and Prefabs
    on Windows; mocked CI alone cannot verify native gizmo picking.
+
+## Reference plugins: manual Knot handles without forced interpolation switch
+
+From uploaded Dreamteck, SplineArchitect and Curvy examples,
+test `Spline.Path → Editable Catmull Tangents`:
+
+1. Use the same 3-Knot Centripetal Road as the screenshot. With
+   editable tangents off, path/road geometry must match previous
+   builds; manual handles and rotation rings are absent.
+2. Enable editable tangents while all Knots remain Auto. The Road
+   must not jump. Selecting Knot 1 should show purple incoming and
+   cyan outgoing tangent points and, on the updated Gizmos SDK,
+   XYZ pivot rotation rings at Knot 1.
+3. Move the outgoing handle. Knot 1 switches to Free, its outgoing
+   branch changes, but its incoming branch stays where it was.
+   Test Aligned and Mirrored modes for coupled handles.
+4. Press Escape during a handle or rotation drag. Both handles,
+   mode and preview must restore. End/commit should preserve changes
+   through Scene Save/Reopen and Undo/Redo (native verification pending).
+5. Turn editable tangents back off. The exact original automatic
+   curve returns; the serialized handles are retained for re-enabling.
+   Baked Mesh must remain unchanged until explicit Bake.
+6. Repeat with Catmull-Rom and a closed Path, and confirm bank/UV
+   seam is unchanged by a no-op Auto tangent edit.
+
+[Uploaded plugin review and decision matrix](REFERENCE_PLUGIN_STUDY.md)

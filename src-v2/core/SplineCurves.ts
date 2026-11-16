@@ -20,6 +20,11 @@ export interface SplineDataV2 {
     readonly knots:ReadonlyArray<SplineKnotV2>;
     readonly closed:boolean;
     readonly type:CurveTypeV2;
+    /** Opt-in: manual Knot handles override Catmull endpoint derivatives.
+     * Without this explicit flag, even supplied handle fields are ignored.
+     * Existing authored Catmull/Centripetal curves remain byte-for-byte
+     * identical unless the author enables manual tangent editing. */
+    readonly editableCatmullTangents?:boolean;
 }
 export interface SplineSampleV2 {readonly position:V3;readonly tangent:V3;}
 export interface LengthPointV2 {readonly parameter:number;readonly distance:number;}
@@ -82,6 +87,16 @@ export function evaluateSplineSegmentV2(s:SplineDataV2,index:number,t:number):Sp
     }
     m0=scale(m0,1-clamp(a.tension??0,0,1));
     m1=scale(m1,1-clamp(b.tension??0,0,1));
+    // A Hermite segment is completely specified by its endpoints and
+    // endpoint tangents. Convert a Bezier-style relative control handle
+    // to its Hermite derivative (three times the local handle vector).
+    // Only the authored side is overridden: the other Knot may still
+    // use the exact automatic Catmull tangent. No tangent interpolation
+    // mode or Knot topology change is required.
+    if(s.editableCatmullTangents===true){
+        if(a.handleOut)m0=scale(a.handleOut,3);
+        if(b.handleIn)m1=scale(b.handleIn,-3);
+    }
     const t2=t*t,t3=t2*t;
     return {
         position:add(add(scale(p0,2*t3-3*t2+1),scale(m0,t3-2*t2+t)),add(scale(p1,-2*t3+3*t2),scale(m1,t3-t2))),

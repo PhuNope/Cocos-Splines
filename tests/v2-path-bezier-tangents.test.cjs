@@ -677,5 +677,67 @@ try {
  assert.throws(()=>pathComp.editKnot('add',0),/Editor-only/);
  env.EDITOR_NOT_IN_PREVIEW=true;
  assert.equal(pathComp.knots.length,3);
+ // Manual Catmull handles preserve the original Centripetal geometry
+ // until their positions are deliberately changed.
+ const cn=new Node('ManualCatmull'),component=cn.addComponent(SplinePath);
+ const pts=[new SplineKnot(),new SplineKnot(),new SplineKnot()];
+ pts[0].position=new Vec3(0,0,0);
+ pts[1].position=new Vec3(3,0,5);
+ pts[2].position=new Vec3(9,0,2);
+ component.knots=pts;component.interpolation=CurveMode.Centripetal;
+ component.gizmoKnotIndex=1;
+ const originalSource=component.getSplineData(cn);
+ const times=[0,.1,.25,.5,.65,.8,1];
+ const originalSamples=times.map(t=>evaluateSplineV2(originalSource,t));
+ assert.equal(originalSource.editableCatmullTangents,undefined);
+ const oldSDK=globalThis.Gizmos3D;
+ globalThis.Gizmos3D={supportsRotationPivot:true,beginColor(){},drawLine(){},
+  move:(name,options)=>[{property:name,visual:'axis',plane:'view',
+   space:options.space}],
+  rotate:(name,options)=>['x','y','z'].map(axis=>({
+   property:name,visual:'rotation',axis,plane:'view',space:options.space,
+   pivotProperty:options.pivotProperty,pivotSpace:options.pivotSpace}))
+ };
+ try{
+  assert(!component.onGizmoHandles().some(h=>h.property==='pathGizmoTangentOut'));
+  component.editableCatmullTangents=true;
+  const manualSource=component.getSplineData(cn);
+  assert.equal(manualSource.editableCatmullTangents,true);
+  for(let i=0;i<times.length;i++){
+   const actual=evaluateSplineV2(manualSource,times[i]);
+   for(const axis of ['x','y','z']){
+    eq(actual.position[axis],originalSamples[i].position[axis],1e-8);
+    eq(actual.tangent[axis],originalSamples[i].tangent[axis],1e-8);
+   }
+  }
+  const handles=component.onGizmoHandles();
+  assert(handles.some(h=>h.property==='pathGizmoTangentIn'));
+  assert(handles.some(h=>h.property==='pathGizmoTangentOut'));
+  assert.equal(handles.filter(h=>h.property==='pathGizmoKnotTangentEuler').length,3);
+  const handle=component.pathGizmoTangentOut;
+  component.onGizmoChanged('pathGizmoTangentOut','begin');
+  component.pathGizmoTangentOut=new Vec3(handle.x,handle.y,handle.z);
+  component.onGizmoChanged('pathGizmoTangentOut','end');
+  assert.equal(pts[1].mode,TangentMode.Free);
+  for(let i=0;i<times.length;i++){
+   const actual=evaluateSplineV2(component.getSplineData(cn),times[i]);
+   for(const axis of ['x','y','z'])
+    eq(actual.position[axis],originalSamples[i].position[axis],2e-6);
+  }
+  const saved={...pts[1].handleOut};
+  component.onGizmoChanged('pathGizmoTangentOut','begin');
+  component.pathGizmoTangentOut=new Vec3(handle.x+1,handle.y,handle.z);
+  assert(Math.abs(pts[1].handleOut.x-saved.x)>.9);
+  component.onGizmoChanged('pathGizmoTangentOut','cancel');
+  assert.deepEqual({...pts[1].handleOut},saved);
+  component.onGizmoChanged('pathGizmoKnotTangentEuler','begin');
+  component.pathGizmoKnotTangentEuler=new Vec3(0,0,45);
+  assert.notDeepEqual({...pts[1].handleOut},saved);
+  component.onGizmoChanged('pathGizmoKnotTangentEuler','cancel');
+  assert.deepEqual({...pts[1].handleOut},saved);
+  component.editableCatmullTangents=false;
+  assert(!component.onGizmoHandles().some(h=>h.property==='pathGizmoTangentOut'));
+  assert.equal(component.getSplineData(cn).knots[1].handleOut,undefined);
+ }finally{globalThis.Gizmos3D=oldSDK;}
  console.log('V2 PURE VEC3 KNOTS & BEZIER PASS: local/world transforms, modes, stable Knot binding, Gizmos/Cancel, Inspector watcher, Play safety.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
