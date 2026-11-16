@@ -5,7 +5,7 @@ import {buildRoadCornerSectionsV2,roadCornerPositionV2,appendRoadQuadV2,type Roa
 import {resolveRoadOverlapV2,type RoadOverlapReportV2} from './RoadOverlapClip';
 import {buildRoadContinuousSectionsV2,roadContinuousProfileX_V2,type RoadContinuousOptionsV2,type RoadContinuousReportV2} from './RoadContinuous';
 import {buildRoadMarkingsV2,appendRoadMarkingsV2,type RoadMarkingOptionsV2} from './RoadMarkings';
-import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
+import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,validateRoadAuthoredWidthV2,type RoadFilletOptionsV2,type RoadFilletReportV2} from './RoadFillet';
 import {trimmedRoadFramesV2,type RoadJunctionTrimV2} from './RoadJunctionTrim';
 export interface RoadStripOptionsV2 extends RoadCornerOptionsV2, RoadContinuousOptionsV2, RoadFilletOptionsV2, RoadJunctionTrimV2 {
     /** Total asphalt width in spline-local units. */
@@ -115,6 +115,9 @@ export function buildRoadStripV2(cache:SplineCacheV2,options:RoadStripOptionsV2)
             maxAngleDegrees:options.maxTurnAngleDegrees??6,maxChordError:options.maxChordError??.03
         }:{})});
     const frames=trimmedRoadFramesV2(workingCache,table,options);
+    // A faithful full-width offset must not lose inside-face triangles.
+    // Let the component's explicit AutoContinuous policy handle tight bends.
+    if(followAuthored)validateRoadAuthoredWidthV2(frames,width*.5);
     const positions:Vec3MeshV2[]=[],normals:Vec3MeshV2[]=[],uv0:Vec2MeshV2[]=[],uv2:Vec2MeshV2[]=[];
     const count=frames.length;
     // Fillet computes a tangent rounded centreline before sweeping. Re-applying

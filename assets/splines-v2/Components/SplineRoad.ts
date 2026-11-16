@@ -13,7 +13,7 @@ import {buildRoadCornerSectionsV2,inspectRoadCornersV2,inspectRoadCenterlineClea
 import {buildSplineFramesV2} from '../core/SplineFrames';
 import {type RoadOverlapReportV2} from '../geometry/RoadOverlapClip';
 import {type RoadContinuousReportV2} from '../geometry/RoadContinuous';
-import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,RoadFilletSpacingErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
+import {buildRoadFilletCacheV2,roadConstantWidthFollowsSourceV2,RoadFilletSpacingErrorV2,RoadAuthoredCurveFoldErrorV2,type RoadFilletReportV2} from '../geometry/RoadFillet';
 import {type JunctionRoadBranchV2} from '../geometry/JunctionPatchV2';
 import {buildRoadSidewalkV2} from '../geometry/RoadSidewalkV2';
 import {type JunctionRoadCandidateV2} from '../geometry/JunctionAutoTrimV2';
@@ -153,7 +153,8 @@ export class SplineRoad extends MeshGenerator {
                     maxArcStep:this.sampleStep
                 });}
                 catch(error){
-                    if(!(error instanceof RoadFilletSpacingErrorV2)||
+                    if(!(error instanceof RoadFilletSpacingErrorV2||
+                error instanceof RoadAuthoredCurveFoldErrorV2)||
                        !this.canAutoContinuousShortKnot())throw error;
                 }
             }
@@ -191,7 +192,8 @@ export class SplineRoad extends MeshGenerator {
                     maxArcStep:this.sampleStep
                 });}
             catch(error){
-                if(!(error instanceof RoadFilletSpacingErrorV2)||
+                if(!(error instanceof RoadFilletSpacingErrorV2||
+                error instanceof RoadAuthoredCurveFoldErrorV2)||
                    !this.canAutoContinuousShortKnot())throw error;
             }
         }
@@ -262,8 +264,12 @@ export class SplineRoad extends MeshGenerator {
         try{geometry=makeRoad(surfaceMode);}
         catch(error){
             if(surfaceMode!=='fillet'||
-               !(error instanceof RoadFilletSpacingErrorV2)||
+               !(error instanceof RoadFilletSpacingErrorV2||
+                error instanceof RoadAuthoredCurveFoldErrorV2)||
                !this.canAutoContinuousShortKnot())throw error;
+            // Exact-source Constant Width must not emit missing inner faces:
+            // the explicit AutoContinuous policy keeps the centreline but
+            // narrows the road only where its full width cannot fit.
             // A radius smaller than the road half-width could fold the inside
             // mesh. Use the proven one-strip Continuous width solver instead.
             // No triangle clipping; UV0/UV2 remain continuous along the Road.

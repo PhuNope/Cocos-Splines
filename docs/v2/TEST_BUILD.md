@@ -524,3 +524,15 @@ exercises a mocked Creator Editor API only.
    Undo/Redo, Save/Reopen, Baked asset unchanged until
    explicit re-Bake, and Prefab Overrides. Record the
    Creator version and a Scene screenshot for acceptance.
+
+## Authored curved Constant Width fold protection
+
+In the three-Knot Centripetal test, first try a narrow Road:
+with Follow Source Curve On, the centre line must pass through
+the authored Knot and sampled Path points at fixed width.
+Increase Width until the inner edge cannot fit the corner.
+In Auto Continuous, expect a clear fallback notice and no
+missing triangles. In Strict Constant Width, expect an
+actionable fold warning and the previous valid preview to
+remain intact. Explicitly Rebuild and inspect Dynamic/Baked,
+UV0 Repeat U/V, UV2, marked lane continuity and Undo/Redo.

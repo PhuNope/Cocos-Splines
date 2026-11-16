@@ -1,5 +1,7 @@
 import {buildSplineCacheV2,type SplineCacheV2} from '../core/SplineCache';
 import {type SplineDataV2,type V3} from '../core/SplineCurves';
+import {type SplineFrameV2} from '../core/SplineFrames';
+import {appendRoadQuadV2} from './RoadCorners';
 
 /** A geometric fit constraint, not a malformed spline or a UV failure.
  * This typed error lets the Road component opt into a safe Continuous
@@ -26,6 +28,41 @@ export function roadConstantWidthFollowsSourceV2(
     source:SplineCacheV2,enabled=true
 ):boolean {
     return enabled!==false&&source.spline.type!=='linear';
+}
+/** Tight authored curves cannot have a non-overlapping constant-width
+ * offset on their inside radius. Never emit a Road with missing triangles. */
+export class RoadAuthoredCurveFoldErrorV2 extends Error {
+    constructor(readonly frameIndex:number,readonly fullWidth:number){
+        super('Constant Width Road: authored curve folds its inside edge near sample '+
+            frameIndex+' at full width '+fullWidth.toFixed(3)+
+            '. Reduce Width, soften/space Knots, or select Continuous.');
+        this.name='RoadAuthoredCurveFoldErrorV2';
+    }
+}
+/** Preflight both full-width offset lanes with the same Float32 orientation
+ * checks used by the actual Road quads, before any mesh part is emitted. */
+export function validateRoadAuthoredWidthV2(
+    frames:ReadonlyArray<SplineFrameV2>,halfExtent:number
+):void {
+    if(!Number.isFinite(halfExtent)||halfExtent<=0)
+        throw new Error('Invalid authored Road half-width');
+    const offset=(f:SplineFrameV2,side:number):V3=>({
+        x:f.position.x+f.right.x*halfExtent*side,
+        y:f.position.y+f.right.y*halfExtent*side,
+        z:f.position.z+f.right.z*halfExtent*side
+    });
+    for(let i=0;i+1<frames.length;i++){
+        const a=frames[i],b=frames[i+1];
+        const positions=[offset(a,-1),a.position,offset(a,1),
+            offset(b,-1),b.position,offset(b,1)];
+        const normals=[a.up,a.up,a.up,b.up,b.up,b.up];
+        for(let lane=0;lane<2;lane++){
+            const indices:number[]=[];
+            if(appendRoadQuadV2(positions,normals,lane,lane+1,
+                lane+3,lane+4,indices)!==2)
+                throw new RoadAuthoredCurveFoldErrorV2(i,halfExtent*2);
+        }
+    }
 }
 export interface RoadFilletOptionsV2 {
  readonly minimumRadiusScale?:number;

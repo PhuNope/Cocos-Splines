@@ -62,7 +62,7 @@ try{
  // By default Constant Width must follow the author's true
  // Centripetal centreline (including its middle Knot), not Knot chords.
  for(const axis of ['u','v']){
-  const settings={width:4,step:.25,surfaceMode:'fillet',adaptiveSampling:true,
+  const settings={width:.5,step:.25,surfaceMode:'fillet',adaptiveSampling:true,
    maxTurnAngleDegrees:6,maxChordError:.03,uvMetersPerRepeat:5,
    uvLongitudinalAxis:axis};
   const frames=buildSplineFramesV2(source,{maxStep:.25,
@@ -75,14 +75,19 @@ try{
    const f=frames[i],centre=3*(3*i+1),left=3*(3*i),right=3*(3*i+2);
    for(let k=0;k<3;k++)near(road.positions[centre+k],
     f.position[['x','y','z'][k]],4e-5);
-   near(Math.hypot(...[0,1,2].map(k=>road.positions[right+k]-road.positions[left+k])),4,4e-5);
+   near(Math.hypot(...[0,1,2].map(k=>road.positions[right+k]-road.positions[left+k])),.5,4e-5);
    near(road.uv0[2*(3*i+1)+longitudinal],f.distance/5,4e-5);
    near(road.uv2[2*(3*i+1)+1],f.distance/source.length,4e-5);
   }
+  // Width 4 at this tight three-Knot curve is physically impossible:
+  // strict Constant Width must reject missing inside-face triangles,
+  // while the Road component may deliberately AutoContinuous fallback.
+  assert.throws(()=>buildRoadStripV2(source,{...settings,width:4}),
+   /folds its inside edge/);
   const oldMesh=buildRoadStripV2(source,{...settings,followSourceCurveInConstantWidth:false});
   assert.notDeepEqual(Array.from(road.positions),Array.from(oldMesh.positions));
-  const decorated=buildRoadProfileV2(source,{...settings,shoulderWidth:1,
-   curbWidth:.3,curbHeight:.2,generateMarkings:true});
+  const decorated=buildRoadProfileV2(source,{...settings,shoulderWidth:.1,
+   curbWidth:.02,curbHeight:.02,generateMarkings:true});
   assert.deepEqual(decorated.submeshes.map(x=>x.materialSlot),[0,1,2,3,4]);
   assert.equal(JSON.parse(exportMeshGltfV2(decorated).json).meshes[0].primitives.length,5);
   assert(decorated.uv2.every(Number.isFinite));
@@ -131,5 +136,5 @@ try{
   surfaceMode:'fillet',adaptiveSampling:true});
  assert(bezierRoad.vertexCount>0);
  assert(bezierRoad.uv0.every(Number.isFinite));
- console.log('V2 CONSTANT WIDTH PASS: authored curved centreline, fixed 4m width, legacy fillet opt-out, U/V UVs, profiles, Bezier and Bake');
+ console.log('V2 CONSTANT WIDTH PASS: authored curved centreline, fixed feasible width, rejecting inside folds, legacy fillet opt-out, U/V UVs, profiles, Bezier and Bake');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

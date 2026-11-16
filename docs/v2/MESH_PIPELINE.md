@@ -510,3 +510,31 @@ frames on the reported three-Knot coordinates, fixed cross-section
 width, UV U/V and UV2 arc distance, profile/markings and glTF,
 and keeps a separate legacy fillet test. The native Editor
 view and material result still need to be validated.
+
+### Authored curve full-width safety preflight (2026-11-16)
+
+For a nonlinear authored centreline, a full-width offset can reverse
+or cross itself at a tight bend. The Road now evaluates both candidate
+inside/outside lanes with the same Float32 triangle orientation rule
+used by its actual mesh tessellator. If either lane would drop a
+triangle, Constant Width raises `RoadAuthoredCurveFoldErrorV2`
+**before** creating a partial Road or profile. This is a geometric
+constraint, not a missing tangent/UV defect.
+
+With `Short Knot Mode = Auto Continuous` (and no incompatible
+Junction Trim or Road Sidewalk), `Spline.Road` explicitly falls
+back to Continuous **on the same authored centreline**, narrowing
+the inside width instead of deleting faces. The Editor reports
+the fallback after an explicit Rebuild; no silent full-width claim
+is made. With `Strict Constant Width`, the error instructs
+the author to reduce Width or soften/space Knots. Linear fillet
+radius/spacing and explicit legacy curved chord fillets continue
+to use their earlier behavior.
+
+The three-Knot regression checks a feasible narrow Road follows
+every source sample with exact width; the same curve at width 4
+rejects full-width folds and the component applies its already
+documented AutoContinuous policy. The profile receives the same
+preflight, preventing a side curb/shoulder from extending beyond
+the safe offset. This is **not** a general 3D self-union algorithm,
+and it does not certify Creator 3.8.8 native rendering.

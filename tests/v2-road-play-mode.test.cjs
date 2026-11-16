@@ -195,6 +195,13 @@ try{
  // The default Constant Width route must sample the real Centripetal curve.
  road.followSourceCurveInConstantWidth=true;
  const followed=road.generate().geometry;
+ assert.match(road.getShortKnotFallback(),/folds its inside edge/,
+  'An impossible 4m offset must AutoContinuous instead of emitting holes');
+ const oldStrict=road.shortKnotMode;
+ road.shortKnotMode=1;
+ assert.throws(()=>road.generate(),/folds its inside edge/,
+  'Strict Constant Width should ask user to reduce width or soften knots');
+ road.shortKnotMode=oldStrict;
  const {buildSplineCacheV2}=require(path.join(temp,'core/SplineCache.js'));
  const {buildSplineFramesV2}=require(path.join(temp,'core/SplineFrames.js'));
  const trueCache=buildSplineCacheV2(road.source());
