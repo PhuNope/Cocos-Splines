@@ -269,7 +269,7 @@ export class SplineRoad extends MeshGenerator {
                 ...roadSampling,followSourceCurveInConstantWidth:followSource,
                 ...filletSettings,...corners
             });
-        let geometry:ReturnType<typeof buildRoadStripV2>;
+        let geometry!:ReturnType<typeof buildRoadStripV2>; // assigned by either success or explicit fallback
         try{geometry=makeRoad(surfaceMode);}
         catch(error){
             if(surfaceMode!=='fillet'||
