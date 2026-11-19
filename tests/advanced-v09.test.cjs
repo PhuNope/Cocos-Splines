@@ -94,8 +94,8 @@ try {
   ctrl.spline={count:3,length:12,closed:false,revision:'1',node:new Node('spline'),
        getRevision(){return '1'},evaluateWorldPosition:t=>new Vec3(12*t,0,0),evaluateRotation:()=>new Quat()};
   ctrl.prefabs=[{uuid:'a',name:'A'},{uuid:'b',name:'B'}];ctrl.count=5;ctrl.modifiers=mods;
-  ctrl.rebuild();assert.equal(made.length,5);assert.equal(ctrl.spawnedRoot.children.length,5);near(made[4].worldPosition.x,16); // +4 offset at progress 1
-  const identities=made.map(n=>n.name);ctrl.rebuild();assert.deepEqual(made.slice(5).map(n=>n.name),identities);
+  ctrl.respawn();assert.equal(made.length,5);assert.equal(ctrl.spawnedRoot.children.length,5);near(made[4].worldPosition.x,16); // +4 offset at progress 1
+  const identities=made.map(n=>n.name);ctrl.respawn();assert.deepEqual(made.slice(5).map(n=>n.name),identities);
   assert(made.slice(0,5).every(n=>!n.isValid));
   assert.equal(ctrl.spawn(),0,'Existing manually saved children should prevent duplicate spawn');
   ctrl.spawnOnStart=false;ctrl.onEnable();assert.equal(ctrl.spawnedRoot.children.length,5);

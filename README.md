@@ -55,3 +55,7 @@ Road, Extrude, MeshDeform and ObjectBender use continuous frames to avoid abrupt
 ### Junction Mesh Road-Matched UV (v0.9.12)
 
 `SplineJunctionMesh` → **UV Mode = Road Matched** samples the actual asphalt edge vertices and UV0 coordinates from each connected `SplineRoad` and blends directions only near the junction center. Set **UV Blend Start = 0.55** and assign the **same shared Material** to all Road meshes and the junction; texture samplers must use **Repeat U/V**. Supports both longitudinal UV axes, reverse, offset, tiling and variable Road width. Legacy `World Projected` remains the default. The center still distorts painted lane markings; no mesh Boolean or automatic marking removal. See [`docs/pages/junction-mesh.html`](docs/pages/junction-mesh.html).
+
+### Breaking API cleanup (Phase 1)
+
+`SplineInstantiate.rebuild()` and `SplineObjectController.rebuild()` have been removed. Use `respawn()` to replace their generated instances or `spawn()` to preserve existing ones. Geometry components' canonical `rebuild()` functions are unchanged. See [migration notes](docs/LEGACY_MIGRATION_VI.md) and [Unity parity roadmap](docs/UNITY_PARITY_ROADMAP_VI.md).

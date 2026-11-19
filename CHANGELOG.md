@@ -1,3 +1,9 @@
+# Unreleased — Phase 1 legacy API cleanup
+
+- Removed compatibility `rebuild()` aliases from `SplineInstantiate` and `SplineObjectController`; use `respawn()`.
+- Updated runtime tests and added an API regression guard.
+- Added a migration guide and Unity reference parity roadmap. Gizmos decorator refactor is scheduled for Phase 1.2 and is **not** included in this commit.
+
 # 0.9.12 — Junction Mesh Road-Matched UV
 
 - Added opt-in `SplineJunctionMesh.uvMode = RoadMatched` and `uvBlendStart` Inspector controls. `WorldProjected` stays the default for existing scenes.

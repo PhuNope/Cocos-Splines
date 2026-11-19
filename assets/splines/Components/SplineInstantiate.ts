@@ -7,7 +7,7 @@ const {ccclass,property,menu}= _decorator;
 export enum InstantiateMethod { Count=0, Distance=1 }
 Enum(InstantiateMethod);
 /** Spawn prefab instances at equal arc distances. No hidden editor mutations.
- * Invoke rebuild() or enable rebuildOnChange to regenerate at runtime.
+ * Call respawn() to regenerate explicitly, or enable rebuildOnChange at runtime.
  */
 @ccclass('Splines.SplineInstantiate')
 @menu('Splines/Spline Instantiate')
@@ -98,8 +98,6 @@ export class SplineInstantiate extends Component {
         this._runtimeSpawned=!EDITOR_NOT_IN_PREVIEW;
         return this._generated.length;
     }
-    /** Backwards-compatible explicit rebuild. */
-    public rebuild():void{this.respawn();}
     private ensureSpawnRoot(name:string):Node{
         if(this.spawnedRoot?.isValid)return this.spawnedRoot;
         const root=new Node(name+' (Generated)');root.setParent(this.parentNode||this.node);

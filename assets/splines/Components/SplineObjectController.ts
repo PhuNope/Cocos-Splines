@@ -6,8 +6,8 @@ import { InstantiateMethod } from './SplineInstantiate';
 const {ccclass,property,menu}=_decorator;
 
 /** Distribute multiple prefab variants over arc distance with deterministic jitter,
- * lane offsets and keyframed modifiers. Runtime-only generated children are destroyed
- * on disable and never saved into editor scenes.
+ * lane offsets and keyframed modifiers. Only runtime-owned instances are cleared
+ * on disable; manually saved instances remain intact.
  */
 @ccclass('Splines.SplineObjectController')
 @menu('Splines/Spline Object Controller')
@@ -98,8 +98,6 @@ export class SplineObjectController extends Component {
         this._runtimeSpawned=!EDITOR_NOT_IN_PREVIEW;
         return this._generated.length;
     }
-    /** Backwards-compatible explicit rebuild. */
-    public rebuild():void{this.respawn();}
     private ensureSpawnRoot(name:string):Node{
         if(this.spawnedRoot?.isValid)return this.spawnedRoot;
         const root=new Node(name+' (Generated)');root.setParent(this.parentNode||this.node);
