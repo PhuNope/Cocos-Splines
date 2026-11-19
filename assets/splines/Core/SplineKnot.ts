@@ -1,4 +1,6 @@
-import { _decorator, Component, Enum, Vec3, Node } from 'cc';
+import { _decorator, Component, Enum, Vec3, Node, Quat } from 'cc';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineKnotGizmos } from '../Editor/SplineKnotGizmos';
 const { ccclass, property, menu, executeInEditMode } = _decorator;
 
 /** Values equal UnityEngine.Splines.TangentMode. */
@@ -10,6 +12,7 @@ Enum(TangentMode);
  * Rotation provides the knot up vector (local +Y).
  */
 @ccclass('Splines.SplineKnot')
+@registerGizmos(SplineKnotGizmos)
 @menu('Splines/Spline Knot')
 @executeInEditMode(true)
 export class SplineKnot extends Component {
@@ -40,20 +43,54 @@ export class SplineKnot extends Component {
         return !!((this.tangentInHandle&&this.tangentInHandle.isValid)||
                   (this.tangentOutHandle&&this.tangentOutHandle.isValid));
     }
-    /** Cocos-Gizmos invokes this in the Editor Scene process, not at runtime. */
-    public onDrawGizmos():void {
-        if(!this.editTangentHandles||!this.hasTangentHandles)return;
-        const spline=(this.node.parent as any)?.getComponent('Splines.SplineContainer') as any;
-        if(spline)spline.drawKnotGizmos(this,true);
+    /** Read and write editor-only world orientation without duplicate serialized state. */
+    get editorWorldEuler():Vec3 {return Quat.toEuler(new Vec3(),this.node.worldRotation);}
+    set editorWorldEuler(euler:Vec3) {
+        if(euler && [euler.x,euler.y,euler.z].every(Number.isFinite))
+            this.node.setWorldRotation(Quat.fromEuler(new Quat(),euler.x,euler.y,euler.z));
     }
-    public onDrawGizmosSelected():void {
-        const spline=(this.node.parent as any)?.getComponent('Splines.SplineContainer') as any;
-        if(!spline)return;
-        // Selecting a knot ALWAYS shows its tangents, independent of the
-        // container's showGizmos / showTangentGizmos properties.
-        if(!spline.showGizmosAlways&&!spline.knots.some((k:any)=>k.editTangentHandles&&k.hasTangentHandles))
-            spline.drawCurveGizmos(true);
-        // Always draw, even if only the selected callback is dispatched.
-        spline.drawKnotGizmos(this,true);
+    private editorSpline():any {
+        return (this.node.parent as any)?.getComponent('Splines.SplineContainer')||null;
     }
+    private readTangent(which:'in'|'out'):Vec3 {
+        const handle=which==='in'?this.tangentInHandle:this.tangentOutHandle;
+        if(handle?.isValid)return handle.position.clone();
+        const spline=this.editorSpline();
+        if(spline){
+            const ordered=this.node.parent!.children.map(n=>n.getComponent(SplineKnot))
+                .filter((x):x is SplineKnot=>!!x&&x.enabled);
+            const index=ordered.indexOf(this),resolved=spline.getNaturalResolvedKnots?.()[index];
+            if(resolved){
+                const value=which==='in'?resolved.tangentIn:resolved.tangentOut;
+                return Vec3.transformQuat(new Vec3(),new Vec3(value.x,value.y,value.z),
+                    Quat.invert(new Quat(),this.node.rotation));
+            }
+        }
+        const value=(which==='in'?this.tangentIn:this.tangentOut).clone();
+        return this.tangentsInKnotSpace?value:
+            Vec3.transformQuat(value,value,Quat.invert(new Quat(),this.node.rotation));
+    }
+    private storeTangent(which:'in'|'out',local:Vec3):void {
+        const handle=which==='in'?this.tangentInHandle:this.tangentOutHandle;
+        if(handle?.isValid){handle.setPosition(local);return;}
+        const value=local.clone();
+        if(!this.tangentsInKnotSpace)Vec3.transformQuat(value,value,this.node.rotation);
+        if(which==='in')this.tangentIn=value;else this.tangentOut=value;
+    }
+    private writeTangent(which:'in'|'out',local:Vec3):void {
+        if(!local||![local.x,local.y,local.z].every(Number.isFinite))return;
+        if(this.mode!==TangentMode.Broken){
+            const beforeIn=this.readTangent('in'),beforeOut=this.readTangent('out');
+            this.mode=TangentMode.Broken;
+            this.storeTangent('in',beforeIn);
+            this.storeTangent('out',beforeOut);
+        }
+        this.storeTangent(which,local);
+        this.editorSpline()?.refresh?.();
+    }
+    get editorTangentIn():Vec3 {return this.readTangent('in');}
+    set editorTangentIn(v:Vec3) {this.writeTangent('in',v);}
+    get editorTangentOut():Vec3 {return this.readTangent('out');}
+    set editorTangentOut(v:Vec3) {this.writeTangent('out',v);}
+
 }

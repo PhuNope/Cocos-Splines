@@ -1,16 +1,16 @@
 import { _decorator, Component, Vec3, Quat, Enum, Color } from 'cc';
 import { SplineKnot, TangentMode } from './SplineKnot';
 import * as M from './SplineMath';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineContainerGizmos } from '../Editor/SplineContainerGizmos';
 import { closestParameter } from './SplineProjectionMath';
 const {ccclass,property,menu,executeInEditMode}= _decorator;
 export enum SplineDimension { Space3D=0, XY2D=1, XZ2D=2 }
 Enum(SplineDimension);
-function gizmos3D():any { return (globalThis as any).Gizmos3D; }
-function gizmos2D():any { return (globalThis as any).Gizmos2D; }
-
 
 /** One spline per container; direct children bearing SplineKnot are evaluated in sibling order. */
 @ccclass('Splines.SplineContainer')
+@registerGizmos(SplineContainerGizmos)
 @menu('Splines/Spline Container')
 @executeInEditMode(true)
 export class SplineContainer extends Component {
@@ -154,80 +154,6 @@ export class SplineContainer extends Component {
         if(right.lengthSqr()<1e-8)right.set(1,0,0);Vec3.normalize(right,right);
         Vec3.cross(up,dir,right);Vec3.normalize(up,up);
         return Quat.fromAxes(out,right,up,dir);
-    }
-    /** Visual helper for Cocos-Gizmos; only the extension invokes these callbacks in Scene Editor. */
-    public drawCurveGizmos(force=false):void{
-        if((!force&&!this.showGizmos)||this.count<2)return;
-        const g3=gizmos3D(),g2=gizmos2D();
-        if(!g3&&!g2)return;
-        const use2D=this.dimension===SplineDimension.XY2D&&!!g2;
-        const g=use2D?g2:g3;
-        if(!g)return;
-        const steps=Math.min(64,Math.max(2,Math.floor(this.gizmoSteps)))*Math.max(1,this.segmentCount);
-        g.beginColor(this.node,this.gizmoColor);
-        let previous=this.evaluateWorldPosition(0);
-        for(let i=1;i<=steps;i++){
-            const current=this.evaluateWorldPosition(i/steps);
-            g.drawLine(this.node,previous,current);
-            previous=current;
-        }
-        for(let i=0;i<this.knots.length;i++){
-            const knot=this.knots[i],position=this.nodeToWorldKnot(knot);
-            if(use2D)g.drawCircle(this.node,position,6);
-            else g.drawSphere(this.node,position,0.09,false,8,6);
-            if(this.showTangentGizmos&&(knot.tangentInHandle||knot.tangentOutHandle))this.drawKnotGizmos(knot);
-        }
-    }
-    public nodeToWorldKnot(knot:SplineKnot):Vec3{
-        const pos=knot.node.position.clone();
-        if(this.dimension===SplineDimension.XY2D)pos.z=0;
-        if(this.dimension===SplineDimension.XZ2D)pos.y=0;
-        return Vec3.transformMat4(pos,pos,this.node.worldMatrix);
-    }
-    public drawKnotGizmos(knot:SplineKnot,force=false):void {
-        // force=true is used by selected knots and explicit edit mode. This
-        // deliberately overrides BOTH global container visualization flags.
-        if(!force&&(!this.showGizmos||!this.showTangentGizmos))return;
-        const g3=gizmos3D(),g2=gizmos2D();
-        const use2D=this.dimension===SplineDimension.XY2D&&!!g2;
-        const g=use2D?g2:g3;
-        if(!g)return;
-        const source=this.getNaturalResolvedKnots();
-        const nodes=this.node.children.map(n=>n.getComponent(SplineKnot)).filter((k):k is SplineKnot=>!!k&&k.enabled);
-        const idx=nodes.indexOf(knot);if(idx<0||!source[idx])return;
-        const data=source[idx],origin=this.nodeToWorldKnot(knot);
-        const incoming=Vec3.transformMat4(new Vec3(),new Vec3(data.position.x+data.tangentIn.x,data.position.y+data.tangentIn.y,data.position.z+data.tangentIn.z),this.node.worldMatrix);
-        const outgoing=Vec3.transformMat4(new Vec3(),new Vec3(data.position.x+data.tangentOut.x,data.position.y+data.tangentOut.y,data.position.z+data.tangentOut.z),this.node.worldMatrix);
-        const tangentColor=new Color(255,164,73,255);
-        g.beginColor(this.node,tangentColor);
-        for(const p of [incoming,outgoing]){
-            g.drawLine(this.node,origin,p);
-            if(use2D)g.drawCircle(this.node,p,6);
-            else g.drawSphere(this.node,p,this.dimension===SplineDimension.Space3D?0.07:5,false,8,6);
-        }
-        // Gizmos2D requires a Canvas / RenderRoot2D ancestor to render its
-        // Graphics. Draw a 3D XY-plane fallback as well: 2D splines outside
-        // Canvas still display their tangent lines/points in Scene View.
-        // Cocos-Gizmos3D is documented to support drawing inside Canvas too.
-        if(use2D&&g3){
-            if(typeof g3.setDepTest==='function')g3.setDepTest(this.node,false);
-            g3.beginColor(this.node,tangentColor);
-            for(const p of [incoming,outgoing]){
-                g3.drawLine(this.node,origin,p);
-                g3.drawSphere(this.node,p,5,false,8,6);
-            }
-            if(typeof g3.setDepTest==='function')g3.setDepTest(this.node,true);
-        }
-    }
-    private hasEditingKnot():boolean {
-        return this.knots.some(k=>k.editTangentHandles&&k.hasTangentHandles);
-    }
-    public onDrawGizmos():void {
-        // Editing one knot is an explicit per-knot override of "Always Show".
-        if(this.showGizmosAlways||this.hasEditingKnot())this.drawCurveGizmos(true);
-    }
-    public onDrawGizmosSelected():void {
-        if(!this.showGizmosAlways&&!this.hasEditingKnot())this.drawCurveGizmos();
     }
     public getRevision():string{this.ensure();return this._signature;}
 }
