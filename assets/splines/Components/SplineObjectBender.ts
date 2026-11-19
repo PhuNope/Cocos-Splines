@@ -7,7 +7,9 @@ import { DeformAxis } from './SplineMeshDeform';
 import { findStoredAttributeFormat, resolveAttributeFormatName, readPositionTriples, readUVPairs, VertexFormat } from '../Core/SplineMeshRead';
 import { recomputeNormals, computeTangents } from '../Core/SplineMeshDeformMath';
 import { bendHierarchyPositions, layoutSequentialMeshParts, BendFrame } from '../Core/SplineHierarchyBendMath';
-import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { buildMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineObjectBenderGizmos } from '../Editor/SplineMeshDrawers';
 const {ccclass,property,menu,executeInEditMode}=_decorator;
 Enum(SplinePositionMode);
 export enum BenderLayout { KeepHierarchy=0, SequentialMeshes=1 }
@@ -19,6 +21,7 @@ interface Original {renderer:MeshRenderer; mesh:Mesh;positions:number[];indices:
  * Keep this node OUTSIDE the source spline hierarchy (do not bend knot handles).
  */
 @ccclass('Splines.SplineObjectBender')
+@registerGizmos(SplineObjectBenderGizmos)
 @menu('Splines/Spline Object Bender')
 @executeInEditMode(true)
 export class SplineObjectBender extends Component {
@@ -39,11 +42,9 @@ export class SplineObjectBender extends Component {
     @property({tooltip:'Show sampled wireframes for all generated child meshes when selected (requires Cocos-Gizmos).'}) showMeshGizmos=true;
     @property({min:24,max:1200,step:1,tooltip:'Total edge budget shared between bent meshes.'}) gizmoEdgeLimit=360;
     private _meshGizmos:Array<{node:import('cc').Node;geometry:MeshGizmoLines}>=[];
-    public onDrawGizmosSelected():void {
-        if(!this.showMeshGizmos)return;
-        const color=new Color(255,137,213,255);
-        for(const sample of this._meshGizmos)drawMeshGizmoLines(this.node,sample.node,sample.geometry,color);
-    }
+    /** Read-only preview cache for the Editor drawer. */
+    public getMeshGizmoSamples():ReadonlyArray<{node:import('cc').Node;geometry:MeshGizmoLines}>{return this._meshGizmos;}
+    
     private originals:Original[]=[];
     private signature='';
     private _applied=false;

@@ -1,5 +1,3 @@
-import { Color, Mat4, Node, Vec3 } from 'cc';
-
 /** Immutable, bounded mesh wireframe cache used only by optional Cocos-Gizmos.
  * The generated source Mesh can release its CPU buffers; gizmos never read back
  * GPU data, change the MeshRenderer or create another Material instance.
@@ -51,15 +49,3 @@ export function buildMeshGizmoLines(
     return result;
 }
 
-/** Draw selection wireframe if the separately installed Cocos-Gizmos is present. */
-export function drawMeshGizmoLines(owner:Node, modelNode:Node, geometry:MeshGizmoLines|null, color:Color):void {
-    const gizmos=(globalThis as any).Gizmos3D;
-    if(!gizmos?.beginColor||!gizmos?.drawLine||!geometry||!owner.isValid||!modelNode.isValid)return;
-    gizmos.beginColor(owner,color);
-    const p=geometry.positions,edges=geometry.edgePairs,world:Mat4=modelNode.worldMatrix;
-    const cache:Vec3[]=[];
-    for(let i=0;i<p.length;i+=3){
-        cache.push(Vec3.transformMat4(new Vec3(),new Vec3(p[i],p[i+1],p[i+2]),world));
-    }
-    for(let i=0;i+1<edges.length;i+=2)gizmos.drawLine(owner,cache[edges[i]],cache[edges[i+1]]);
-}

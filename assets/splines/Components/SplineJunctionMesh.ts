@@ -3,7 +3,9 @@ import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineJunction } from './SplineJunction';
 import { SplineRoad } from './SplineRoad';
 import { buildJunctionPatch, buildRoadMatchedJunctionPatch, MatchedRoadPatchBranch } from '../Core/SplineJunctionPatchMath';
-import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { buildMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineJunctionMeshGizmos } from '../Editor/SplineMeshDrawers';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Legacy preserves the old XZ projected UVs. RoadMatched uses actual Road
  * mesh edge vertices and UVs with a shared blended center. */
@@ -15,6 +17,7 @@ Enum(JunctionUVMode);
  * Keep it as a separate MeshRenderer Node; use the same SHARED road Material asset.
  */
 @ccclass('Splines.SplineJunctionMesh')
+@registerGizmos(SplineJunctionMeshGizmos)
 @menu('Splines/Spline Junction Mesh')
 @executeInEditMode(true)
 @requireComponent(MeshRenderer)
@@ -35,6 +38,8 @@ export class SplineJunctionMesh extends Component {
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private generated:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;
+    /** Read-only preview cache for the Editor drawer. */
+    public getMeshGizmoGeometry():MeshGizmoLines|null{return this._meshGizmo;}
     private fallback:Material|null=null;
     private bound:Material|null=null;
     private signature='';
@@ -60,10 +65,7 @@ export class SplineJunctionMesh extends Component {
         }
         if(!selected)this.bound=null;
     }
-    public onDrawGizmosSelected():void {
-        if(!this.showMeshGizmos)return;
-        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(190,132,255,255));
-    }
+    
     public clear():void {
         this._meshGizmo=null;
         const r=this.getComponent(MeshRenderer);

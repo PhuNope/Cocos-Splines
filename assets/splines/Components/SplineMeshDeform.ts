@@ -6,7 +6,9 @@ import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 import { deformMesh, MeshGeometry, Frame, MeshAxis, UVMode } from '../Core/SplineMeshDeformMath';
 import { readPositionTriples, readUVPairs, resolveAttributeFormatName, findStoredAttributeFormat, readNormalTriples, VertexFormat } from '../Core/SplineMeshRead';
-import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { buildMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineMeshDeformGizmos } from '../Editor/SplineMeshDrawers';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Cocos readAttribute() returns raw Uint16 bits for half-float formats. */
 export { decodeHalfFloat } from '../Core/SplineMeshRead';
@@ -20,6 +22,7 @@ Enum(DeformAxis);Enum(DeformMode);Enum(DeformUV);Enum(DeformRepeatLayout);
  * Mesh must have sufficient longitudinal subdivisions for curved bends.
  */
 @ccclass('Splines.SplineMeshDeform')
+@registerGizmos(SplineMeshDeformGizmos)
 @menu('Splines/Spline Mesh Deform')
 @executeInEditMode(true)
 @requireComponent(MeshRenderer)
@@ -50,6 +53,8 @@ export class SplineMeshDeform extends Component {
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _generated:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;
+    /** Read-only preview cache for the Editor drawer. */
+    public getMeshGizmoGeometry():MeshGizmoLines|null{return this._meshGizmo;}
     private _revision='';
     private _failedSignature='';
     private _fallback:Material|null=null;
@@ -89,10 +94,7 @@ export class SplineMeshDeform extends Component {
         this.syncMaterial(this.getComponent(MeshRenderer));
         if(this.rebuildOnChange&&this.signature()!==this._revision&&this.signature()!==this._failedSignature)this.rebuild();
     }
-    public onDrawGizmosSelected():void {
-        if(!this.showMeshGizmos)return;
-        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(102,225,152,255));
-    }
+    
     private clear():void {
         this._meshGizmo=null;
         const renderer=this.getComponent(MeshRenderer);

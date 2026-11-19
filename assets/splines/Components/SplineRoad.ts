@@ -9,7 +9,9 @@ import { estimateMinimumBendRadius } from '../Core/SplineStableFrames';
 Enum(SplinePositionMode);
 Enum(RoadUvDirection);
 Enum(RoadCornerMode);
-import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { buildMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineRoadGizmos } from '../Editor/SplineMeshDrawers';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 /** Live editable roadway, inspired by a road surface generator. Generates transient Mesh,
  * not a serialized Mesh asset. Geometry is created in this node's local space,
@@ -19,6 +21,7 @@ const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
  * This prevents conflicting with SplineExtrude's MeshRenderer on legacy nodes.
  */
 @ccclass('Splines.SplineRoad')
+@registerGizmos(SplineRoadGizmos)
 @menu('Splines/Spline Road')
 @executeInEditMode(true)
 @requireComponent(MeshRenderer)
@@ -60,6 +63,8 @@ export class SplineRoad extends Component {
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;
+    /** Read-only preview cache for the Editor drawer. */
+    public getMeshGizmoGeometry():MeshGizmoLines|null{return this._meshGizmo;}
     private _fallback:Material|null=null;
     // Assigned asset is shared. Never use getMaterialInstance() or renderer.material.
     // Track only explicit component bindings so users can also assign a Material
@@ -165,10 +170,7 @@ export class SplineRoad extends Component {
             this.endProgress,this.rangeMode,this.startDistance,this.endDistance,this.uvMetersPerRepeat,this.uvDirection,
             this.uvWidthTiles,this.uvReverseAcross,this.uvReverseLength,this.uvOffsetU,this.uvOffsetV,this.capEnds,this.gizmoEdgeLimit]);
     }
-    public onDrawGizmosSelected():void {
-        if(!this.showMeshGizmos)return;
-        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(68,190,255,255));
-    }
+    
     private clearMesh():void{
         this._meshGizmo=null;
         this._junctionRings=[];

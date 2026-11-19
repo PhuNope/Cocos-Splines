@@ -4,12 +4,15 @@ import { createWorldFrameField } from '../Core/SplineWorldFrames';
 import { SplinePositionMode, toNormalizedRange } from '../Core/SplinePosition';
 Enum(SplinePositionMode);
 Enum(SplinePositionMode);
-import { buildMeshGizmoLines, drawMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { buildMeshGizmoLines, MeshGizmoLines } from '../Core/SplineMeshGizmos';
+import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
+import { SplineExtrudeGizmos } from '../Editor/SplineMeshDrawers';
 const {ccclass,property,menu,executeInEditMode,requireComponent}= _decorator;
 /** Generate a UV-mapped tube. Renderer resides on THIS node, which may be distinct
  * from the SplineContainer. Generated meshes are transient, not serialized assets.
  */
 @ccclass('Splines.SplineExtrude')
+@registerGizmos(SplineExtrudeGizmos)
 @menu('Splines/Spline Extrude')
 @executeInEditMode(true)
 @requireComponent(MeshRenderer)
@@ -35,6 +38,8 @@ export class SplineExtrude extends Component {
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;
+    /** Read-only preview cache for the Editor drawer. */
+    public getMeshGizmoGeometry():MeshGizmoLines|null{return this._meshGizmo;}
     private _fallback:Material|null=null;
     // Assigned asset is shared. Never use getMaterialInstance() or renderer.material.
     // Track only explicit component bindings so users can also assign a Material
@@ -144,10 +149,7 @@ export class SplineExtrude extends Component {
         this.syncMaterial(renderer);
         this._revision=this.signature();
     }
-    public onDrawGizmosSelected():void {
-        if(!this.showMeshGizmos)return;
-        drawMeshGizmoLines(this.node,this.node,this._meshGizmo,new Color(255,163,75,255));
-    }
+    
     onDestroy():void{
         this._meshGizmo=null;
         this._meshGizmo=null;
