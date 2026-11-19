@@ -167,10 +167,10 @@ export class JunctionPatch extends MeshGenerator {
             const guide=buildJunctionSceneGuideV2(entries,{
                 showCurb:this.gizmoJunctionCurbs});
             return guide;
-            return null;
         }catch{
             // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
             // Gizmos never mutate Nodes, meshes or the saved Scene.
+            return null;
         }
     }
     /**

@@ -194,10 +194,10 @@ export class SplineRoad extends MeshGenerator {
                 totalWidth,{maxSteps:steps,showEdges:this.gizmoEdges,
                     showKnots:false});
             return guide;
-            return null;
         }catch{
             // Gizmos are read-only Editor aids. Invalid/unfinished Roads must
             // never break selection, write serialization or spam Play logs.
+            return null;
         }
     }
     /** Editor-only local corner report; no warnings are printed during Play. */
