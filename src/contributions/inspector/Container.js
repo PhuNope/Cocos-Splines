@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -19,9 +19,15 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <ui-prop type="dump" class="spl-prop spl-field-showTangentGizmos"></ui-prop>
     <ui-prop type="dump" class="spl-prop spl-field-gizmoSteps"></ui-prop>
     <ui-prop type="dump" class="spl-prop spl-field-gizmoColor"></ui-prop>
-    <p class="spl-note">Bật Cocos-Gizmos v2.0.3+. Chọn Knot sẽ luôn hiện tangent dù Show Tangent Gizmos tắt. Knot có handles: bật Edit Handles để luôn thấy đường + tangent khi chỉnh, không cần bật Show Gizmos Always.</p>
+    <p class="spl-note">Bật Cocos-Gizmos v3.0.3+. Chọn Knot sẽ luôn hiện tangent dù Show Tangent Gizmos tắt. Knot có handles: bật Edit Handles để luôn thấy đường + tangent khi chỉnh, không cần bật Show Gizmos Always.</p>
   </details>
   <div class="spl-info">Đang tải knots…</div>
+  <details class="spl-section" open><summary>Batch Knot Tools · Multi-select / Snap / Align</summary>
+    <p class="spl-note">Đánh dấu Knot trong danh sách bên dưới. Snap dùng tọa độ local của Spline; Align dùng Knot đầu tiên theo Hierarchy làm mốc.</p>
+    <div class="spl-btns"><button type="button" class="spl-btn spl-mark-all">✓ Mark all</button><button type="button" class="spl-btn spl-mark-none">Clear marks</button><button type="button" class="spl-btn spl-select-marked">Select in Scene</button></div>
+    <div class="spl-btns spl-batch-inputs"><label>Grid step <input class="spl-grid-step" type="number" min="0.0001" max="1000000" step="0.25" value="1" aria-label="Grid step (local units)"></label><button type="button" class="spl-btn spl-snap-marked">Snap marked</button></div>
+    <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button></div>
+  </details>
   <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
     <p class="spl-note">Dựng road mesh bằng Inspector, không cần code. Gắn Trigger để nhận event; Junction dùng để nối nhiều Spline.</p>
@@ -51,6 +57,12 @@ const ownStyle=style+`
 .spl-knot-grid input,.spl-knot-grid select{background:var(--color-normal-fill-emphasis,#202c38);color:inherit;border:1px solid #536471;border-radius:4px;padding:4px 3px;font-size:11px}
 .spl-knot-grid input:disabled{opacity:.5;cursor:not-allowed}.spl-knot-grid input:focus{outline:1px solid #6baac9}
 .spl-knot .spl-btn{padding:3px 6px;font-size:10px}
+.spl-mark{display:inline-flex;align-items:center;gap:4px;margin-left:7px;font-size:10px;font-weight:400;color:var(--color-normal,#aebbc5)}
+.spl-mark input{margin:0;cursor:pointer}
+.spl-batch-inputs{align-items:center}
+.spl-batch-inputs label{display:flex;align-items:center;gap:5px;font-size:11px}
+.spl-batch-inputs input,.spl-batch-inputs select{width:80px;background:var(--color-normal-fill-emphasis,#202c38);color:inherit;border:1px solid #536471;border-radius:4px;padding:4px}
+
 `;
 function createButton(label,action,cls=''){
     const b=document.createElement('button');b.type='button';b.className='spl-btn '+cls;b.textContent=label;b.addEventListener('click',action);return b;
@@ -96,11 +108,25 @@ function renderKnots(panel,data){
     // Never destroy focused native numeric inputs mid-edit.
     if(panel._editing)return;
     const host=panel.$.knots;host.replaceChildren();
+    const valid=new Set(data.knots.map(k=>k.uuid));
+    for(const id of panel._marked)if(!valid.has(id))panel._marked.delete(id);
     if(!data.knots.length){host.textContent='Spline chưa có knot. Nhấn Add Knot.';return;}
     for(const knot of data.knots){
         const details=document.createElement('details');details.className='spl-knot';
         details.open=panel._openedKnots?.has(knot.uuid)||false;
-        const summary=document.createElement('summary');summary.textContent=`${knot.index+1}. ${knot.name}`;details.append(summary);
+        const summary=document.createElement('summary');summary.textContent=`${knot.index+1}. ${knot.name} `;
+        const markLabel=document.createElement('label');markLabel.className='spl-mark';
+        const checkbox=document.createElement('input');checkbox.type='checkbox';
+        checkbox.checked=panel._marked.has(knot.uuid);
+        checkbox.setAttribute('aria-label','Mark '+knot.name+' for batch editing');
+        checkbox.addEventListener('click',event=>event.stopPropagation());
+        checkbox.addEventListener('change',()=>{
+            if(checkbox.checked)panel._marked.add(knot.uuid);
+            else panel._marked.delete(knot.uuid);
+        });
+        markLabel.addEventListener('click',event=>event.stopPropagation());
+        markLabel.append(checkbox,document.createTextNode('Mark'));
+        summary.append(markLabel);details.append(summary);
         details.addEventListener('toggle',()=>{if(!panel._openedKnots)panel._openedKnots=new Set();if(details.open)panel._openedKnots.add(knot.uuid);else panel._openedKnots.delete(knot.uuid);});
         const buttons=document.createElement('div');buttons.className='spl-btns';
         buttons.append(createButton('◎ Select',()=>void callEditor(panel,'select-knot-id',knot.uuid)));
@@ -140,15 +166,20 @@ async function refresh(panel){
     try{
         const s=await Editor.Message.request(NAME,'get-spline');
         if(panel._closed||token!==panel._requestToken)return;
-        if(!s||!s.found){panel.$.info.textContent=s?.message||s?.error||'Chọn một SplineContainer';panel.$.knots.textContent='';return;}
+        if(!s||!s.found){panel._splineData=null;panel.$.info.textContent=s?.message||s?.error||'Chọn một SplineContainer';panel.$.knots.textContent='';return;}
+        panel._splineData=s;
         panel.$.info.textContent=`${s.knots.length} knots · ${s.segments} curves · ${Number(s.length).toFixed(2)} units`;
+        const hiddenAxis=s.dimension===1?'z':s.dimension===2?'y':null;
+        const axis=panel.$.alignAxis;
+        for(const option of axis.options)option.disabled=option.value===hiddenAxis;
+        if(axis.value===hiddenAxis)axis.value='x';
         renderKnots(panel,s);
     }catch(e){if(!panel._closed&&token===panel._requestToken)show(panel,String(e?.message||e),true);}
 }
 module.exports={
     template,style:ownStyle,$,
     ready(){
-        this._closed=false;this._openedKnots=new Set();this._editing=false;
+        this._closed=false;this._openedKnots=new Set();this._marked=new Set();this._editing=false;this._splineData=null;
         // Only native input widgets should block a list redraw; buttons such as
         // Select/Split still need the list to refresh immediately after clicking.
         const isInput=el=>el&&typeof el.matches==='function'&&el.matches('input,select,textarea');
@@ -168,6 +199,28 @@ module.exports={
         this.$.positioner.addEventListener('click',async()=>{const r=await callEditor(this,'create-positioner');if(r?.ok)show(this,'Đã thêm Spline Positioner.');});
         this.$.projector.addEventListener('click',async()=>{const r=await callEditor(this,'create-projector');if(r?.ok)show(this,'Đã thêm Spline Projector.');});
         this.$.length.addEventListener('click',async()=>{const r=await callEditor(this,'create-length-monitor');if(r?.ok)show(this,'Đã thêm Spline Length Monitor.');});
+        const chosen=()=>Array.from(this._marked);
+        const batch=async(message,...args)=>{
+            if(!chosen().length){show(this,'Mark at least one Knot in the list.',true);return;}
+            const result=await callEditor(this,message,chosen(),...args);
+            if(result?.ok){show(this,result.message||'Updated.');await refresh(this);}
+        };
+        this.$.markAll.addEventListener('click',()=>{
+            if(!this._splineData)return;
+            this._marked=new Set(this._splineData.knots.map(k=>k.uuid));
+            renderKnots(this,this._splineData);
+        });
+        this.$.markNone.addEventListener('click',()=>{
+            this._marked.clear();
+            if(this._splineData)renderKnots(this,this._splineData);
+        });
+        this.$.selectMarked.addEventListener('click',()=>void batch('select-knot-ids'));
+        this.$.snapMarked.addEventListener('click',()=>{
+            const step=Number(this.$.gridStep.value);
+            if(!Number.isFinite(step)||step<=0||step>1e6)return show(this,'Grid step must be > 0 and <= 1000000.',true);
+            void batch('snap-selected-knots',step);
+        });
+        this.$.alignMarked.addEventListener('click',()=>void batch('align-selected-knots',this.$.alignAxis.value));
         this.$.add.addEventListener('click',async()=>{const r=await callEditor(this,'add-knot');if(r?.ok)await refresh(this);});
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
         this.$.reverse.addEventListener('click',async()=>{const r=await callEditor(this,'reverse-direction');if(r?.ok)await refresh(this);});
@@ -178,5 +231,5 @@ module.exports={
         for(const field of fields){const p=dump?.value?.[field],widget=this.$['p_'+field];if(p&&widget?.render)widget.render(p);}
         void refresh(this);
     },
-    close(){this._closed=true;this._requestToken=(this._requestToken||0)+1;},
+    close(){this._closed=true;this._marked?.clear();this._splineData=null;this._requestToken=(this._requestToken||0)+1;},
 };
