@@ -1,5 +1,6 @@
 'use strict';
 const {mockGizmoHUD,findHud,flattenHud}=require('./helpers/gizmo-hud-sdk.cjs');
+const {registerGizmos}=require('./helpers/register-gizmos-decorator.cjs');
 /**
  * Real TS Path compiled against Cocos mocks: authored Bezier tangents,
  * Path/consumer coordinate conversion, modes, Gizmos Escape, source order,
@@ -15,7 +16,8 @@ try {
    '--useDefineForClassFields','false','--rootDir',
    path.join(root,'assets/splines-v2'),'--outDir',dir,
    path.join(root,'assets/splines-v2/Components/SplinePath.ts'),
-   path.join(root,'tests/types/cc.d.ts')],{stdio:'pipe'});
+   path.join(root,'tests/types/cc.d.ts'),
+   path.join(root,'tests/types/cocos-gizmos.d.ts')],{stdio:'pipe'});
  const env={EDITOR_NOT_IN_PREVIEW:true};
  class Vec3 {
    constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
@@ -69,6 +71,7 @@ try {
  Module._load=function(id,parent,isMain){
    if(id==='cc')return cc;
    if(id==='cc/env')return env;
+   if(id==='db://cocos-gizmos/RegisterGizmos')return {registerGizmos};
    return original.apply(this,arguments);
  };
  let SplinePath,CurveMode,TangentMode,SplineKnot,RotationMode,SplineSpace,evaluateSplineV2;

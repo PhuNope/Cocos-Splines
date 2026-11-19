@@ -1,95 +1,115 @@
-# Required Cocos-Gizmos integration — Clean Architecture
+# Cocos Splines — official Gizmos decorator architecture
 
-**Development branch:** `v2.0.0` · Cocos Creator 3.8.8
-**Required editor extension:** `cocos-gizmos >=3.0.2`, enabled before editing Cocos Splines.
-**Implementation baseline:** `PhuNope/Cocos-Gizmos` branch `v3`,
-including GizmoHUD fluent builder, native SelectGizmo command adapter,
-and component-Vec3 rotation pivots.
+**Cocos Creator:** 3.8.8. **Required independent extension:**
+[Cocos-Gizmos](https://github.com/PhuNope/Cocos-Gizmos), branch `v3`,
+version **3.0.2 or newer**. These are breaking development changes.
 
-## Explicit dependency contract
+## The decorator IS the integration boundary
 
-The installable Splines manifest contains
-`cocosSplines.requiredExtensions['cocos-gizmos']='>=3.0.2'`
-and lists the required Scene APIs. **This is metadata validated by
-our own scripts, not a Cocos Creator automatic installation facility.**
-Install/enable Gizmos separately in Extension Manager and reopen
-Creator. Cocos Splines does not copy Gizmos source, transpile another
-vendor into its extension or import Gizmos into Play runtime code.
+Cocos-Gizmos already exports `registerGizmos` and `IDrawGizmos`
+from its **readonly Asset Database mount**. Cocos Creator 3.8 supports
+importing scripts from another extension via the `db://` scheme:
 
-At Editor interaction time, `resolveSplineGizmos()` checks all of:
+```ts
+import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
+import {SplinePathGizmos} from '../Editor/SplinePathGizmos';
 
-- `Gizmos3D.move/rotate/beginColor/drawLine` and
-  `Gizmos3D.supportsRotationPivot === true`
-- `Gizmos2D.rotate`
-- `GizmoHUD.createHud/bind/action`
-
-Missing or incompatible APIs produce **one actionable Console warning
-per Scene session**, and Gizmos operations are disabled. There is
-**no legacy flat-HUD or pivot-less SDK fallback**. This is intentional:
-a plugin mismatch should not silently render rings around the Path
-Node instead of the selected Knot.
-
-## Dependency boundaries
-
-```text
-  Core: SplineCurves / Frames / Cache / Road geometry
-            ↑  (data; no Editor or Gizmos)
-  Spline.Path (application / authored CCClass data / gesture snapshots)
-            │  state snapshot + callback actions
-            ↓
-  SplineGizmoHandler (one Editor anti-corruption layer)
-      ├─ handles(state)       → Gizmos3D.move/rotate + indexed points
-      ├─ hud(state)           → GizmoHUD.createHud().bind().action().build()
-      └─ drawGuide(node,data) → Gizmos3D.beginColor/drawLine/drawSphere
-            ↓
-  Cocos-Gizmos (presentation, input, command sessions)
-            ↓
-  Native Cocos Creator Scene View
+@ccclass('Spline.Path')
+@registerGizmos(SplinePathGizmos)
+export class SplinePath extends Component { /* Knot data and editing */ }
 ```
 
-`SplineGizmoHandler` is in
-`assets/splines-v2/Components/SplineGizmoHandler.ts`. It uses
-constructor-injected `sdkProvider` (Dependency Inversion) and narrow
-structural ports rather than importing Cocos-Gizmos implementation
-files or reaching into private Scene Selection internals.
-It is housed beside components rather than in a magic `Editor/`
-asset directory because Cocos Creator may omit Editor-only folders
-from game builds while Path has a static module import. The handler
-is **inert at module evaluation and in Play mode**: only Editor Scene
-callbacks resolve Gizmos globals.
+The other consumers register their own drawers:
 
-**Single responsibility / separation of concerns**
+- `@registerGizmos(SplineRoadGizmos)` on `Spline.Road`
+- `@registerGizmos(SplineJunctionGizmos)` on `Spline.Junction`
 
-- `Spline.Path`: Knot serialization, movement, tangent rotation, Roll,
-  multi-selection identity, begin/update/end/cancel, Undo/onRestore
-  quarantine and preview invalidation. No HUD/DOM/SDK composition.
-- `SplineGizmoHandler`: capability validation, creation of move,
-  indexed point and Knot-centered rotation descriptors, property-bound
-  HUD, colors and world-space scene drawing.
-- `Spline.Road` / `Spline.Junction`: independent geometry consumers.
-  They reuse only `drawGuide` and own no Knot controls.
-- `Cocos-Gizmos`: renderer, pointer picking, command/session behavior,
-  HUD DOM and widget gestures. Splines does not duplicate these.
+**No copy of Gizmos RegisterGizmos.ts or the SDK is bundled.**
+Creator must import the external mounted script successfully. If
+Gizmos is missing, a module resolution error is an **intentional hard
+dependency**, not something Splines hides behind a fake decorator.
 
-The old `SplineGizmoBridge` and old Path
-`onGizmoHudControls()/onGizmoHud()/onGizmoHudAction()` callbacks were
-removed. `onGizmoHUD()` supplies the latest declarative HUD. Property
-bindings still target actual Component getters/setters and report
-`onGizmoHudChanged()` gesture phases; actions invoke the Path's
-existing guarded group-selection methods. No extra serialized knot
-selection fields or child Nodes are created.
+The installed manifest advertises the dependency under
+`cocosSplines.requiredExtensions`. That metadata is checked by
+our tests; **Creator does not automatically install extensions
+from this field**.
 
-## Validation / limitations
+## Separation of concerns
 
-Headless tests validate SDK contract detection (missing HUD, missing
-pivot), one warning, move/rotation/point descriptors in both coordinate
-spaces, group-highlighted handles, HUD builder property/action Commands,
-world-transformed guide drawing, bounded output, cancellation/Undo
-quarantine through the real Path component, and the built package
-manifest. An Editor test ZIP contains **only** Splines; the required
-Gizmos ZIP must be installed separately.
+```text
+Cocos-Gizmos v3 — input, commands, Editor HUD and drawing
+          |
+ db://cocos-gizmos/RegisterGizmos
+          |
+ @registerGizmos(Drawer) — lazy one Drawer / Component WeakMap
+          |
+ ├─ Editor/SplinePathGizmos.ts
+ │    handles(state), HUD, selected guides, gesture callbacks
+ │         |
+ │         +--> SplinePath: pure CCClass Knots, interpolation,
+ │              Vec3 getter/setter proxies, Edit/Undo snapshots,
+ │              cancellation quarantine, preview invalidation
+ │
+ ├─ Editor/SplineRoadGizmos.ts
+ │    selected guide only --> SplineRoad geometry consumer
+ │
+ └─ Editor/SplineJunctionGizmos.ts
+      selected guide only --> JunctionPatch geometry consumer
+          |
+ Editor/SplineGizmoHandler.ts
+       SDK validation, descriptors, GizmoHUD builder,
+       bounded/local-to-world guide rendering
+```
 
-Native Creator 3.8.8 still requires Scene mouse picking, HUD DOM focus
-and pointer capture, Escape/Cancel, multi-Knot Undo/Redo, Prefab
-Overrides, rotation pivot snap and Scene Save/Reopen acceptance.
-Automated CI is not certification of native Editor Undo.
+**SRP:** Components own serialization, curve sampling and edit
+semantics; Drawers own Scene View callback composition; the Handler
+owns only calls into the required SDK. Geometry core and Road
+processors never import Gizmos. A Drawer is not another Node or
+Component, and creates no serialized data.
+
+**OCP:** A new consumer can register a Drawer without adding switch
+cases to `Spline.Path`. **DIP:** The Handler resolves structural
+ports on demand, with injectable SDK provider for tests. Cocos-Gizmos
+`registerGizmos` caches each Drawer per Component instance lazily,
+forwards only hooks implemented by the Drawer and does nothing in
+Preview or game mode.
+
+The custom `SplineGizmoHandler` is **not a second decorator**:
+we do not install hooks, patch prototypes, run a redundant WeakMap,
+or create an independent gesture controller. It stays a thin SDK
+facade for Move/Rotate descriptors, HUD commands and guide drawing.
+
+## Authoring and Undo data flow
+
+`Spline.Path` retains one array of pure CCClass `Spline.Knot`
+records. The SDK edits typed computed Vec3/Euler/number properties
+on the Component. On gesture callbacks, `SplinePathGizmos`
+forwards to explicit Component edit methods
+`applyGizmoGesture()` / `applyGizmoHudGesture()`.
+These manage selected-Knot identity, multi-Knot position snapshots,
+tangent mode/handles, Roll, preview updates and Cancel/Escape
+restoration. **No independent Serialized Knot Node exists.**
+
+For group nudge and inspector topology edits, Editor Scene calls
+`scene.set-property(record:true)` for the whole typed Knot array.
+A canceled Gizmos drag never overwrites a saved Baked Mesh.
+Native Creator Undo/Redo and Prefab Overrides must be verified
+in the actual Windows Editor.
+
+## Installation and test gates
+
+1. Enable Cocos-Gizmos 3.0.2+ and let AssetDB mount
+   `db://cocos-gizmos/RegisterGizmos`.
+2. Install Cocos-Splines development ZIP; restart Creator.
+3. Select a Path: one HUD, move and Knot-index handles, Local/World,
+   roll, group actions, tangent points and Knot-centered rotation
+   rings must work. Test Escape and Undo/Redo.
+4. Select a Road or Junction: guides appear; no extra Knot handles.
+5. Enter Play and build: the decorator is inert; geometry works
+   normally and there are no runtime SDK globals.
+
+CI uses a test-only decorator double mirroring SDK lazy WeakMap
+dispatch. Only the real Creator 3.8.8 can validate AssetDB import
+load order, DOM pointer capture and native Undo/Prefab behavior.
+
+**No Git tag or Release is created without explicit approval.**

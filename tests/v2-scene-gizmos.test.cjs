@@ -7,7 +7,7 @@ try{
  cp.execFileSync('tsc',['--strict','--target','ES2020','--module','commonjs',
     '--outDir',tmp,'--rootDir',path.join(root,'assets/splines-v2'),
     '--skipLibCheck',path.join(root,'tests/types/cc.d.ts'),
-    path.join(root,'assets/splines-v2/Components/SplineGizmoHandler.ts')],{stdio:'pipe'});
+    path.join(root,'assets/splines-v2/Editor/SplineGizmoHandler.ts')],{stdio:'pipe'});
  const {buildRoadSceneGuideV2,buildJunctionSceneGuideV2}=require(
     path.join(tmp,'geometry/SceneGizmoGuideV2.js'));
  const frame=(x)=>({distance:x,parameter:x/100,
@@ -66,7 +66,7 @@ try{
  };
  try{
     const {SplineGizmoHandler,resolveSplineGizmos}=require(
-        path.join(tmp,'Components/SplineGizmoHandler.js'));
+        path.join(tmp,'Editor/SplineGizmoHandler.js'));
     const node={isValid:true,worldMatrix:{tx:10,ty:20,tz:30}};
     const old3D=globalThis.Gizmos3D,old2D=globalThis.Gizmos2D,
         oldHud=globalThis.GizmoHUD;
@@ -204,27 +204,37 @@ try{
  }finally{Module._load=originalLoad;}
  const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
  const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),'utf8');
- assert.match(road,/public onDrawGizmosSelected\(\):void/);
- assert(!/\bpublic onGizmoHandles\(/.test(road),'Road cannot own Knot handles');
- assert(!/\b(?:knots:Node\[\]|interpolation=|closed=false)\b/.test(road),
-   'Road cannot own Path source fields');
- const pathSource=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplinePath.ts'),'utf8');
- assert.match(pathSource,/public onGizmoHandles\(/);
- assert.match(pathSource,/public onGizmoChanged\(/);
- assert.match(junction,/public onDrawGizmosSelected\(\):void/);
- assert.match(road,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showSceneGizmos/);
- assert.match(junction,/if\(!EDITOR_NOT_IN_PREVIEW\|\|!this.showJunctionSceneGizmos/);
- assert.match(junction,/link\.road\.sampleJunctionEnd/);
+ const pathSource=fs.readFileSync(path.join(root,
+    'assets/splines-v2/Components/SplinePath.ts'),'utf8');
+ for(const [component,drawerName] of [[pathSource,'SplinePathGizmos'],
+     [road,'SplineRoadGizmos'],[junction,'SplineJunctionGizmos']]){
+    assert(component.includes('@registerGizmos('+drawerName+')'),
+      'Component must use the official SDK decorator');
+    assert(component.includes("from 'db://cocos-gizmos/RegisterGizmos'"));
+    assert(!component.includes('public onGizmoHandles()'));
+    assert(!component.includes('public onDrawGizmosSelected()'));
+    assert(component.includes('createSceneGizmoGuide()'));
+    const drawer=fs.readFileSync(path.join(root,
+      'assets/splines-v2/Editor/'+drawerName+'.ts'),'utf8');
+    assert(drawer.includes('implements IDrawGizmos'));
+    assert(drawer.includes('onDrawGizmosSelected()'));
+    assert(drawer.includes('splineGizmos.drawGuide('));
+ }
+ assert(pathSource.includes('applyGizmoGesture('));
+ assert(pathSource.includes('applyGizmoHudGesture('));
+ assert(road.includes('!this.showSceneGizmos'));
+ assert(junction.includes('!this.showJunctionSceneGizmos'));
+ assert(junction.includes('link.road.sampleJunctionEnd'));
  const native=require(path.join(root,'src/contributions/inspector/RoadV2.js'));
  for(const field of ['showSceneGizmos','gizmoSteps','gizmoEdges',
      'showJunctionSceneGizmos','gizmoJunctionCurbs'])
       assert(native.makeV2Inspector?native.makeV2Inspector.toString().includes(field):
          fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8').includes(field));
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoHandler.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Editor/SplineGizmoHandler.ts.meta')));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/geometry/SceneGizmoGuideV2.ts.meta')));
  // Public APIs and Inspector must use 'Gizmos', never a version-branded key.
  for(const part of ['SplinePath','SplineRoad','JunctionPatch',
-    'MeshGenerator','SplineGizmoHandler']){
+    'MeshGenerator']){
     const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+part+'.ts'),'utf8');
     assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(source),
        part+' must not expose version-tagged Gizmos symbols');
@@ -232,8 +242,10 @@ try{
  const ui=fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8');
  assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(ui),
     'Inspector must not present version-specific Gizmos labels');
- assert.deepEqual(fs.readdirSync(path.join(root,'assets/splines-v2/Components')).filter(n=>/^SplineGizmo.*Handler\.ts$/.test(n)),['SplineGizmoHandler.ts'],
-    'Only one Editor SDK adapter must ship');
+ assert(!fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoHandler.ts')));
+ assert.deepEqual(fs.readdirSync(path.join(root,'assets/splines-v2/Editor'))
+    .filter(n=>/^SplineGizmo.*Handler\.ts$/.test(n)),['SplineGizmoHandler.ts'],
+    'Only one SDK adapter remains in Editor/');
 
  console.log('V2 SCENE GIZMOS HANDLER PASS: required SDK gate, builder HUD commands, pivot, shared drawing and world transforms.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

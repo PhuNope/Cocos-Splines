@@ -1,90 +1,47 @@
-# Spline Editor Gizmos — required Cocos-Gizmos integration
+# Gizmos workflow — Cocos Splines
 
-Cocos Splines `v2.0.0` requires
-[Cocos-Gizmos](https://github.com/PhuNope/Cocos-Gizmos)
-**3.0.2 or newer** in Cocos Creator 3.8.8. Enable it in Extension
-Manager **before** testing Spline handles and restart Creator after
-updating either extension. The Editor dependencies are installed
-separately; Splines never vendors or copies Gizmos SDK code.
+Install and enable **Cocos-Gizmos 3.0.2+** before Cocos Splines,
+then restart Cocos Creator 3.8.8. The Editor requires the
+mounted `db://cocos-gizmos/RegisterGizmos` module.
 
-For architectural boundaries and the actual required Scene API,
-see [Gizmos architecture](GIZMOS_ARCHITECTURE.md).
+Spline.Path is decorated with
+`@registerGizmos(SplinePathGizmos)`. Road and Junction
+register their own read-only guide Drawers. Every Drawer is a
+plain TypeScript class in `assets/splines-v2/Editor/` and never
+becomes another Node or serialized Component. It is instantiated
+on demand by the actual SDK decorator and retained per Component.
 
-## Component responsibilities
+## Editing
 
-`Spline.Path` owns **one serialized array of pure `Spline.Knot`
-CCClass records**, not child Nodes. Its move/rotate proxy getters,
-gesture snapshots, cancellation, multi-Knot selection and linked
-preview invalidation all remain owned by Path. Native interactive
-Gizmos (render/pick, command lifecycle, HUD DOM) are owned by
-Cocos-Gizmos. `SplineGizmoHandler` is the **only SDK adapter**.
+- **Knots:** the active Knot has XYZ/plane Move handles; the other
+  Knots can show indexed selectable points. Position and Rotation
+  Local/World spaces and snapping are independent.
+- **Tangent points:** for Bézier, enable Gizmo Edit Tangents.
+  For Catmull-Rom/Centripetal, first opt into Editable Catmull
+  Tangents. Auto Knots remain unchanged until first edit.
+- **Tangent rotation:** when Gizmo Rotation Mode is Knots and
+  Gizmo Rotate Knot Tangents is on, three rings pivot at the
+  selected Knot, steering both Bézier/Hermite handles. This does
+  NOT rotate the entire Path Node or invent separate XYZ Euler
+  fields for pure Vec3 Knots.
+- **Path rotation:** Planar2D/Spatial3D rotate the Path Node around
+  Z/XYZ. **Roll Degrees** banks the mesh cross-section about the
+  spline tangent independently.
+- **Group move:** Toggle Active Group in the SDK builder HUD, or
+  + Group on Inspector Knot cards. The selection is transient.
+  Group Nudge records one whole serialized Knot-array edit.
 
-`Spline.Road` and `Spline.Junction` draw read-only guide lines and
-markers through the same Handler; neither can edit or store Knot
-positions independently. Extrude and Mesh Deform consume Path
-geometry and rebuild previews only, without Knot gizmos.
+On begin/update/end/cancel the Drawer forwards to Path's edit
+state machine; Escape restores Knot positions, manual tangents,
+mode and Roll and triggers dynamic preview rebuild. Interrupted
+sessions after Creator Undo/Restore are quarantined. Neither
+preview nor gestures overwrite saved Baked Mesh assets.
 
-The retired `SplineGizmoBridge` and flat
-`onGizmoHudControls()/onGizmoHud()/onGizmoHudAction()` API are
-**removed**. The new Path HUD uses `onGizmoHUD()` and
-`GizmoHUD.createHud()` with the SDK's property and action Commands.
+The old SplineGizmoBridge and direct
+`onGizmoHandles/onGizmoHUD/onDrawGizmosSelected` Component hooks
+have been deleted; the required decorator is the one registration
+mechanism. Missing `db://cocos-gizmos/RegisterGizmos` is a hard
+module dependency, not an optional compatibility mode.
 
-## Move, rotate and group controls
-
-- **Knots** Gizmo mode: Move XYZ axes and XY/XZ/YZ planes edit the
-  selected Knot's Vec3. Optional indexed point handles expose other
-  Knots (capped by Gizmo Point Limit).
-- **Local/World** Position and Rotation spaces remain independent.
-  Position Snap of 0 means unsnapped; positive values constrain moves.
-- **Bézier** or **Editable Catmull/Centripetal**: enable Gizmo Edit
-  Tangents to see purple incoming and cyan outgoing control points.
-  **Gizmo Rotate Knot Tangents** adds three rotation rings at the
-  actual selected Knot's position, rotating the tangent vectors
-  without rotating the Node. The required SDK supports rotation
-  pivots natively.
-- **Planar2D / Spatial3D** rotation mode rotates the **entire Path
-  Node**, using Z or XYZ rings respectively. The Knot's own
-  heading/pitch follow the curve tangent. `Roll Degrees` is a
-  separate bank around that tangent.
-- **GizmoHUD** uses property-bound Commands for Snap, Active Knot,
-  Roll, Tangents, Other Knots, Roll Guide and coordinate spaces.
-  Two explicit action buttons **Toggle Active Group** and
-  **Clear Group** act on the same transient selection as the
-  Inspector + Group Nudge buttons. No extra serialized list.
-- **Group Move:** only a selected group member moves the whole
-  selected set. The dragging gesture pins Knots by record identity;
-  Escape restores all original Knot positions. Inspector Group
-  Nudge writes one serialized Knot array with `record:true`.
-
-## Gesture and safety contract
-
-On `begin`, Path pins the edited Knot and records its complete
-position, mode, in/out handles and Roll, plus group snapshots.
-`update` invalidates preview consumers. `end` settles the edited
-state; `cancel`/Escape restores the snapshots, then refreshes
-previews. Undo/onRestore invalidates stale CCClass object identities
-and quarantines any late SDK callback until its matching cancel/end.
-Neither dynamic preview nor Editor dragging writes to saved
-Baked Mesh assets.
-
-## Required SDK, no optional compatibility
-
-If Cocos-Gizmos 3.0.2+ is missing or the installed extension lacks
-`Gizmos3D.supportsRotationPivot`, `GizmoHUD.createHud/bind/action`
-or the native move/rotate/draw APIs, the Handler reports **one
-actionable Editor Console warning** and does not present fake or
-old-version handles. No compatibility bridge to a legacy Gizmos
-HUD is available. This affects only Editor Scene interaction;
-Play and pure geometry do not invoke SDK globals.
-
-## Acceptance on Creator 3.8.8 Windows
-
-Select a Path and verify **one new HUD**, correct Knot pivot rings,
-correct coordinates/snap, indexed point highlighting, group actions
-and manual tangents. Test Escape, Undo/Redo, Prefab Overrides,
-Save/Reopen, 2D/3D view transitions, Road/Junction guides,
-interrupted dragging and Baked Mesh preservation. Headless CI
-validates descriptor and serialization contracts but does **not**
-certify native Editor pointer capture or Undo.
-
-No tag/Release is created from development test builds.
+For the architecture, see [GIZMOS_ARCHITECTURE.md](GIZMOS_ARCHITECTURE.md).
+For Windows Creator acceptance, see [TEST_BUILD.md](TEST_BUILD.md).

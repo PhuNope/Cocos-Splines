@@ -10,8 +10,9 @@ import {CurveMode,SplineSpace} from './SplinePath';
 import {MeshGenerator} from './MeshGenerator';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
-import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {splineGizmos} from './SplineGizmoHandler';
+import {type SceneGuideDataV2,buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
+import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
+import {SplineJunctionGizmos} from '../Editor/SplineJunctionGizmos';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
@@ -52,6 +53,7 @@ export enum JunctionTerrainEdgeMode {FlatHeight=0,SampleTerrain=1}
  * Reads only explicitly linked Road end rings; never changes Road data.
  */
 @ccclass('Spline.Junction')
+@registerGizmos(SplineJunctionGizmos)
 @menu('Cocos Splines/Junction Patch')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
@@ -138,10 +140,10 @@ export class JunctionPatch extends MeshGenerator {
     private _lastSeamAudit:JunctionSeamAuditReportV2|null=null;
     private _seamAuditRequested=false;
     /** Selected-only read-only authoring visualization. Never paints runtime geometry. */
-    public onDrawGizmosSelected():void {
+    public createSceneGizmoGuide():SceneGuideDataV2|null {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmos||
             this.branches.length<3||
-            this.branches.length>4)return;
+            this.branches.length>4)return null;
         try{
             const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
             const local=(p:{x:number;y:number;z:number})=>{
@@ -164,7 +166,8 @@ export class JunctionPatch extends MeshGenerator {
             });
             const guide=buildJunctionSceneGuideV2(entries,{
                 showCurb:this.gizmoJunctionCurbs});
-            splineGizmos.drawGuide(this.node,guide);
+            return guide;
+            return null;
         }catch{
             // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
             // Gizmos never mutate Nodes, meshes or the saved Scene.

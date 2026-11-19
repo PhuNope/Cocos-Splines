@@ -9,10 +9,10 @@ import {type SceneGuideDataV2,type SceneGuideGroupV2} from '../geometry/SceneGiz
  * Ownership:
  * - Cocos-Gizmos: rendering, picking, command sessions and HUD DOM.
  * - This adapter: SDK discovery, descriptors, HUD composition, guide drawing.
- * - Spline.Path: serialized Knots, validated edits, Undo/cancel snapshots.
+ * - Spline.Path: serialized Knots and validated edits; Drawers own callbacks.
  *
- * The engine Component imports this module even in game builds, so this port
- * must never access Gizmos globals or Editor at module evaluation time.
+ * Editor Drawers import this module; SDK resolution is always deferred until
+ * a Scene draw or input callback, never performed at module evaluation time.
  * A missing/incompatible SDK is reported once per Scene session; there is
  * no fallback to the retired flat HUD or legacy gizmo adapters.
  */

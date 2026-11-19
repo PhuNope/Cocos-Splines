@@ -92,7 +92,9 @@ fs.writeFileSync(path.join(target,'README.md'),
     '4. In Inspector use Rebuild Preview, Bake glTF Asset and Bind Imported Mesh.\n'+
     '5. REQUIRED: install/enable Cocos-Gizmos >=3.0.2 BEFORE Cocos-Splines; restart Creator.\n'+
     '   The latest GizmoHUD builder and rotation-pivot APIs are mandatory.\n'+
-    '   The Scene warns once when this extension is absent; no old HUD fallback.\n\n'+
+    '   Components use the SDK @registerGizmos decorator via db://cocos-gizmos/RegisterGizmos.\n'+
+    '   Project/Global Gizmos must mount its readonly RegisterGizmos.ts asset before import.\n'+
+    '   Missing dependency is an explicit Creator import error; no local shim.\n\n'+
     '**This is a test artifact, not a release. Existing legacy scenes are not supported.**\n'+
     'Full instructions: docs/v2/TEST_BUILD.md and docs/v2/REBUILD_BREAKING.md.\n','utf8');
 // Smoke load the packed Editor topology planner, not just its own file.
@@ -107,8 +109,14 @@ for(const rel of [
  'dist/v2/clean-main.js','dist/v2/clean-scene.js',
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePath.ts',
- 'assets/splines-v2/Components/SplineGizmoHandler.ts',
- 'assets/splines-v2/Components/SplineGizmoHandler.ts.meta',
+ 'assets/splines-v2/Editor/SplineGizmoHandler.ts',
+ 'assets/splines-v2/Editor/SplineGizmoHandler.ts.meta',
+ 'assets/splines-v2/Editor/SplinePathGizmos.ts',
+ 'assets/splines-v2/Editor/SplinePathGizmos.ts.meta',
+ 'assets/splines-v2/Editor/SplineRoadGizmos.ts',
+ 'assets/splines-v2/Editor/SplineRoadGizmos.ts.meta',
+ 'assets/splines-v2/Editor/SplineJunctionGizmos.ts',
+ 'assets/splines-v2/Editor/SplineJunctionGizmos.ts.meta',
  'dist/v2/PathV2Dump.js',
  'dist/v2/BezierCurveSplit.js',
  'dist/v2/PathGroupNudgeDump.js',
@@ -145,6 +153,9 @@ assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
 assert(!fs.existsSync(path.join(target,'assets/splines.meta')),
     'Legacy asset UUID metadata must NOT ship');
+assert(!fs.existsSync(path.join(target,
+    'assets/splines-v2/Components/SplineGizmoHandler.ts')),
+    'Obsolete component-level handler must not ship');
 assert(!fs.existsSync(path.join(target,
     'assets/splines-v2/Components/SplineGizmoBridge.ts')),
     'Retired optional Gizmos bridge must not ship');

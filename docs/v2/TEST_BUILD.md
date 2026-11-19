@@ -659,3 +659,30 @@ automatically installed by Creator. Restart Creator after updates.
 See [Gizmos architecture](GIZMOS_ARCHITECTURE.md).
 These are required native Creator 3.8.8 acceptance tests; mocked
 CI does not certify actual Editor picking or Undo history.
+
+## Native acceptance — official @registerGizmos migration
+
+This development build removes direct `onGizmo*` methods from
+the Cocos Components. The only Scene hooks come from the
+Cocos-Gizmos `@registerGizmos(Drawer)` decorator imported from
+`db://cocos-gizmos/RegisterGizmos`. Gizmos 3.0.2+ is a **hard
+dependency**. Install/enable it first and restart Creator 3.8.8
+before enabling Cocos Splines.
+
+1. Select an active Spline.Path: verify one HUD, move and indexed
+   points, tangent handles and rotation rings at the selected Knot,
+   Roll controls, Local/World, snap and group selection.
+2. Move a group of Knots; press Escape mid-drag. Verify both original
+   positions, tangent modes, Roll and Road preview are restored.
+3. Select a Spline.Road and Spline.Junction: only their read-only
+   selected guides should render, no Knot-move HUD.
+4. Save and reopen the Scene, Undo/Redo, test Prefab Overrides,
+   enter Play and build. No Baked Mesh changes without explicit Bake.
+5. Disable Gizmos in a disposable test project. The Asset Database
+   should report the required module missing; a silent substitute
+   decorator or legacy HUD is **not** supported.
+
+See [GIZMOS_ARCHITECTURE.md](GIZMOS_ARCHITECTURE.md).
+Headless CI verifies the registration source, mock callback dispatch
+and package presence, but not actual Creator AssetDB import or
+native Scene pointer/Undo history.

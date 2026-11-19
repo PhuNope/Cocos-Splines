@@ -20,8 +20,9 @@ import {type JunctionRoadCandidateV2} from '../geometry/JunctionAutoTrimV2';
 import {sampleSplineDistanceV2} from '../core/SplineCache';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
-import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {splineGizmos} from './SplineGizmoHandler';
+import {type SceneGuideDataV2,buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
+import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
+import {SplineRoadGizmos} from '../Editor/SplineRoadGizmos';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum UVCrossMode {Legacy=0,Physical=1}
@@ -37,6 +38,7 @@ export enum RoadTerrainMode {FlatHeight=0,SampleTerrain=1}
  * bakedMesh, then choose Manual/Baked. Multi-material parts use shared materials.
  */
 @ccclass('Spline.Road')
+@registerGizmos(SplineRoadGizmos)
 @menu('Cocos Splines/Road')
 @requireComponent(MeshRenderer)
 @executeInEditMode(true)
@@ -170,9 +172,9 @@ export class SplineRoad extends MeshGenerator {
 
 
     /** Selection drawing uses actual global Gizmos3D, installed by Gizmos scene.js. */
-    public onDrawGizmosSelected():void {
+    public createSceneGizmoGuide():SceneGuideDataV2|null {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmos||
-            !this.node?.isValid)return;
+            !this.node?.isValid)return null;
         try{
             const source=this.source();
             const cache=buildSplineCacheV2(source);
@@ -191,7 +193,8 @@ export class SplineRoad extends MeshGenerator {
             const guide=buildRoadSceneGuideV2(trimmed,source.knots.map(k=>k.position),
                 totalWidth,{maxSteps:steps,showEdges:this.gizmoEdges,
                     showKnots:false});
-            splineGizmos.drawGuide(this.node,guide);
+            return guide;
+            return null;
         }catch{
             // Gizmos are read-only Editor aids. Invalid/unfinished Roads must
             // never break selection, write serialization or spam Play logs.

@@ -2,13 +2,15 @@
 /** v2 playback contract, exercising the actual compiled component with Cocos fakes. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process'),Module=require('node:module');
 const {mockGizmoHUD,findHud}=require('./helpers/gizmo-hud-sdk.cjs');
+const {registerGizmos}=require('./helpers/register-gizmos-decorator.cjs');
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-road-runtime-'));
 try{
  const types=path.join(root,'tests/types/cc.d.ts');
  const file=path.join(root,'assets/splines-v2/Components/SplineRoad.ts');
  cp.execFileSync('tsc',['--target','ES2020','--module','commonjs','--strict','--experimentalDecorators',
   '--skipLibCheck','--useDefineForClassFields','false','--rootDir',path.join(root,'assets/splines-v2'),
-  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrude.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeform.ts'),path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),types],{stdio:'pipe'});
+  '--outDir',temp,file,path.join(root,'assets/splines-v2/Components/SplineExtrude.ts'),path.join(root,'assets/splines-v2/Components/SplineMeshDeform.ts'),path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),types,
+  path.join(root,'tests/types/cocos-gizmos.d.ts')],{stdio:'pipe'});
  const generated=[];
  const env={EDITOR_NOT_IN_PREVIEW:false};
  const identity={};
@@ -51,6 +53,7 @@ try{
  Module._load=function(request,parent,isMain){
   if(request==='cc')return cc;
   if(request==='cc/env')return env;
+  if(request==='db://cocos-gizmos/RegisterGizmos')return {registerGizmos};
   return originalLoad.apply(this,arguments);
  };
  let SplineRoad,MeshMode,SplineExtrude,SplineMeshDeform,JunctionPatch,JunctionRoadLink,JunctionTurnGuide;

@@ -27,8 +27,16 @@ for(const name of ['ProfileSweep','RoadStrip','RoadCorners','RoadOverlapClip','R
  checkRel('assets/splines-v2/geometry/'+name+'.ts');
  checkRel('assets/splines-v2/geometry/'+name+'.ts.meta');
 }
-checkRel('assets/splines-v2/Components/SplineGizmoHandler.ts');
-checkRel('assets/splines-v2/Components/SplineGizmoHandler.ts.meta');
+checkRel('assets/splines-v2/Editor/SplineGizmoHandler.ts');
+checkRel('assets/splines-v2/Editor/SplineGizmoHandler.ts.meta');
+for(const component of ['Path','Road','Junction']){
+    const name=component==='Junction'?'SplineJunctionGizmos':'Spline'+component+'Gizmos';
+    checkRel('assets/splines-v2/Editor/'+name+'.ts');
+    checkRel('assets/splines-v2/Editor/'+name+'.ts.meta');
+}
+assert(!fs.existsSync(path.join(root,
+    'assets/splines-v2/Components/SplineGizmoHandler.ts')),
+    'Do not retain the component-level Editor adapter');
 assert(!fs.existsSync(path.join(root,
     'assets/splines-v2/Components/SplineGizmoBridge.ts')),
     'Retired SDK bridge must be deleted');

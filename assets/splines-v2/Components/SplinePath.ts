@@ -3,9 +3,9 @@ import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {evaluateSplineSegmentV2,type SplineDataV2,type CurveTypeV2,type V3} from '../core/SplineCurves';
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
-import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {splineGizmos,type SplineHandleDescriptor,type SplineGizmoHudDefinition}
-    from './SplineGizmoHandler';
+import {buildRoadSceneGuideV2,type SceneGuideDataV2} from '../geometry/SceneGizmoGuideV2';
+import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
+import {SplinePathGizmos} from '../Editor/SplinePathGizmos';
 
 const {ccclass,property,executeInEditMode,menu}=_decorator;
 
@@ -78,6 +78,7 @@ const rotatedVec=(v:V3,q:QuaternionV2):Vec3=>{
 };
 
 @ccclass('Spline.Path')
+@registerGizmos(SplinePathGizmos)
 @menu('Cocos Splines/Path')
 @executeInEditMode(true)
 export class SplinePath extends Component {
@@ -270,7 +271,7 @@ export class SplinePath extends Component {
                 this._dragKnot:null;
         return Number.isSafeInteger(index)&&index>=0?this.knots[index]??null:null;
     }
-    private hasManualTangentHandles():boolean {
+    public hasManualTangentHandles():boolean {
         return this.interpolation===CurveMode.Bezier||
             (this.editableCatmullTangents&&
              (this.interpolation===CurveMode.CatmullRom||
@@ -639,28 +640,6 @@ export class SplinePath extends Component {
         if(kind==='position')this.gizmoPositionSpace=space;
         else this.gizmoRotationSpace=space;
     }
-    /** The application produces a validated snapshot; the Editor adapter
-     * alone knows the current Cocos-Gizmos descriptor/command APIs. */
-    public onGizmoHandles():SplineHandleDescriptor[] {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid)return [];
-        const mode=this.gizmoRotationMode===RotationMode.Planar2D?'2d':
-            this.gizmoRotationMode===RotationMode.Spatial3D?'3d':'knots';
-        return splineGizmos.handles({
-            mode,
-            positionSpace:this.gizmoPositionSpace===SplineSpace.World?'world':'local',
-            rotationSpace:this.gizmoRotationSpace===SplineSpace.World?'world':'local',
-            positionSnap:this.gizmoPositionSnap,
-            rotationSnap:this.gizmoRotationSnap,
-            activeIndex:this.gizmoKnotIndex,knotCount:this.knots.length,
-            showKnots:this.gizmoEditKnots,
-            multiPoints:this.gizmoMultiKnotPoints,
-            pointLimit:this.gizmoPointLimit,
-            selectedIndices:this.selectedGroupIndices(),
-            manualTangents:this.hasManualTangentHandles(),
-            editTangents:this.gizmoEditTangents,
-            rotateTangents:this.gizmoRotateKnotTangents
-        });
-    }
     /**
      * SDK HUD sliders require a scalar property on the Component. This
      * computed proxy targets the selected, serialized Vec3 Knot record.
@@ -680,7 +659,7 @@ export class SplinePath extends Component {
         if(!knot)return;
         knot.rollDegrees=value;
     }
-    public onGizmoHudChanged(
+    public applyGizmoHudGesture(
         name:string,phase:'begin'|'update'|'end'|'cancel',_value:number|boolean
     ):void {
         if(!EDITOR_NOT_IN_PREVIEW||name!=='pathGizmoActiveRoll')return;
@@ -715,26 +694,7 @@ export class SplinePath extends Component {
             }
         }
     }
-    /** Preferred Cocos-Gizmos HUD builder, with typed property Commands.
-     * No deprecated flat HUD list, duplicate gesture/controller or DOM code. */
-    public onGizmoHUD():SplineGizmoHudDefinition|null {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
-           !this.gizmoEditKnots||this.knots.length<2)return null;
-        const knot=this.knots[this.gizmoKnotIndex];
-        if(!knot||!finite(knot.position))return null;
-        const world=this.gizmoPositionSpace===SplineSpace.World;
-        const position=this.toGizmoPoint(knot.position,world);
-        if(!finite(position))return null;
-        return splineGizmos.hud({
-            activeIndex:this.gizmoKnotIndex,knotCount:this.knots.length,
-            position,positionSpace:world?'world':'local',
-            selectedIndices:this.selectedGroupIndices(),
-            manualTangents:this.hasManualTangentHandles(),
-            onToggleGroup:()=>this.toggleGroupKnot(this.gizmoKnotIndex),
-            onClearGroup:()=>this.clearGroupKnots()
-        });
-    }
-    public onGizmoChanged(name:string,phase:'begin'|'update'|'end'|'cancel',
+    public applyGizmoGesture(name:string,phase:'begin'|'update'|'end'|'cancel',
                           index?:number):void {
         if(!EDITOR_NOT_IN_PREVIEW)return;
         if(this._discardedGizmo){
@@ -839,9 +799,9 @@ export class SplinePath extends Component {
             }
         }
     }
-    public onDrawGizmosSelected():void {
+    public createSceneGizmoGuide():SceneGuideDataV2|null {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoShowPath||
-            !this.node?.isValid||this.knots.length<2)return;
+            !this.node?.isValid||this.knots.length<2)return null;
         try{
             const source=this.getSplineData(this.node);
             const cache=buildSplineCacheV2(source);
@@ -884,9 +844,10 @@ export class SplinePath extends Component {
                     {at:right,radius:.11,group:'bank-right'},
                     {at:up,radius:.12,group:'bank-up'});
             }
-            splineGizmos.drawGuide(this.node,{lines,dots});
+            return {lines,dots};
         }catch{
             // Incomplete Path is normal while authoring. Never spam logs.
+            return null;
         }
     }
     /**

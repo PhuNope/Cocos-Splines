@@ -14,6 +14,7 @@
   },
   "include": [
     "assets/splines-v2/**/*.ts",
-    "tests/types/cc.d.ts"
+    "tests/types/cc.d.ts",
+    "tests/types/cocos-gizmos.d.ts"
   ]
 }
