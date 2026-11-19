@@ -71,3 +71,13 @@ Road/Extrude/MeshDeform/JunctionMesh/ObjectBender and Modifiers now use standalo
 ### Phase 2.1 — Batch Knot Editor (development)
 
 Mark knots in the SplineContainer Inspector and use **Select in Scene**, **Snap marked** or **Align marked**. Snap uses container-local grid units and respects 2D dimensions. See [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Node CI covers math, batch snapshots, validation and rollback; native Cocos Creator Editor Undo/Redo must still be tested.
+
+### V2 test builds (not releases)
+
+Active development branch: [`v2`](https://github.com/PhuNope/Cocos-Splines/tree/v2). Every successful push to `v2` runs validation and publishes a downloadable ZIP under [GitHub Actions artifacts](https://github.com/PhuNope/Cocos-Splines/actions/workflows/ci-release.yml). The artifact is named `cocos-splines-v2-<full commit SHA>`, and contains the installable `cocos-splines-v2-<short SHA>.zip`.
+
+To test, open the latest successful **v2** workflow run, download its Artifact, unzip that GitHub artifact, then extract the nested extension ZIP into `<your-project>/extensions/` to obtain `extensions/cocos-splines/package.json`. Enable `Cocos-Gizmos v3.0.3+` first, then enable Cocos-Splines in Extension Manager.
+
+To build locally after `npm run build`, run `npm run package:preview`. The preview packager does **not** create Git tags or GitHub Releases. **No release/tag is authorized until explicitly approved by the owner.** Preview outputs are identified by commit SHA; `package.json` version remains unchanged until release authorization.
+
+Automated validation does not replace testing inside Cocos Creator 3.8.x, especially Gizmos interactions, native Undo/Redo and prefab serialization.

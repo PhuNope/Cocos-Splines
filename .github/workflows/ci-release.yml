@@ -5,6 +5,7 @@ on:
     branches:
       - dev
       - main
+      - v2
       - 'refactor/**'
   workflow_dispatch:
 
@@ -32,6 +33,20 @@ jobs:
         run: npm run verify
       - name: Run regression tests
         run: npm test
+      - name: Package V2 preview (no tag or release)
+        if: github.ref == 'refs/heads/v2'
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: npm run package:preview
+      - name: Upload downloadable V2 preview
+        if: github.ref == 'refs/heads/v2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cocos-splines-v2-${{ github.sha }}
+          path: builds/cocos-splines-v2-*.zip
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
 
 # Release publishing is intentionally disabled. No tag or GitHub Release may
 # be created without the owner's explicit approval. CI only validates pushes.
