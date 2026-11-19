@@ -697,8 +697,11 @@ try {
  const times=[0,.1,.25,.5,.65,.8,1];
  const originalSamples=times.map(t=>evaluateSplineV2(originalSource,t));
  assert.equal(originalSource.editableCatmullTangents,undefined);
- const oldSDK=globalThis.Gizmos3D,oldHudSDK=globalThis.GizmoHUD;
+ const oldSDK=globalThis.Gizmos3D,oldHudSDK=globalThis.GizmoHUD,
+   old2DSDK=globalThis.Gizmos2D;
  globalThis.GizmoHUD=mockGizmoHUD;
+ globalThis.Gizmos2D={rotate:(property,opts)=>[{
+   property,axis:'z',visual:'rotation',space:opts.space}]};
  globalThis.Gizmos3D={supportsRotationPivot:true,beginColor(){},drawLine(){},
   move:(name,options)=>[{property:name,visual:'axis',plane:'view',
    space:options.space}],
@@ -746,6 +749,7 @@ try {
   component.editableCatmullTangents=false;
   assert(!component.onGizmoHandles().some(h=>h.property==='pathGizmoTangentOut'));
   assert.equal(component.getSplineData(cn).knots[1].handleOut,undefined);
- }finally{globalThis.Gizmos3D=oldSDK;globalThis.GizmoHUD=oldHudSDK;}
+ }finally{globalThis.Gizmos3D=oldSDK;
+   globalThis.GizmoHUD=oldHudSDK;globalThis.Gizmos2D=old2DSDK;}
  console.log('V2 PURE VEC3 KNOTS & BEZIER PASS: local/world transforms, modes, stable Knot binding, Gizmos/Cancel, Inspector watcher, Play safety.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
