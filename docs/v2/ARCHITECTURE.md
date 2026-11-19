@@ -52,3 +52,25 @@ The `assets/splines-v2` AssetDB mount mirrors `src-v2/core` and `src-v2/geometry
 ## Geometry and AssetDB binding follow-up
 
 `ProfileSweep.ts` is shared by the v2 road band generator and tube extruder. It stores non-overlapping *material bands*, not guaranteed collision-free road sections or unique lightmap UV atlases. The glTF importer produces a Mesh subasset containing its primitives. `src/v2/EditorAssetBind.js` resolves this imported UUID and writes native scene dumps, with a bounded import wait and explicit retry. No Editor-only log appears at Play, and normal gameplay never invokes AssetDB. Editor integration is unverified until a Creator 3.8.x smoke test on a real scene.
+
+## Clean V2-only repository and independent playback consumers
+
+The development branch now contains only `assets/splines-v2`,
+`src-v2` pure geometry, `src/v2` Editor services, the five active
+V2 Inspector modules, v2 docs, and v2 regression tests. Historical
+v0.9 code and UUIDs were intentionally deleted. The module names
+`Spline.Path`, `Spline.Follower` and `Spline.Projector` never
+refer to any of the retired `Splines.*` classes.
+
+`Spline.Follower` is a distinct, self-contained Component with
+`SplinePath` reference, immutable source cache, distance/time
+traversal and optional rotation-minimizing/banked orientation.
+`Spline.Projector` independently calculates nearest points in
+world metric (and can optionally snap its own Node). Neither
+subclasses `Spline.Road` or introduces a Knot Node. Shared
+`SplineTraversal.ts` and `SplineProjection.ts` are engine-neutral
+pure functions mirrored under the Cocos Asset Database.
+
+Both have explicit opt-in Editor preview, no Editor-only SDK
+import and no implicit changes to Baked geometry or Road.
+See `UNITY_FEATURE_GAP.md` for the source-based feature audit.

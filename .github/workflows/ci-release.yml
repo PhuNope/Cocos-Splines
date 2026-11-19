@@ -1,11 +1,9 @@
-name: Cocos Splines — validation and opt-in test build (no release)
+name: Cocos Splines v2 — validation and opt-in test build (no release)
 
 on:
   push:
     branches:
       - v2.0.0
-      - dev
-      - main
   pull_request:
   workflow_dispatch:
 
@@ -25,17 +23,15 @@ jobs:
           node-version: '22'
       - name: Install TypeScript compiler
         run: npm install --no-save --no-package-lock --ignore-scripts typescript@5.9.3
-      - name: Typecheck legacy runtime baseline
-        run: npm run check:runtime
       - name: Typecheck new v2 core
         run: npm run check:v2
       - name: Typecheck Cocos v2 Editor bridge
         run: npm run check:v2-editor
-      - name: Build editor extension baseline
+      - name: Build clean V2 Editor scripts
         run: npm run build
       - name: Verify extension structure
         run: npm run verify
-      - name: Run regression tests including v2 core
+      - name: Run V2-only regression suite
         run: npm test
 
   package-v2-test:

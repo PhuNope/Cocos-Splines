@@ -1,17 +1,19 @@
+'use strict';
+/** V2-only Editor bundle: no legacy component/panel/Inspector copy stage. */
 const fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');
-for(const rel of ['src/main.js','src/scene.js',
- 'src/contributions/inspector/common.js','src/contributions/inspector/Container.js',
- 'src/contributions/inspector/Knot.js','src/contributions/inspector/Road.js','src/contributions/inspector/Trigger.js','src/contributions/inspector/Junction.js','src/contributions/inspector/Animate.js',
- 'src/contributions/inspector/Extrude.js','src/contributions/inspector/Instantiate.js','src/contributions/inspector/Path2D.js','src/contributions/inspector/MeshDeform.js','src/contributions/inspector/Positioner.js','src/contributions/inspector/Projector.js','src/contributions/inspector/LengthMonitor.js',
- 'src/contributions/inspector/Modifiers.js','src/contributions/inspector/ObjectController.js',
- 'src/contributions/inspector/Bender.js','src/contributions/inspector/Morph.js',
- 'src/contributions/inspector/JunctionMesh.js','src/contributions/inspector/RoadV2.js',
- 'src/contributions/inspector/ExtrudeV2.js','src/contributions/inspector/MeshDeformV2.js',
- 'src/contributions/inspector/JunctionV2.js','src/contributions/inspector/PathV2.js',
- 'src/v2/EditorAssetBind.js']){
- const target=rel.replace(/^src\//,'dist/');
- fs.mkdirSync(path.dirname(path.join(root,target)),{recursive:true});
- fs.copyFileSync(path.join(root,rel),path.join(root,target));
-}
-console.log('Editor JavaScript copied to dist/');
+const out=path.join(root,'dist');
+fs.rmSync(out,{recursive:true,force:true});
+const copy=(from,to)=>{
+ const source=path.join(root,from),dest=path.join(root,to);
+ if(!fs.statSync(source).isFile())throw new Error('Missing '+from);
+ fs.mkdirSync(path.dirname(dest),{recursive:true});
+ fs.copyFileSync(source,dest);
+};
+for(const file of fs.readdirSync(path.join(root,'src/v2')).filter(x=>x.endsWith('.js')))
+ copy('src/v2/'+file,'dist/v2/'+file);
+copy('src/v2/inspector-common-clean.js','dist/contributions/inspector/common.js');
+for(const name of ['PathV2','RoadV2','ExtrudeV2','MeshDeformV2','JunctionV2'])
+ copy('src/contributions/inspector/'+name+'.js',
+     'dist/contributions/inspector/'+name+'.js');
+console.log('BUILD PASS: V2-only Editor scripts; legacy entrypoints absent.');

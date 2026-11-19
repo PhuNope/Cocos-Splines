@@ -125,6 +125,14 @@ for(const rel of [
  'dist/v2/JunctionAutoConnectDump.js',
  'dist/v2/JunctionTangentDump.js',
  'dist/contributions/inspector/PathV2.js',
+ 'assets/splines-v2/Components/SplineFollower.ts',
+ 'assets/splines-v2/Components/SplineFollower.ts.meta',
+ 'assets/splines-v2/Components/SplineProjector.ts',
+ 'assets/splines-v2/Components/SplineProjector.ts.meta',
+ 'assets/splines-v2/core/SplineProjection.ts',
+ 'assets/splines-v2/core/SplineProjection.ts.meta',
+ 'assets/splines-v2/core/SplineTraversal.ts',
+ 'assets/splines-v2/core/SplineTraversal.ts.meta',
  'assets/splines-v2/Components/MeshGenerator.ts',
  'assets/splines-v2/Components/MeshGenerator.ts.meta',
  'assets/splines-v2/Components/GeometrySettings.ts',
@@ -151,6 +159,13 @@ for(const rel of [
 ])assertFile(rel);
 assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
+assert(!fs.existsSync(path.join(root,'assets/splines')),
+    'Legacy Spline assets must be deleted from repository');
+assert(!fs.existsSync(path.join(root,'scripts/release.cjs')),
+    'Legacy release pipeline must be removed');
+assert(!fs.existsSync(path.join(root,'src/main.js')),
+    'Legacy main entrypoint must be removed');
+
 assert(!fs.existsSync(path.join(target,'assets/splines.meta')),
     'Legacy asset UUID metadata must NOT ship');
 assert(!fs.existsSync(path.join(target,
