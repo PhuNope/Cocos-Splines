@@ -59,3 +59,7 @@ Road, Extrude, MeshDeform and ObjectBender use continuous frames to avoid abrupt
 ### Breaking API cleanup (Phase 1)
 
 `SplineInstantiate.rebuild()` and `SplineObjectController.rebuild()` have been removed. Use `respawn()` to replace their generated instances or `spawn()` to preserve existing ones. Geometry components' canonical `rebuild()` functions are unchanged. See [migration notes](docs/LEGACY_MIGRATION_VI.md) and [Unity parity roadmap](docs/UNITY_PARITY_ROADMAP_VI.md).
+
+### Cocos-Gizmos v3 dependency (development branch)
+
+The spline core drawers import the upstream `registerGizmos` decorator via `db://cocos-gizmos/RegisterGizmos` (Cocos-Gizmos v3.0.3+ must be installed/enabled). Selected knots offer two interactive tangent Move handles and a rotation handle. See [integration notes](docs/GIZMOS_V3_INTEGRATION_VI.md); native Undo/Redo and Cocos Creator Editor 3.8.8 still require manual verification.

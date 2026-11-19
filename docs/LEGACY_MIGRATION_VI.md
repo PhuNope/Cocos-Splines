@@ -12,3 +12,7 @@ Thay call site có receiver thuộc hai class này sang `respawn()`. **Không th
 ### Sắp tới
 
 Phase 1.2 chuyển direct Gizmos callbacks sang Editor drawers. Cần xác minh runtime module import của Cocos-Gizmos v3 dưới Cocos Creator 3.8.8. Các trường `tangentInHandle` và enum legacy trong serialized scenes cần migration riêng, chưa được gỡ trong P1.1.
+
+### Phase 1.2 — Core Gizmos
+
+`SplineContainer`/`SplineKnot` không còn callback draw trực tiếp. Cần bật Cocos-Gizmos v3.0.3+ để import decorator từ AssetDB. Xem [GIZMOS_V3_INTEGRATION_VI.md](GIZMOS_V3_INTEGRATION_VI.md). Các node tangent đã được serialize trong Scene cũ vẫn được hỗ trợ.

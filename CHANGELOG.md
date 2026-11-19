@@ -1,3 +1,10 @@
+# Unreleased — Phase 1.2 Core Gizmos v3 drawers
+
+- Migrated SplineContainer and SplineKnot Gizmo draw callbacks into Editor-only drawers registered with upstream Cocos-Gizmos decorator from the read-only AssetDB mount.
+- Added computed editor tangent/world-rotation properties, direct Move/Rotate handles and cancel restoration.
+- Added Node mock loader and offline TypeScript declarations for tests; Cocos Editor must load the actual v3 module.
+- Manual Scene/Undo/build validation is outstanding, and other mesh/modifier gizmos will migrate in Phase 1.3.
+
 # Unreleased — Phase 1 legacy API cleanup
 
 - Removed compatibility `rebuild()` aliases from `SplineInstantiate` and `SplineObjectController`; use `respawn()`.

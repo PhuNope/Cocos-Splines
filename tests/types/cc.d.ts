@@ -30,6 +30,7 @@ declare module 'cc' {
         static slerp(out:Quat,a:Quat,b:Quat,t:number):Quat;
         static multiply(out:Quat,a:Quat,b:Quat):Quat;
         static invert(out:Quat,a:Quat):Quat;
+        static toEuler(out:Vec3,a:Quat):Vec3;
         static fromAxes(out:Quat,x:Vec3,y:Vec3,z:Vec3):Quat;
         static fromEuler(out:Quat,x:number,y:number,z:number):Quat;
     }
