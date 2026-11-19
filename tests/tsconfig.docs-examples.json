@@ -3,7 +3,9 @@
   "compilerOptions": {
     "baseUrl": "..",
     "paths": {
-      "db://cocos-splines/splines/*": ["assets/splines/*"]
+      "db://cocos-splines/splines/*": [
+        "assets/splines/*"
+      ]
     }
   },
   "include": [
@@ -11,6 +13,7 @@
     "../docs/examples/RoadUvSetup.ts",
     "../docs/examples/ExtrudeTubeSetup.ts",
     "../docs/examples/JunctionRoadPatchSetup.ts",
-    "types/cc.d.ts"
+    "types/cc.d.ts",
+    "types/gizmos.d.ts"
   ]
 }
