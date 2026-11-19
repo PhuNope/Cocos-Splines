@@ -14,7 +14,9 @@ for(const [name,fields] of [['Path2D',['spline','lineWidth','strokeColor']],['Me
 }
 const source=fs.readFileSync(root+'/assets/splines/Core/SplineContainer.ts','utf8');
 assert(fs.readFileSync(root+'/assets/splines/Components/SplineMeshDeform.ts','utf8').includes('RGB16F'));
-assert(source.includes('onDrawGizmosSelected()')&&source.includes('drawKnotGizmos'));
+assert(!source.includes('onDrawGizmosSelected()'),'Runtime container no longer owns editor rendering');
+assert(source.includes('@registerGizmos(SplineContainerGizmos)'));
+assert(fs.readFileSync(root+'/assets/splines/Editor/SplineContainerGizmos.ts','utf8').includes('drawSplineKnot'));
 assert(fs.readFileSync(root+'/assets/splines/Components/SplineAnimate.ts','utf8').includes('spline.dimension===SplineDimension.XY2D'));
 const calls=[],selection=['canvas-1'];let count=0,handlesCreated=false;
 global.Editor={Selection:{getSelected(){return selection;},clear(){selection.length=0;},select(_,v){selection.push(v);}},

@@ -93,8 +93,8 @@ try{
    a.onDrawGizmosSelected();
    assert(g2.filter(c=>c[0]==='circle').length>=2,'2D selected tangent point circles');
    assert(g2.filter(c=>c[0]==='line').length>=2,'2D selected tangent arms');
-   assert(g3.some(c=>c[0]==='sphere'&&c[3]===5),'3D fallback visible in XY2D');
-   assert(g3.some(c=>c[0]==='depth'&&c[2]===false),'2D overlay disables depth test');
+   assert(g3.some(c=>c[0]==='sphere'&&c[3]===.07),'3D fallback draws bounded markers in XY2D');
+   assert(!g3.some(c=>c[0]==='depth'),'Drawers must not mutate global depth-test state');
    g2.length=0;g3.length=0;
    // When editing on, knot tangents are always on without touching the container fields.
    a.editTangentHandles=true;
@@ -108,7 +108,7 @@ try{
    a.onDrawGizmosSelected();assert(g2.filter(c=>c[0]==='line').length>=2);
    // A 3D-only environment still shows 2D tangents with a useful point radius.
    delete globalThis.Gizmos2D;g3.length=0;a.onDrawGizmosSelected();
-   assert(g3.some(c=>c[0]==='sphere'&&c[3]===5),'fallback when Gizmos2D unavailable');
+   assert(g3.some(c=>c[0]==='sphere'&&c[3]===.07),'fallback when Gizmos2D unavailable');
   }finally{delete globalThis.Gizmos2D;delete globalThis.Gizmos3D;}
 
   // Full SplineMeshDeform.rebuild() integration under Cocos mocks, not just
