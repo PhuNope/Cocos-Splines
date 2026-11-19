@@ -1,3 +1,10 @@
+# Unreleased — Phase 2.1 Batch Knot Editing
+
+- Added multi-select via Inspector Knot marks and Scene selection.
+- Added local grid snap and axis alignment for marked/selected Knot nodes, respecting XY2D and XZ2D dimensions.
+- Added one Scene snapshot per batch, validation, no-op suppression and best-effort rollback on partial failures.
+- Added pure placement math and Node regression integration tests. Live Cocos Creator Editor Undo/Redo and Scene selection still require manual testing.
+
 # Unreleased — Phase 1.3 Mesh and Modifiers Gizmos
 
 - Migrated Road/Extrude/MeshDeform/JunctionMesh/ObjectBender wireframes and Modifiers visual guides into dedicated Editor drawer classes using the upstream registerGizmos decorator.

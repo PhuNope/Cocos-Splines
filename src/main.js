@@ -74,7 +74,7 @@ let knotEditBusy=false;
 /** Selection is ordered by sibling index, not by click order, for deterministic align. */
 function selectedKnotIds(info,explicit){
     const ids=explicit===undefined
-        ?selected().filter(id=>info.knots.some(k=>k.uuid===id))
+        ?selected().filter(id=>id!==info.rootUuid)
         :explicit;
     return validatedKnots(info.knots,ids).map(k=>k.uuid);
 }

@@ -67,3 +67,7 @@ The spline core drawers import the upstream `registerGizmos` decorator via `db:/
 ### Editor-only mesh and modifier drawers
 
 Road/Extrude/MeshDeform/JunctionMesh/ObjectBender and Modifiers now use standalone Cocos-Gizmos v3 drawers. Geometry preview caches stay with their owning Components and are exposed via read-only methods; drawing is no longer implemented by runtime Components. Cocos Creator live smoke tests remain required.
+
+### Phase 2.1 — Batch Knot Editor (development)
+
+Mark knots in the SplineContainer Inspector and use **Select in Scene**, **Snap marked** or **Align marked**. Snap uses container-local grid units and respects 2D dimensions. See [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Node CI covers math, batch snapshots, validation and rollback; native Cocos Creator Editor Undo/Redo must still be tested.
