@@ -1,5 +1,5 @@
 'use strict';
-/** Bounded read-only Road/Junction selection guide + optional Gizmos3D bridge. */
+/** Required SDK v3.0.2 adapter, fluent HUD, shared Road/Junction guides. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),
     path=require('node:path'),cp=require('node:child_process'),Module=require('node:module');
 const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'v2-gizmo-'));
@@ -7,7 +7,7 @@ try{
  cp.execFileSync('tsc',['--strict','--target','ES2020','--module','commonjs',
     '--outDir',tmp,'--rootDir',path.join(root,'assets/splines-v2'),
     '--skipLibCheck',path.join(root,'tests/types/cc.d.ts'),
-    path.join(root,'assets/splines-v2/Components/SplineGizmoBridge.ts')],{stdio:'pipe'});
+    path.join(root,'assets/splines-v2/Components/SplineGizmoHandler.ts')],{stdio:'pipe'});
  const {buildRoadSceneGuideV2,buildJunctionSceneGuideV2}=require(
     path.join(tmp,'geometry/SceneGizmoGuideV2.js'));
  const frame=(x)=>({distance:x,parameter:x/100,
@@ -60,79 +60,145 @@ try{
  }
  const originalLoad=Module._load;
  Module._load=function(req,parent,isMain){
-    if(req==='cc')return {Color,Vec3};
+    if(req==='cc')return {Color,Vec3,Mat4:class Mat4{}};
     if(req==='cc/env')return {EDITOR_NOT_IN_PREVIEW:true};
     return originalLoad.apply(this,arguments);
  };
  try{
-    const {drawSplineSceneGizmos,availableGizmoBackend,
-        buildSplineKnotMoveGizmos,buildSplineKnotPointGizmos}=require(
-        path.join(tmp,'Components/SplineGizmoBridge.js'));
+    const {SplineGizmoHandler,resolveSplineGizmos}=require(
+        path.join(tmp,'Components/SplineGizmoHandler.js'));
     const node={isValid:true,worldMatrix:{tx:10,ty:20,tz:30}};
-    const old=globalThis.Gizmos3D;
+    const old3D=globalThis.Gizmos3D,old2D=globalThis.Gizmos2D,
+        oldHud=globalThis.GizmoHUD;
+    const calls=[];
+    const mockHud=()=>{
+      const controls=[];
+      const make=(id)=>({
+       id,children:controls,
+       position(){return this;},theme(){return this;},
+       width(){return this;},padding(){return this;},gap(){return this;},
+       text(key,text){controls.push({id:key,text,kind:'text'});return this;},
+       row(key,cb){const row=make(key);cb(row);controls.push({
+           id:key,kind:'row',children:row.children});return this;},
+       toggle(key,text,command){controls.push({id:key,text,kind:'toggle',command});return this;},
+       slider(key,text,command,opts){controls.push({
+           id:key,text,kind:'slider',command,...opts});return this;},
+       button(key,text,command){controls.push({id:key,text,kind:'button',command});return this;},
+       build(){return {kind:'hud',id,root:{children:controls}};}
+      });
+      return {
+       createHud:make,bind:property=>({kind:'property',property}),
+       action:execute=>({kind:'action',execute})
+      };
+    };
+    const hud=mockHud();
+    const sdkMock={
+      Gizmos3D:{
+       supportsRotationPivot:true,
+       beginColor:(owner,color)=>calls.push({t:'color',owner,color}),
+       drawLine:(owner,a,b)=>calls.push({t:'line',owner,a:{...a},b:{...b}}),
+       drawSphere:(owner,p,r)=>calls.push({t:'sphere',owner,p:{...p},r}),
+       move:(property,opts)=>{
+        calls.push({t:'move',property,opts});
+        return Array.from({length:6},(_,i)=>({
+          id:'move-'+i,property,visual:i<3?'axis':'plane',
+          axis:i<3?['x','y','z'][i]:undefined,space:opts.space,
+          snap:opts.snap
+        }));
+       },
+       rotate:(property,opts)=>['x','y','z'].map(axis=>({
+        id:'ring-'+axis,property,axis,visual:'rotation',
+        space:opts.space,snap:opts.snap,
+        pivotProperty:opts.pivotProperty,pivotSpace:opts.pivotSpace
+       }))
+      },
+      Gizmos2D:{
+       rotate:(property,opts)=>[{property,axis:'z',visual:'rotation',
+        space:opts.space,snap:opts.snap}]
+      },
+      GizmoHUD:hud
+    };
+    const handler=new SplineGizmoHandler(()=>sdkMock);
+    const base={
+      mode:'knots',positionSpace:'local',rotationSpace:'local',
+      positionSnap:0,rotationSnap:0,activeIndex:1,knotCount:3,
+      showKnots:true,multiPoints:true,pointLimit:16,selectedIndices:[0,1],
+      manualTangents:true,editTangents:true,rotateTangents:true
+    };
+    let descriptors=handler.handles(base);
+    assert.equal(descriptors.length,13,'6 move, 2 indexed points, 3 Knot rings, 2 tangents');
+    assert.deepEqual(descriptors.filter(x=>x.index!==undefined).map(x=>x.index),[0,2]);
+    assert.equal(descriptors.find(x=>x.index===0).color,'#72e6e0');
+    assert.equal(descriptors.find(x=>x.index===2).color,'#ffb84a');
+    assert.equal(descriptors.filter(x=>x.property==='pathGizmoKnotTangentEuler').length,3);
+    assert(descriptors.filter(x=>x.property==='pathGizmoKnotTangentEuler')
+      .every(x=>x.pivotProperty==='pathGizmoKnotPosition'&&x.pivotSpace==='local'));
+    descriptors=handler.handles({...base,positionSpace:'world',rotationSpace:'world',
+      positionSnap:.25,rotationSnap:15});
+    assert(descriptors.every(d=>d.space==='world'));
+    assert(descriptors.every(d=>d.snap===.25||d.snap===15));
+    assert(descriptors.some(d=>d.property==='pathGizmoKnotPositionsWorld'));
+    assert(descriptors.some(d=>d.property==='pathGizmoTangentOutWorld'));
+    assert.equal(handler.handles({...base,mode:'2d'}).length,1);
+    assert.deepEqual(handler.handles({...base,mode:'3d'}).map(h=>h.axis),['x','y','z']);
+    assert.deepEqual(handler.handles({...base,showKnots:false}),[]);
+    assert.equal(handler.handles({...base,manualTangents:false}).length,8);
+    let toggled=0,cleared=0;
+    const definition=handler.hud({
+      activeIndex:1,knotCount:3,position:{x:2,y:0,z:4},
+      positionSpace:'world',selectedIndices:[0,1],manualTangents:true,
+      onToggleGroup:()=>{toggled++;},onClearGroup:()=>{cleared++;}
+    });
+    assert.equal(definition.kind,'hud');
+    assert.equal(definition.id,'spline-path');
+    const flatten=nodes=>nodes.flatMap(n=>n.children?[n,...flatten(n.children)]:[n]);
+    const controls=flatten(definition.root.children);
+    assert.match(controls.find(n=>n.id==='active').text,/Knot 1.*world.*X 2.00/);
+    assert.equal(controls.find(n=>n.id==='roll').command.property,'pathGizmoActiveRoll');
+    assert.equal(controls.find(n=>n.id==='active-knot').max,2);
+    assert.equal(controls.find(n=>n.id==='position-snap').step,.05);
+    controls.find(n=>n.id==='group-toggle').command.execute({});
+    controls.find(n=>n.id==='group-clear').command.execute({});
+    assert.deepEqual([toggled,cleared],[1,1]);
+    assert.equal(controls.filter(n=>n.kind==='toggle').length,7);
+    assert.equal(handler.hud({...base,knotCount:1}),null);
+    const rendered=handler.drawGuide(node,guide);
+    assert.equal(rendered,guide.lines.length+guide.dots.length);
+    const first=calls.find(x=>x.t==='line');
+    assert(Math.abs(first.a.x-(guide.lines[0].a.x+10))<1e-8);
+    assert(Math.abs(first.a.z-(guide.lines[0].a.z+30))<1e-8);
+    assert(calls.some(x=>x.t==='sphere'));
+    assert.equal(handler.drawGuide({...node,isValid:false},guide),0);
+    assert.equal(handler.drawGuide(node,{
+      lines:[...guide.lines,...guide.lines,...guide.lines,...guide.lines],
+      dots:[...guide.dots,...guide.dots]
+    }),600+6);
     try{
-      delete globalThis.Gizmos3D;
-      assert.equal(availableGizmoBackend(),null,'Cocos-Gizmos is optional');
-      assert.deepEqual(buildSplineKnotMoveGizmos('gizmoKnotPosition'),[]);
-      assert.deepEqual(buildSplineKnotPointGizmos('gizmoKnotPositions',[0,1]),[]);
-      assert.equal(drawSplineSceneGizmos(node,guide),0);
-      const calls=[],sdkMock={beginColor:(owner,color)=>calls.push({t:'color',owner,color}),
-        drawLine:(owner,a,b)=>calls.push({t:'line',owner,a:{...a},b:{...b}}),
-        drawSphere:(owner,p,r)=>calls.push({t:'sphere',owner,p:{...p},r}),
-        move:(property,options)=>{
-          calls.push({t:'move',property,options});
-          return Array.from({length:6},(_,i)=>({id:'handle-'+i,property,
-            visual:i<3?'axis':'plane',space:options.space,plane:'xy'}));
-        }};
-      globalThis.Gizmos3D=sdkMock;
-      assert.equal(availableGizmoBackend(),sdkMock,'Actual global installed by Gizmos scene.js');
-      const none=buildSplineKnotPointGizmos('gizmoKnotPositions',[0,2]);
-      assert.equal(none.length,2);
-      assert.deepEqual(none.map(h=>h.index),[0,2]);
-      assert(none.every(h=>h.property==='gizmoKnotPositions'&&h.plane==='view'&&
-        h.space==='local'&&h.visual==='point'&&h.pickSize===24));
-      assert.throws(()=>buildSplineKnotPointGizmos('gizmoKnotPositions',[-1]),
-        /invalid indexed Knot/);
-      const worldMove=buildSplineKnotMoveGizmos('worldKnot','world');
-      assert(worldMove.every(h=>h.space==='world'));
-      const worldPoints=buildSplineKnotPointGizmos('worldKnots',[0,2],'world');
-      assert(worldPoints.every(h=>h.space==='world'));
-      const snappedWorld=buildSplineKnotMoveGizmos('worldKnotWithSnap','world',.25);
-      assert.equal(snappedWorld.length,6);
-      assert.equal(calls.find(x=>x.property==='worldKnotWithSnap').options.snap,.25);
-      const snappedPoints=buildSplineKnotPointGizmos('pointSnap',[1,3],'local',.5);
-      assert(snappedPoints.every(h=>h.snap===.5));
-      const unsnappedPoints=buildSplineKnotPointGizmos('pointSnap',[1,3]);
-      assert(unsnappedPoints.every(h=>h.snap===undefined));
-      const groupPoints=buildSplineKnotPointGizmos('groups',[0,1,2],
-        'world',0,[0,2]);
-      assert.deepEqual(groupPoints.map(h=>h.color),
-        ['#72e6e0','#ffb84a','#72e6e0']);
-      assert.throws(()=>buildSplineKnotPointGizmos('groups',[0],
-        'world',0,[-1]),/invalid group Knot/);
-      assert.throws(()=>buildSplineKnotMoveGizmos('bad','world',Infinity),/Move snap/);
-      assert.throws(()=>buildSplineKnotPointGizmos('bad',[1],'world',-1),/Point snap/);
-      const move=buildSplineKnotMoveGizmos('gizmoKnotPosition');
-      assert.equal(move.length,6,'Gizmos move generates XYZ+three plane descriptors');
-      assert(move.every(h=>h.property==='gizmoKnotPosition'));
-      const moveCall=calls.find(x=>x.t==='move'&&x.property==='gizmoKnotPosition');
-      assert.equal(moveCall.options.space,'local');
-      assert.equal(moveCall.options.pickSize,28);
-      assert.equal(moveCall.options.snap,undefined,'Zero Snap preserves continuous drag');
-      const rendered=drawSplineSceneGizmos(node,guide);
-      assert.equal(rendered,guide.lines.length+guide.dots.length);
-      const first=calls.find(x=>x.t==='line');
-      assert(Math.abs(first.a.x-(guide.lines[0].a.x+10))<1e-8);
-      assert(Math.abs(first.a.z-(guide.lines[0].a.z+30))<1e-8);
-      assert(calls.some(x=>x.t==='sphere'));
-      assert(calls.every(x=>x.t==='move'||x.owner===node));
-      globalThis.Gizmos3D={beginColor:()=>{},drawLine:null};
-      assert.equal(availableGizmoBackend(),null,'Malformed SDK must fail safely');
-      assert.deepEqual(buildSplineKnotMoveGizmos('gizmoKnotPosition'),[]);
-      globalThis.Gizmos3D=sdkMock;
-      assert.equal(drawSplineSceneGizmos({...node,isValid:false},guide),0);
-      assert.equal(drawSplineSceneGizmos(node,{lines:[...guide.lines,...guide.lines,...guide.lines,...guide.lines],dots:[...guide.dots,...guide.dots]}),600+6);
-    }finally{globalThis.Gizmos3D=old;}
+      globalThis.Gizmos3D=sdkMock.Gizmos3D;
+      globalThis.Gizmos2D=sdkMock.Gizmos2D;
+      globalThis.GizmoHUD=sdkMock.GizmoHUD;
+      assert(resolveSplineGizmos(),'Latest required SDK must resolve through Scene globals');
+      globalThis.GizmoHUD=undefined;
+      assert.equal(resolveSplineGizmos(),null,'Old flat HUD SDK must be rejected');
+      globalThis.GizmoHUD=sdkMock.GizmoHUD;
+      globalThis.Gizmos3D={...sdkMock.Gizmos3D,supportsRotationPivot:false};
+      assert.equal(resolveSplineGizmos(),null,'Pivot-less SDK cannot be accepted');
+    }finally{
+      globalThis.Gizmos3D=old3D;globalThis.Gizmos2D=old2D;
+      globalThis.GizmoHUD=oldHud;
+    }
+    // A missing mandatory extension reports ONE actionable Console warning,
+    // never silently renders legacy handles, and never logs in Play.
+    const warn=console.warn,errors=[];
+    try{
+      console.warn=(...args)=>errors.push(args.join(' '));
+      const missing=new SplineGizmoHandler(()=>null);
+      assert.deepEqual(missing.handles(base),[]);
+      assert.deepEqual(missing.handles(base),[]);
+      assert.equal(missing.drawGuide(node,guide),0);
+      assert.equal(errors.length,1);
+      assert.match(errors[0],/REQUIRED cocos-gizmos >=3.0.2/);
+    }finally{console.warn=warn;}
  }finally{Module._load=originalLoad;}
  const road=fs.readFileSync(path.join(root,'assets/splines-v2/Components/SplineRoad.ts'),'utf8');
  const junction=fs.readFileSync(path.join(root,'assets/splines-v2/Components/JunctionPatch.ts'),'utf8');
@@ -152,11 +218,11 @@ try{
      'showJunctionSceneGizmos','gizmoJunctionCurbs'])
       assert(native.makeV2Inspector?native.makeV2Inspector.toString().includes(field):
          fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8').includes(field));
- assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoBridge.ts.meta')));
+ assert(fs.existsSync(path.join(root,'assets/splines-v2/Components/SplineGizmoHandler.ts.meta')));
  assert(fs.existsSync(path.join(root,'assets/splines-v2/geometry/SceneGizmoGuideV2.ts.meta')));
  // Public APIs and Inspector must use 'Gizmos', never a version-branded key.
  for(const part of ['SplinePath','SplineRoad','JunctionPatch',
-    'MeshGenerator','SplineGizmoBridge']){
+    'MeshGenerator','SplineGizmoHandler']){
     const source=fs.readFileSync(path.join(root,'assets/splines-v2/Components/'+part+'.ts'),'utf8');
     assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(source),
        part+' must not expose version-tagged Gizmos symbols');
@@ -164,8 +230,8 @@ try{
  const ui=fs.readFileSync(path.join(root,'src/contributions/inspector/RoadV2.js'),'utf8');
  assert(!/(?:gizmoV[0-9]|GizmoV[0-9]|GizmosV[0-9]|Gizmos\s+v[0-9])/i.test(ui),
     'Inspector must not present version-specific Gizmos labels');
- assert.deepEqual(fs.readdirSync(path.join(root,'assets/splines-v2/Components')).filter(n=>/^SplineGizmo.*Bridge\.ts$/.test(n)),['SplineGizmoBridge.ts'],
-    'Only one non-versioned Gizmos bridge must ship');
+ assert.deepEqual(fs.readdirSync(path.join(root,'assets/splines-v2/Components')).filter(n=>/^SplineGizmo.*Handler\.ts$/.test(n)),['SplineGizmoHandler.ts'],
+    'Only one Editor SDK adapter must ship');
 
- console.log('V2 SCENE GIZMOS BRIDGE PASS: bounded guides, global move/indexed point descriptors, world draw, Editor gating.');
+ console.log('V2 SCENE GIZMOS HANDLER PASS: required SDK gate, builder HUD commands, pivot, shared drawing and world transforms.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

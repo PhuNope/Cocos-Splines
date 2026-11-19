@@ -4,10 +4,8 @@ import {evaluateSplineSegmentV2,type SplineDataV2,type CurveTypeV2,type V3} from
 import {buildSplineCacheV2} from '../core/SplineCache';
 import {buildSplineFramesV2,frameAtDistanceV2} from '../core/SplineFrames';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoBackend,buildSplineKnotMoveGizmos,
-    buildSplineKnotPointGizmos,buildSplinePathRotateGizmos,
-    buildSplineKnotTangentRotateGizmos,drawSplineSceneGizmos,
-    type SplineGizmoHandle} from './SplineGizmoBridge';
+import {splineGizmos,type SplineHandleDescriptor,type SplineGizmoHudDefinition}
+    from './SplineGizmoHandler';
 
 const {ccclass,property,executeInEditMode,menu}=_decorator;
 
@@ -586,17 +584,6 @@ export class SplinePath extends Component {
         this._selectedGroup.clear();
         return [];
     }
-    public onGizmoHudAction(id:string):void {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
-           !this.gizmoEditKnots||this._dragKnot||
-           this._rotationDragging||this._hudRollKnot)return;
-        if(id==='path-group-clear'){
-            this.clearGroupKnots();
-            return;
-        }
-        if(id!=='path-group-toggle')return;
-        this.toggleGroupKnot(this.gizmoKnotIndex);
-    }
     public get pathGizmoKnotPosition():Vec3 {
         return this.read(this.gizmoKnotIndex,'pathGizmoKnotPosition');
     }
@@ -652,50 +639,27 @@ export class SplinePath extends Component {
         if(kind==='position')this.gizmoPositionSpace=space;
         else this.gizmoRotationSpace=space;
     }
-    public onGizmoHandles():SplineGizmoHandle[] {
+    /** The application produces a validated snapshot; the Editor adapter
+     * alone knows the current Cocos-Gizmos descriptor/command APIs. */
+    public onGizmoHandles():SplineHandleDescriptor[] {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid)return [];
-        if(this.gizmoRotationMode!==RotationMode.Knots){
-            const mode=this.gizmoRotationMode===RotationMode.Planar2D?
-                '2d':this.gizmoRotationMode===RotationMode.Spatial3D?
-                '3d':null;
-            return mode?buildSplinePathRotateGizmos('pathGizmoRotationEuler',
-                mode,this.gizmoRotationSnap,
-                this.gizmoRotationSpace===SplineSpace.World?'world':'local'):[];
-        }
-        if(!this.gizmoEditKnots||!this.knots[this.gizmoKnotIndex])return [];
-        const world=this.gizmoPositionSpace===SplineSpace.World;
-        const space=world?'world':'local';
-        const snap=Number.isFinite(this.gizmoPositionSnap)&&
-            this.gizmoPositionSnap>=0&&this.gizmoPositionSnap<=20?
-            this.gizmoPositionSnap:0;
-        const active=buildSplineKnotMoveGizmos(
-            world?'pathGizmoKnotPositionWorld':'pathGizmoKnotPosition',space,snap);
-        if(!active.length)return [];
-        const handles=[...active];
-        if(this.gizmoMultiKnotPoints){
-            const limit=Number.isFinite(this.gizmoPointLimit)?
-                Math.max(2,Math.min(32,Math.floor(this.gizmoPointLimit))):16;
-            const indices=Array.from({length:Math.min(this.knots.length,limit)},(_,i)=>i)
-                .filter(i=>i!==this.gizmoKnotIndex);
-            handles.push(...buildSplineKnotPointGizmos(
-                world?'pathGizmoKnotPositionsWorld':'pathGizmoKnotPositions',
-                indices,space,snap,this.selectedGroupIndices()));
-        }
-        if(this.hasManualTangentHandles()&&this.gizmoEditTangents){
-            if(this.gizmoRotateKnotTangents)
-                handles.push(...buildSplineKnotTangentRotateGizmos(
-                    'pathGizmoKnotTangentEuler','pathGizmoKnotPosition',
-                    this.gizmoRotationSnap,
-                    this.gizmoRotationSpace===SplineSpace.World?'world':'local'));
-            handles.push(
-                {id:'path-tangent-in',property:world?'pathGizmoTangentInWorld':'pathGizmoTangentIn',
-                    visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
-                    color:'#b58cff',hoverColor:'#fff269',pickSize:24},
-                {id:'path-tangent-out',property:world?'pathGizmoTangentOutWorld':'pathGizmoTangentOut',
-                    visual:'point',plane:'view',space,...(snap>0?{snap}:{}),
-                    color:'#48d8e6',hoverColor:'#fff269',pickSize:24});
-        }
-        return handles;
+        const mode=this.gizmoRotationMode===RotationMode.Planar2D?'2d':
+            this.gizmoRotationMode===RotationMode.Spatial3D?'3d':'knots';
+        return splineGizmos.handles({
+            mode,
+            positionSpace:this.gizmoPositionSpace===SplineSpace.World?'world':'local',
+            rotationSpace:this.gizmoRotationSpace===SplineSpace.World?'world':'local',
+            positionSnap:this.gizmoPositionSnap,
+            rotationSnap:this.gizmoRotationSnap,
+            activeIndex:this.gizmoKnotIndex,knotCount:this.knots.length,
+            showKnots:this.gizmoEditKnots,
+            multiPoints:this.gizmoMultiKnotPoints,
+            pointLimit:this.gizmoPointLimit,
+            selectedIndices:this.selectedGroupIndices(),
+            manualTangents:this.hasManualTangentHandles(),
+            editTangents:this.gizmoEditTangents,
+            rotateTangents:this.gizmoRotateKnotTangents
+        });
     }
     /**
      * SDK HUD sliders require a scalar property on the Component. This
@@ -751,62 +715,24 @@ export class SplinePath extends Component {
             }
         }
     }
-    /**
-     * Read-only Scene HUD coordinate readout. It shows the editing space,
-     * never serialized CCClass/Vec3 dump data or a second Inspector panel.
-     */
-    public onGizmoHud():Array<{
-        id:string;text:string;order:number;fontSize:number;color:string
-    }> {
+    /** Preferred Cocos-Gizmos HUD builder, with typed property Commands.
+     * No deprecated flat HUD list, duplicate gesture/controller or DOM code. */
+    public onGizmoHUD():SplineGizmoHudDefinition|null {
         if(!EDITOR_NOT_IN_PREVIEW||!this.node?.isValid||
-           !this.gizmoEditKnots||this.knots.length<2||
-           !availableGizmoBackend())return [];
-        const index=this.gizmoKnotIndex,knot=this.knots[index];
-        if(!knot||!finite(knot.position))return [];
+           !this.gizmoEditKnots||this.knots.length<2)return null;
+        const knot=this.knots[this.gizmoKnotIndex];
+        if(!knot||!finite(knot.position))return null;
         const world=this.gizmoPositionSpace===SplineSpace.World;
-        const p=this.toGizmoPoint(knot.position,world);
-        if(!finite(p))return [];
-        const f=(n:number)=>n.toFixed(2);
-        const selected=this.selectedGroupIndices();
-        const group=selected.length>0?' · Group '+selected.length+': '+
-            selected.join(', '):'';
-        return [{id:'path-active-position',
-            text:'Knot '+index+' · '+(world?'World':'Local')+
-                 '  X '+f(p.x)+'  Y '+f(p.y)+'  Z '+f(p.z)+group,
-            order:0,fontSize:12,color:'#a3e2ff'}];
-    }
-    public onGizmoHudControls():Array<{
-        type:'slider'|'toggle'|'button';id:string;text:string;property?:string;
-        min?:number;max?:number;step?:number;order?:number;group?:string;
-    }> {
-        if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoEditKnots||
-            this.knots.length<2||!availableGizmoBackend())return [];
-        return [
-            {type:'toggle',id:'position-local',text:'Position · Local',
-                property:'pathHudPositionLocal',group:'position-space',order:-4},
-            {type:'toggle',id:'position-world',text:'Position · World',
-                property:'pathHudPositionWorld',group:'position-space',order:-3},
-            {type:'toggle',id:'rotation-local',text:'Rotation · Local',
-                property:'pathHudRotationLocal',group:'rotation-space',order:-2},
-            {type:'toggle',id:'rotation-world',text:'Rotation · World',
-                property:'pathHudRotationWorld',group:'rotation-space',order:-1},
-            {type:'slider',id:'path-position-snap',text:'Position Snap',
-                property:'gizmoPositionSnap',min:0,max:5,step:.05,order:0},
-            {type:'slider',id:'path-active-knot',text:'Active Knot',
-                property:'gizmoKnotIndex',min:0,
-                max:Math.min(this.knots.length-1,127),step:1,order:1},
-            {type:'toggle',id:'path-other-knots',text:'Other Knots',
-                property:'gizmoMultiKnotPoints',order:2},
-            ...(this.hasManualTangentHandles()?
-                [{type:'toggle' as const,id:'path-tangent-handles',
-                    text:'Tangents',property:'gizmoEditTangents',order:3}]:[]),
-            {type:'slider',id:'path-knot-roll',text:'Knot Roll (deg)',
-                property:'pathGizmoActiveRoll',min:-180,max:180,step:1,order:4},
-            {type:'toggle',id:'path-roll-guide',text:'Roll Guide',
-                property:'gizmoShowRollGuide',order:5},
-            {type:'button',id:'path-group-toggle',text:'Toggle Active Group',order:6},
-            {type:'button',id:'path-group-clear',text:'Clear Group',order:7}
-        ];
+        const position=this.toGizmoPoint(knot.position,world);
+        if(!finite(position))return null;
+        return splineGizmos.hud({
+            activeIndex:this.gizmoKnotIndex,knotCount:this.knots.length,
+            position,positionSpace:world?'world':'local',
+            selectedIndices:this.selectedGroupIndices(),
+            manualTangents:this.hasManualTangentHandles(),
+            onToggleGroup:()=>this.toggleGroupKnot(this.gizmoKnotIndex),
+            onClearGroup:()=>this.clearGroupKnots()
+        });
     }
     public onGizmoChanged(name:string,phase:'begin'|'update'|'end'|'cancel',
                           index?:number):void {
@@ -915,7 +841,7 @@ export class SplinePath extends Component {
     }
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.gizmoShowPath||
-            !this.node?.isValid||!availableGizmoBackend()||this.knots.length<2)return;
+            !this.node?.isValid||this.knots.length<2)return;
         try{
             const source=this.getSplineData(this.node);
             const cache=buildSplineCacheV2(source);
@@ -958,7 +884,7 @@ export class SplinePath extends Component {
                     {at:right,radius:.11,group:'bank-right'},
                     {at:up,radius:.12,group:'bank-up'});
             }
-            drawSplineSceneGizmos(this.node,{lines,dots});
+            splineGizmos.drawGuide(this.node,{lines,dots});
         }catch{
             // Incomplete Path is normal while authoring. Never spam logs.
         }

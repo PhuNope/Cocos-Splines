@@ -21,7 +21,7 @@ import {sampleSplineDistanceV2} from '../core/SplineCache';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {trimmedRoadFramesV2} from '../geometry/RoadJunctionTrim';
 import {buildRoadSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoBackend,drawSplineSceneGizmos} from './SplineGizmoBridge';
+import {splineGizmos} from './SplineGizmoHandler';
 const {ccclass,property,requireComponent,executeInEditMode,menu}=_decorator;
 
 export enum UVCrossMode {Legacy=0,Physical=1}
@@ -172,7 +172,7 @@ export class SplineRoad extends MeshGenerator {
     /** Selection drawing uses actual global Gizmos3D, installed by Gizmos scene.js. */
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showSceneGizmos||
-            !availableGizmoBackend())return;
+            !this.node?.isValid)return;
         try{
             const source=this.source();
             const cache=buildSplineCacheV2(source);
@@ -191,7 +191,7 @@ export class SplineRoad extends MeshGenerator {
             const guide=buildRoadSceneGuideV2(trimmed,source.knots.map(k=>k.position),
                 totalWidth,{maxSteps:steps,showEdges:this.gizmoEdges,
                     showKnots:false});
-            drawSplineSceneGizmos(this.node,guide);
+            splineGizmos.drawGuide(this.node,guide);
         }catch{
             // Gizmos are read-only Editor aids. Invalid/unfinished Roads must
             // never break selection, write serialization or spam Play logs.

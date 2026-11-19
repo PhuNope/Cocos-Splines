@@ -3,6 +3,10 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const root=path.resolve(__dirname,'..');
 const pkg=require(path.join(root,'package.json'));
 assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
+assert.equal(pkg.cocosSplines?.requiredExtensions?.['cocos-gizmos'],'>=3.0.2',
+    'Cocos-Gizmos extension is a REQUIRED Editor dependency');
+assert.deepEqual(pkg.cocosSplines?.requiredSceneApi?.slice(0,2),
+    ['Gizmos3D.move','Gizmos3D.rotate']);
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);if(pkg.panels)throw new Error('No standalone spline panel should ship');
 checkRel(pkg.contributions['asset-db'].mount.path);
@@ -23,6 +27,11 @@ for(const name of ['ProfileSweep','RoadStrip','RoadCorners','RoadOverlapClip','R
  checkRel('assets/splines-v2/geometry/'+name+'.ts');
  checkRel('assets/splines-v2/geometry/'+name+'.ts.meta');
 }
+checkRel('assets/splines-v2/Components/SplineGizmoHandler.ts');
+checkRel('assets/splines-v2/Components/SplineGizmoHandler.ts.meta');
+assert(!fs.existsSync(path.join(root,
+    'assets/splines-v2/Components/SplineGizmoBridge.ts')),
+    'Retired SDK bridge must be deleted');
 checkRel('assets/splines-v2/Components/SplineExtrude.ts');
 checkRel('assets/splines-v2/Components/SplineExtrude.ts.meta');
 checkRel('assets/splines-v2/Components/SplineMeshDeform.ts');

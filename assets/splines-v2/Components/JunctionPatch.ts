@@ -11,7 +11,7 @@ import {MeshGenerator} from './MeshGenerator';
 import {buildJunctionMarkingsV2,type JunctionMarkingReportV2} from '../geometry/JunctionMarkingsV2';
 import {appendRoadMarkingsV2} from '../geometry/RoadMarkings';
 import {buildJunctionSceneGuideV2} from '../geometry/SceneGizmoGuideV2';
-import {availableGizmoBackend,drawSplineSceneGizmos} from './SplineGizmoBridge';
+import {splineGizmos} from './SplineGizmoHandler';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 
@@ -140,7 +140,7 @@ export class JunctionPatch extends MeshGenerator {
     /** Selected-only read-only authoring visualization. Never paints runtime geometry. */
     public onDrawGizmosSelected():void {
         if(!EDITOR_NOT_IN_PREVIEW||!this.showJunctionSceneGizmos||
-            !availableGizmoBackend()||this.branches.length<3||
+            this.branches.length<3||
             this.branches.length>4)return;
         try{
             const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
@@ -164,7 +164,7 @@ export class JunctionPatch extends MeshGenerator {
             });
             const guide=buildJunctionSceneGuideV2(entries,{
                 showCurb:this.gizmoJunctionCurbs});
-            drawSplineSceneGizmos(this.node,guide);
+            splineGizmos.drawGuide(this.node,guide);
         }catch{
             // Leave authoring errors to explicit Inspector Rebuild/diagnostics.
             // Gizmos never mutate Nodes, meshes or the saved Scene.

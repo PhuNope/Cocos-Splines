@@ -1,4 +1,5 @@
 'use strict';
+const {mockGizmoHUD,findHud,flattenHud}=require('./helpers/gizmo-hud-sdk.cjs');
 /**
  * Real TS Path compiled against Cocos mocks: authored Bezier tangents,
  * Path/consumer coordinate conversion, modes, Gizmos Escape, source order,
@@ -142,8 +143,10 @@ try {
  pathComp.registerPreviewConsumer(consumerA);pathComp.registerPreviewConsumer(consumerB);
  const originalGizmos=globalThis.Gizmos3D;
  const originalGizmos2D=globalThis.Gizmos2D;
+ const originalGizmosHUD=globalThis.GizmoHUD;
  const colors=[],lines=[];
- globalThis.Gizmos3D={beginColor:(owner,color)=>colors.push(color),
+ globalThis.GizmoHUD=mockGizmoHUD;
+ globalThis.Gizmos3D={supportsRotationPivot:true,beginColor:(owner,color)=>colors.push(color),
    drawLine:(owner,a,b)=>lines.push({a:{...a},b:{...b}}),
    drawSphere:()=>{},move:(property,opts)=>Array.from({length:6},(_,i)=>({
      id:property+i,property,space:opts.space,snap:opts.snap,visual:'axis',plane:'xy'
@@ -157,11 +160,11 @@ try {
      snap:opts.snap,space:opts.space}]
  };
  try{
-   const localPositionText=pathComp.onGizmoHud();
-   assert.equal(localPositionText.length,1);
-   assert.match(localPositionText[0].text,/Knot 0.*Local.*X 0\.00/);
+   const localHud=pathComp.onGizmoHUD();
+   assert.equal(localHud?.kind,'hud');
+   assert.match(findHud(localHud,'active').text,/Knot 0.*local.*X 0\.00/);
    const hs=pathComp.onGizmoHandles();
-   assert.equal(hs.length,9,'6 move, 1 other Knot and two tangent points');
+   assert.equal(hs.length,12,'6 move, 1 other Knot, 3 pivot rings and 2 tangents');
    assert.deepEqual(hs.slice(-2).map(h=>h.property),
      ['pathGizmoTangentIn','pathGizmoTangentOut']);
    assert(hs.slice(-2).every(h=>h.visual==='point'&&h.plane==='view'));
@@ -194,20 +197,22 @@ try {
    k0.handleIn=new Vec3(beforeRotateIn.x,beforeRotateIn.y,beforeRotateIn.z);
    k0.handleOut=new Vec3(beforeRotateOut.x,beforeRotateOut.y,beforeRotateOut.z);
    k0.mode=TangentMode.Auto;
-   globalThis.Gizmos3D.supportsRotationPivot=false;
-   assert.equal(pathComp.onGizmoHudControls().length,12);
-   assert.deepEqual(pathComp.onGizmoHudControls().slice(-2).map(x=>x.id),
-     ['path-group-toggle','path-group-clear']);
-   const positionSnapHud=pathComp.onGizmoHudControls().find(x=>x.property==='gizmoPositionSnap');
+   const newHud=pathComp.onGizmoHUD();
+   const all=flattenHud(newHud);
+   assert.equal(newHud.kind,'hud');
+   assert.deepEqual(['group-toggle','group-clear'].map(id=>
+     findHud(newHud,id).kind),['button','button']);
+   const positionSnapHud=findHud(newHud,'position-snap');
    assert.deepEqual({min:positionSnapHud.min,max:positionSnapHud.max,step:positionSnapHud.step},
      {min:0,max:5,step:.05});
-   const spaceControls=pathComp.onGizmoHudControls().filter(x=>x.group?.endsWith('-space'));
-   assert.deepEqual(spaceControls.map(x=>x.id),[
-     'position-local','position-world','rotation-local','rotation-world']);
-   assert(spaceControls.every(x=>x.type==='toggle'));
-   const rollHud=pathComp.onGizmoHudControls().find(x=>x.property==='pathGizmoActiveRoll');
+   const spaceControls=['position-local','position-world',
+       'rotation-local','rotation-world'].map(id=>findHud(newHud,id));
+   assert(spaceControls.every(x=>x.kind==='toggle'&&x.command.kind==='property'));
+   const rollHud=findHud(newHud,'roll');
+   assert.equal(rollHud.command.property,'pathGizmoActiveRoll');
    assert.deepEqual({min:rollHud.min,max:rollHud.max,step:rollHud.step},
      {min:-180,max:180,step:1});
+   assert(!all.some(x=>x.id==='legacy-hud'));
    pathComp.onDrawGizmosSelected();
    assert(lines.length>2,'Selected Bezier Path draws tangent control segments');
    assert(colors.some(c=>c.r===181&&c.g===140),'incoming control has distinct color');
@@ -225,14 +230,14 @@ try {
    // Position World Gizmos use genuine world-coordinate proxies for
    // active, indexed and Bezier tangent handles. Escape restores local data.
    pathComp.gizmoPositionSnap=.25;
-   assert(pathComp.onGizmoHandles().every(h=>h.snap===.25),
+   assert(pathComp.onGizmoHandles().filter(h=>h.property!=='pathGizmoKnotTangentEuler').every(h=>h.snap===.25),
      'Local active/point/tangent handles should share Position Snap');
    pathComp.pathHudPositionWorld=true;
-   assert.match(pathComp.onGizmoHud()[0].text,/Knot 0.*World.*X 10\.00/,
+   assert.match(findHud(pathComp.onGizmoHUD(),'active').text,/Knot 0.*world.*X 10\.00/,
      'Read-only HUD XYZ must follow the selected World coordinate space');
    const worldHandles=pathComp.onGizmoHandles();
-   assert(worldHandles.every(h=>h.space==='world'));
-   assert(worldHandles.every(h=>h.snap===.25),
+   assert(worldHandles.filter(h=>h.property!=='pathGizmoKnotTangentEuler').every(h=>h.space==='world'));
+   assert(worldHandles.filter(h=>h.property!=='pathGizmoKnotTangentEuler').every(h=>h.snap===.25),
      'World active/point/tangent handles should snap in world coordinates');
    assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionWorld'));
    assert(worldHandles.some(h=>h.property==='pathGizmoKnotPositionsWorld'));
@@ -281,12 +286,12 @@ try {
    // group array. The active handle translates all selected records.
    pathComp.gizmoKnotIndex=0;
    assert.deepEqual(pathComp.selectedGroupIndices(),[]);
-   pathComp.onGizmoHudAction('path-group-toggle');
+   findHud(pathComp.onGizmoHUD(),'group-toggle').command.execute(pathComp);
    assert.deepEqual(pathComp.selectedGroupIndices(),[0]);
    pathComp.gizmoKnotIndex=1;
-   pathComp.onGizmoHudAction('path-group-toggle');
+   findHud(pathComp.onGizmoHUD(),'group-toggle').command.execute(pathComp);
    assert.deepEqual(pathComp.selectedGroupIndices(),[0,1]);
-   assert.match(pathComp.onGizmoHud()[0].text,/Group 2: 0, 1/);
+   assert.match(findHud(pathComp.onGizmoHUD(),'group-readout').text,/Group 2: 0, 1/);
    assert(pathComp.onGizmoHandles().some(h=>
      h.index===0&&h.color==='#72e6e0'),'Selected peers are cyan');
    pathComp.gizmoKnotIndex=0;
@@ -294,7 +299,8 @@ try {
    pathComp.pathHudPositionWorld=true;
    pathComp.onGizmoChanged('pathGizmoKnotPositionWorld','begin');
    pathComp.gizmoKnotIndex=1; // Simulate an Inspector selection change
-   pathComp.onGizmoHudAction('path-group-clear');
+   assert.throws(()=>findHud(pathComp.onGizmoHUD(),'group-clear').command.execute(pathComp),
+     /during a Gizmos drag/);
    assert.deepEqual(pathComp.selectedGroupIndices(),[0,1],
      'Selection changes are refused during drag');
    // A delayed Local descriptor cannot write or finalize the World gesture.
@@ -342,14 +348,14 @@ try {
    pathComp.onGizmoChanged('pathGizmoKnotPosition','end');
    assert.equal(k0.position.x,3,'Group End retains both edits');
    assert.equal(k1.position.x,9);
-   pathComp.onGizmoHudAction('path-group-toggle');
+   findHud(pathComp.onGizmoHUD(),'group-toggle').command.execute(pathComp);
    assert.deepEqual(pathComp.selectedGroupIndices(),[1]);
    pathComp.pathGizmoKnotPosition=new Vec3(4,0,0);
    assert.equal(k0.position.x,4,'Non-selected active Knot can move separately');
    assert.equal(k1.position.x,9,'Other selected Knot remains unchanged');
    k0.position=new Vec3(group0.x,group0.y,group0.z);
    k1.position=new Vec3(group1.x,group1.y,group1.z);
-   pathComp.onGizmoHudAction('path-group-clear');
+   findHud(pathComp.onGizmoHUD(),'group-clear').command.execute(pathComp);
    assert.deepEqual(pathComp.selectedGroupIndices(),[]);
    pathComp.gizmoKnotIndex=0;
    // Wrong indexed handle callbacks must neither write another Knot nor
@@ -373,9 +379,9 @@ try {
    assert.deepEqual({...k1.position},indexed1,'Correct indexed Cancel restores Knot');
    // Group Nudge produces a read-only local delta for one recordable
    // serialized-CCClass write in extension main (not a live Scene mutation).
-   pathComp.onGizmoHudAction('path-group-toggle');
+   findHud(pathComp.onGizmoHUD(),'group-toggle').command.execute(pathComp);
    pathComp.gizmoKnotIndex=1;
-   pathComp.onGizmoHudAction('path-group-toggle');
+   findHud(pathComp.onGizmoHUD(),'group-toggle').command.execute(pathComp);
    pathComp.gizmoPositionSnap=.5;
    const sourcePositions=pathComp.knots.map(k=>({...k.position}));
    const nudgeLocal=pathComp.planGroupNudge('x+');
@@ -398,7 +404,7 @@ try {
    assert.deepEqual(pathComp.selectedGroupIndices(),[0,1]);
    pathComp.pathHudPositionLocal=true;
    pathComp.gizmoPositionSnap=0;
-   pathComp.onGizmoHudAction('path-group-clear');
+   findHud(pathComp.onGizmoHUD(),'group-clear').command.execute(pathComp);
    pathComp.gizmoKnotIndex=0;
    const rollCallsBefore=calls.length;
    pathComp.gizmoKnotIndex=0;
@@ -645,6 +651,7 @@ try {
  }finally{
    globalThis.Gizmos3D=originalGizmos;
    globalThis.Gizmos2D=originalGizmos2D;
+   globalThis.GizmoHUD=originalGizmosHUD;
    env.EDITOR_NOT_IN_PREVIEW=true;
    pathComp.unregisterPreviewConsumer(consumerA);
    pathComp.unregisterPreviewConsumer(consumerB);
@@ -690,7 +697,8 @@ try {
  const times=[0,.1,.25,.5,.65,.8,1];
  const originalSamples=times.map(t=>evaluateSplineV2(originalSource,t));
  assert.equal(originalSource.editableCatmullTangents,undefined);
- const oldSDK=globalThis.Gizmos3D;
+ const oldSDK=globalThis.Gizmos3D,oldHudSDK=globalThis.GizmoHUD;
+ globalThis.GizmoHUD=mockGizmoHUD;
  globalThis.Gizmos3D={supportsRotationPivot:true,beginColor(){},drawLine(){},
   move:(name,options)=>[{property:name,visual:'axis',plane:'view',
    space:options.space}],
@@ -738,6 +746,6 @@ try {
   component.editableCatmullTangents=false;
   assert(!component.onGizmoHandles().some(h=>h.property==='pathGizmoTangentOut'));
   assert.equal(component.getSplineData(cn).knots[1].handleOut,undefined);
- }finally{globalThis.Gizmos3D=oldSDK;}
+ }finally{globalThis.Gizmos3D=oldSDK;globalThis.GizmoHUD=oldHudSDK;}
  console.log('V2 PURE VEC3 KNOTS & BEZIER PASS: local/world transforms, modes, stable Knot binding, Gizmos/Cancel, Inspector watcher, Play safety.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

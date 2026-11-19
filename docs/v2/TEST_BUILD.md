@@ -629,3 +629,33 @@ test `Spline.Path → Editable Catmull Tangents`:
 5. Save/Reopen and test Prefab Overrides and explicit Bake.
    No automatic Baked Mesh overwrite is authorized; mock
    regression verifies math and serialized dump only.
+
+## Gizmos extension required — fluent HUD migration
+
+Install and enable **Cocos-Gizmos >=3.0.2** (branch `v3`) in
+Extension Manager **before** loading this Cocos-Splines test build.
+They remain independent installable extensions. The dependency
+metadata in the Splines package is checked by our tests, not
+automatically installed by Creator. Restart Creator after updates.
+
+1. Select a Spline.Path in the Scene. Verify a single **new fluent
+   GizmoHUD** (no overlapping old flat HUD), showing active Knot,
+   Local/World position and rotation-space controls, Snap, Roll
+   and group commands. Group selection must agree with Inspector.
+2. With Bézier or editable Catmull/Centripetal mode, select one
+   Knot and move tangent handles, then rotate its pivot-centered
+   XYZ tangent rings. Escape must restore mode, both handles and
+   preview. Path Node must not rotate; Roll remains independent.
+3. Test Planar2D/Spatial3D whole-Node rotation, Local/World
+   spaces, snapping, indexed point handles, multi-Knot drag and
+   Undo/Redo. No Knot child Nodes should be created.
+4. Select Road and Junction: guide drawing uses the shared
+   Gizmo SDK adapter without creating Knot controllers. Verify
+   Save/Reopen and Prefab Overrides.
+5. In a disposable Scene, disable Cocos-Gizmos. Cocos Splines
+   must print **one explicit dependency warning**, with no
+   legacy HUD fallback. Geometry/Play/Baked still work.
+
+See [Gizmos architecture](GIZMOS_ARCHITECTURE.md).
+These are required native Creator 3.8.8 acceptance tests; mocked
+CI does not certify actual Editor picking or Undo history.

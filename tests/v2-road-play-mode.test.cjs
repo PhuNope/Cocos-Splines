@@ -1,6 +1,7 @@
 'use strict';
 /** v2 playback contract, exercising the actual compiled component with Cocos fakes. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),cp=require('node:child_process'),Module=require('node:module');
+const {mockGizmoHUD,findHud}=require('./helpers/gizmo-hud-sdk.cjs');
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-v2-road-runtime-'));
 try{
  const types=path.join(root,'tests/types/cc.d.ts');
@@ -270,20 +271,28 @@ try{
  road.uvLongitudinalAxis=0;road.shortKnotMode=0;
  // The source Path owns all Knot editing; Road rebuilds as a
  // subscriber. No Road-owned Knot proxy or HUD is permitted.
- const originalSdk=globalThis.Gizmos3D;
- const mockGizmos={beginColor:()=>{},drawLine:()=>{},
+ const originalSdk=globalThis.Gizmos3D,original2D=globalThis.Gizmos2D,
+   originalHUD=globalThis.GizmoHUD;
+ const mockGizmos={supportsRotationPivot:true,beginColor:()=>{},drawLine:()=>{},
    move:(property,options)=>Array.from({length:6},(_,i)=>({
      property,id:'move-'+i,visual:i<3?'axis':'plane',plane:'xy',
-     space:options.space}))};
+     space:options.space})),
+   rotate:(property,options)=>['x','y','z'].map(axis=>({
+     property,axis,visual:'rotation',space:options.space}))};
  globalThis.Gizmos3D=mockGizmos;
+ globalThis.Gizmos2D={rotate:(property,options)=>[{
+   property,axis:'z',visual:'rotation',space:options.space}]};
+ globalThis.GizmoHUD=mockGizmoHUD;
  try{
    authoredPath.gizmoKnotIndex=1;
    const handles=authoredPath.onGizmoHandles();
    assert.equal(handles.length,8,'Path owns active handles and two point handles');
-   assert.equal(authoredPath.onGizmoHudControls().length,11,
-     'Path HUD offers Position Snap, two Local/World toggle pairs, Knot, Roll and guide controls');
-   assert.equal(authoredPath.onGizmoHudControls().filter(h=>h.group?.endsWith('-space')).length,4);
-   assert(authoredPath.onGizmoHudControls().some(h=>h.property==='pathGizmoActiveRoll'));
+   const hud=authoredPath.onGizmoHUD();
+   assert.equal(hud.kind,'hud');
+   for(const id of ['position-local','position-world','rotation-local',
+     'rotation-world','position-snap','active-knot','roll','roll-guide',
+     'group-toggle','group-clear'])assert(findHud(hud,id));
+   assert.equal(findHud(hud,'roll').command.property,'pathGizmoActiveRoll');
    assert.deepEqual(handles.slice(6).map(h=>h.index),[0,2]);
    const firstOriginal={...a.worldPosition};
    authoredPath.pathGizmoKnotPositions[0]=new Vec3(NaN,0,0);
@@ -302,7 +311,8 @@ try{
    authoredPath.pathGizmoKnotPositions[2]=new Vec3(thirdOriginal.x,thirdOriginal.y,thirdOriginal.z);
    authoredPath.onGizmoChanged('pathGizmoKnotPositions','cancel',2);
    authoredPath.knots=originalOrder;
- }finally{globalThis.Gizmos3D=originalSdk;}
+ }finally{globalThis.Gizmos3D=originalSdk;
+   globalThis.Gizmos2D=original2D;globalThis.GizmoHUD=originalHUD;}
 
  // Path Gizmos update a temporary Road mesh; end/cancel force a rebuild.
  road.gizmoLiveMesh=true;road.gizmoMeshIntervalMs=400;
@@ -363,16 +373,21 @@ try{
  const originalPrimary=renderer.mesh,originalSecondary=otherRenderer.mesh;
  assert(originalPrimary&&originalSecondary);
  assert(!('onGizmoHandles' in road),'Only Path owns Knot handles');
- const priorSDK=globalThis.Gizmos3D;
+ const priorSDK=globalThis.Gizmos3D,prior2D=globalThis.Gizmos2D,
+   priorHUD=globalThis.GizmoHUD;
  globalThis.Gizmos3D=mockGizmos;
+ globalThis.Gizmos2D={rotate:(property,options)=>[{
+   property,axis:'z',visual:'rotation',space:options.space}]};
+ globalThis.GizmoHUD=mockGizmoHUD;
  try{
     splinePath.gizmoKnotIndex=1;
     const pathHandles=splinePath.onGizmoHandles();
     assert.equal(pathHandles.length,8,'SplinePath owns six XYZ/plane + two point handles');
     assert(pathHandles.some(h=>h.property==='pathGizmoKnotPosition'));
     assert.deepEqual(pathHandles.slice(6).map(h=>h.index),[0,2]);
-    assert.equal(splinePath.onGizmoHudControls().length,11,
-       'Shared Path HUD includes Position/Rotation Local/World groups and Knot Roll/guide');
+    const hud=splinePath.onGizmoHUD();
+    assert.equal(hud.kind,'hud');
+    assert.equal(findHud(hud,'roll').command.property,'pathGizmoActiveRoll');
     const dragStart={...b.worldPosition};
     splinePath.onGizmoChanged('pathGizmoKnotPosition','begin');
     splinePath.pathGizmoKnotPosition=new Vec3(
@@ -451,13 +466,14 @@ try{
         Date.now=realClock;
         env.EDITOR_NOT_IN_PREVIEW=true;
     }
- }finally{globalThis.Gizmos3D=priorSDK;}
+ }finally{globalThis.Gizmos3D=priorSDK;
+   globalThis.Gizmos2D=prior2D;globalThis.GizmoHUD=priorHUD;}
  other.onDisable();
  road.pathSource=authoredPath;authoredPath.knots=[a,b,k2];
  road.showSavedMesh();generated.length=0;
 
  env.EDITOR_NOT_IN_PREVIEW=false;
- assert.equal(authoredPath.onGizmoHudControls().length,0,'No Path HUD in Play');
+ assert.equal(authoredPath.onGizmoHUD(),null,'No Path HUD in Play');
  assert.equal(authoredPath.onGizmoHandles().length,0,'No Path handles in Play');
  const beforePlay={...a.worldPosition};
  authoredPath.pathGizmoKnotPositions[0]=new Vec3(500,500,500);

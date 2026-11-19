@@ -44,7 +44,9 @@ for(const name of ['RoadV2','ExtrudeV2','MeshDeformV2','JunctionV2'])
 copy('src/contributions/inspector/PathV2.js','dist/contributions/inspector/PathV2.js');
 const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 pkg.version=version;
-pkg.description='Clean BREAKING V2 development test extension for Cocos Creator 3.8.x';
+pkg.description='Clean BREAKING V2 development test extension; requires Cocos-Gizmos >=3.0.2';
+assert.equal(pkg.cocosSplines?.requiredExtensions?.['cocos-gizmos'],'>=3.0.2',
+    'The installable manifest must declare required Gizmos extension API');
 pkg.main='./dist/v2/clean-main.js';
 pkg.contributions={
     scene:{script:'./dist/v2/clean-scene.js'},
@@ -88,7 +90,9 @@ fs.writeFileSync(path.join(target,'README.md'),
     '2. Add Spline.Road / SplineExtrude / SplineMeshDeform, link Path Source.\n'+
     '3. Add Spline.Junction and linked Roads if needed.\n'+
     '4. In Inspector use Rebuild Preview, Bake glTF Asset and Bind Imported Mesh.\n'+
-    '5. Enable Cocos-Gizmos separately for Scene editing.\n\n'+
+    '5. REQUIRED: install/enable Cocos-Gizmos >=3.0.2 BEFORE Cocos-Splines; restart Creator.\n'+
+    '   The latest GizmoHUD builder and rotation-pivot APIs are mandatory.\n'+
+    '   The Scene warns once when this extension is absent; no old HUD fallback.\n\n'+
     '**This is a test artifact, not a release. Existing legacy scenes are not supported.**\n'+
     'Full instructions: docs/v2/TEST_BUILD.md and docs/v2/REBUILD_BREAKING.md.\n','utf8');
 // Smoke load the packed Editor topology planner, not just its own file.
@@ -103,6 +107,8 @@ for(const rel of [
  'dist/v2/clean-main.js','dist/v2/clean-scene.js',
  'dist/v2/EditorAssetBind.js','dist/contributions/inspector/common.js',
  'assets/splines-v2/Components/SplinePath.ts',
+ 'assets/splines-v2/Components/SplineGizmoHandler.ts',
+ 'assets/splines-v2/Components/SplineGizmoHandler.ts.meta',
  'dist/v2/PathV2Dump.js',
  'dist/v2/BezierCurveSplit.js',
  'dist/v2/PathGroupNudgeDump.js',
@@ -139,6 +145,12 @@ assert(!fs.existsSync(path.join(target,'assets/splines')),
     'Legacy Spline assets must NOT ship');
 assert(!fs.existsSync(path.join(target,'assets/splines.meta')),
     'Legacy asset UUID metadata must NOT ship');
+assert(!fs.existsSync(path.join(target,
+    'assets/splines-v2/Components/SplineGizmoBridge.ts')),
+    'Retired optional Gizmos bridge must not ship');
+assert(!fs.existsSync(path.join(target,
+    'assets/splines-v2/Components/SplineGizmoBridge.ts.meta')),
+    'Retired optional bridge metadata must not ship');
 assert(!fs.existsSync(path.join(target,'dist/main.js'))&&
        !fs.existsSync(path.join(target,'dist/scene.js')),
     'Legacy Editor entrypoints must NOT ship');
