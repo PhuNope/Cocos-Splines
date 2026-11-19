@@ -1,5 +1,6 @@
 'use strict';
 const NAME='cocos-splines';
+const {planKnotPositions,validatedKnots}=require('./SplineKnotEditMath');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -68,6 +69,54 @@ async function selectedSpline(){
     return invokeScene('querySpline',ids[0]);
 }
 function alertError(action,e){console.error(`[Cocos Splines] ${action}:`,e);return {ok:false,error:String(e?.message||e)};}
+
+let knotEditBusy=false;
+/** Selection is ordered by sibling index, not by click order, for deterministic align. */
+function selectedKnotIds(info,explicit){
+    const ids=explicit===undefined
+        ?selected().filter(id=>info.knots.some(k=>k.uuid===id))
+        :explicit;
+    return validatedKnots(info.knots,ids).map(k=>k.uuid);
+}
+async function writeKnotPosition(uuid,value){
+    const result=await Editor.Message.request('scene','set-property',{
+        uuid,path:'position',dump:{type:'cc.Vec3',value:{x:value.x,y:value.y,z:value.z}},record:false,
+    });
+    if(result===false)throw new Error('Failed to set knot position: '+uuid);
+}
+async function applyKnotPlacement(operation,ids,options){
+    if(knotEditBusy)throw new Error('Another knot edit is in progress.');
+    knotEditBusy=true;
+    try {
+        const info=await selectedSpline();
+        if(!info?.found)throw new Error(info?.message||'Select a SplineContainer or Knot.');
+        const selectedIds=selectedKnotIds(info,ids);
+        const edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension);
+        if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
+        const applied=[];
+        try{
+            for(const edit of edits){
+                // Include the current node even when the Scene API throws after applying it.
+                applied.push(edit);
+                await writeKnotPosition(edit.uuid,edit.after);
+            }
+            // One native snapshot for the complete batch (not one per Knot).
+            await snapshot();
+        }catch(error){
+            const rollbacks=await Promise.allSettled(applied.slice().reverse()
+                .map(edit=>writeKnotPosition(edit.uuid,edit.before)));
+            const failures=rollbacks.filter(r=>r.status==='rejected');
+            if(failures.length)throw new Error(String(error)+'; rollback failed on '+failures.length+' Knot(s)');
+            throw error;
+        }
+        let warning;
+        try{await invokeScene('refreshPreview',info.rootUuid);}
+        catch(error){warning='Positions saved, but preview refresh failed: '+String(error);}
+        return {ok:true,changed:true,count:edits.length,warning,
+            message:operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
+                'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.'};
+    }finally{knotEditBusy=false;}
+}
 const methods={
     async create2DSpline(){
         try{
@@ -358,6 +407,24 @@ const methods={
             if(!s?.found||!s.knots.some(k=>k.uuid===uuid))throw Error('Knot không thuộc spline đang chọn.');
             selectOnly(uuid);return {ok:true};}
         catch(e){return alertError('select-knot-id',e);}
+    },
+    async selectKnotIds(ids){
+        try{
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a spline.');
+            const knots=selectedKnotIds(info,ids);
+            Editor.Selection.clear('node');
+            for(const uuid of knots)Editor.Selection.select('node',uuid);
+            return {ok:true,count:knots.length,message:'Selected '+knots.length+' Knot(s) in Scene.'};
+        }catch(error){return alertError('select-knot-ids',error);}
+    },
+    async snapSelectedKnots(ids,step){
+        try{return await applyKnotPlacement('snap',ids,{step});}
+        catch(error){return alertError('snap-selected-knots',error);}
+    },
+    async alignSelectedKnots(ids,axis){
+        try{return await applyKnotPlacement('align',ids,{axis});}
+        catch(error){return alertError('align-selected-knots',error);}
     },
     async deleteKnotId(uuid){
         try {const s=await selectedSpline();

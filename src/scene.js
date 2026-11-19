@@ -41,7 +41,7 @@ function query(uuid){
         try{length=component.length;segments=component.segmentCount;}
         catch(err){return {found:true,rootUuid:root.uuid,rootName:root.name,parentUuid:root.parent?.uuid,containerIndex,knots,warning:String(err)};}
     }
-    return {found:true,rootUuid:root.uuid,rootName:root.name,parentUuid:root.parent?.uuid,containerIndex,closed:component.closed,
+    return {found:true,rootUuid:root.uuid,rootName:root.name,parentUuid:root.parent?.uuid,containerIndex,closed:component.closed,dimension:component.dimension,
       reversed:component.reversed,length,segments,knots};
 }
 function refreshPreview(uuid){
