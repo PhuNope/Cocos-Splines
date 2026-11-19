@@ -1,3 +1,10 @@
+# Unreleased — Phase 1.3 Mesh and Modifiers Gizmos
+
+- Migrated Road/Extrude/MeshDeform/JunctionMesh/ObjectBender wireframes and Modifiers visual guides into dedicated Editor drawer classes using the upstream registerGizmos decorator.
+- Core/SplineMeshGizmos is now pure geometry data construction, with rendering in Editor/SplineMeshDrawers.
+- Removed direct onDrawGizmosSelected methods from all six migrated components and updated coverage.
+- Live Editor verification is still required; Node CI does not certify Cocos Scene rendering.
+
 # Unreleased — Phase 1.2 Core Gizmos v3 drawers
 
 - Migrated SplineContainer and SplineKnot Gizmo draw callbacks into Editor-only drawers registered with upstream Cocos-Gizmos decorator from the read-only AssetDB mount.

@@ -24,4 +24,4 @@ Mock TypeScript compile và test có hỗ trợ import chính thức bằng load
 
 Smoke test: bật cả hai extension → chọn Container (curve) → chọn Knot (2 tangent handles, rotation gizmos) → kéo mỗi bên, đổi mode từ AutoSmooth, Escape, Undo/Redo, save/reopen scene, thử XY2D và XZ2D/3D, thử parent non-uniform scale và build game.
 
-Phase 1.3 sẽ migrate Road/Extrude/MeshDeform/Modifiers và các mesh gizmos; hiện chưa được chuyển.
+Phase 1.3 đã chuyển Road/Extrude/MeshDeform/JunctionMesh/ObjectBender sang Editor/SplineMeshDrawers.ts và Modifiers sang Editor/SplineModifierGizmos.ts. Core/SplineMeshGizmos.ts chỉ còn hàm buildMeshGizmoLines (pure data).

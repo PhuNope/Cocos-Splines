@@ -63,3 +63,7 @@ Road, Extrude, MeshDeform and ObjectBender use continuous frames to avoid abrupt
 ### Cocos-Gizmos v3 dependency (development branch)
 
 The spline core drawers import the upstream `registerGizmos` decorator via `db://cocos-gizmos/RegisterGizmos` (Cocos-Gizmos v3.0.3+ must be installed/enabled). Selected knots offer two interactive tangent Move handles and a rotation handle. See [integration notes](docs/GIZMOS_V3_INTEGRATION_VI.md); native Undo/Redo and Cocos Creator Editor 3.8.8 still require manual verification.
+
+### Editor-only mesh and modifier drawers
+
+Road/Extrude/MeshDeform/JunctionMesh/ObjectBender and Modifiers now use standalone Cocos-Gizmos v3 drawers. Geometry preview caches stay with their owning Components and are exposed via read-only methods; drawing is no longer implemented by runtime Components. Cocos Creator live smoke tests remain required.

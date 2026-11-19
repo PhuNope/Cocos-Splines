@@ -24,7 +24,8 @@ try {
  const orig=Module._load;
  Module._load=function(n,parent,isMain){if(n==='cc')return cc;if(n==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};return orig.call(this,n,parent,isMain);};
  try {
-  const {buildMeshGizmoLines,drawMeshGizmoLines}=require(path.join(tmp,'Core/SplineMeshGizmos.js'));
+  const {buildMeshGizmoLines}=require(path.join(tmp,'Core/SplineMeshGizmos.js'));
+  const {drawMeshGizmoLines}=require(path.join(tmp,'Editor/SplineMeshDrawers.js'));
   const positions=[],indices=[];
   for(let k=0;k<120;k++){
    const base=positions.length/3;
@@ -74,7 +75,8 @@ try {
   }
   for(const type of ['SplineRoad','SplineExtrude','SplineMeshDeform','SplineJunctionMesh','SplineObjectBender']){
    const s=fs.readFileSync(path.join(root,'assets/splines/Components',type+'.ts'),'utf8');
-   assert(s.includes('onDrawGizmosSelected()')&&s.includes('drawMeshGizmoLines('));
+   assert(s.includes('@registerGizmos(')&&!s.includes('onDrawGizmosSelected()'));
+   assert(s.includes(type==='SplineObjectBender'?'getMeshGizmoSamples()':'getMeshGizmoGeometry()'));
   }
   console.log('MORPH + MESH GIZMOS v0.9.4 PASS: Local/World, transform/restore, bounded wireframes, no gizmos fallback, Inspector fields.');
  } finally {Module._load=orig;}

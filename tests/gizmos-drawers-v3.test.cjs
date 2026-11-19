@@ -25,4 +25,15 @@ for(const name of ['SplineContainerGizmos','SplineKnotGizmos']){
     assert(read(base).length>300);
     assert.match(JSON.parse(read(base+'.meta')).uuid,/^[a-f\d-]{36}$/);
 }
-console.log('GIZMOS DRAWER V3 PASS: official decorator, separated Gizmo draw and handle ports.');
+for(const name of ['SplineRoad','SplineExtrude','SplineMeshDeform','SplineObjectBender','SplineJunctionMesh','SplineModifiers']){
+    const file=read('assets/splines/Components/'+name+'.ts');
+    assert.match(file,/@registerGizmos\(/);
+    assert.doesNotMatch(file,/onDrawGizmos(?:Selected)?\s*\(/);
+}
+const coreMesh=read('assets/splines/Core/SplineMeshGizmos.ts');
+assert.doesNotMatch(coreMesh,/globalThis|drawMeshGizmoLines/);
+const meshDrawer=read('assets/splines/Editor/SplineMeshDrawers.ts');
+const modifierDrawer=read('assets/splines/Editor/SplineModifierGizmos.ts');
+assert(meshDrawer.includes('drawMeshGizmoLines'));
+assert(modifierDrawer.includes('onDrawGizmosSelected'));
+console.log('GIZMOS DRAWER V3 PASS: official decorator, isolated core/mesh/modifier Gizmos.');

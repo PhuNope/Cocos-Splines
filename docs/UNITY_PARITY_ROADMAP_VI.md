@@ -56,3 +56,10 @@ Editor 3.8.8 smoke checks, example scenes, docs, performance, breaking-change mi
 ## Chính sách legacy
 
 Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration. Không tự ý đổi enum/default đã serialize (`cornerMode=Legacy`, `repeatLayout=Count`, `SplineMorph.space=World`...) khi chưa có data migration. Các hàm `rebuild()` tạo geometry vẫn canonical, không phải legacy alias.
+
+### Phase 1.3 — Đã chuyển mesh/modifier drawers
+
+- [x] Road, Extrude, MeshDeform, JunctionMesh, ObjectBender cùng dùng SplineMeshDrawers.
+- [x] SplineModifiers vẽ hoàn toàn trong Editor/SplineModifierGizmos.
+- [x] Core/SplineMeshGizmos chỉ xây dựng dữ liệu wireframe, không truy cập globalThis.
+- [ ] Manual Cocos Creator Scene validation: draw depth, selected components, nested model transforms và Undo/Redo.
