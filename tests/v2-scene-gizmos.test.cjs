@@ -72,9 +72,10 @@ try{
         oldHud=globalThis.GizmoHUD;
     const calls=[];
     const mockHud=()=>{
-      const controls=[];
-      const make=(id)=>({
-       id,children:controls,
+      const make=(id)=>{
+       const controls=[]; // Each row owns its children; never self-reference.
+       return ({
+        id,children:controls,
        position(){return this;},theme(){return this;},
        width(){return this;},padding(){return this;},gap(){return this;},
        text(key,text){controls.push({id:key,text,kind:'text'});return this;},
@@ -84,8 +85,9 @@ try{
        slider(key,text,command,opts){controls.push({
            id:key,text,kind:'slider',command,...opts});return this;},
        button(key,text,command){controls.push({id:key,text,kind:'button',command});return this;},
-       build(){return {kind:'hud',id,root:{children:controls}};}
-      });
+        build(){return {kind:'hud',id,root:{children:controls}};}
+       });
+      };
       return {
        createHud:make,bind:property=>({kind:'property',property}),
        action:execute=>({kind:'action',execute})
