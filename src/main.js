@@ -84,6 +84,23 @@ async function writeKnotPosition(uuid,value){
     });
     if(result===false)throw new Error('Failed to set knot position: '+uuid);
 }
+async function writeKnotRotation(uuid,rotation){
+    const result=await Editor.Message.request('scene','set-property',{
+        uuid,path:'rotation',dump:{type:'cc.Quat',
+            value:{x:rotation.x,y:rotation.y,z:rotation.z,w:rotation.w}},record:false,
+    });
+    if(result===false)throw new Error('Failed to set knot rotation: '+uuid);
+}
+async function restoreKnotEdit(edit){
+    const work=[];
+    // Preserve existing non-surface batch edits and only touch rotation when
+    // the surface normal option produced a rotation change.
+    if(edit.rotationChanged)work.push(writeKnotRotation(edit.uuid,edit.beforeRotation));
+    if(edit.positionChanged!==false)work.push(writeKnotPosition(edit.uuid,edit.before));
+    const results=await Promise.allSettled(work);
+    const failures=results.filter(result=>result.status==='rejected');
+    if(failures.length)throw new Error('Could not rollback '+failures.length+' property change(s) on '+edit.uuid);
+}
 async function applyKnotPlacement(operation,ids,options){
     if(knotEditBusy)throw new Error('Another knot edit is in progress.');
     knotEditBusy=true;
@@ -105,9 +122,19 @@ async function applyKnotPlacement(operation,ids,options){
                 return {uuid,position:frame.toWorld(knot.position)};
             });
             const result=await invokeScene('snapToMeshSurface',info.rootUuid,
-                options.targetUuid,world,{height:options.height,maxDrop:options.maxDrop});
+                options.targetUuid,world,{height:options.height,maxDrop:options.maxDrop,
+                    alignNormal:options.alignNormal===true});
             if(!result?.ok)throw new Error(result?.error||'Surface raycast failed.');
-            edits=planSurfaceKnotPositions(info.knots,selectedIds,result.hits,matrixResult.matrix);
+            if(options.alignNormal===true){
+                const rotations=await invokeScene('queryKnotOrientations',info.rootUuid,selectedIds);
+                if(!rotations?.ok)throw new Error(rotations?.error||'Cannot read Knot rotations.');
+                const rotationMap=new Map(rotations.rotations.map(entry=>[entry.uuid,entry.rotation]));
+                const withRotation=info.knots.map(knot=>({
+                    ...knot,rotation:rotationMap.get(knot.uuid),
+                }));
+                edits=planSurfaceKnotPositions(withRotation,selectedIds,result.hits,
+                    matrixResult.matrix,true,rotations.parentRotation);
+            }else edits=planSurfaceKnotPositions(info.knots,selectedIds,result.hits,matrixResult.matrix);
         }else{
             let frame=null;
             if(options.space==='world'){
@@ -123,13 +150,14 @@ async function applyKnotPlacement(operation,ids,options){
             for(const edit of edits){
                 // Include the current node even when the Scene API throws after applying it.
                 applied.push(edit);
-                await writeKnotPosition(edit.uuid,edit.after);
+                if(edit.positionChanged!==false)await writeKnotPosition(edit.uuid,edit.after);
+                if(edit.rotationChanged)await writeKnotRotation(edit.uuid,edit.afterRotation);
             }
             // One native snapshot for the complete batch (not one per Knot).
             await snapshot();
         }catch(error){
             const rollbacks=await Promise.allSettled(applied.slice().reverse()
-                .map(edit=>writeKnotPosition(edit.uuid,edit.before)));
+                .map(edit=>restoreKnotEdit(edit)));
             const failures=rollbacks.filter(r=>r.status==='rejected');
             if(failures.length)throw new Error(String(error)+'; rollback failed on '+failures.length+' Knot(s)');
             throw error;
@@ -454,8 +482,9 @@ const methods={
             return response;
         }catch(error){return alertError('list-surface-meshes',error);}
     },
-    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100){
-        try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop});}
+    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,alignNormal=false){
+        try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop,
+            alignNormal:alignNormal===true});}
         catch(error){return alertError('snap-selected-to-surface',error);}
     },
     async snapSelectedKnots(ids,step,space='local'){

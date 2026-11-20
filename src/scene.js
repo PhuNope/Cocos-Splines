@@ -121,6 +121,24 @@ function snapToMeshSurface(rootUuid,targetUuid,origins,options={}){
         return {ok:false,error:String(error?.message||error)};
     }
 }
+/** Read-only scene orientation query, used only when Align Normal is enabled. */
+function queryKnotOrientations(rootUuid,uuids){
+    const root=resolve(rootUuid);
+    if(!root||containerOf(root)!==root||!Array.isArray(uuids)||
+       uuids.length<1||uuids.length>64||new Set(uuids).size!==uuids.length)
+        return {ok:false,error:'Invalid spline or orientation selection.'};
+    const pack=q=>q&&{x:q.x,y:q.y,z:q.z,w:q.w};
+    const parentRotation=pack(root.worldRotation);
+    const rotations=[];
+    for(const uuid of uuids){
+        const knot=resolve(uuid);
+        if(!knot||knot.parent!==root||
+           !knot.components.some(c=>classOf(c)==='Splines.SplineKnot'))
+            return {ok:false,error:'Selected Knot is no longer a child of this SplineContainer.'};
+        rotations.push({uuid,rotation:pack(knot.rotation)});
+    }
+    return {ok:true,parentRotation,rotations};
+}
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
     const {js}=require('cc');let count=0;
@@ -300,5 +318,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceMeshes,snapToMeshSurface,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceMeshes,snapToMeshSurface,queryKnotOrientations,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
