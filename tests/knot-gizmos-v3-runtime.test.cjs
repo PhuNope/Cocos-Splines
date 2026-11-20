@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict');
 const cp=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),Module=require('node:module');
 const root=path.resolve(__dirname,'..'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'spline-knot-v3-'));
+(async()=>{
 try {
     cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),'--noEmit','false','--outDir',dir]);
     class Vec3 {
@@ -22,13 +23,13 @@ try {
         static toEuler(out,q){return out.set(q.x,q.y,q.z);}
     }
     class Node {
-        constructor(name){this.name=name;this.parent=null;this.children=[];this.position=new Vec3();
+        constructor(name){this.name=name;this.uuid=name;this.parent=null;this.children=[];this.position=new Vec3();
             this.rotation=new Quat();this.worldRotation=new Quat();this.isValid=true;this.enabled=true;this.components=[];}
         getComponent(type){
             if(typeof type==='string'&&type==='Splines.SplineContainer')return this.spline||null;
             return this.components.find(c=>c instanceof type)||null;
         }
-        setWorldRotation(q){this.worldRotation=q.clone();}
+        setWorldRotation(q){this.worldRotation=q.clone();this.rotation=q.clone();}
         setPosition(v){this.position=v.clone();}
     }
     class Component {constructor(){this.enabled=true;this.isValid=true;}}
@@ -59,8 +60,15 @@ try {
         assert.equal(knot.editorTangentOut.x,2,'AutoSmooth getter uses resolved tangent');
         const gizmo=new SplineKnotGizmos(knot);
         globalThis.Gizmos3D={
-            move:name=>[{property:name,visual:'axis'}],
-            rotate:name=>[{property:name,visual:'rotation'}],
+            supportsExternalHistory:true,
+            move:(name,options)=>{
+                assert.equal(options.history,'external');
+                return [{property:name,visual:'axis'}];
+            },
+            rotate:(name,options)=>{
+                assert.equal(options.history,'external');
+                return [{property:name,visual:'rotation'}];
+            },
         };
         const handles=gizmo.onGizmoHandles();
         assert.deepEqual(handles.map(x=>x.property),['editorTangentIn','editorTangentOut','editorWorldEuler']);
@@ -79,20 +87,45 @@ try {
         assert.equal(nodeA.worldRotation.z,30,'Rotate Gizmo writes node world rotation');
         gizmo.onGizmoChanged('editorWorldEuler','cancel');
         assert.equal(nodeA.worldRotation.z,0,'Cancel restores node world rotation');
-        let requests=0;
-        globalThis.Editor={Message:{request:()=>{
+        let requests=0,writes=0;
+        globalThis.Editor={Message:{request:(channel,method,payload)=>{
+            assert.equal(channel,'scene');
+            if(method==='query-node')return {
+                __comps__:[{type:'Splines.SplineKnot',value:{
+                    mode:{type:'Enum'},tangentIn:{type:'cc.Vec3'},
+                    tangentOut:{type:'cc.Vec3'},
+                }}],
+            };
+            if(method==='set-property'){
+                assert.equal(payload.record,false);
+                writes++;
+                if(payload.path==='rotation'){
+                    nodeA.rotation=Object.assign(new Quat(),payload.dump.value);
+                    nodeA.worldRotation=nodeA.rotation.clone();
+                }else{
+                    const field=payload.path.split('.').at(-1);
+                    assert(['mode','tangentIn','tangentOut'].includes(field));
+                    knot[field]=field==='mode'?payload.dump.value:
+                        new Vec3().set(payload.dump.value);
+                }
+                return true;
+            }
+            assert.equal(method,'snapshot');
             requests++;
-            return false; // synchronous Scene snapshot failure
+            return false; // reject the one serialized snapshot
         }}};
         gizmo.onGizmoChanged('editorTangentOut','begin');
         knot.editorTangentOut=new Vec3(7,3,0);
         gizmo.onGizmoChanged('editorTangentOut','end');
+        await new Promise(resolve=>setImmediate(resolve));
         assert.equal(knot.mode,TangentMode.AutoSmooth,'Failed tangent commit restores AutoSmooth');
         assert.equal(knot.tangentOut.x,1,'Failed tangent commit restores original outgoing tangent');
         assert.equal(requests,1);
+        assert(writes>=4,'Tangent serialized mode/vector updates also roll back');
         gizmo.onGizmoChanged('editorWorldEuler','begin');
         knot.editorWorldEuler=new Vec3(0,50,20);
         gizmo.onGizmoChanged('editorWorldEuler','end');
+        await new Promise(resolve=>setImmediate(resolve));
         assert.equal(nodeA.worldRotation.y,0,'Failed rotate snapshot restores previous world rotation');
         assert.equal(requests,2);
         // Component disabled mid-drag: no snapshot, tangent/mode restored.
@@ -123,3 +156,4 @@ try {
         console.log('KNOT GIZMOS V3 PASS: tangent/rotate cancel and failed snapshots.');
     } finally {Module._load=original;}
 } finally {fs.rmSync(dir,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});
