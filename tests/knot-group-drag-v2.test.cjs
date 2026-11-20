@@ -67,7 +67,7 @@ try {
         remote.parent=otherContainer;
         const remoteKnot=new SplineKnot();remoteKnot.node=remote;
         remote.components=[remoteKnot];otherContainer.children=[remote];
-        container.spline={dimension:0,count:3,refresh(){},
+        container.spline={node:container,dimension:0,count:3,refresh(){},
             knots,getNaturalResolvedKnots(){return [];}};
         otherContainer.spline={dimension:0,count:1,refresh(){}};
         const original=nodes.map(n=>n.worldPosition.clone());
