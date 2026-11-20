@@ -87,6 +87,10 @@ try {
 
  // Same protection for a simple Knot rotation, with an in-flight IPC.
  h=make();calls.length=0;
+ // Rotation gestures do not change TangentMode; hold the component fields
+ // at their original values so preflight checks only the changed quaternion.
+ h.target.mode=h.before.mode;
+ h.target.tangentOut={...h.before.outTangent};
  h.knotNode.rotation={...h.Q90};
  const rotateAfter={...h.before,localRotation:{...h.Q90}};
  let resumeRotation;
