@@ -85,3 +85,9 @@ Cần **Cocos-Gizmos V3 preview mới** có `supportsExternalHistory`, tương t
 Group Move, Tangent Move và Knot Rotate của các Knot **cùng một SplineContainer** nay có chung một khóa lịch sử Editor. Khi Knot A đã thả chuột nhưng Scene Editor vẫn đang ghi serialized properties / chờ snapshot / rollback, Knot B không thể bắt đầu một thao tác mới; các handle tạm ẩn để tránh xung đột. Khóa nhả sau khi tác vụ ghi hoặc rollback hoàn tất. SplineContainer khác vẫn hoạt động độc lập.
 
 Cache của spline gốc được invalidated sau commit hoặc rollback, kể cả nếu Knot đổi parent. Road/Extrude/MeshDeform tiếp tục dùng hệ thống `getRevision()` và `update()` đang có để phát hiện thay đổi sau Editor Undo/Redo. Không thêm legacy listener. Cần Creator 3.8.8 để kiểm thử native Undo stack, Prefab và tình huống đổi selection khi commit đang chờ.
+
+## Phase 2.15 — Bảo vệ Scene khi Gizmos đang chờ IPC
+
+Mỗi lần bắt đầu kéo Knot, plugin ghi nhận một **Scene Lease** gồm danh tính các Node từ SplineContainer đến Scene root. Nếu đóng/mở Scene, thay Nested Prefab editing root hoặc reparent ancestor khi đang kéo, các thao tác Group Move, Tangent và Rotate sẽ hủy an toàn. `scene:query-node`, `scene:set-property`, `scene:snapshot` được kiểm tra trước và sau phản hồi bất đồng bộ; không tiếp tục ghi hoặc rollback sang Scene khác.
+
+**Giới hạn:** plugin không thể hủy một lệnh Editor đã gửi đi từ trước khi Scene đổi, chỉ có thể chặn các lệnh tiếp theo. Cần smoke test với Cocos Creator 3.8.8 thật để xác minh native Undo, Prefab overrides và thời điểm unload. Vẫn dùng Cocos-Gizmos v3 preview hỗ trợ `supportsExternalHistory`.

@@ -163,3 +163,10 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Invalidate original spline arc LUT on transaction completion; existing road/extrude/deform revision observers can respond after Editor restores state.
 - [x] Regression tests for pending snapshot races and rollback-before-release.
 - [ ] Native Editor undo-stack grouping, Prefab Instance overrides, Editor update cadence and actual multi-scene lifecycle still need Creator 3.8.8 smoke testing.
+
+### Phase 2.15 — Scene Lease / stale IPC fail-closed
+
+- [x] Capture original SplineContainer→Scene ancestry at Gizmo begin, validate during drag/end and async commit.
+- [x] Stop follow-up query/set-property/snapshot/rollback after Scene unload, ancestor reparent or same-UUID nested Prefab root replacement.
+- [x] Preserve normal single-snapshot flow while Scene lease remains valid; tests cover delayed IPC and active Group Move invalidation.
+- [ ] Actual Creator native Scene-switch cancellation, Undo/Redo history and Nested Prefab override/apply/revert still require live validation.

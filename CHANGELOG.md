@@ -1,3 +1,13 @@
+# Unreleased — Phase 2.15 Scene Lease / Async Editor IPC Invalidation
+
+- Added `SplineGizmoSceneLease`: immutable Scene hierarchy identity captured when a Knot Gizmo gesture begins, including ancestor/root Node object identities and validity. This detects Scene unload/reload, nested Prefab editing-root replacement and ancestor reparenting even when a newly opened Scene reuses UUIDs.
+- Group Move, Knot Rotate and Tangent Move validate the captured lease at gesture update/end and during async serialized Editor operations. A stale gesture cancels without requesting a snapshot or restoring old Nodes into a different Scene.
+- Serialized Group and Knot writers now guard **before and after** each asynchronous `scene:set-property`, `scene:query-node` (Tangent component index) and `scene:snapshot`, and before rollback. If an old request completes after unload, they abort without issuing further set-property/rollback to the now-current Scene.
+- The existing per-SplineContainer history gate still releases only after the in-flight operation handles success/error; Scene Lease prevents an obsolete commit from contaminating a newer Scene.
+- Regression coverage includes a fake Scene with nested Prefab ancestors, same-UUID root replacement, delayed query/set-property/snapshot, active Group Move unload/cancel and normal successful commits.
+- **Limit:** requests ALREADY submitted to the Editor cannot be forcibly cancelled by this feature. It prevents follow-up requests and wrong-Scene rollback; it does not guarantee Creator will not process an already in-flight request after a Scene switch. Native Undo stack, actual Prefab override serialization and Scene teardown timing still require Creator 3.8.8 manual acceptance.
+- Preview code on `v2` only; no tag or GitHub Release.
+
 # Unreleased — Phase 2.14 Serialized Gizmo History Concurrency & Revision Recovery
 
 - Added `SplineGizmoHistoryGate`, an Editor-only WeakMap keyed by SplineContainer Node. Prevents overlapping serialized Scene transactions across distinct Knot drawers on the same spline.

@@ -309,3 +309,24 @@ Phase này hoàn thiện cơ chế history của **Knot đơn lẻ** để cùng
 5. Khi Scene snapshot lỗi, kiểm tra Console warning, vị trí/rotation/tangent rollback và việc Gizmos hoạt động lại sau lỗi.
 
 **Chưa xác minh:** giao tiếp native Editor Undo/Redo, Prefab apply/revert và việc Editor luôn tick `update()` trong mọi tình huống. CI chỉ chứng minh khóa, đúng thứ tự lệnh và revision invalidation; không mô phỏng Undo stack native.
+
+## Phase 2.15 — Scene Lease và giao dịch Gizmos bị gián đoạn
+
+**Mục tiêu:** ngăn thao tác Editor bất đồng bộ của Scene *cũ* ghi vào Scene *mới*. `SplineGizmoSceneLease` ghi lại **tham chiếu Node thật** của SplineContainer, Prefab ancestors và Scene root lúc `begin`. Lease không dựa riêng vào UUID (Scene mới có thể tạo object khác với cùng UUID), không truy cập `__prefab` và không đăng ký các event Editor không chính thức.
+
+**Quy tắc vận hành:**
+
+1. Trước drag, chụp lease. Nếu parent/ancestor thay đổi hoặc một Node trong chuỗi bị vô hiệu hóa, `valid()` trả false, giao dịch hủy.
+2. Tại `end`, các writer Group/Tangent/Rotate tiếp tục kiểm tra lease trước/sau `query-node`, `set-property` và `snapshot`. Không gửi snapshot khi phát hiện lease mất hiệu lực trước bước snapshot.
+3. Nếu Scene unload trong lúc một Editor IPC đang chờ, sau khi IPC trả về writer nhận ra lease stale và **không phát thêm lệnh ghi/rollback** vào Scene mới.
+4. Cancel không đụng transform các Node đã thuộc Scene unload. History Gate chỉ nhả khi thao tác bất đồng bộ hoàn tất để tránh 2 gesture chồng nhau.
+5. Trong Scene còn hợp lệ, các lệnh serialize và single snapshot hoạt động như Phase 2.12–2.14.
+
+**Smoke test với dự án mẫu riêng (Creator 3.8.8):**
+
+- Chỉnh Group Move trên một Scene có nhiều Knot, đổi Scene khi còn giữ chuột hoặc ngay sau khi thả; không được xuất hiện các thay đổi bất ngờ ở Scene mới.
+- Thử Tangent AutoSmooth→Broken và Rotate rồi mở Scene khác trong lúc Editor xử lý. Kiểm tra Console có cảnh báo giao dịch stale thay vì ghi tiếp.
+- Thử Prefab Instance và Nested Prefab editing mode, đóng editing root giữa lúc thao tác; không được áp override sang một đối tượng khác.
+- Trở lại Scene ban đầu rồi thử kéo lại, Undo/Redo và save/reopen. Kiểm tra Road/Extrude/Deform tiếp tục theo dữ liệu Knot thật.
+
+**Giới hạn kỹ thuật:** Cocos Editor IPC đã gửi không có khả năng cancel được xác nhận, nên chức năng này không thể đảm bảo một request *đang bay* sẽ không được xử lý khi Scene đổi. Nó ngăn **các request tiếp theo** và tránh rollback sai Scene. Native Undo stack, Prefab apply/revert, unload/reload timing và Editor UI lifecycle vẫn phải test thực tế.

@@ -42,3 +42,7 @@ Knot Tangent Move and Knot Rotate now require matching Gizmos v3 with `supportsE
 ### Phase 2.14 — Pending serialized history gate
 
 The preview blocks overlapping Knot Gizmo transactions within one spline while any set-property/snapshot/rollback is pending; independent splines remain editable. Cancel, no-op and failed operations must release correctly. The original spline's cache is invalidated on commit completion, allowing existing dependent components to rebuild on subsequent Editor updates. Validate Undo/Redo and nested Prefab instances in Creator 3.8.8; CI does not certify native undo. No tag/Release.
+
+### Phase 2.15 Scene lease safety
+
+Builds reject further serialized Scene writes/snapshots/rollback once the original Scene/Prefab ancestry becomes invalid. Already-dispatched native IPC cannot be cancelled by the extension. Verify rapid Scene switch/unload in a copy of a Creator 3.8.8 project and check Prefab overrides, Undo/Redo. Use existing Gizmos v3 preview with `supportsExternalHistory`. No tag/Release.
