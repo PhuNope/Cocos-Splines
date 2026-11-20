@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -29,6 +29,11 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <div class="spl-btns spl-batch-inputs"><label>Grid step <input class="spl-grid-step" type="number" min="0.0001" max="1000000" step="0.25" value="1" aria-label="Grid step (local units)"></label><button type="button" class="spl-btn spl-snap-marked">Snap marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>ΔX <input class="spl-move-x" type="number" step="0.5" value="0" aria-label="Move delta X"></label><label>ΔY <input class="spl-move-y" type="number" step="0.5" value="0" aria-label="Move delta Y"></label><label>ΔZ <input class="spl-move-z" type="number" step="0.5" value="0" aria-label="Move delta Z"></label><button type="button" class="spl-btn spl-move-marked">Move marked</button></div>
+    <div class="spl-surface-panel">
+      <p class="spl-note">Surface Snap · 3D only. Target must be a readable MeshRenderer outside this spline. Cast downward in World Y; no Physics Collider required.</p>
+      <div class="spl-btns spl-batch-inputs"><label>Target mesh <select class="spl-surface-target" aria-label="Surface target mesh"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
+      <div class="spl-btns spl-batch-inputs"><label>Start above <input class="spl-surface-height" type="number" step="1" min="0" max="1000000" value="10" aria-label="Surface cast height"></label><label>Cast depth <input class="spl-surface-drop" type="number" step="1" min="0.01" max="1000000" value="100" aria-label="Surface max drop"></label><button type="button" class="spl-btn spl-surface-snap">Snap to Surface</button></div>
+    </div>
   </details>
   <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
@@ -64,6 +69,8 @@ const ownStyle=style+`
 .spl-batch-inputs{align-items:center}
 .spl-batch-inputs label{display:flex;align-items:center;gap:5px;font-size:11px}
 .spl-batch-inputs input,.spl-batch-inputs select{width:80px;background:var(--color-normal-fill-emphasis,#202c38);color:inherit;border:1px solid #536471;border-radius:4px;padding:4px}
+.spl-surface-panel{margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border-normal,#415162)}
+.spl-surface-target{min-width:135px;max-width:230px}
 
 `;
 function createButton(label,action,cls=''){
@@ -169,12 +176,16 @@ async function refresh(panel){
         const s=await Editor.Message.request(NAME,'get-spline');
         if(panel._closed||token!==panel._requestToken)return;
         if(!s||!s.found){panel._splineData=null;panel.$.info.textContent=s?.message||s?.error||'Chọn một SplineContainer';panel.$.knots.textContent='';return;}
+        if(panel._surfaceRoot!==s.rootUuid){panel._surfaceRoot=null;
+            panel.$.surfaceTarget.replaceChildren();const option=document.createElement('option');
+            option.value='';option.textContent='Click Refresh meshes';panel.$.surfaceTarget.append(option);}
         panel._splineData=s;
         panel.$.info.textContent=`${s.knots.length} knots · ${s.segments} curves · ${Number(s.length).toFixed(2)} units`;
         const hiddenAxis=s.dimension===1?'z':s.dimension===2?'y':null;
         const space=panel.$.coordinateSpace;
         for(const option of space.options)option.disabled=option.value==='world'&&s.dimension!==0;
         if(s.dimension!==0&&space.value==='world')space.value='local';
+        panel.$.surfaceSnap.disabled=s.dimension!==0;
         for(const axis of ['x','y','z']){
             const entry=panel.$['move'+axis.toUpperCase()];
             entry.disabled=axis===hiddenAxis;
@@ -189,7 +200,7 @@ async function refresh(panel){
 module.exports={
     template,style:ownStyle,$,
     ready(){
-        this._closed=false;this._openedKnots=new Set();this._marked=new Set();this._editing=false;this._splineData=null;
+        this._closed=false;this._openedKnots=new Set();this._marked=new Set();this._editing=false;this._splineData=null;this._surfaceRoot=null;
         // Only native input widgets should block a list redraw; buttons such as
         // Select/Split still need the list to refresh immediately after clicking.
         const isInput=el=>el&&typeof el.matches==='function'&&el.matches('input,select,textarea');
@@ -238,15 +249,45 @@ module.exports={
                 return show(this,'Move delta must contain finite values within ±1000000.',true);
             void batch('move-selected-knots',delta,space());
         });
+        const updateSurfaces=async()=>{
+            if(!this._splineData?.rootUuid)return show(this,'Select the SplineContainer first.',true);
+            const rootUuid=this._splineData.rootUuid;
+            const result=await callEditor(this,'list-surface-meshes');
+            if(this._closed||this._splineData?.rootUuid!==rootUuid)return;
+            if(!result?.ok)return;
+            const selector=this.$.surfaceTarget,previous=selector.value;
+            selector.replaceChildren();
+            const none=document.createElement('option');
+            none.value='';none.textContent='Choose a target mesh…';selector.append(none);
+            for(const target of result.targets||[]){
+                const item=document.createElement('option');
+                item.value=target.uuid;item.textContent=target.name+' ['+target.uuid.slice(0,8)+']';
+                selector.append(item);
+            }
+            if(Array.from(selector.options).some(item=>item.value===previous))selector.value=previous;
+            this._surfaceRoot=rootUuid;
+            show(this,'Found '+(result.targets?.length||0)+' readable mesh surface(s).');
+        };
+        this.$.surfaceRefresh.addEventListener('click',()=>void updateSurfaces());
+        this.$.surfaceSnap.addEventListener('click',()=>{
+            const target=this.$.surfaceTarget.value;
+            const height=Number(this.$.surfaceHeight.value);
+            const maxDrop=Number(this.$.surfaceDrop.value);
+            if(!target)return show(this,'Choose a MeshRenderer surface target.',true);
+            if(!Number.isFinite(height)||height<0||height>1e6||
+               !Number.isFinite(maxDrop)||maxDrop<=0||maxDrop>1e6)
+                return show(this,'Start above >= 0 and cast depth > 0; both <= 1000000.',true);
+            void batch('snap-selected-to-surface',target,height,maxDrop);
+        });
         this.$.add.addEventListener('click',async()=>{const r=await callEditor(this,'add-knot');if(r?.ok)await refresh(this);});
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
         this.$.reverse.addEventListener('click',async()=>{const r=await callEditor(this,'reverse-direction');if(r?.ok)await refresh(this);});
         this.$.import.addEventListener('click',async()=>{const r=await callEditor(this,'import-json',this.$.json.value);if(r?.ok){show(this,`Imported ${r.knots} knots.`);await refresh(this);}});
-        void refresh(this);
+        void refresh(this).then(()=>updateSurfaces());
     },
     update(dump){
         for(const field of fields){const p=dump?.value?.[field],widget=this.$['p_'+field];if(p&&widget?.render)widget.render(p);}
         void refresh(this);
     },
-    close(){this._closed=true;this._marked?.clear();this._splineData=null;this._requestToken=(this._requestToken||0)+1;},
+    close(){this._closed=true;this._marked?.clear();this._splineData=null;this._surfaceRoot=null;this._requestToken=(this._requestToken||0)+1;},
 };
