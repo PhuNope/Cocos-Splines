@@ -33,6 +33,8 @@ export class SplineGizmoEditTransaction<T> {
     constructor(
         private readonly snapshot:SplineSnapshotRequest<T>,
         private readonly onFailure:SplineGestureFailure,
+        /** Invoked after cancel/no-op or after async commit/rollback settles. */
+        private readonly onSettled:()=>void=()=>{},
     ){}
 
     get baseline():T|null {return this.active?.before??null;}
@@ -72,6 +74,7 @@ export class SplineGizmoEditTransaction<T> {
         ++this.version;
         try{gesture.port.restore(gesture.before);}
         catch(error){this.onFailure(error);}
+        finally{this.onSettled();}
         return true;
     }
     end(property:string):boolean {
@@ -87,9 +90,13 @@ export class SplineGizmoEditTransaction<T> {
             try{gesture.port.restore(gesture.before);}
             catch(rollbackError){this.onFailure(rollbackError);}
             this.onFailure(error);
+            this.onSettled();
             return false;
         }
-        if(!gesture.port.changed(gesture.before,after))return false;
+        if(!gesture.port.changed(gesture.before,after)){
+            this.onSettled();
+            return false;
+        }
         const version=gesture.version;
         const fail=(error:unknown)=>{
             // Only restore if nothing newer has begun AND the entire completed
@@ -112,20 +119,26 @@ export class SplineGizmoEditTransaction<T> {
         try{
             // Execute IPC synchronously on End; the Promise may settle later.
             requested=this.snapshot(gesture.before,after,property);
-        }catch(error){fail(error);return true;}
+        }catch(error){
+            try{fail(error);}finally{this.onSettled();}
+            return true;
+        }
         if(requested===false||
            (!!requested&&typeof requested==='object'&&
              (requested as {ok?:boolean}).ok===false)){
-            fail(new Error('Scene snapshot rejected this Gizmo edit.'));
+            try{fail(new Error('Scene snapshot rejected this Gizmo edit.'));}
+            finally{this.onSettled();}
             return true;
         }
         const pending=Promise.resolve(requested).then(value=>{
             if(value===false||(value&&typeof value==='object'&&
                 (value as {ok?:boolean}).ok===false))
                 fail(new Error('Scene snapshot rejected this Gizmo edit.'));
-        },fail);
+        },fail).finally(()=>{
+            try{this.onSettled();}
+            finally{this.pending.delete(pending);}
+        });
         this.pending.add(pending);
-        void pending.finally(()=>this.pending.delete(pending));
         return true;
     }
 }
