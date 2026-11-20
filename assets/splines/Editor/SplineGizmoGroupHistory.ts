@@ -37,23 +37,29 @@ function ensureNode(edit:GroupPositionEdit,expected:LocalPoint):boolean {
     return node?.isValid!==false&&!!node?.uuid&&node?.parent===edit.parent&&
         samePoint(node.position,expected);
 }
+/** Guard every asynchronous Scene request against Scene/Prefab root replacement. */
+const live=(guard:()=>boolean):boolean=>{try{return guard()===true;}catch{return false;}};
 function successful(value:unknown):boolean {
     return value!==false&&!(value&&typeof value==='object'&&
         (value as {ok?:boolean}).ok===false);
 }
 async function setPosition(edit:GroupPositionEdit,position:LocalPoint,
-    request:SceneMessageRequest):Promise<void> {
+    request:SceneMessageRequest,guard:()=>boolean):Promise<void> {
+    if(!live(guard))throw Error('Scene lease expired before Knot position write.');
     const result=await request('scene','set-property',{
         uuid:edit.node.uuid,path:'position',
         dump:{type:'cc.Vec3',value:{x:position.x,y:position.y,z:position.z}},
         record:false,
     });
+    if(!live(guard))throw Error('Scene lease expired after Knot position write.');
     if(!successful(result))
         throw new Error('Scene rejected serialized Knot position: '+edit.node.uuid);
 }
 export async function commitGroupPositions(
     edits:readonly GroupPositionEdit[],request:SceneMessageRequest,
+    guard:()=>boolean=()=>true,
 ):Promise<unknown> {
+    if(!live(guard))throw Error('Scene lease expired before Group Move commit.');
     if(typeof request!=='function'||!Array.isArray(edits)||!edits.length||edits.length>512)
         throw new Error('Invalid Group Move serialized history transaction.');
     const ids=new Set<string>();
@@ -69,24 +75,31 @@ export async function commitGroupPositions(
     const touched:GroupPositionEdit[]=[];
     try{
         for(const edit of changed){
+            if(!live(guard))throw Error('Scene lease expired during Group Move commit.');
             if(!ensureNode(edit,edit.after))
                 throw new Error('Knot transform changed during serialized Group Move commit.');
             // An Editor request may mutate before throwing, so include it
             // in rollback before invoking the request.
             touched.push(edit);
-            await setPosition(edit,edit.after,request);
+            await setPosition(edit,edit.after,request,guard);
             if(!ensureNode(edit,edit.after))
                 throw new Error('Scene changed Knot transform during serialized commit.');
         }
+        if(!live(guard))throw Error('Scene lease expired before Group Move snapshot.');
         const snapshot=await request('scene','snapshot');
+        if(!live(guard))throw Error('Scene lease expired while Group Move snapshot was pending.');
         if(!successful(snapshot))throw new Error('Scene rejected Group Move snapshot.');
         return snapshot;
     }catch(error){
+        // Editor IPC addresses the currently open Scene, not the old one.
+        // Never send rollback writes to a different Scene after unload/reload.
+        if(!live(guard))
+            throw Error('Scene lease expired: Group Move aborted without cross-Scene rollback.');
         const failed:string[]=[];
         for(const edit of touched.reverse()){
             // Never overwrite a newer Scene change or a reparented Node.
             if(!ensureNode(edit,edit.after))continue;
-            try{await setPosition(edit,edit.before,request);}
+            try{await setPosition(edit,edit.before,request,guard);}
             catch(rollbackError){failed.push(edit.node.uuid+': '+String(rollbackError));}
         }
         const description=String((error as Error)?.message||error);
