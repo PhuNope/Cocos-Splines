@@ -102,11 +102,98 @@ function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatri
     }).filter(e=>e.changed);
 }
 
+/** Unit quaternions, independent of Cocos math / Editor runtime. */
+function validQuaternion(q){
+    return !!q&&['x','y','z','w'].every(k=>typeof q[k]==='number'&&Number.isFinite(q[k]));
+}
+function normalizeQuaternion(q){
+    if(!validQuaternion(q))throw Error('Knot or spline rotation must be a finite quaternion.');
+    const norm=Math.hypot(q.x,q.y,q.z,q.w);
+    if(!(norm>1e-9))throw Error('Knot or spline rotation cannot be a zero quaternion.');
+    return {x:q.x/norm,y:q.y/norm,z:q.z/norm,w:q.w/norm};
+}
+function multiplyQuaternion(a,b){
+    return {
+        x:a.w*b.x+a.x*b.w+a.y*b.z-a.z*b.y,
+        y:a.w*b.y-a.x*b.z+a.y*b.w+a.z*b.x,
+        z:a.w*b.z+a.x*b.y-a.y*b.x+a.z*b.w,
+        w:a.w*b.w-a.x*b.x-a.y*b.y-a.z*b.z,
+    };
+}
+const conjugate=q=>({x:-q.x,y:-q.y,z:-q.z,w:q.w});
+function rotateByQuaternion(q,v){
+    const u={x:q.x,y:q.y,z:q.z};
+    const t=cross(u,v);
+    const c=cross(u,t);
+    return {x:v.x+2*(q.w*t.x+c.x),y:v.y+2*(q.w*t.y+c.y),
+        z:v.z+2*(q.w*t.z+c.z)};
+}
+function unit(v){
+    const n=length(v);
+    if(!(n>1e-8)||!Number.isFinite(n))throw Error('Surface alignment has no stable direction.');
+    return {x:v.x/n,y:v.y/n,z:v.z/n};
+}
+function subtractVector(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};}
+function projectPlane(v,n){return subtractVector(v,{x:n.x*dot(v,n),y:n.y*dot(v,n),z:n.z*dot(v,n)});}
+function quaternionFromAxes(right,up,forward){
+    const m00=right.x,m01=up.x,m02=forward.x;
+    const m10=right.y,m11=up.y,m12=forward.y;
+    const m20=right.z,m21=up.z,m22=forward.z;
+    const trace=m00+m11+m22;
+    let x,y,z,w,s;
+    if(trace>0){
+        s=Math.sqrt(trace+1)*2;
+        w=.25*s;x=(m21-m12)/s;y=(m02-m20)/s;z=(m10-m01)/s;
+    }else if(m00>m11&&m00>m22){
+        s=Math.sqrt(1+m00-m11-m22)*2;
+        w=(m21-m12)/s;x=.25*s;y=(m01+m10)/s;z=(m02+m20)/s;
+    }else if(m11>m22){
+        s=Math.sqrt(1+m11-m00-m22)*2;
+        w=(m02-m20)/s;x=(m01+m10)/s;y=.25*s;z=(m12+m21)/s;
+    }else{
+        s=Math.sqrt(1+m22-m00-m11)*2;
+        w=(m10-m01)/s;x=(m02+m20)/s;y=(m12+m21)/s;z=.25*s;
+    }
+    return normalizeQuaternion({x,y,z,w});
+}
+/**
+ * Orients the Knot's +Y world axis to mesh normal. Preserve as much of
+ * its current world +Z heading as possible on the surface tangent plane.
+ * Returns a NODE LOCAL rotation relative to SplineContainer.
+ */
+function alignLocalRotationToNormal(localRotation,parentWorldRotation,upNormal){
+    const parent=normalizeQuaternion(parentWorldRotation);
+    const original=normalizeQuaternion(localRotation);
+    if(!validPoint(upNormal))throw Error('Surface hit is missing a finite normal.');
+    const up=unit(upNormal);
+    if(up.y<.05)throw Error('Surface normal is too steep to align Knot Up.');
+    const world=normalizeQuaternion(multiplyQuaternion(parent,original));
+    let heading=projectPlane(rotateByQuaternion(world,{x:0,y:0,z:1}),up);
+    if(length(heading)<1e-6){
+        const right=projectPlane(rotateByQuaternion(world,{x:1,y:0,z:0}),up);
+        heading=cross(unit(right),up);
+    }
+    const forward=unit(heading);
+    const right=unit(cross(up,forward));
+    const correctedForward=unit(cross(right,up));
+    const targetWorld=quaternionFromAxes(right,up,correctedForward);
+    const targetLocal=normalizeQuaternion(multiplyQuaternion(conjugate(parent),targetWorld));
+    // q and -q are equivalent; keep shortest signed representation.
+    const similarity=original.x*targetLocal.x+original.y*targetLocal.y+
+        original.z*targetLocal.z+original.w*targetLocal.w;
+    return similarity<0?{x:-targetLocal.x,y:-targetLocal.y,z:-targetLocal.z,w:-targetLocal.w}:targetLocal;
+}
+function quaternionChanged(a,b){
+    const one=normalizeQuaternion(a),two=normalizeQuaternion(b);
+    const dotValue=Math.abs(one.x*two.x+one.y*two.y+one.z*two.z+one.w*two.w);
+    return 1-dotValue>1e-9;
+}
+
 /**
  * Surface hits are generated in the Scene process from a single explicit
  * target MeshRenderer. Validate the entire batch before any Scene mutation.
  */
-function planSurfaceKnotPositions(knots,ids,hits,worldMatrix){
+function planSurfaceKnotPositions(knots,ids,hits,worldMatrix,alignNormal=false,parentRotation=null){
     const selected=validatedKnots(knots,ids);
     if(selected.length>64||!Array.isArray(hits)||hits.length!==selected.length)
         throw Error('Every selected Knot must have exactly one surface hit (max 64).');
@@ -115,16 +202,22 @@ function planSurfaceKnotPositions(knots,ids,hits,worldMatrix){
     for(const hit of hits){
         if(typeof hit?.uuid!=='string'||mapped.has(hit.uuid)||!validPoint(hit.position))
             throw Error('Surface returned duplicate or invalid world positions.');
-        mapped.set(hit.uuid,hit.position);
+        mapped.set(hit.uuid,hit);
     }
     return selected.map(knot=>{
-        const world=mapped.get(knot.uuid);
-        if(!world)throw Error('Surface results did not match selected Knot UUIDs.');
+        const hit=mapped.get(knot.uuid);
+        if(!hit)throw Error('Surface results did not match selected Knot UUIDs.');
         const before={x:knot.position.x,y:knot.position.y,z:knot.position.z};
-        const after=frame.toLocal(world);
+        const after=frame.toLocal(hit.position);
         if(!validPoint(after))throw Error('Surface produced an invalid local position.');
-        return {uuid:knot.uuid,before,after,
-            changed:AXES.some(axis=>Math.abs(before[axis]-after[axis])>1e-8)};
+        const positionChanged=AXES.some(axis=>Math.abs(before[axis]-after[axis])>1e-8);
+        const beforeRotation=alignNormal?normalizeQuaternion(knot.rotation):null;
+        const afterRotation=alignNormal?
+            alignLocalRotationToNormal(beforeRotation,parentRotation,hit.normal):null;
+        const rotationChanged=alignNormal&&quaternionChanged(beforeRotation,afterRotation);
+        return {uuid:knot.uuid,before,after,positionChanged,
+            beforeRotation,afterRotation,rotationChanged,
+            changed:positionChanged||rotationChanged};
     }).filter(edit=>edit.changed);
 }
-module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions,planSurfaceKnotPositions};
+module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions,planSurfaceKnotPositions,alignLocalRotationToNormal,quaternionChanged};

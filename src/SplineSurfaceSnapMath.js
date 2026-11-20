@@ -27,7 +27,29 @@ function prepareSurface(positions,indices,matrix){
         throw Error('Surface mesh has invalid triangle indices.');
     return {positions:transformed,indices,triangleCount};
 }
-function castDown(surface,point,height=10,maxDrop=100){
+/**
+ * Mesh winding can face either way. Surface alignment treats the upward
+ * hemisphere as the target so inverted triangle winding is harmless.
+ */
+function triangleUpNormal(surface,triangle){
+    const p=surface.positions,ix=surface.indices;
+    const a=ix[triangle*3]*3,b=ix[triangle*3+1]*3,c=ix[triangle*3+2]*3;
+    const ab={x:p[b]-p[a],y:p[b+1]-p[a+1],z:p[b+2]-p[a+2]};
+    const ac={x:p[c]-p[a],y:p[c+1]-p[a+1],z:p[c+2]-p[a+2]};
+    let x=ab.y*ac.z-ab.z*ac.y;
+    let y=ab.z*ac.x-ab.x*ac.z;
+    let z=ab.x*ac.y-ab.y*ac.x;
+    const length=Math.hypot(x,y,z);
+    if(!(length>1e-12)||!Number.isFinite(length))
+        throw Error('Surface triangle normal is degenerate.');
+    x/=length;y/=length;z/=length;
+    if(y<0){x=-x;y=-y;z=-z;}
+    // Very steep faces provide an unstable up direction for the knot and
+    // can produce unexpected flips near vertically oriented triangles.
+    if(y<.05)throw Error('Surface too steep to align Knot Up; disable Align Normal.');
+    return {x,y,z};
+}
+function castDown(surface,point,height=10,maxDrop=100,withNormal=false){
     if(!valid(point)||!Number.isFinite(height)||height<0||height>1e6||
        !Number.isFinite(maxDrop)||maxDrop<=0||maxDrop>1e6)
         throw Error('Surface ray parameters must be finite; height >= 0 and maxDrop > 0.');
@@ -50,7 +72,10 @@ function castDown(surface,point,height=10,maxDrop=100){
         if(y>startY+eps||y<minY-eps||y<=bestY)continue;
         bestY=y;bestTriangle=tri;
     }
-    return bestTriangle<0?null:{x:point.x,y:bestY,z:point.z,triangle:bestTriangle};
+    if(bestTriangle<0)return null;
+    const result={x:point.x,y:bestY,z:point.z,triangle:bestTriangle};
+    if(withNormal)result.normal=triangleUpNormal(surface,bestTriangle);
+    return result;
 }
 function snapOrigins(surface,entries,options={}){
     if(!Array.isArray(entries)||entries.length<1||entries.length>MAX_KNOTS||
@@ -60,12 +85,15 @@ function snapOrigins(surface,entries,options={}){
     const height=options.height===undefined?10:options.height;
     const maxDrop=options.maxDrop===undefined?100:options.maxDrop;
     const hits=[];
+    const alignNormal=options.alignNormal===true;
     for(const entry of entries){
-        const hit=castDown(surface,entry.position,height,maxDrop);
+        const hit=castDown(surface,entry.position,height,maxDrop,alignNormal);
         if(!hit)throw Error('No surface directly below Knot '+entry.uuid+
             ' within cast height and max drop. No changes were applied.');
-        hits.push({uuid:entry.uuid,position:{x:hit.x,y:hit.y,z:hit.z},triangle:hit.triangle});
+        const item={uuid:entry.uuid,position:{x:hit.x,y:hit.y,z:hit.z},triangle:hit.triangle};
+        if(alignNormal)item.normal=hit.normal;
+        hits.push(item);
     }
     return hits;
 }
-module.exports={MAX_TRIANGLES,MAX_KNOTS,prepareSurface,castDown,snapOrigins};
+module.exports={MAX_TRIANGLES,MAX_KNOTS,prepareSurface,castDown,snapOrigins,triangleUpNormal};
