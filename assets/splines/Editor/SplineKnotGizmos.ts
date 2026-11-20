@@ -209,7 +209,7 @@ export class SplineKnotGizmos {
             inHandleParent:k.tangentInHandle?.isValid?k.tangentInHandle.parent:null,
             outHandleParent:k.tangentOutHandle?.isValid?k.tangentOutHandle.parent:null,
             parent:k.node.parent,dimension:this.spline()?.dimension??0,
-            sceneLease:this.heldLease||captureSceneLease(k.node.parent),
+            sceneLease:this.heldLease||captureSceneLease(k.node.parent!),
             group:group.map(knot=>{
                 if(!knot.node.isValid)throw new Error('Group Knot deleted during Gizmo drag');
                 return {knot,position:knot.node.worldPosition.clone(),
