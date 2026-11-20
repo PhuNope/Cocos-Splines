@@ -163,7 +163,7 @@ export class SplineKnotGizmos {
         if(phase==='begin'){
             const spline=this.spline(),root=k.node?.parent;
             if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline||
-               spline.enabled===false||root.activeInHierarchy===false)return;
+               spline.enabled===false||(root as any)?.activeInHierarchy===false)return;
             const group=property==='editorGroupWorldPosition'?this.selectedGroup():[];
             if(property==='editorGroupWorldPosition'&&
                 (group.length<2||group[0]!==k))return;
@@ -176,7 +176,7 @@ export class SplineKnotGizmos {
             const outputHandle=k.tangentOutHandle?.isValid?k.tangentOutHandle:null;
             const valid=()=>{
                 if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||
-                   root.activeInHierarchy===false||spline.enabled===false||
+                   (root as any)?.activeInHierarchy===false||spline.enabled===false||
                    k.node.parent!==root||this.spline()!==spline)return false;
                 const currentIds=this.selectedNodeIds();
                 if(ownerSelected&&(!currentIds||!currentIds.has(k.node.uuid)))
