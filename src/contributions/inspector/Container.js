@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -32,6 +32,7 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <div class="spl-surface-panel">
       <p class="spl-note">Surface Snap · 3D only. Target must be a readable MeshRenderer outside this spline. Cast downward in World Y; no Physics Collider required.</p>
       <div class="spl-btns spl-batch-inputs"><label>Target mesh <select class="spl-surface-target" aria-label="Surface target mesh"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
+      <p class="spl-note"><label><input class="spl-surface-align-normal" type="checkbox"> Align Knot +Y to surface normal (changes Knot rotation; knot-space tangents may rotate the curve)</label></p>
       <div class="spl-btns spl-batch-inputs"><label>Start above <input class="spl-surface-height" type="number" step="1" min="0" max="1000000" value="10" aria-label="Surface cast height"></label><label>Cast depth <input class="spl-surface-drop" type="number" step="1" min="0.01" max="1000000" value="100" aria-label="Surface max drop"></label><button type="button" class="spl-btn spl-surface-snap">Snap to Surface</button></div>
     </div>
   </details>
@@ -277,7 +278,7 @@ module.exports={
             if(!Number.isFinite(height)||height<0||height>1e6||
                !Number.isFinite(maxDrop)||maxDrop<=0||maxDrop>1e6)
                 return show(this,'Start above >= 0 and cast depth > 0; both <= 1000000.',true);
-            void batch('snap-selected-to-surface',target,height,maxDrop);
+            void batch('snap-selected-to-surface',target,height,maxDrop,this.$.surfaceAlignNormal.checked);
         });
         this.$.add.addEventListener('click',async()=>{const r=await callEditor(this,'add-knot');if(r?.ok)await refresh(this);});
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
