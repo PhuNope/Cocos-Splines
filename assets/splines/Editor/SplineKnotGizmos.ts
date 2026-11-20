@@ -46,16 +46,23 @@ const quaternionChanged=(a:Quat,b:Quat)=>{
 export class SplineKnotGizmos {
     private static warnedFrameDependency=false;
     private heldScope:object|null=null;
+    private heldContainer:SplineContainer|null=null;
     /** Called after a native gesture completes or serialized IPC rollback settles. */
     private releaseHistory():void {
-        const scope=this.heldScope;
+        const scope=this.heldScope,original=this.heldContainer;
         if(!scope)return;
         SplineGizmoHistoryGate.release(scope,this);
         this.heldScope=null;
-        // Even if Editor IPC rolled back the serialized state before the
-        // transaction's own failure handler, force arc-cache invalidation.
-        // Road/Extrude/Deform components observe getRevision in their update.
-        if(alive(this.component.node))this.spline()?.refresh();
+        this.heldContainer=null;
+        // Undo/Redo and asynchronous serialized rollback can change Knot
+        // fields before an Editor redraw. Always invalidate the ORIGINAL
+        // container, even if the edited Knot was reparented meanwhile.
+        // Consumers use getRevision in update() to rebuild Road/Extrude/Deform.
+        try{
+            if(original&&alive(original.node))original.refresh();
+        }catch(error){
+            console.warn('[cocos-splines] Cannot refresh spline after Gizmo transaction:',error);
+        }
     }
     private readonly edits=new SplineGizmoEditTransaction<Before>(
         (before,after,property)=>{
@@ -328,6 +335,7 @@ export class SplineKnotGizmos {
             if(!SplineGizmoHistoryGate.claim(root,this))
                 throw Error('Another Knot history transaction is still committing in this SplineContainer.');
             this.heldScope=root;
+            this.heldContainer=spline;
             try{
                 const accepted=this.edits.begin(property,{
                     capture:()=>this.read(group),
