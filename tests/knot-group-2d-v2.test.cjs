@@ -115,17 +115,24 @@ try {
    }},
   };
   const descriptor=(property,axis,plane,visual)=>({property,axis,plane,visual});
-  globalThis.Gizmos2D={move:property=>[
-   descriptor(property,'x','view','axis'),
-   descriptor(property,'y','view','axis'),
-   descriptor(property,undefined,'xy','plane')]};
-  globalThis.Gizmos3D={move:property=>[
+  globalThis.Gizmos2D={move:(property,opts)=>{
+    assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+    return [
+      descriptor(property,'x','view','axis'),
+      descriptor(property,'y','view','axis'),
+      descriptor(property,undefined,'xy','plane')];
+  }};
+  globalThis.Gizmos3D={supportsMoveFrameNode:true,move:(property,opts)=>{
+   if(property==='editorGroupLocalPosition'){
+     assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+   }
+   return [
    ...['x','y','z'].map(axis=>descriptor(property,axis,'view','axis')),
-   ...['xy','xz','yz'].map(plane=>descriptor(property,undefined,plane,'plane'))],
+   ...['xy','xz','yz'].map(plane=>descriptor(property,undefined,plane,'plane'))];},
    rotate:()=>[]};
   const a=new SplineKnotGizmos(knots[0]);
   const b=new SplineKnotGizmos(knots[1]);
-  const group=handles=>handles.filter(h=>h.property==='editorGroupWorldPosition');
+  const group=handles=>handles.filter(h=>h.property==='editorGroupLocalPosition');
   let hs=group(a.onGizmoHandles());
   assert.deepEqual(hs.map(h=>h.axis||h.plane),['x','y','xy']);
   assert.equal(group(b.onGizmoHandles()).length,0,'Single group pivot');
@@ -134,26 +141,26 @@ try {
   const worldDrag=Vec3.add(new Vec3(),nodes[0].worldPosition,new Vec3(2,3,5));
   const requested=local(worldDrag),expected=planarMovePositions(1,
     originals[0],requested,originals.slice(0,2));
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  knots[0].editorGroupWorldPosition=worldDrag;
-  a.onGizmoChanged('editorGroupWorldPosition','update');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  knots[0].editorGroupLocalPosition=requested;
+  a.onGizmoChanged('editorGroupLocalPosition','update');
   eqVec(nodes[0].position,expected[0]);
   eqVec(nodes[1].position,expected[1]);
   eq(nodes[0].position.z,originals[0].z);
   eq(nodes[1].position.z,originals[1].z);
   eqVec(nodes[2].position,originals[2]);
-  a.onGizmoChanged('editorGroupWorldPosition','cancel');
+  a.onGizmoChanged('editorGroupLocalPosition','cancel');
   nodes.forEach((n,i)=>eqVec(n.position,originals[i]));
   assert.equal(snapshots,0,'Cancel must not create an Undo entry');
 
   // End without update callback also projects into authored local 2D plane.
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  knots[0].editorGroupWorldPosition=worldDrag;
-  a.onGizmoChanged('editorGroupWorldPosition','end');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  knots[0].editorGroupLocalPosition=requested;
+  a.onGizmoChanged('editorGroupLocalPosition','end');
   eqVec(nodes[0].position,expected[0]);eqVec(nodes[1].position,expected[1]);
   assert.equal(snapshots,1);
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  a.onGizmoChanged('editorGroupWorldPosition','end');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  a.onGizmoChanged('editorGroupLocalPosition','end');
   assert.equal(snapshots,1,'A no-op never snapshots');
 
   // XZ2D: filtered Gizmos3D axes must exclude Y and XY/YZ planes.
@@ -164,32 +171,32 @@ try {
   const xzTarget=Vec3.add(new Vec3(),nodes[0].worldPosition,new Vec3(3,7,2));
   const xzExpected=planarMovePositions(2,xzOriginals[0],
    local(xzTarget),xzOriginals.slice(0,2));
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  knots[0].editorGroupWorldPosition=xzTarget;
-  a.onGizmoChanged('editorGroupWorldPosition','update');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  knots[0].editorGroupLocalPosition=local(xzTarget);
+  a.onGizmoChanged('editorGroupLocalPosition','update');
   eqVec(nodes[0].position,xzExpected[0]);eqVec(nodes[1].position,xzExpected[1]);
   eq(nodes[0].position.y,xzOriginals[0].y);
   eq(nodes[1].position.y,xzOriginals[1].y);
-  a.onGizmoChanged('editorGroupWorldPosition','end');
+  a.onGizmoChanged('editorGroupLocalPosition','end');
   assert.equal(snapshots,2);
   // Reject stale group when changing dimension during drag.
   const beforeInvalid=nodes.map(n=>n.position.clone());
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  knots[0].editorGroupWorldPosition=Vec3.add(new Vec3(),nodes[0].worldPosition,
-   new Vec3(6,5,4));
-  a.onGizmoChanged('editorGroupWorldPosition','update');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  knots[0].editorGroupLocalPosition=local(Vec3.add(new Vec3(),nodes[0].worldPosition,
+   new Vec3(6,5,4)));
+  a.onGizmoChanged('editorGroupLocalPosition','update');
   container.spline.dimension=1;
-  a.onGizmoChanged('editorGroupWorldPosition','end');
+  a.onGizmoChanged('editorGroupLocalPosition','end');
   nodes.forEach((n,i)=>eqVec(n.position,beforeInvalid[i]));
   assert.equal(snapshots,2);
 
   // A rejected snapshot restores LOCAL positions, including hidden 2D axis.
   const beforeFail=nodes.map(n=>n.position.clone());
   snapshotAllowed=false;
-  a.onGizmoChanged('editorGroupWorldPosition','begin');
-  knots[0].editorGroupWorldPosition=Vec3.add(new Vec3(),nodes[0].worldPosition,
-   new Vec3(5,6,8));
-  a.onGizmoChanged('editorGroupWorldPosition','end');
+  a.onGizmoChanged('editorGroupLocalPosition','begin');
+  knots[0].editorGroupLocalPosition=local(Vec3.add(new Vec3(),nodes[0].worldPosition,
+   new Vec3(5,6,8)));
+  a.onGizmoChanged('editorGroupLocalPosition','end');
   nodes.forEach((n,i)=>eqVec(n.position,beforeFail[i]));
   assert.equal(snapshots,3);
   snapshotAllowed=true;
@@ -198,6 +205,10 @@ try {
   delete globalThis.Gizmos2D;
   hs=group(a.onGizmoHandles());
   assert.deepEqual(hs.map(h=>h.axis||h.plane),['x','y','xy']);
+  // Stock Gizmos 3.0.3 cannot render ancestor-local handles.
+  globalThis.Gizmos3D.supportsMoveFrameNode=false;
+  assert.equal(group(a.onGizmoHandles()).length,0);
+  globalThis.Gizmos3D.supportsMoveFrameNode=true;
   // Invalid scene selection fails closed rather than leaking a group gizmo.
   selection=['a'];
   assert.equal(group(a.onGizmoHandles()).length,0);
