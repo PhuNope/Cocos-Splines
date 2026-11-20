@@ -1,6 +1,7 @@
 'use strict';
 const NAME='cocos-splines';
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
+const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -30,7 +31,12 @@ async function property(root,index,key,value,type){
         uuid:root,path:`__comps__.${index}.${key}`,dump:{type,value},record:true});
     if(result===false)throw new Error(`set-property failed for ${key}`);
 }
-async function snapshot(){await Editor.Message.request('scene','snapshot');}
+async function snapshot(){
+    const result=await Editor.Message.request('scene','snapshot');
+    if(result===false||(result&&typeof result==='object'&&result.ok===false))
+        throw Error('Scene snapshot was rejected.');
+    return result;
+}
 async function setKnotValue(uuid,key,value,fallbackType,record=false){
     const dump=await Editor.Message.request('scene','query-node',uuid);
     const comps=dump?.__comps__||[];
@@ -91,16 +97,6 @@ async function writeKnotRotation(uuid,rotation){
     });
     if(result===false)throw new Error('Failed to set knot rotation: '+uuid);
 }
-async function restoreKnotEdit(edit){
-    const work=[];
-    // Preserve existing non-surface batch edits and only touch rotation when
-    // the surface normal option produced a rotation change.
-    if(edit.rotationChanged)work.push(writeKnotRotation(edit.uuid,edit.beforeRotation));
-    if(edit.positionChanged!==false)work.push(writeKnotPosition(edit.uuid,edit.before));
-    const results=await Promise.allSettled(work);
-    const failures=results.filter(result=>result.status==='rejected');
-    if(failures.length)throw new Error('Could not rollback '+failures.length+' property change(s) on '+edit.uuid);
-}
 async function applyKnotPlacement(operation,ids,options){
     if(knotEditBusy)throw new Error('Another knot edit is in progress.');
     knotEditBusy=true;
@@ -147,23 +143,12 @@ async function applyKnotPlacement(operation,ids,options){
             edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
         }
         if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
-        const applied=[];
-        try{
-            for(const edit of edits){
-                // Include the current node even when the Scene API throws after applying it.
-                applied.push(edit);
-                if(edit.positionChanged!==false)await writeKnotPosition(edit.uuid,edit.after);
-                if(edit.rotationChanged)await writeKnotRotation(edit.uuid,edit.afterRotation);
-            }
-            // One native snapshot for the complete batch (not one per Knot).
-            await snapshot();
-        }catch(error){
-            const rollbacks=await Promise.allSettled(applied.slice().reverse()
-                .map(edit=>restoreKnotEdit(edit)));
-            const failures=rollbacks.filter(r=>r.status==='rejected');
-            if(failures.length)throw new Error(String(error)+'; rollback failed on '+failures.length+' Knot(s)');
-            throw error;
-        }
+        await commitKnotEdits(edits,{
+            read:uuids=>invokeScene('queryKnotBatchState',info.rootUuid,uuids),
+            writePosition:writeKnotPosition,
+            writeRotation:writeKnotRotation,
+            snapshot,
+        });
         let warning;
         try{await invokeScene('refreshPreview',info.rootUuid);}
         catch(error){warning='Positions saved, but preview refresh failed: '+String(error);}

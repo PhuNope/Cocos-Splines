@@ -174,6 +174,34 @@ function queryKnotOrientations(rootUuid,uuids){
     }
     return {ok:true,parentRotation,rotations};
 }
+/**
+ * Read-back contract for Editor batch transactions. Only immediate Knot
+ * children of the selected spline may participate, and no Node is modified.
+ */
+function queryKnotBatchState(rootUuid,uuids){
+    const root=resolve(rootUuid);
+    if(!root||containerOf(root)!==root||
+       !root.components.some(c=>classOf(c)==='Splines.SplineContainer')||
+       !Array.isArray(uuids)||uuids.length<1||uuids.length>512||
+       uuids.some(id=>typeof id!=='string'||!id)||
+       new Set(uuids).size!==uuids.length)
+        return {ok:false,error:'Invalid spline or batch Knot selection.'};
+    const states=[];
+    for(const uuid of uuids){
+        const node=resolve(uuid);
+        if(!node||node.parent!==root||
+           !node.components.some(c=>classOf(c)==='Splines.SplineKnot'))
+            return {ok:false,error:'Knot no longer belongs to selected SplineContainer.'};
+        const p=node.position,q=node.rotation;
+        const position={x:p.x,y:p.y,z:p.z};
+        const rotation={x:q.x,y:q.y,z:q.z,w:q.w};
+        if(!Object.values(position).every(Number.isFinite)||
+           !Object.values(rotation).every(Number.isFinite))
+            return {ok:false,error:'Invalid Knot Node transform in Scene.'};
+        states.push({uuid,position,rotation});
+    }
+    return {ok:true,states};
+}
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
     const {js}=require('cc');let count=0;
@@ -353,5 +381,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
