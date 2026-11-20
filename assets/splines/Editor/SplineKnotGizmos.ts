@@ -6,6 +6,7 @@ import { SplineGizmoEditTransaction } from './SplineGizmoEditTransaction';
 import { planarMovePositions } from './SplineGroupMoveMath';
 import { commitGroupPositions } from './SplineGizmoGroupHistory';
 import { commitKnotSerializedGesture } from './SplineGizmoKnotHistory';
+import { SplineGizmoHistoryGate } from './SplineGizmoHistoryGate';
 
 interface GroupMember {knot:SplineKnot;position:Vec3;localPosition:Vec3;}
 interface Before {
@@ -44,6 +45,18 @@ const quaternionChanged=(a:Quat,b:Quat)=>{
  */
 export class SplineKnotGizmos {
     private static warnedFrameDependency=false;
+    private heldScope:object|null=null;
+    /** Called after a native gesture completes or serialized IPC rollback settles. */
+    private releaseHistory():void {
+        const scope=this.heldScope;
+        if(!scope)return;
+        SplineGizmoHistoryGate.release(scope,this);
+        this.heldScope=null;
+        // Even if Editor IPC rolled back the serialized state before the
+        // transaction's own failure handler, force arc-cache invalidation.
+        // Road/Extrude/Deform components observe getRevision in their update.
+        if(alive(this.component.node))this.spline()?.refresh();
+    }
     private readonly edits=new SplineGizmoEditTransaction<Before>(
         (before,after,property)=>{
             const editor=(globalThis as any).Editor||(globalThis as any).window?.Editor;
@@ -67,6 +80,7 @@ export class SplineKnotGizmos {
             throw new Error('Unsupported Gizmo history field '+property);
         },
         error=>console.warn('[cocos-splines] Gizmo snapshot/rollback failed:',error),
+        ()=>this.releaseHistory(),
     );
     constructor(public readonly component:SplineKnot){}
     private spline():SplineContainer|null {
@@ -106,6 +120,10 @@ export class SplineKnotGizmos {
         const spline=this.spline();
         if(!alive(this.component)||!this.component.enabled||
            !alive(this.component.node)||!spline||spline.count<2)return [];
+        // A previous drag may still be writing real serialized Scene fields.
+        // Do not expose a second handle until its commit/rollback finishes.
+        if(SplineGizmoHistoryGate.locked(spline.node)&&
+           this.edits.property===null)return [];
         const g2=(globalThis as any).Gizmos2D,g3=(globalThis as any).Gizmos3D;
         const g=spline.dimension===1&&g2?g2:g3;
         // All Knot handles are computed editor-only ports. Do not allow old
@@ -303,12 +321,25 @@ export class SplineKnotGizmos {
                    (!alive(outputHandle)||k.tangentOutHandle!==outputHandle))return false;
                 return true;
             };
-            this.edits.begin(property,{
-                capture:()=>this.read(group),
-                restore:before=>this.restore(property,before),
-                changed:(before,after)=>this.changed(property,before,after),
-                valid,
-            });
+            // One SplineContainer owns one native Editor history commit at a
+            // time, even if different Knot drawers receive drag callbacks.
+            // Throwing aborts the native GizmoEditSession before it writes
+            // the computed property (which is not itself undoable).
+            if(!SplineGizmoHistoryGate.claim(root,this))
+                throw Error('Another Knot history transaction is still committing in this SplineContainer.');
+            this.heldScope=root;
+            try{
+                const accepted=this.edits.begin(property,{
+                    capture:()=>this.read(group),
+                    restore:before=>this.restore(property,before),
+                    changed:(before,after)=>this.changed(property,before,after),
+                    valid,
+                });
+                if(!accepted)throw Error('Knot Gizmo gesture is no longer valid.');
+            }catch(error){
+                this.releaseHistory();
+                throw error;
+            }
         }
         if(phase==='update'||phase==='end'){
             if(!this.validateGesture())return;
