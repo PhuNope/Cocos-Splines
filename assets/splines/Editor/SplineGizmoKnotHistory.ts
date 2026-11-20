@@ -136,6 +136,8 @@ export async function commitKnotSerializedGesture(
        before.parent!==after.parent||
        before.inHandleNode!==after.inHandleNode||
        before.outHandleNode!==after.outHandleNode||
+       before.inHandleParent!==after.inHandleParent||
+       before.outHandleParent!==after.outHandleParent||
        !verifyState(target,after))
         throw Error('Knot Scene state changed; refusing stale serialized Gizmo commit.');
     const tangent=property==='editorTangentIn'||property==='editorTangentOut';
