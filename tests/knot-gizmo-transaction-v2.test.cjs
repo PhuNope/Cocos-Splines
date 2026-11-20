@@ -119,6 +119,42 @@ try{
  assert.equal(transaction.cancel('move'),true);
  assert.equal(state.x,60);
  assert.equal(failures.length>=4,true);
+ // Explicit gesture validation protects deleted/reparented/deselected Knots.
+ let eligible=true;
+ let invalidSnapshotCalls=0;
+ const validPort={...port,valid:()=>eligible};
+ transaction=new SplineGizmoEditTransaction(()=>{
+  invalidSnapshotCalls++;return true;
+ },error=>failures.push(String(error)));
+ transaction.begin('move',validPort);
+ state.x=101;
+ eligible=false;
+ assert.equal(transaction.validateActive(),false);
+ assert.equal(state.x,60,'Invalid gesture rolls back');
+ assert.equal(transaction.property,null);
+ assert.equal(transaction.end('move'),false);
+ assert.equal(invalidSnapshotCalls,0);
+ assert.equal(transaction.begin('move',validPort),false,'Invalid start rejected');
+ eligible=true;
+ transaction.begin('move',validPort);
+ state.x=105;
+ eligible=false;
+ assert.equal(transaction.end('move'),false,'End checks validity before snapshot');
+ assert.equal(state.x,60);
+ assert.equal(invalidSnapshotCalls,0);
+ eligible=true;
+ // Async failure after Scene eligibility changes must not undo a new owner.
+ let rejectInvalid;
+ transaction=new SplineGizmoEditTransaction(()=>
+  new Promise((_resolve,reject)=>{rejectInvalid=reject;}),
+  error=>failures.push(String(error)));
+ transaction.begin('move',validPort);
+ state.x=110;
+ transaction.end('move');
+ eligible=false;
+ rejectInvalid(Error('Delayed snapshot failure after hierarchy change'));
+ await flush();
+ assert.equal(state.x,110,'Invalidated Scene context is never rolled back late');
  console.log('GIZMO TRANSACTION PASS: begin/end, cancel, no-op, sync/async failures, stale rollback guards.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1;});

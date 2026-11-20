@@ -124,6 +124,53 @@ try {
         nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,savedWorld[i],
             'Group snapshot failure restores every selected Knot'));
         failSnapshot=false;
+        // Selection changes without a plugin 'cancel' callback must still
+        // invalidate at End and restore only the group created by this drag.
+        const beforeSelectionChange=nodes.map(node=>node.worldPosition.clone());
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(30,30,9);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        selection=['a']; // b was deselected
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,2,'Selection invalidation does not snapshot');
+        nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,beforeSelectionChange[i]));
+        // Redraw callbacks can invalidate a gesture before the native adapter
+        // dispatches cancel. A later End must remain a no-op.
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(35,30,9);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        selection=['a'];
+        a.onGizmoHandles();
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,2);
+        nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,beforeSelectionChange[i]));
+        // Reparent a Knot while dragging: restore the unchanged owner, never
+        // move a Node that is now owned by a different container.
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(33,30,9);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        const movedB=nodes[1].worldPosition.clone();
+        nodes[1].parent=otherContainer;
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.deepEqual(nodes[0].worldPosition,beforeSelectionChange[0]);
+        assert.deepEqual(nodes[1].worldPosition,movedB,'Reparented Knot is not rewritten');
+        assert.equal(snapshots,2);
+        nodes[1].parent=container;
+        nodes[1].setWorldPosition(beforeSelectionChange[1]);
+        // Deleted knot cannot produce snapshot, but surviving owner rolls back.
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(28,29,7);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        nodes[1].isValid=false;
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.deepEqual(nodes[0].worldPosition,beforeSelectionChange[0]);
+        assert.equal(snapshots,2);
+        nodes[1].isValid=true;
+        nodes[1].setWorldPosition(beforeSelectionChange[1]);
         selection=['a'];
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'A single selected knot has only its individual handles');

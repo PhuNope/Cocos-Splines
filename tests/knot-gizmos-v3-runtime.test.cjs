@@ -95,6 +95,29 @@ try {
         gizmo.onGizmoChanged('editorWorldEuler','end');
         assert.equal(nodeA.worldRotation.y,0,'Failed rotate snapshot restores previous world rotation');
         assert.equal(requests,2);
+        // Component disabled mid-drag: no snapshot, tangent/mode restored.
+        knot.enabled=true;
+        gizmo.onGizmoChanged('editorTangentOut','begin');
+        knot.editorTangentOut=new Vec3(8,1,0);
+        knot.enabled=false;
+        gizmo.onGizmoChanged('editorTangentOut','end');
+        assert.equal(knot.mode,TangentMode.AutoSmooth);
+        assert.equal(knot.tangentOut.x,1);
+        assert.equal(requests,2,'Disabled component does not commit');
+        knot.enabled=true;
+        // Owner moved to a different parent; do not restore its new transform
+        // when cancelling a rotation from the original spline.
+        gizmo.onGizmoChanged('editorWorldEuler','begin');
+        knot.editorWorldEuler=new Vec3(0,15,10);
+        const changedRotation=nodeA.worldRotation.clone();
+        const differentParent=new Node('Other Root');
+        nodeA.parent=differentParent;
+        gizmo.onGizmoChanged('editorWorldEuler','end');
+        assert.deepEqual(nodeA.worldRotation,changedRotation,
+            'Reparented owner is left for its new hierarchy to manage');
+        assert.equal(requests,2);
+        nodeA.parent=rootNode;
+        nodeA.setWorldRotation(new Quat());
         delete globalThis.Editor;
         delete globalThis.Gizmos3D;
         console.log('KNOT GIZMOS V3 PASS: tangent/rotate cancel and failed snapshots.');
