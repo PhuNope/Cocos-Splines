@@ -81,3 +81,7 @@ To test, open the latest successful **v2** workflow run, download its Artifact, 
 To build locally after `npm run build`, run `npm run package:preview`. The preview packager does **not** create Git tags or GitHub Releases. **No release/tag is authorized until explicitly approved by the owner.** Preview outputs are identified by commit SHA; `package.json` version remains unchanged until release authorization.
 
 Automated validation does not replace testing inside Cocos Creator 3.8.x, especially Gizmos interactions, native Undo/Redo and prefab serialization.
+
+### V2 Phase 2.2a — World knot positioning (preview)
+
+Batch Knot Tools now offers **Local / World** for 3D curves with correctly transformed nested rotation/nonuniform scale, plus **Move marked** by numeric Delta X/Y/Z. XY2D/XZ2D remain constrained to local editing to avoid invalid off-plane placements. See [editing guide](docs/SPLINE_EDITOR_PHASE2_VI.md). This is not yet interactive multi-knot dragging and does not certify native Editor Undo/Redo.

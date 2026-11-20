@@ -1,3 +1,12 @@
+# Unreleased — Phase 2.2a World-space Knot tools
+
+- Local/World coordinate space in SplineContainer Batch Knot Tools.
+- World-space grid snap and World X/Y/Z alignment for 3D splines under rotated/translated/nonuniformly scaled parents.
+- Numeric group Move marked by Delta X/Y/Z. 2D axes are constrained to their authored local plane.
+- Added a read-only Scene worldMatrix query and singular-transform validation.
+- Extended regression tests for world transforms, partial-failure rollback and no-op.
+- Native Creator Undo/Redo and Scene picking still require manual testing. No tag or release created.
+
 # Unreleased — Phase 2.1 Batch Knot Editing
 
 - Added multi-select via Inspector Knot marks and Scene selection.
