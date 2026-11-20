@@ -19,6 +19,8 @@ assert.match(knotDrawer,/onGizmoHandles\(\)/);
 assert.match(knotDrawer,/editorTangentIn/);
 assert.match(knotDrawer,/editorTangentOut/);
 assert.match(knotDrawer,/editorWorldEuler/);
+assert.match(knotDrawer,/editorGroupWorldPosition/);
+assert.match(knotDrawer,/selectedGroup\(\)/);
 assert.match(knotDrawer,/phase==='cancel'/);
 for(const name of ['SplineContainerGizmos','SplineKnotGizmos']){
     const base='assets/splines/Editor/'+name+'.ts';

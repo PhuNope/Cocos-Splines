@@ -43,6 +43,18 @@ export class SplineKnot extends Component {
         return !!((this.tangentInHandle&&this.tangentInHandle.isValid)||
                   (this.tangentOutHandle&&this.tangentOutHandle.isValid));
     }
+    /** Position port for Cocos-Gizmos Move. Uses the real Node transform,
+     * with no additional scene nodes or serialized duplicate coordinates.
+     * Group translation of siblings is coordinated by the Editor drawer.
+     */
+    get editorGroupWorldPosition():Vec3 {
+        return this.node.worldPosition.clone();
+    }
+    set editorGroupWorldPosition(value:Vec3) {
+        if(value && [value.x,value.y,value.z].every(Number.isFinite))
+            this.node.setWorldPosition(value);
+    }
+
     /** Read and write editor-only world orientation without duplicate serialized state. */
     get editorWorldEuler():Vec3 {return Quat.toEuler(new Vec3(),this.node.worldRotation);}
     set editorWorldEuler(euler:Vec3) {
