@@ -47,7 +47,7 @@ function triangleUpNormal(surface,triangle){
     // Very steep faces provide an unstable up direction for the knot and
     // can produce unexpected flips near vertically oriented triangles.
     if(y<.05)throw Error('Surface too steep to align Knot Up; disable Align Normal.');
-    return {x,y,z};
+    return {x:x||0,y:y||0,z:z||0};
 }
 function castDown(surface,point,height=10,maxDrop=100,withNormal=false){
     if(!valid(point)||!Number.isFinite(height)||height<0||height>1e6||
