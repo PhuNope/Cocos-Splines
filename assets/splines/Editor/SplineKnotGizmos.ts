@@ -279,7 +279,7 @@ export class SplineKnotGizmos {
         const k=this.component;
         if(phase==='begin'){
             const spline=this.spline(),root=k.node?.parent;
-            if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline||
+            if(!alive(k)||!k.enabled||!alive(k.node)||!root||!alive(root)||!spline||
                spline.enabled===false||(root as any)?.activeInHierarchy===false)return;
             if(property===GROUP_LOCAL&&
                (spline.dimension===0||(globalThis as any).Gizmos3D?.supportsMoveFrameNode!==true))return;
