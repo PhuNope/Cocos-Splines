@@ -1,3 +1,13 @@
+# Unreleased — Phase 2.3 Surface Snap (MeshRenderer)
+
+- Added downward World-Y surface snapping for selected 3D Knots against an explicitly chosen readable MeshRenderer, with no physics Collider dependency.
+- Inspector enumerates eligible mesh targets outside the SplineContainer, validates raycast height/depth and provides a Snap to Surface action.
+- Supports translated/rotated/non-uniformly scaled meshes with CPU triangle raycasts, and converts snapped world hits into spline-local Knot positions.
+- All-or-nothing batch planning, one Scene snapshot for changes, rollback on partial Scene write errors, and 20,000-triangle / 64-knot caps.
+- Source mesh data is never modified; only normal RGB32F single-submesh MeshRenderers with Allow Data Access are supported in this slice.
+- Added standalone geometry tests, batch edit integration tests and Scene service contract tests. Native Editor Undo/Redo and prefab cases still require manual smoke tests.
+- Development stays on `v2`; no tag or GitHub Release.
+
 # Unreleased — Phase 2.2b Interactive multi-knot Gizmos
 
 - Added a Cocos-Gizmos v3 World Move handle for multi-selected 3D knots in the same SplineContainer, anchored on first selected Knot in natural hierarchy order.

@@ -68,3 +68,26 @@ Chức năng dùng **onGizmoHandles / onGizmoChanged** chính thức của Cocos
 Việc tạo yêu cầu snapshot khi kết thúc là biện pháp để ghi Undo transaction cho các Node đã đổi World position; `editorGroupWorldPosition`, `editorTangentIn/Out`, `editorWorldEuler` vẫn là property tính toán. **Native Undo/Redo, prefab overrides và việc Gizmos bắt chuột chính xác chưa được chứng minh trong Creator 3.8.8.**
 
 **Smoke test Editor bắt buộc:** kéo 2–3 Knot (trên parent rotation + nonuniform scale), xác nhận Knot không chọn đứng yên, Esc khôi phục; thả rồi Ctrl+Z/Ctrl+Shift+Z; save/reopen Scene và Prefab; kiểm tra snap, tangent Move và Rotate handles; xác minh nhóm hai spline không thể kéo chung.
+
+## Phase 2.3 — Surface Snap với MeshRenderer
+
+Trong **SplineContainer Inspector → Batch Knot Tools**, mục **Surface Snap**:
+
+1. Chọn SplineContainer 3D, đánh dấu ít nhất một Knot (tối đa 64 Knot).
+2. Bấm **Refresh meshes** để lấy danh sách các MeshRenderer hợp lệ trong Scene; chọn mesh đích (ví dụ Ground hoặc Terrain Mesh).
+3. Mesh nhập cần bật **Allow Data Access**; bước đầu chỉ hỗ trợ **single-submesh** có **RGB32F POSITION** (không dùng compressed vertices).
+4. Nhập **Start above** (mặc định 10 đơn vị World): điểm bắt đầu ray tại Knot World Y + giá trị này. **Cast depth** (mặc định 100): chiều dài ray thẳng xuống theo -Y World tính từ điểm bắt đầu.
+5. Nhấn **Snap to Surface**. Công cụ chọn giao điểm cao nhất bên dưới điểm bắt đầu, biến đổi World → spline local và sửa các Knot cùng một batch.
+
+Không cần Collider/PhysicsSystem. Có hỗ trợ transform mesh gồm translation/rotation/non-uniform scale. Bề mặt dựng từ triangle mesh CPU; giới hạn **20.000 tam giác** mỗi mesh và **64 Knot** mỗi thao tác. Không sửa mesh nguồn hoặc các Node không đánh dấu.
+
+**Fail closed**: nếu một Knot nằm ngoài footprint mesh, không tìm thấy giao điểm trong Cast depth, ma trận world suy biến, mesh không đọc được hoặc vượt giới hạn, toàn bộ thao tác bị hủy **trước khi ghi**. Nếu Scene `set-property` lỗi giữa chừng, editor cố gắng khôi phục các vị trí đã ghi. Chỉ tạo snapshot khi có Knot thay đổi.
+
+Lựa chọn MeshRenderer ở ngoài spline đích (không cho snap lên mesh Road/Extrude thuộc chính spline đang chỉnh, vì sẽ tạo vòng lặp). Những bề mặt đứng gần thẳng đứng sẽ không cho giao điểm với ray World-Y nếu tam giác chiếu lên mặt phẳng XZ bị suy biến. **2D spline không hỗ trợ** chức năng này; Snap grid vẫn sử dụng được.
+
+Editor messages:
+
+- `Editor.Message.request('cocos-splines','list-surface-meshes')`
+- `Editor.Message.request('cocos-splines','snap-selected-to-surface',ids,targetNodeUuid,startAbove,castDepth)`
+
+**Cần test thủ công Cocos Creator 3.8.8:** asset import format, refresh danh sách MeshRenderer, parent transforms, Scene Undo/Redo, mesh có cạnh dốc và prefab overrides. CI Node chỉ chứng minh thuật toán và message contract, không chứng minh tương tác thật trong Scene.

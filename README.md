@@ -89,3 +89,7 @@ Batch Knot Tools now offers **Local / World** for 3D curves with correctly trans
 ### V2 Phase 2.2b — Interactive group move preview
 
 Select multiple 3D Knot nodes belonging to one SplineContainer in the **Batch Knot Tools → Select in Scene** action. A single group Move Gizmo appears at the first selected Knot's world position: drag to translate the selected knots without moving unrelated knots. Escape restores the group. On release, a Scene snapshot is requested. Creator 3.8.8's actual native Undo/Redo, mouse picking and prefab behavior remain to be manually verified; see [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md).
+
+### V2 Phase 2.3 — Mesh Surface Snap (preview)
+
+In SplineContainer Inspector → Batch Knot Tools, mark 3D Knots, click **Refresh meshes**, select a readable MeshRenderer outside the spline and **Snap to Surface**. A CPU World-Y raycast lands knots on the triangle mesh without Physics Collider. Requires imported mesh **Allow Data Access**, single submesh and RGB32F position attributes; max 20,000 triangles and 64 knots. Missing ray hits abort the entire batch. See [guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Live Creator Editor Undo/Redo, asset import variations and prefab overrides still need testing.
