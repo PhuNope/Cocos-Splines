@@ -71,12 +71,12 @@ try {
             knots,getNaturalResolvedKnots(){return [];}};
         otherContainer.spline={dimension:0,count:1,refresh(){}};
         const original=nodes.map(n=>n.worldPosition.clone());
-        let selection=['b','a','remote'],snapshots=0;
+        let selection=['b','a','remote'],snapshots=0,failSnapshot=false;
         globalThis.Editor={
             Selection:{getSelected(){return selection;}},
-            Message:{request:async(channel,message)=>{
+            Message:{request:(channel,message)=>{
                 assert.equal(channel,'scene');assert.equal(message,'snapshot');snapshots++;
-                return true;
+                return !failSnapshot;
             }},
         };
         globalThis.Gizmos3D={
@@ -114,6 +114,16 @@ try {
         a.onGizmoChanged('editorGroupWorldPosition','begin');
         a.onGizmoChanged('editorGroupWorldPosition','end');
         assert.equal(snapshots,1,'No-op drag must not snapshot');
+        const savedWorld=nodes.map(node=>node.worldPosition.clone());
+        failSnapshot=true;
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(20,29,4);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,2,'Failed snapshot was attempted exactly once');
+        nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,savedWorld[i],
+            'Group snapshot failure restores every selected Knot'));
+        failSnapshot=false;
         selection=['a'];
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'A single selected knot has only its individual handles');

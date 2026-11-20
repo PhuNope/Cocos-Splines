@@ -79,7 +79,24 @@ try {
         assert.equal(nodeA.worldRotation.z,30,'Rotate Gizmo writes node world rotation');
         gizmo.onGizmoChanged('editorWorldEuler','cancel');
         assert.equal(nodeA.worldRotation.z,0,'Cancel restores node world rotation');
+        let requests=0;
+        globalThis.Editor={Message:{request:()=>{
+            requests++;
+            return false; // synchronous Scene snapshot failure
+        }}};
+        gizmo.onGizmoChanged('editorTangentOut','begin');
+        knot.editorTangentOut=new Vec3(7,3,0);
+        gizmo.onGizmoChanged('editorTangentOut','end');
+        assert.equal(knot.mode,TangentMode.AutoSmooth,'Failed tangent commit restores AutoSmooth');
+        assert.equal(knot.tangentOut.x,1,'Failed tangent commit restores original outgoing tangent');
+        assert.equal(requests,1);
+        gizmo.onGizmoChanged('editorWorldEuler','begin');
+        knot.editorWorldEuler=new Vec3(0,50,20);
+        gizmo.onGizmoChanged('editorWorldEuler','end');
+        assert.equal(nodeA.worldRotation.y,0,'Failed rotate snapshot restores previous world rotation');
+        assert.equal(requests,2);
+        delete globalThis.Editor;
         delete globalThis.Gizmos3D;
-        console.log('KNOT GIZMOS V3 PASS: selected handles, tangent materialization, cancel and rotation.');
+        console.log('KNOT GIZMOS V3 PASS: tangent/rotate cancel and failed snapshots.');
     } finally {Module._load=original;}
 } finally {fs.rmSync(dir,{recursive:true,force:true});}
