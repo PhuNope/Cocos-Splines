@@ -73,6 +73,7 @@ const equal=(a:FieldValue,b:FieldValue):boolean=>
         typeof a==='number'&&typeof b==='number'&&a===b:
         ('w' in a||'w' in b)?sameQuat(a as KnotQuat,b as KnotQuat):
         sameVec(a,b);
+const live=(guard:()=>boolean):boolean=>{try{return guard()===true;}catch{return false;}};
 const good=(value:unknown)=>value!==false&&!(value&&typeof value==='object'&&
     (value as {ok?:boolean}).ok===false);
 function valueCopy(v:FieldValue):FieldValue {
@@ -99,19 +100,25 @@ function verifyState(target:KnotSerializedTarget,state:KnotSerializedState):bool
     }
     return true;
 }
-async function write(op:Write,value:FieldValue,request:SceneMessageRequest):Promise<void>{
+async function write(op:Write,value:FieldValue,request:SceneMessageRequest,
+    guard:()=>boolean):Promise<void>{
+    if(!live(guard))throw Error('Scene lease expired before Knot serialized write.');
     const result=await request('scene','set-property',{
         uuid:op.uuid,path:op.path,
         dump:{type:op.type,value:valueCopy(value)},
         record:false,
     });
+    if(!live(guard))throw Error('Scene lease expired after Knot serialized write.');
     if(!good(result))
         throw Error('Editor rejected serialized Knot field '+op.uuid+'/'+op.path);
 }
 async function componentIndex(
     target:KnotSerializedTarget,request:SceneMessageRequest,
+    guard:()=>boolean,
 ):Promise<{index:number;values:Record<string,any>}> {
+    if(!live(guard))throw Error('Scene lease expired before component query.');
     const dump=await request('scene','query-node',target.node.uuid) as any;
+    if(!live(guard))throw Error('Scene lease expired after component query.');
     const comps=dump?.__comps__;
     if(!Array.isArray(comps))
         throw Error('Cannot resolve serialized SplineKnot component in Scene.');
@@ -131,7 +138,9 @@ export async function commitKnotSerializedGesture(
     target:KnotSerializedTarget,
     before:KnotSerializedState,after:KnotSerializedState,
     request:SceneMessageRequest,
+    guard:()=>boolean=()=>true,
 ):Promise<unknown>{
+    if(!live(guard))throw Error('Scene lease expired before Knot Gizmo commit.');
     if(typeof request!=='function'||!target||!before||!after||
        before.parent!==after.parent||
        before.inHandleNode!==after.inHandleNode||
@@ -157,7 +166,7 @@ export async function commitKnotSerializedGesture(
             !sameVec(before.outTangent,after.outTangent);
         let idx=-1,types:Record<string,any>={};
         if(changedComponent){
-            const found=await componentIndex(target,request);
+            const found=await componentIndex(target,request,guard);
             idx=found.index;types=found.values;
         }
         const componentType=(key:string,fallback:string)=>{
@@ -197,28 +206,35 @@ export async function commitKnotSerializedGesture(
     if(!ops.length)return true;
     // Query-node occurs asynchronously; reject property edits made between
     // preflight and the first serialized write.
-    if(!verifyState(target,after))
-        throw Error('Knot Scene state changed during serialized Gizmo planning.');
+    if(!live(guard)||!verifyState(target,after))
+        throw Error('Knot Scene lease or state changed during serialized Gizmo planning.');
     const touched:Write[]=[];
     try{
         for(const op of ops){
+            if(!live(guard))throw Error('Scene lease expired during Knot serialization.');
             if(!op.valid()||!equal(op.current(),op.after))
                 throw Error('Knot field changed during serialized Gizmo transaction.');
             touched.push(op);
-            await write(op,op.after,request);
+            await write(op,op.after,request,guard);
             if(!op.valid()||!equal(op.current(),op.after))
                 throw Error('Knot field changed while applying Editor property.');
         }
+        if(!live(guard))throw Error('Scene lease expired before Knot snapshot.');
         const snapshot=await request('scene','snapshot');
+        if(!live(guard))throw Error('Scene lease expired while Knot snapshot was pending.');
         if(!good(snapshot))
             throw Error('Scene rejected Knot Gizmo snapshot.');
         return snapshot;
     }catch(error){
+        // A stale Scene IPC address may now target another Scene. Do not
+        // try to roll back via that address after hierarchy replacement.
+        if(!live(guard))
+            throw Error('Scene lease expired: Knot commit aborted without cross-Scene rollback.');
         const failures:string[]=[];
         for(const op of touched.reverse()){
             // If another edit modified the field, don't overwrite it.
             if(!op.valid()||!equal(op.current(),op.after))continue;
-            try{await write(op,op.before,request);}
+            try{await write(op,op.before,request,guard);}
             catch(e){failures.push(op.uuid+'/'+op.path+': '+String(e));}
         }
         const message=String((error as Error)?.message||error);
