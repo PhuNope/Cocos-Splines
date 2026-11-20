@@ -67,3 +67,11 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] SplineModifiers vẽ hoàn toàn trong Editor/SplineModifierGizmos.
 - [x] Core/SplineMeshGizmos chỉ xây dựng dữ liệu wireframe, không truy cập globalThis.
 - [ ] Manual Cocos Creator Scene validation: draw depth, selected components, nested model transforms và Undo/Redo.
+
+### Phase 2.2b — Interactive group Move (preview)
+
+- [x] Thêm Move handle World trên Knot đầu tiên trong nhóm được chọn (Cocos-Gizmos v3; không dùng legacy direct callbacks).
+- [x] Dịch nhóm theo cùng delta World, giữ Knot ngoài selection đứng yên, Cancel rollback, no-op không snapshot.
+- [x] Node mock tests cho multi-select, bất biến vị trí, nhóm thuộc spline khác và 2D constraints.
+- [ ] Native Undo/Redo, prefab overrides và Scene mouse picking cần smoke test Cocos Creator 3.8.8.
+- [ ] Surface snap/align, drag nhóm trong XY2D/XZ2D và materialization/migration tangent-handle nodes.

@@ -51,3 +51,20 @@ API mới: `Editor.Message.request('cocos-splines','move-selected-knots',ids,{x:
 - Batch tests: một snapshot, không snapshot khi no-op, rollback khi ghi lỗi.
 - Không ghi khi selection không hợp lệ, world matrix suy biến hoặc thao tác làm lệch mặt phẳng 2D.
 - Vẫn cần smoke test trong Cocos Creator 3.8.8: Scene Undo/Redo, prefab overrides, selection và preview 2D/3D.
+
+## Phase 2.2b — Gizmos kéo nhiều Knot (đang thử nghiệm)
+
+**Cách dùng trong Scene (spline 3D):**
+
+1. Trong SplineContainer Inspector, Mark ít nhất 2 Knot thuộc **cùng một SplineContainer**.
+2. Nhấn **Select in Scene**. Editor dùng thứ tự Knot trong Hierarchy (không phụ thuộc thứ tự click) để xác định Knot làm mốc.
+3. Với Knot đầu tiên trong nhóm được chọn, Gizmos v3 hiển thị Move handle **group World position** ở vị trí World hiện tại của Knot. Kéo theo trục hoặc mặt phẳng để dịch cả nhóm.
+4. Thả chuột (end) để gửi một yêu cầu Scene snapshot; nhấn Esc/Cancel để khôi phục toàn bộ vị trí trước khi kéo. Không làm dịch chuyển Knot không được chọn hoặc Knot từ spline khác.
+
+Chức năng dùng **onGizmoHandles / onGizmoChanged** chính thức của Cocos-Gizmos v3. Chỉ có một group handle ở Knot đầu tiên nhằm tránh các handle nhóm trùng nhau. Vị trí Knot lưu ở Node transforms vốn có, **không** tạo thêm node, serialized field hoặc shim API Gizmos.
+
+**Giới hạn:** World group drag chỉ có cho Space3D, không áp dụng XY2D/XZ2D. Khi Scene Editor không cung cấp `Editor.Selection.getSelected('node')`, group handle sẽ bị ẩn an toàn; Batch Move bằng số trong Inspector vẫn hoạt động.
+
+Việc tạo yêu cầu snapshot khi kết thúc là biện pháp để ghi Undo transaction cho các Node đã đổi World position; `editorGroupWorldPosition`, `editorTangentIn/Out`, `editorWorldEuler` vẫn là property tính toán. **Native Undo/Redo, prefab overrides và việc Gizmos bắt chuột chính xác chưa được chứng minh trong Creator 3.8.8.**
+
+**Smoke test Editor bắt buộc:** kéo 2–3 Knot (trên parent rotation + nonuniform scale), xác nhận Knot không chọn đứng yên, Esc khôi phục; thả rồi Ctrl+Z/Ctrl+Shift+Z; save/reopen Scene và Prefab; kiểm tra snap, tangent Move và Rotate handles; xác minh nhóm hai spline không thể kéo chung.

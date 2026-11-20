@@ -85,3 +85,7 @@ Automated validation does not replace testing inside Cocos Creator 3.8.x, especi
 ### V2 Phase 2.2a — World knot positioning (preview)
 
 Batch Knot Tools now offers **Local / World** for 3D curves with correctly transformed nested rotation/nonuniform scale, plus **Move marked** by numeric Delta X/Y/Z. XY2D/XZ2D remain constrained to local editing to avoid invalid off-plane placements. See [editing guide](docs/SPLINE_EDITOR_PHASE2_VI.md). This is not yet interactive multi-knot dragging and does not certify native Editor Undo/Redo.
+
+### V2 Phase 2.2b — Interactive group move preview
+
+Select multiple 3D Knot nodes belonging to one SplineContainer in the **Batch Knot Tools → Select in Scene** action. A single group Move Gizmo appears at the first selected Knot's world position: drag to translate the selected knots without moving unrelated knots. Escape restores the group. On release, a Scene snapshot is requested. Creator 3.8.8's actual native Undo/Redo, mouse picking and prefab behavior remain to be manually verified; see [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md).

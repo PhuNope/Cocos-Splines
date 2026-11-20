@@ -1,3 +1,11 @@
+# Unreleased — Phase 2.2b Interactive multi-knot Gizmos
+
+- Added a Cocos-Gizmos v3 World Move handle for multi-selected 3D knots in the same SplineContainer, anchored on first selected Knot in natural hierarchy order.
+- Drag updates the group's Node world positions from an immutable baseline, preventing cumulative drift. Cancel/Escape rolls back all positions; successful end requests one Scene snapshot; no-op never snapshots.
+- Added snapshot requests for changed computed tangent/rotation editing ports on Gizmo end. Native Creator Undo/Redo behavior still requires a live smoke test.
+- Added mock regression tests for selection scoping, cancellation and no-op, including cross-spline and 2D safeguards.
+- No tag or GitHub Release. Every validated v2 commit produces a test ZIP artifact.
+
 # Unreleased — Phase 2.2a World-space Knot tools
 
 - Local/World coordinate space in SplineContainer Batch Knot Tools.
