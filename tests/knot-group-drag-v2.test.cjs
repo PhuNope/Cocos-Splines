@@ -73,6 +73,7 @@ try {
         otherContainer.spline={dimension:0,count:1,refresh(){}};
         const original=nodes.map(n=>n.worldPosition.clone());
         let selection=['b','a','remote'],snapshots=0,failSnapshot=false;
+        let delayedSnapshot=null;
         const writes=[];
         globalThis.Editor={
             Selection:{getSelected(){return selection;}},
@@ -89,7 +90,7 @@ try {
                     return true;
                 }
                 assert.equal(message,'snapshot');snapshots++;
-                return !failSnapshot;
+                return delayedSnapshot||!failSnapshot;
             }},
         };
         globalThis.Gizmos3D={
@@ -212,7 +213,31 @@ try {
         selection=['a','remote'];
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'Nodes from different spline containers are never grouped');
+        // A pending async history commit must block even a DIFFERENT Knot
+        // drawer from starting a second tangent or group transaction.
         selection=['a','b'];
+        let resolveSnapshot;
+        delayedSnapshot=new Promise(resolve=>{resolveSnapshot=resolve;});
+        const savedForGate=nodes.map(n=>n.worldPosition.clone());
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(
+            savedForGate[0].x+2,savedForGate[0].y+4,savedForGate[0].z+1);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        await new Promise(resolve=>setImmediate(resolve));
+        assert.equal(snapshots,3,'Third commit is waiting on Scene IPC');
+        assert.equal(a.onGizmoHandles().length,0,'Owning drawer hides all handles until commit');
+        assert.equal(b.onGizmoHandles().length,0,'Other Knot drawer is also held');
+        assert.throws(
+            ()=>b.onGizmoChanged('editorTangentOut','begin'),
+            /still committing/,
+            'No second gesture may write into the same spline during snapshot IPC');
+        resolveSnapshot(true);
+        await new Promise(resolve=>setImmediate(resolve));
+        assert(a.onGizmoHandles().length>0,'Handles return once commit completes');
+        b.onGizmoChanged('editorTangentOut','begin');
+        b.onGizmoChanged('editorTangentOut','cancel');
+        assert.equal(snapshots,3,'Cancel after unlock does not create history');
         delete globalThis.Editor;
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'Unavailable Editor Selection must fail closed');
