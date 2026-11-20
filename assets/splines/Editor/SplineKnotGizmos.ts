@@ -44,7 +44,7 @@ export class SplineKnotGizmos {
         if(!Array.isArray(uuids))return [];
         const ids=new Set(uuids.filter((v):v is string=>typeof v==='string'));
         // Always use natural hierarchy order even when user clicked B then A.
-        return spline.node.children.map(node=>node.getComponent('Splines.SplineKnot') as SplineKnot|null)
+        return spline.node.children.map(node=>(node as any).getComponent('Splines.SplineKnot') as SplineKnot|null)
             .filter((k):k is SplineKnot=>!!k && k.enabled && ids.has(k.node.uuid));
     }
     onGizmoSettings(){return {display:'always' as const};}
