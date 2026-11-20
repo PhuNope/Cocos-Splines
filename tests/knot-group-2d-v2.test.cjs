@@ -7,6 +7,7 @@ const path=require('node:path');
 const Module=require('node:module');
 const root=path.resolve(__dirname,'..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-spline-group-2d-'));
+(async()=>{
 try {
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),
   '--noEmit','false','--outDir',temp]);
@@ -106,11 +107,21 @@ try {
   container.children=nodes;
   container.spline={node:container,dimension:1,count:3,enabled:true,
    knots,refresh(){},showGizmosAlways:false};
-  let selection=['a','b'],snapshots=0,snapshotAllowed=true;
+  let selection=['a','b'],snapshots=0,snapshotAllowed=true,positionWrites=0;
   globalThis.Editor={
    Selection:{getSelected(){return selection;}},
-   Message:{request(channel,method){
-    assert.equal(channel,'scene');assert.equal(method,'snapshot');
+   Message:{request(channel,method,payload){
+    assert.equal(channel,'scene');
+    if(method==='set-property'){
+     assert.equal(payload.path,'position');assert.equal(payload.record,false);
+     assert.equal(payload.dump.type,'cc.Vec3');
+     positionWrites++;
+     const node=nodes.find(n=>n.uuid===payload.uuid);
+     assert(node);
+     node.setPosition(new Vec3(payload.dump.value.x,payload.dump.value.y,payload.dump.value.z));
+     return true;
+    }
+    assert.equal(method,'snapshot');
     snapshots++;return snapshotAllowed;
    }},
   };
@@ -118,15 +129,17 @@ try {
   globalThis.Gizmos2D={move:(property,opts)=>{
     if(property==='editorGroupLocalPosition'){
       assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+     assert.equal(opts.history,'external');
     }
     return [
       descriptor(property,'x','view','axis'),
       descriptor(property,'y','view','axis'),
       descriptor(property,undefined,'xy','plane')];
   }};
-  globalThis.Gizmos3D={supportsMoveFrameNode:true,move:(property,opts)=>{
+  globalThis.Gizmos3D={supportsMoveFrameNode:true,supportsExternalHistory:true,move:(property,opts)=>{
    if(property==='editorGroupLocalPosition'){
      assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+     assert.equal(opts.history,'external');
    }
    return [
    ...['x','y','z'].map(axis=>descriptor(property,axis,'view','axis')),
@@ -159,7 +172,9 @@ try {
   a.onGizmoChanged('editorGroupLocalPosition','begin');
   knots[0].editorGroupLocalPosition=requested;
   a.onGizmoChanged('editorGroupLocalPosition','end');
+  await new Promise(resolve=>setImmediate(resolve));
   eqVec(nodes[0].position,expected[0]);eqVec(nodes[1].position,expected[1]);
+  assert.equal(positionWrites,2);
   assert.equal(snapshots,1);
   a.onGizmoChanged('editorGroupLocalPosition','begin');
   a.onGizmoChanged('editorGroupLocalPosition','end');
@@ -180,6 +195,7 @@ try {
   eq(nodes[0].position.y,xzOriginals[0].y);
   eq(nodes[1].position.y,xzOriginals[1].y);
   a.onGizmoChanged('editorGroupLocalPosition','end');
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(snapshots,2);
   // Reject stale group when changing dimension during drag.
   const beforeInvalid=nodes.map(n=>n.position.clone());
@@ -199,6 +215,7 @@ try {
   knots[0].editorGroupLocalPosition=local(Vec3.add(new Vec3(),nodes[0].worldPosition,
    new Vec3(5,6,8)));
   a.onGizmoChanged('editorGroupLocalPosition','end');
+  await new Promise(resolve=>setImmediate(resolve));
   nodes.forEach((n,i)=>eqVec(n.position,beforeFail[i]));
   assert.equal(snapshots,3);
   snapshotAllowed=true;
@@ -219,3 +236,4 @@ try {
   console.log('GROUP MOVE 2D PASS: XY/XZ handle filtering, tilted/scaled Container, hidden-axis lock, Cancel, snapshot rollback.');
  }finally{Module._load=previous;}
 }finally{fs.rmSync(temp,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});

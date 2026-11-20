@@ -7,6 +7,7 @@ const path=require('node:path');
 const Module=require('node:module');
 const root=path.resolve(__dirname,'..');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'spline-group-move-'));
+(async()=>{
 try {
     cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),
         '--noEmit','false','--outDir',dir]);
@@ -38,8 +39,8 @@ try {
             return this.components.find(comp=>comp instanceof type)||null;
         }
         setWorldRotation(value){this.worldRotation=value.clone();}
-        setWorldPosition(value){this.worldPosition=value.clone();}
-        setPosition(value){this.position=value.clone();}
+        setWorldPosition(value){this.worldPosition=value.clone();this.position=value.clone();}
+        setPosition(value){this.position=value.clone();this.worldPosition=value.clone();}
     }
     class Component{constructor(){this.enabled=true;this.isValid=true;}}
     const identity=x=>x;
@@ -72,15 +73,31 @@ try {
         otherContainer.spline={dimension:0,count:1,refresh(){}};
         const original=nodes.map(n=>n.worldPosition.clone());
         let selection=['b','a','remote'],snapshots=0,failSnapshot=false;
+        const writes=[];
         globalThis.Editor={
             Selection:{getSelected(){return selection;}},
-            Message:{request:(channel,message)=>{
-                assert.equal(channel,'scene');assert.equal(message,'snapshot');snapshots++;
+            Message:{request:(channel,message,payload)=>{
+                assert.equal(channel,'scene');
+                if(message==='set-property'){
+                    assert.equal(payload.path,'position');
+                    assert.equal(payload.record,false);
+                    assert.equal(payload.dump.type,'cc.Vec3');
+                    writes.push(payload);
+                    const node=nodes.find(node=>node.uuid===payload.uuid);
+                    assert(node,'Unknown Knot '+payload.uuid);
+                    node.setPosition(new Vec3(...['x','y','z'].map(k=>payload.dump.value[k])));
+                    return true;
+                }
+                assert.equal(message,'snapshot');snapshots++;
                 return !failSnapshot;
             }},
         };
         globalThis.Gizmos3D={
-            move:name=>[{property:name,visual:'move'}],
+            supportsExternalHistory:true,
+            move:(name,options)=>{
+                if(name==='editorGroupWorldPosition')assert.equal(options.history,'external');
+                return [{property:name,visual:'move'}];
+            },
             rotate:name=>[{property:name,visual:'rotate'}],
         };
         const a=new SplineKnotGizmos(knots[0]);
@@ -110,6 +127,8 @@ try {
         knots[0].editorGroupWorldPosition=new Vec3(11,20,-1);
         a.onGizmoChanged('editorGroupWorldPosition','update');
         a.onGizmoChanged('editorGroupWorldPosition','end');
+        await new Promise(resolve=>setImmediate(resolve));
+        assert.equal(writes.length,2,'Both Knot positions are written through serialized Scene API');
         assert.equal(snapshots,1,'Exactly one Scene snapshot on successful group drag');
         a.onGizmoChanged('editorGroupWorldPosition','begin');
         a.onGizmoChanged('editorGroupWorldPosition','end');
@@ -120,6 +139,7 @@ try {
         knots[0].editorGroupWorldPosition=new Vec3(20,29,4);
         a.onGizmoChanged('editorGroupWorldPosition','update');
         a.onGizmoChanged('editorGroupWorldPosition','end');
+        await new Promise(resolve=>setImmediate(resolve));
         assert.equal(snapshots,2,'Failed snapshot was attempted exactly once');
         nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,savedWorld[i],
             'Group snapshot failure restores every selected Knot'));
@@ -200,3 +220,4 @@ try {
         console.log('KNOT GROUP DRAG PASS: direct handle, selected-only translation, cancel, snapshots and 2D guards.');
     }finally{Module._load=old;}
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});
