@@ -143,3 +143,22 @@ Khác với MeshRenderer CPU path, Collider path **không yêu cầu Allow Data 
 **Thay đổi API trên nhánh v2:** `Editor.Message.request('cocos-splines','list-surface-targets')` thay thế `list-surface-meshes`; mỗi target chứa `kind:'mesh'|'collider'`. Lệnh Snap giữ tên `snap-selected-to-surface` và nhận thêm tham số cuối `targetKind` (mặc định `mesh`). Scene methods mới là `listSurfaceTargets` / `snapToSurfaceTarget`.
 
 **Bắt buộc kiểm tra thủ công trong Creator 3.8.8:** 3D Physics enabled, TerrainCollider thực tế, backend hitNormal, Collider chồng nhau, Scene Undo/Redo, prefab overrides và Preview/Build; CI chỉ test logic adapter và message contract.
+
+## Phase 2.7 — Transaction và Undo/Redo Safety
+
+Các thao tác **Snap to Grid**, **Align**, **Move marked** và **Surface Snap** (Mesh/Collider, có hoặc không Align Normal) nay đi qua bộ điều phối `SplineBatchEditTransaction`. Không thêm node, component hoặc serialized field mới.
+
+Quy trình:
+
+1. Tính trước mọi thay đổi (không ghi trực tiếp trong bước raycast/plan).
+2. Dùng `queryKnotBatchState` để đọc vị trí/rotation từ chính Scene. Nếu giá trị đã thay đổi từ lúc tính plan, **dừng trước khi ghi** để tránh ghi đè dữ liệu người khác.
+3. Ghi `position` và `rotation` theo thứ tự, `record:false`.
+4. Đọc lại mọi Knot đã sửa. Nếu Scene không áp dụng một lệnh mà cũng không báo lỗi, hoặc dữ liệu sai với kế hoạch, **rollback theo thứ tự ngược**.
+5. Chỉ khi toàn bộ vị trí/rotation đúng thì yêu cầu một native `scene/snapshot`. Nếu trả `false`, `{ok:false}` hoặc throw, rollback toàn bộ. Không đánh dấu thành công giả.
+6. Nếu có một rollback không thành công, trả lỗi cụ thể để người dùng xử lý Scene trước khi thao tác tiếp.
+
+So sánh rotation theo quaternion tương đương **q và -q**, tránh báo lỗi sai khi Cocos chuẩn hóa dấu. Có tolerance nhỏ để chấp nhận sai số float32.
+
+**Điều chưa xác nhận**: native Undo/Redo thực sự có lưu/khôi phục đủ Node và Prefab override trong Cocos Creator 3.8.8, hoặc các Gizmos tương tác kéo tangent/group có dùng native transaction giống Inspector. Node mock chỉ chứng minh các lệnh được gọi và rollback, không mô phỏng Undo stack thực tế.
+
+**Smoke test bắt buộc**: trước hết tạo Scene bản sao, Snap 3 Knot khác nhau, nhấn Ctrl/Cmd+Z rồi Ctrl/Cmd+Shift+Z. Lặp lại với Surface Snap + Align Normal, Knot trong Prefab, Scale/Rotation của parent, sau đó save/reopen Scene. Nếu Undo không khôi phục cùng một nhóm, gửi Console log và ảnh để điều chỉnh cơ chế snapshot theo phiên bản Creator thực tế.

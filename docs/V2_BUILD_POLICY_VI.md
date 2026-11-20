@@ -14,3 +14,7 @@
 ### Phase 2.6 preview
 
 The V2 ZIP includes both MeshRenderer and Collider/Terrain snapping. No tag or GitHub Release. Validate on a real Creator project with 3D Physics enabled; automated tests cannot certify Editor-time TerrainCollider physics.
+
+### Phase 2.7 preview acceptance
+
+Test the latest `v2` ZIP with multi-Knot Snap/Align/Move, Mesh and Collider surface snaps, and Ctrl+Z/Ctrl+Shift+Z. New Scene transform read-back guards catch stale or silently ignored writes. CI cannot prove Editor history is correct; send Console logs for any Undo/Redo discrepancies. No release or tag.

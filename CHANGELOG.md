@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.7 Knot Batch Transaction Hardening
+
+- Extracted reusable editor-only `SplineBatchEditTransaction` coordinator to keep Scene writes, verification, native snapshot request and rollback separate from Knot math and Inspector UI.
+- Added read-only `queryKnotBatchState` Scene service, validating direct Knot children and reporting actual Node position/local quaternion.
+- Before mutating, compare the current Node data to the planned baseline; stale edits abort without writing or making a snapshot.
+- After setting properties, read back every selected Knot: silently ignored/partial Scene writes now trigger reverse-order rollback rather than false success.
+- Exactly one snapshot is requested after successful verification. Rejected or thrown snapshot requests trigger rollback; `undefined` is treated as possible success for Creator IPC.
+- Added focused tests for snapshot errors, mutation-then-throw, stale inputs, no-op state, quaternion sign equivalence, and Scene read-back contracts.
+- Native Cocos Creator 3.8.8 Undo/Redo, prefab overrides, and changes done by Gizmos drag still require manual verification. **No claim of native Undo/Redo correctness based on Node mocks.**
+- Code pushed to `v2`; no tag or GitHub Release.
+
 # Unreleased — Phase 2.6 3D Collider & Terrain Surface Snap
 
 - Added explicitly typed MeshRenderer vs Physics Collider surface targets in the SplineContainer Inspector.

@@ -16,6 +16,7 @@ knot.components.push({kind:'Splines.SplineKnot'});
 const identityRotation={x:0,y:0,z:0,w:1};
 spline.worldRotation=identityRotation;
 knot.rotation=identityRotation;
+knot.position={x:1,y:2,z:3};
 const ownedMesh=child(spline,node('own','Own Extrusion'));
 const target=child(scene,node('mesh','Ground'));
 const bad=child(scene,node('bad','Unreadable'));
@@ -72,6 +73,16 @@ try{
  assert.deepEqual(orientations.rotations,[{uuid:'knot-1',rotation:identityRotation}]);
  assert(!methods.queryKnotOrientations('spline',['mesh']).ok);
  assert(!methods.queryKnotOrientations('spline',['knot-1','knot-1']).ok);
+ const batch=methods.queryKnotBatchState('spline',['knot-1']);
+ assert(batch.ok,batch.error);
+ assert.deepEqual(batch.states,[{uuid:'knot-1',position:{x:1,y:2,z:3},
+    rotation:identityRotation}]);
+ assert(!methods.queryKnotBatchState('spline',['mesh']).ok,
+  'Foreign surface mesh can never be treated as a Knot');
+ assert(!methods.queryKnotBatchState('spline',['knot-1','knot-1']).ok,
+  'Duplicate Knot UUIDs must be rejected before commit');
+ assert(!methods.queryKnotBatchState('bad',['knot-1']).ok,
+  'Batch readback only accepts an active SplineContainer');
  assert(!methods.snapToSurfaceTarget('spline','own',origins).ok,
     'Sculpting should never raycast against spline-owned meshes');
  assert(!methods.snapToSurfaceTarget('spline','bad',origins).ok,

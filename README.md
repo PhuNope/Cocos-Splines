@@ -105,3 +105,7 @@ Surface Snap now offers **Smooth normals on shared mesh vertices**, enabled only
 ### V2 Phase 2.6 — Collider/Terrain Surface Snap (preview)
 
 Surface Snap can now target an explicit **(mesh)** MeshRenderer or **(collider)** 3D Physics Collider (including TerrainCollider, when supported by the selected Physics backend). Collider raycasts use Cocos Creator's PhysicsSystem, filter hits to only the selected target, and do not require mesh Allow Data Access. Smooth normals remain mesh-only; position and optional hitNormal rotation use the existing atomic batch workflow. See [Phase 2 editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Test in an actual Creator 3.8.8 Scene before using for production terrain. `list-surface-meshes` was renamed to `list-surface-targets` in the developing `v2` branch.
+
+### V2 Phase 2.7 — Verified batch editing (preview)
+
+All Inspector batch Knot operations use an isolated transaction coordinator: read Scene transform state before editing to avoid overwriting stale data, apply edits via official Scene property messages, read back results, then request one native Scene snapshot. Failed writes, mismatched read-back and rejected snapshots trigger best-effort reverse rollback. Unit tests cover these paths; **Creator Editor native Undo/Redo is not certified until verified in a real 3.8.8 scene**. See [test checklist](docs/SPLINE_EDITOR_PHASE2_VI.md).

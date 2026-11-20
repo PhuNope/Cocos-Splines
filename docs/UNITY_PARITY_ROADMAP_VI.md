@@ -102,3 +102,9 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Physics 3D Collider target selection, strict raycast hit isolation, TerrainCollider/primitive Collider support where physics is active.
 - [x] No hit => no edit; optional hitNormal orientation, mesh-only smoothing, Node regression/Scene contract tests.
 - [ ] Verify 3D Physics Scene behavior and TerrainCollider in Cocos Creator 3.8.8; native Undo/Redo and prefab overrides.
+
+### Phase 2.7 — Transaction Read-back / Undo safety
+
+- [x] Editor-only atomic batch transaction, stale-data guard và Scene transform readback trước/sau khi ghi.
+- [x] Snapshot false/throw rollback, reverse property rollback, single snapshot after verify, tests cho partial write/rotation failures.
+- [ ] Native Cocos 3.8.8 Undo/Redo thực tế, Prefab overrides và các interactive Gizmos transactions cần live Editor integration.
