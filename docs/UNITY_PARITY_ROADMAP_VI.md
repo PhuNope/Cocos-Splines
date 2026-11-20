@@ -116,3 +116,10 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Tests với interactive Gizmos mocks cho Cancel, failed snapshot và tự kiểm tra lifecycle.
 - [ ] Cocos Creator 3.8.8 native Undo stack, prefab override và tích hợp onControlBegin/End cần kiểm chứng thực tế.
 - [ ] Mở rộng backend nếu cần sang native scene undo transaction API chính thức sau khi có kết quả smoke test.
+
+### Phase 2.9 — Gizmo Scene Invalidation (preview)
+
+- [x] Guard selection, group membership, reparent, deleted/disabled Knot and disabled spline at begin/update/end, redraw and pending rollback.
+- [x] Restore only surviving group knots still under original parent; avoid stale async rollback and snapshots on invalidated edits.
+- [x] Node mock regression tests for selection change, reparent/delete and disabled component.
+- [ ] Real Cocos 3.8.8 teardown callbacks, Undo history grouping and prefab overrides require on-device Editor tests.

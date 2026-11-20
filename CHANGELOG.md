@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.9 Gizmo Scene / Selection Invalidation
+
+- A unified Gizmo transaction now accepts an optional live Scene validity guard. Invalid gestures cancel before committing: no Scene snapshot or false Undo history entry.
+- Knot drawers detect deselection, membership changes in a 3D multi-Knot group, deleted/disabled Knot, disabled SplineContainer, reparented group Knot, deleted tangent-handle Node and missing Editor Selection API after a known selection.
+- Performs validation in official Cocos-Gizmos v3 begin/update/end and redraw hooks instead of private Cocos Editor event listeners or polling.
+- Restores surviving knots still under their original parent, without mutating deleted or reparented nodes. Async snapshot failure cannot rollback an invalidated/changed Scene context.
+- Prevents stale drawers from rendering handles for disabled/deleted Knot components.
+- Added tests for selection changes both at End and redraw, reparenting, deletion, component disable, stale async snapshots and transaction guard behavior.
+- Native Editor Undo stack and Prefab overrides still require **live Creator 3.8.8 smoke tests**. This phase does not claim they are certified.
+- Preview code pushed only to `v2` — no tag or GitHub Release.
+
 # Unreleased — Phase 2.8 Shared Gizmo Gesture Transactions
 
 - Refactored Knot tangent Move, Knot Rotate, and 3D selected Knot Group Move to use a single editor-only SplineGizmoEditTransaction abstraction.

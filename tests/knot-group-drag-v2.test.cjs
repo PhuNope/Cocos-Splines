@@ -171,6 +171,16 @@ try {
         assert.equal(snapshots,2);
         nodes[1].isValid=true;
         nodes[1].setWorldPosition(beforeSelectionChange[1]);
+        // Disabled spline must invalidate an otherwise valid selection.
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        knots[0].editorGroupWorldPosition=new Vec3(42,44,10);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        container.spline.enabled=false;
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,2);
+        nodes.forEach((node,i)=>assert.deepEqual(node.worldPosition,beforeSelectionChange[i]));
+        container.spline.enabled=true;
         selection=['a'];
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'A single selected knot has only its individual handles');

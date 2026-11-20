@@ -184,3 +184,18 @@ Lớp transaction chỉ sống trong Editor, không thêm trường serialize ho
 3. Đổi Knot AutoSmooth → Broken bằng kéo tangent, thả rồi Undo/Redo. Thử lại với Cancel để xác minh TangentMode và tangent còn lại.
 4. Rotate Knot, thử Cancel rồi Undo/Redo; thử dưới Container có parent rotation/nonuniform scale.
 5. Save/reopen Scene hoặc Prefab Instance để kiểm tra serialized state và override. Nếu Undo/Redo không đúng, gửi ảnh Scene, console log và mô tả kết quả để sửa theo Editor thực tế.
+
+## Phase 2.9 — Hủy Gizmo an toàn khi Scene thay đổi
+
+Các gesture **Group Move / Rotate / Tangent Move** dùng thêm một bộ kiểm tra điều kiện trước, trong và sau khi kéo:
+
+- Nếu đổi selection giữa khi kéo hoặc nhóm Knot trong một SplineContainer thay đổi, gesture bị **Cancel**, không gọi snapshot.
+- Nếu Knot đang chỉnh bị disable/xóa, Knot bị đổi parent, spline bị disable/hủy hoặc tangent-handle Node đang chỉnh biến mất, gesture bị hủy và cố gắng hoàn nguyên dữ liệu có thể phục hồi.
+- Với Group Move, chỉ khôi phục những Node **còn sống và còn thuộc parent ban đầu**; Node đã chuyển sang spline khác không bị ghi đè.
+- Sau khi End, nếu snapshot bất đồng bộ trả lỗi mà Scene đã đổi / xuất hiện gesture mới, công cụ chỉ cảnh báo thay vì hoàn tác trạng thái mới.
+- Các kiểm tra dùng callback `begin / update / end / cancel` cùng lượt vẽ Gizmos chính thức. Không thêm polling hoặc listener Editor riêng không có API đảm bảo.
+- Thao tác no-op, cancel hoặc selection đổi giữa chừng không tạo snapshot.
+
+**Test trong Creator 3.8.8:** mở Scene bản sao. Chọn 2–3 Knot và kéo Group Move; trong lúc kéo đổi selection, xóa/disable một Knot hoặc đổi parent của một Knot, rồi kiểm tra các Node còn lại không lệch và Console không có exception. Thử tương tự với tangent và rotation. Sau đó kiểm tra Undo/Redo, Prefab Instance overrides, save/reopen Scene.
+
+**Giới hạn:** Editor thật có thể không gửi redraw/end callback sau một số kiểu xóa/đổi selection; plugin Cocos-Gizmos v3 cũng có lifecycle teardown riêng. Bộ test này kiểm tra các callback và kết quả khi chúng được gọi, **chưa chứng minh callback luôn xảy ra trong tất cả thao tác Editor**, cũng chưa xác minh native Undo/Redo hoặc Prefab serialization.

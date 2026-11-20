@@ -113,3 +113,7 @@ All Inspector batch Knot operations use an isolated transaction coordinator: rea
 ### V2 Phase 2.8 — Shared Gizmo transaction lifecycle (preview)
 
 Knot tangent Move, Knot Rotate and 3D multi-Knot Group Move now share `SplineGizmoEditTransaction` for baseline capture, cancel restoration, no-op detection, one requested Scene snapshot on completed edits, and guarded rollback when a snapshot request fails. This uses the existing official Gizmos v3 `begin/update/end/cancel` lifecycle rather than an extra legacy handle system. **Automated tests do not certify native Editor Undo/Redo or prefab overrides**; test in a real Creator 3.8.8 Scene before production use.
+
+### V2 Phase 2.9 — Gizmo invalidation safety (preview)
+
+Knot Group Move, Tangent and Rotate transactions now cancel when Scene context changes while dragging (selection, reparent, deleted Knot, disabled component, changed group membership). Surviving group members in the original spline are restored; reparented objects are not overwritten. Guarded async failures do not revert newer changes. No polling or legacy Editor API is introduced. Validate native Undo/Redo and Prefab overrides in Creator 3.8.8 before using in production; see [editor checklist](docs/SPLINE_EDITOR_PHASE2_VI.md).
