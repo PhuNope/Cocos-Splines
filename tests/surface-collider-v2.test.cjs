@@ -189,7 +189,10 @@ const main=require(path.join(__dirname,'../dist/main.js')).methods;
  assert.deepEqual(records.map(k=>k.position),before,'Partial writes restore all positions');
  const inspector=require('../dist/contributions/inspector/Container.js');
  assert(inspector.template.includes('spl-surface-target'));
- assert(inspector.template.includes("collider:"));
+ const inspectorSource=require('node:fs').readFileSync(
+  path.join(__dirname,'../src/contributions/inspector/Container.js'),'utf8');
+ assert(inspectorSource.includes("startsWith('collider:')"),
+  'Target kind detection must live in the Inspector controller');
  const packageInfo=require('../package.json');
  assert(packageInfo.contributions.messages['list-surface-targets']);
  assert(!packageInfo.contributions.messages['list-surface-meshes']);
