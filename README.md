@@ -117,3 +117,7 @@ Knot tangent Move, Knot Rotate and 3D multi-Knot Group Move now share `SplineGiz
 ### V2 Phase 2.9 — Gizmo invalidation safety (preview)
 
 Knot Group Move, Tangent and Rotate transactions now cancel when Scene context changes while dragging (selection, reparent, deleted Knot, disabled component, changed group membership). Surviving group members in the original spline are restored; reparented objects are not overwritten. Guarded async failures do not revert newer changes. No polling or legacy Editor API is introduced. Validate native Undo/Redo and Prefab overrides in Creator 3.8.8 before using in production; see [editor checklist](docs/SPLINE_EDITOR_PHASE2_VI.md).
+
+### V2 Phase 2.10 — Multi-Knot Group Move in 2D (preview)
+
+The Editor Group Move handle now works for multi-selected Knots on **XY2D** (X/Y/XY handles) and **XZ2D** (X/Z/XZ handles), alongside the existing 3D Group Move. Dragging is converted to SplineContainer-local coordinates, so the hidden 2D axis and every Knot's relative offset are preserved, including under rotated or non-uniformly scaled Containers. Cancel restores the group; valid End requests one Scene snapshot. Note: with a heavily tilted Container, World-axis handle visuals can differ from the actual projected local-plane motion. [Editor test guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Native Undo/Redo is not certified without Creator testing.

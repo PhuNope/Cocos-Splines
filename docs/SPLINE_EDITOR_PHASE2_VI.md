@@ -199,3 +199,23 @@ Các gesture **Group Move / Rotate / Tangent Move** dùng thêm một bộ kiể
 **Test trong Creator 3.8.8:** mở Scene bản sao. Chọn 2–3 Knot và kéo Group Move; trong lúc kéo đổi selection, xóa/disable một Knot hoặc đổi parent của một Knot, rồi kiểm tra các Node còn lại không lệch và Console không có exception. Thử tương tự với tangent và rotation. Sau đó kiểm tra Undo/Redo, Prefab Instance overrides, save/reopen Scene.
 
 **Giới hạn:** Editor thật có thể không gửi redraw/end callback sau một số kiểu xóa/đổi selection; plugin Cocos-Gizmos v3 cũng có lifecycle teardown riêng. Bộ test này kiểm tra các callback và kết quả khi chúng được gọi, **chưa chứng minh callback luôn xảy ra trong tất cả thao tác Editor**, cũng chưa xác minh native Undo/Redo hoặc Prefab serialization.
+
+## Phase 2.10 — Group Move trực tiếp cho XY2D và XZ2D
+
+**Cách dùng:**
+
+1. Tạo **SplineContainer** với `dimension = XY2D` hoặc `XZ2D` và ít nhất hai Knot.
+2. Vào **Batch Knot Tools**, đánh dấu từ hai Knot trở lên và nhấn **Select in Scene**.
+3. Ở Knot đầu tiên theo thứ tự Hierarchy sẽ xuất hiện **Group Move**:
+   - **XY2D:** handle **X/Y/XY**, dùng `Gizmos2D.move`; nếu không có `Gizmos2D` trong Scene, fallback là bộ 3D chỉ có X/Y/XY.
+   - **XZ2D:** handle **X/Z/XZ**, lọc từ `Gizmos3D.move`; tuyệt đối không có Y/XY/YZ.
+4. Khi kéo, tọa độ World do Gizmos trả được đổi về **SplineContainer local** bằng `inverseTransformPoint`. Delta sau đó chỉ có hai trục chủ động. **Z của XY2D và Y của XZ2D giữ nguyên giá trị gốc trên từng Knot**, kể cả các scene cũ có trục ẩn khác 0.
+5. Thả để yêu cầu một Scene snapshot. Esc/Cancel hoặc thay đổi dimension/group selection giữa lúc kéo sẽ khôi phục nhóm về local baseline, không tạo snapshot.
+
+**Parent transforms:** phép chuyển đổi sử dụng world transform của Container, không cộng World delta trực tiếp lên các Knot. Điều này hỗ trợ parent xoay, tịnh tiến và non-uniform scale, tránh đưa Knot ra khỏi mặt phẳng được spline evaluator sử dụng.
+
+**Giới hạn UX:** Gizmos2D v3 thể hiện các trục X/Y trong World/View. Nếu parent của XY2D bị nghiêng ra khỏi World XY (hoặc parent của XZ2D bị nghiêng khỏi World XZ), thao tác sẽ được chiếu về mặt phẳng local nên chuyển động thực tế có thể không nằm chính xác dưới chuột. Đây là lựa chọn **giữ dữ liệu 2D đúng** thay vì cho Node chạy ra khỏi mặt phẳng; sẽ cần thử trực tiếp trong Editor trước khi chọn cách vẽ handle tùy biến theo local frame.
+
+**Kiểm thử thủ công trong Cocos Creator 3.8.8:** kéo X/Y/XY (XY2D), X/Z/XZ (XZ2D), nhóm 2–3 Knot trên parent xoay 45° và scale không đều, kiểm tra các Knot không chọn, Esc, Undo/Redo, save/reopen Scene và prefab overrides.
+
+Đây là **Group Move trong Scene**. Quy tắc **Local-only** của các nút Batch Snap/Align/Move bằng số trong Inspector đối với 2D **không thay đổi**. Native Editor Undo/Redo vẫn cần kiểm chứng thực tế.

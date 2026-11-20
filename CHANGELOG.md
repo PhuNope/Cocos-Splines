@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.10 2D Multi-Knot Group Move
+
+- Added Group Move Gizmos to XY2D and XZ2D SplineContainer editor modes using official Cocos-Gizmos v3 handles.
+- XY2D uses Gizmos2D Move X/Y/XY, falling back to filtered 3D handles if Gizmos2D is unavailable. XZ2D exposes only 3D X/Z/XZ handles.
+- Converted dragged World position into Container local space with `inverseTransformPoint`. All selected Knot positions are derived from an immutable local baseline, with the inactive local axis preserved independently for every Knot.
+- Respects parent rotation, translation and nonuniform scale; does not modify unrelated Knots, opposite spline, or tangent data.
+- Reuses existing shared Gizmo gesture transactions: Cancel/Esc restores local positions; one snapshot is requested on changed End, none on no-op/invalid selection, and failed snapshot rolls back.
+- Includes pure dimension-constraint tests and mocked Scene Gizmos tests for tilted/scaled containers, both 2D dimensions, redo-safe baseline, Cancel, no-op, rejection and mid-gesture dimension switches.
+- Numeric Inspector Local/World rules are unchanged (2D remains Local-only); this slice adds a **Scene Gizmo** gesture, not 2D World numeric alignment.
+- Manual Cocos Creator 3.8.8 testing still required for handle picking, tilted parent UX, native Undo/Redo and prefab overrides. No tag or GitHub Release; `v2` preview only.
+
 # Unreleased — Phase 2.9 Gizmo Scene / Selection Invalidation
 
 - A unified Gizmo transaction now accepts an optional live Scene validity guard. Invalid gestures cancel before committing: no Scene snapshot or false Undo history entry.

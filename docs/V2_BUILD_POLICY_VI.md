@@ -22,3 +22,7 @@ Test the latest `v2` ZIP with multi-Knot Snap/Align/Move, Mesh and Collider surf
 ### Phase 2.9 Preview
 
 Test selection changes, disabling/deleting a Knot and reparenting during a Gizmo drag, in a copy of the Scene. No tags/releases are generated. Node/CI tests do not guarantee native Scene lifecycle or prefab-override behavior.
+
+### Phase 2.10 preview
+
+Test both XY2D and XZ2D multi-selection Group Move in Scene View, especially a rotated/scaled Container. Editor may project World-axis dragging onto the authored 2D plane. Validate Undo/Redo, Cancel and save/reopen Scene. CI does not certify native Cocos Editor behavior; no tag or Release.

@@ -123,3 +123,10 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Restore only surviving group knots still under original parent; avoid stale async rollback and snapshots on invalidated edits.
 - [x] Node mock regression tests for selection change, reparent/delete and disabled component.
 - [ ] Real Cocos 3.8.8 teardown callbacks, Undo history grouping and prefab overrides require on-device Editor tests.
+
+### Phase 2.10 — Interactive 2D Group Move
+
+- [x] Multi-selected Knot Group Move 2D: XY handles X/Y/XY, XZ handles X/Z/XZ, không tạo Node proxy.
+- [x] Local planar delta từ World drag point, giữ nguyên hidden axis, parent rotation/nonuniform scale, Cancel và transaction snapshots.
+- [x] Node/planar math tests for XY2D/XZ2D, tilted parent, no-op, snapshot failure and dimension change.
+- [ ] Native Cocos Creator 3.8.8 mouse picking/Undo/Redo, prefab overrides, tilted-container local-axis visual fidelity.
