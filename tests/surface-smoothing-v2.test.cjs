@@ -77,7 +77,7 @@ global.Editor={
         if(payload.method==='queryKnotOrientations')return {ok:true,
             parentRotation:{x:0,y:0,z:0,w:1},
             rotations:knots.map(k=>({uuid:k.uuid,rotation:{...k.rotation}}))};
-        if(payload.method==='snapToMeshSurface'){
+        if(payload.method==='snapToSurfaceTarget'){
             lastOptions=payload.args[3];
             try{return {ok:true,hits:snapOrigins(surface,payload.args[2],lastOptions)};}
             catch(e){return {ok:false,error:e.message};}

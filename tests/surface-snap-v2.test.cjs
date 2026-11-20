@@ -56,8 +56,8 @@ global.Editor={
    if(payload.method==='querySpline')return {found:true,rootUuid:'root',dimension,
       knots:state.map(k=>({uuid:k.uuid,position:{...k.position}}))};
    if(payload.method==='queryKnotEditFrame')return {ok:true,matrix:ID};
-   if(payload.method==='listSurfaceMeshes')return {ok:true,targets:[{uuid:'mesh',name:'Ground'}]};
-   if(payload.method==='snapToMeshSurface'){
+   if(payload.method==='listSurfaceTargets')return {ok:true,targets:[{uuid:'mesh',name:'Ground',kind:'mesh'}]};
+   if(payload.method==='snapToSurfaceTarget'){
       assert.equal(payload.args[0],'root');
       assert.equal(payload.args[1],'mesh');
       if(sceneFail)return {ok:false,error:'No surface directly below a Knot'};
@@ -80,7 +80,7 @@ global.Editor={
 };
 const methods=require(path.join(__dirname,'../dist/main.js')).methods;
 (async()=>{
- let result=await methods.listSurfaceMeshes();
+ let result=await methods.listSurfaceTargets();
  assert(result.ok);assert.equal(result.targets[0].uuid,'mesh');
  result=await methods.snapSelectedToSurface(['b','a'],'mesh',10,50);
  assert(result.ok,result.error);assert.equal(result.count,2);
@@ -110,9 +110,9 @@ const methods=require(path.join(__dirname,'../dist/main.js')).methods;
  for(const marker of ['spl-surface-target','spl-surface-refresh','spl-surface-height',
   'spl-surface-drop','spl-surface-snap'])
   assert(inspector.template.includes(marker),'Missing Inspector control '+marker);
- for(const name of ['list-surface-meshes','snap-selected-to-surface'])
+ for(const name of ['list-surface-targets','snap-selected-to-surface'])
   assert(require('../package.json').contributions.messages[name]);
  const script=require('node:fs').readFileSync(path.join(__dirname,'../src/scene.js'),'utf8');
- assert(script.includes('function listSurfaceMeshes(')&&script.includes('function snapToMeshSurface('));
+ assert(script.includes('function listSurfaceTargets(')&&script.includes('function snapToSurfaceTarget('));
  console.log('V2 SURFACE SNAP PASS: mesh raycast, highest hit, transformed mesh, all-or-nothing and rollback.');
 })().catch(err=>{console.error(err);process.exitCode=1;});

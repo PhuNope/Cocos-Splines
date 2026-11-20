@@ -40,29 +40,29 @@ Module._load=function(req,parent,isMain){
  return original.apply(this,arguments);
 };
 try{
- let r=methods.listSurfaceMeshes('spline');
+ let r=methods.listSurfaceTargets('spline');
  assert(r.ok,r.error);
- assert.deepEqual(r.targets.map(x=>x.uuid),['mesh']);
- assert(!methods.listSurfaceMeshes('foreign').ok);
+ assert.deepEqual(r.targets.map(x=>[x.uuid,x.kind]),[['mesh','mesh']]);
+ assert(!methods.listSurfaceTargets('foreign').ok);
  const origins=[{uuid:'k1',position:{x:0,y:4,z:0}}];
- r=methods.snapToMeshSurface('spline','mesh',origins,{height:1,maxDrop:10});
+ r=methods.snapToSurfaceTarget('spline','mesh',origins,{height:1,maxDrop:10});
  assert(r.ok,r.error);
  assert.deepEqual(r.hits[0].position,{x:0,y:2,z:0});
  assert.equal(r.triangles,2);
- const normals=methods.snapToMeshSurface('spline','mesh',origins,
+ const normals=methods.snapToSurfaceTarget('spline','mesh',origins,
   {height:1,maxDrop:10,alignNormal:true});
  assert(normals.ok,normals.error);
  assert.deepEqual(normals.hits[0].normal,{x:0,y:1,z:0});
- const smooth=methods.snapToMeshSurface('spline','mesh',origins,
+ const smooth=methods.snapToSurfaceTarget('spline','mesh',origins,
   {height:1,maxDrop:10,alignNormal:true,smoothNormal:true,creaseAngle:60});
  assert(smooth.ok,smooth.error);
  assert.deepEqual(smooth.hits[0].normal,{x:0,y:1,z:0},
   'Planar surface smooths to the same upward normal');
- const invalidCrease=methods.snapToMeshSurface('spline','mesh',origins,
+ const invalidCrease=methods.snapToSurfaceTarget('spline','mesh',origins,
   {height:1,maxDrop:10,alignNormal:true,smoothNormal:true,creaseAngle:90});
  assert(!invalidCrease.ok);
  assert.match(invalidCrease.error,/crease angle/);
- const disabledCrease=methods.snapToMeshSurface('spline','mesh',origins,
+ const disabledCrease=methods.snapToSurfaceTarget('spline','mesh',origins,
   {height:1,maxDrop:10,alignNormal:false,smoothNormal:true,creaseAngle:90});
  assert(disabledCrease.ok,'Disabled alignment cannot change legacy snap behavior');
  assert(!('normal' in disabledCrease.hits[0]));
@@ -72,17 +72,17 @@ try{
  assert.deepEqual(orientations.rotations,[{uuid:'knot-1',rotation:identityRotation}]);
  assert(!methods.queryKnotOrientations('spline',['mesh']).ok);
  assert(!methods.queryKnotOrientations('spline',['knot-1','knot-1']).ok);
- assert(!methods.snapToMeshSurface('spline','own',origins).ok,
+ assert(!methods.snapToSurfaceTarget('spline','own',origins).ok,
     'Sculpting should never raycast against spline-owned meshes');
- assert(!methods.snapToMeshSurface('spline','bad',origins).ok,
+ assert(!methods.snapToSurfaceTarget('spline','bad',origins).ok,
     'Unreadable mesh must not be modified or raycast');
- assert(!methods.snapToMeshSurface('spline','missing',origins).ok);
- assert(!methods.snapToMeshSurface('spline','mesh',
+ assert(!methods.snapToSurfaceTarget('spline','missing',origins).ok);
+ assert(!methods.snapToSurfaceTarget('spline','mesh',
     [{uuid:'k1',position:{x:40,y:4,z:0}}],{height:10,maxDrop:50}).ok,
     'No-hit returns error so all knots remain unchanged');
  const old=target.components[0].mesh;
  target.components[0].mesh=mesh(true,'RGB16F');
- assert.match(methods.snapToMeshSurface('spline','mesh',origins).error,/RGB32F/);
+ assert.match(methods.snapToSurfaceTarget('spline','mesh',origins).error,/RGB32F/);
  target.components[0].mesh=old;
  console.log('SURFACE SCENE CONTRACT PASS: target discovery, normals, read-only rotations, exclusion and fail-closed.');
 }finally{Module._load=original;}
