@@ -17,7 +17,7 @@ export interface SplineGizmoEditPort<T> {
     /** Optional live Scene/Selection guard. A false result cancels without snapshot. */
     valid?():boolean;
 }
-export type SplineSnapshotRequest=()=>unknown|Promise<unknown>;
+export type SplineSnapshotRequest<T>=(before:T,after:T,property:string)=>unknown|Promise<unknown>;
 export type SplineGestureFailure=(reason:unknown)=>void;
 
 interface Active<T> {
@@ -31,7 +31,7 @@ export class SplineGizmoEditTransaction<T> {
     private version=0;
     private pending=new Set<Promise<void>>();
     constructor(
-        private readonly snapshot:SplineSnapshotRequest,
+        private readonly snapshot:SplineSnapshotRequest<T>,
         private readonly onFailure:SplineGestureFailure,
     ){}
 
@@ -111,7 +111,7 @@ export class SplineGizmoEditTransaction<T> {
         let requested:unknown;
         try{
             // Execute IPC synchronously on End; the Promise may settle later.
-            requested=this.snapshot();
+            requested=this.snapshot(gesture.before,after,property);
         }catch(error){fail(error);return true;}
         if(requested===false||
            (!!requested&&typeof requested==='object'&&

@@ -4,6 +4,7 @@ import type { SplineContainer } from '../Core/SplineContainer';
 import { drawSplineCurve, drawSplineKnot } from './SplineContainerGizmos';
 import { SplineGizmoEditTransaction } from './SplineGizmoEditTransaction';
 import { planarMovePositions } from './SplineGroupMoveMath';
+import { commitGroupPositions } from './SplineGizmoGroupHistory';
 
 interface GroupMember {knot:SplineKnot;position:Vec3;localPosition:Vec3;}
 interface Before {
@@ -38,11 +39,23 @@ const quaternionChanged=(a:Quat,b:Quat)=>{
 export class SplineKnotGizmos {
     private static warnedFrameDependency=false;
     private readonly edits=new SplineGizmoEditTransaction<Before>(
-        ()=>{
+        (before,after,property)=>{
             const editor=(globalThis as any).Editor||(globalThis as any).window?.Editor;
             const request=editor?.Message?.request;
             if(typeof request!=='function')throw new Error('Scene snapshot API unavailable');
-            return request.call(editor.Message,'scene','snapshot');
+            const message=(channel:string,method:string,payload?:unknown)=>
+                request.call(editor.Message,channel,method,payload);
+            if(groupProperty(property)){
+                if(before.group.length!==after.group.length||
+                   before.group.some((entry,i)=>entry.knot!==after.group[i]?.knot))
+                    throw new Error('Group selection changed before serialized commit.');
+                return commitGroupPositions(before.group.map((entry,i)=>({
+                    node:entry.knot.node,
+                    before:entry.localPosition,after:after.group[i].localPosition,
+                    parent:before.parent,
+                })),message);
+            }
+            return message('scene','snapshot');
         },
         error=>console.warn('[cocos-splines] Gizmo snapshot/rollback failed:',error),
     );
@@ -93,9 +106,10 @@ export class SplineKnotGizmos {
         ];
         if(g.rotate)handles.push(...g.rotate('editorWorldEuler',{space:'world',ringSize:70,pickSize:14}));
         const group=this.selectedGroup();
-        if(group.length>=2&&group[0]===this.component){
+        if(group.length>=2&&group[0]===this.component &&
+           g3?.supportsExternalHistory===true){
             const opts={axisSize:60,planeSize:18,pickSize:25,
-                showPositionLabel:true};
+                showPositionLabel:true,history:'external'};
             if(spline.dimension===0&&g3?.move){
                 handles.push(...g3.move(GROUP_WORLD,{...opts,space:'world'}));
             }else if(spline.dimension!==0&&g3?.supportsMoveFrameNode===true){
@@ -116,6 +130,10 @@ export class SplineKnotGizmos {
                 SplineKnotGizmos.warnedFrameDependency=true;
                 console.warn('[cocos-splines] 2D Group Move requires a Cocos-Gizmos v3 development build with supportsMoveFrameNode.');
             }
+        }else if(group.length>=2&&group[0]===this.component&&
+                 !SplineKnotGizmos.warnedFrameDependency){
+            SplineKnotGizmos.warnedFrameDependency=true;
+            console.warn('[cocos-splines] Multi-Knot Group Move requires matching Cocos-Gizmos v3 preview (supportsExternalHistory).');
         }
         return handles;
     }
@@ -230,6 +248,8 @@ export class SplineKnotGizmos {
             if(property===GROUP_LOCAL&&
                (spline.dimension===0||(globalThis as any).Gizmos3D?.supportsMoveFrameNode!==true))return;
             if(property===GROUP_WORLD&&spline.dimension!==0)return;
+            if(groupProperty(property)&&
+                (globalThis as any).Gizmos3D?.supportsExternalHistory!==true)return;
             const group=groupProperty(property)?this.selectedGroup():[];
             const startDimension=spline.dimension;
             if(groupProperty(property)&&
