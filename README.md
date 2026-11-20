@@ -97,3 +97,7 @@ In SplineContainer Inspector → Batch Knot Tools, mark 3D Knots, click **Refres
 ### V2 Phase 2.4 — Surface normal alignment (preview)
 
 Surface Snap now optionally aligns the selected Knots' **local +Y** axis with the upward mesh surface normal while attempting to preserve their existing world forward heading. The checkbox is **off by default**, and position-only snapping remains unchanged. Rotation changes may affect knot-local tangent curves; see [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Requires real Cocos Editor testing for native Undo/Redo and Prefab overrides.
+
+### V2 Phase 2.5 — Smooth surface normal alignment (preview)
+
+Surface Snap now offers **Smooth normals on shared mesh vertices**, enabled only when **Align Knot +Y** is on. The default is **off**, with an optional crease-angle threshold (0–89°, default 60°). It reduces Knot rotation discontinuities between neighboring triangles that share vertex indices; split UV/hard-edge vertices remain sharp. The smoothing never alters hit positions. See [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Native Creator Editor smoke tests still required.

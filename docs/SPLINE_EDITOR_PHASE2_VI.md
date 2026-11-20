@@ -108,3 +108,21 @@ API cũ được giữ nguyên khi bỏ qua tham số cuối:
 `alignNormal` mặc định `false`.
 
 Đã có Node regression tests cho pháp tuyến, mesh winding ngược, orientation với parent rotation, batch chỉ thay rotation, no-op và rollback khi `set-property('rotation')` thất bại. **Chưa chứng nhận native Cocos Creator 3.8.8 Undo/Redo, Gizmo mouse picking, prefab override hay terrain nhập thực tế.**
+
+## Phase 2.5 — Smooth Surface Normals (preview)
+
+Có thêm hai điều khiển trong **Surface Snap**:
+- **Smooth normals on shared mesh vertices**: tắt theo mặc định. Chỉ bật được khi bật **Align Knot +Y to surface normal**.
+- **Crease angle (°)**: mặc định **60°**, chấp nhận giá trị **0–89°**. Góc nhỏ giữ mép sắc; góc lớn làm mềm hơn các chỗ gấp nối giữa những tam giác.
+
+Khi bật, hướng normal tại điểm raycast là kết quả **nội suy barycentric** từ normal các đỉnh. Normal mỗi đỉnh được tính trung bình **có trọng số diện tích tam giác**, chỉ cộng các face chung **chỉ số vertex** với face được hit và có góc lệch không vượt ngưỡng crease. Việc tính normal diễn ra trong World space **sau khi áp dụng worldMatrix** của MeshRenderer, nên vẫn đúng với mesh có rotation/scale không đồng đều.
+
+**Giới hạn:** không tự hàn các vertex trùng vị trí nhưng khác chỉ số (UV seam, hard-normal split); để mượt qua những ranh giới đó, mesh phải có topology dùng chung đỉnh. Ở chỗ không tìm được normal ổn định hoặc mặt quá dốc, cả batch bị từ chối trước khi thay đổi Knot.
+
+Đây chỉ là làm mượt **hướng quay** của Knot; **vị trí raycast không thay đổi**. Nếu không bật Align Normal, không tính hoặc áp dụng smooth normal. Bật Align Normal nhưng không bật Smooth thì vẫn dùng **flat triangle normal**, như Phase 2.4.
+
+API có thêm hai tham số tùy chọn:
+`snap-selected-to-surface(ids,targetUuid,startAbove,castDepth,alignNormal,smoothNormal,creaseAngle)`.
+Các lời gọi cũ vẫn giữ nguyên kết quả; mặc định `alignNormal=false`, `smoothNormal=false`, `creaseAngle=60`.
+
+Smoke test trong Creator: so sánh Knot rotation khi ở hai bên đường nối giữa tam giác phẳng và tam giác nghiêng, thử crease angle 0/60, bật/tắt smoothing, mesh có hard edge/UV split, và Undo/Redo. Native Editor Undo/Redo và prefab vẫn **chưa được xác minh trực tiếp**.

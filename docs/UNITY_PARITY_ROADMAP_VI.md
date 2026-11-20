@@ -89,3 +89,10 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Đồng bộ position / local rotation trong một batch, snapshot + rollback, không thay rotation ở chế độ cũ.
 - [x] Unit + integration tests cho orientation với parent rotation, rotation-only, cancel khi lỗi.
 - [ ] Cocos Editor 3.8.8 smoke tests, bảo toàn hình dạng spline khi dùng Knot-space tangent (hiện cần kiểm tra thủ công).
+
+### Phase 2.5 — Crease-aware Smooth Surface Normals
+
+- [x] Barycentric smoothing normals tại các đỉnh **chung chỉ số** theo trọng số diện tích, có crease threshold 0–89 độ.
+- [x] Mặc định tắt; tránh thay đổi path Surface Snap cũ, không tác động vị trí hit.
+- [x] Unit tests cho ranh giới tam giác, crease=0, hard seam, mesh nonuniform scale, opt-in và Scene contract.
+- [ ] Làm mượt qua UV split (cần mesh topology welding option riêng); native Cocos Creator 3.8.8 acceptance vẫn chờ test.

@@ -1,3 +1,11 @@
+# Unreleased — Phase 2.5 Crease-aware Surface Normal Smoothing
+
+- Added opt-in normal smoothing to Surface Snap when Align Knot +Y is active, with a validated 0–89° crease-angle control (60° default).
+- Built area-weighted adjacent-face normals per shared vertex and barycentric interpolation at the hit; uses World-space transformed geometry, without modifying mesh source or raycast positions.
+- Preserves hard edges across split indices, ignores unstable adjacent faces, retains all-or-nothing planning and atomic position/rotation snapshot/rollback.
+- Added math, Scene contract and Inspector wiring tests; legacy flat-normal and position-only defaults remain unchanged.
+- Manual Cocos Creator 3.8.8 Gizmos, prefab and native Undo/Redo testing is outstanding. No tag or GitHub Release created.
+
 # Unreleased — Phase 2.4 Surface Normal Alignment
 
 - Added opt-in **Align Knot +Y to surface normal** in Surface Snap. Default is disabled to preserve existing geometry and behavior.

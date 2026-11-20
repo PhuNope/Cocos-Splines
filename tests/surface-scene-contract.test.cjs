@@ -53,6 +53,19 @@ try{
   {height:1,maxDrop:10,alignNormal:true});
  assert(normals.ok,normals.error);
  assert.deepEqual(normals.hits[0].normal,{x:0,y:1,z:0});
+ const smooth=methods.snapToMeshSurface('spline','mesh',origins,
+  {height:1,maxDrop:10,alignNormal:true,smoothNormal:true,creaseAngle:60});
+ assert(smooth.ok,smooth.error);
+ assert.deepEqual(smooth.hits[0].normal,{x:0,y:1,z:0},
+  'Planar surface smooths to the same upward normal');
+ const invalidCrease=methods.snapToMeshSurface('spline','mesh',origins,
+  {height:1,maxDrop:10,alignNormal:true,smoothNormal:true,creaseAngle:90});
+ assert(!invalidCrease.ok);
+ assert.match(invalidCrease.error,/crease angle/);
+ const disabledCrease=methods.snapToMeshSurface('spline','mesh',origins,
+  {height:1,maxDrop:10,alignNormal:false,smoothNormal:true,creaseAngle:90});
+ assert(disabledCrease.ok,'Disabled alignment cannot change legacy snap behavior');
+ assert(!('normal' in disabledCrease.hits[0]));
  const orientations=methods.queryKnotOrientations('spline',['knot-1']);
  assert(orientations.ok,orientations.error);
  assert.deepEqual(orientations.parentRotation,identityRotation);
