@@ -138,3 +138,11 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Có capability check để ẩn handle 2D khi dependency chưa nâng cấp; không thêm legacy code.
 - [x] Unit tests frame axes, nonuniform scale/rotation, cancellation/no-op và rollback.
 - [ ] Native 3.8.8 Editor mouse picking, one-gesture Undo, Prefab overrides, multi-scene teardown vẫn cần smoke test.
+
+### Phase 2.12 — Single-owner Group History + Prefab-aware Scene path
+
+- [x] Extensible `history:'external'` in Cocos-Gizmos v3: no duplicate native SelectGizmo Undo hooks for computed group ports.
+- [x] Real Node.position writes through Editor scene set-property (record:false) and one snapshot per completed changed Group Move.
+- [x] Typed, prevalidated group commit, serialized reverse rollback, stale and reparent protection, Node integration regression tests.
+- [ ] Real Editor 3.8.8 Undo/Redo one-gesture acceptance, Prefab Instance/nested overrides, apply/revert and on-disk save/reopen validation.
+- [ ] Upgrade single-Knot Tangent/Rotate to serialized transaction after Group acceptance.

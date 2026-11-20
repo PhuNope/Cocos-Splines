@@ -237,3 +237,27 @@ Phase này thay thế giới hạn hiển thị trục World khi Container nghi�
 **Tương thích:** bản Gizmos v3.0.3 thông thường không có API reference-frame. Khi thiếu, chỉ ẩn Group Move 2D và đưa cảnh báo ở Console; 3D Group Move và Tangent/Rotate không bị đổi. Để thử Phase 2.11, phải dùng **đúng bản Gizmos v3 preview mới**.
 
 **Acceptance Creator 3.8.8:** kéo 2–3 Knot với Container có rotation+nonuniform scale; kiểm tra arrow và ô plane nằm trên mặt phẳng local; Esc hoàn nguyên; Undo/Redo đúng một gesture; save/reopen Scene và Prefab Instance; Knot có rotation riêng khác Container; chuyển selection hoặc dimension khi đang kéo. CI chỉ kiểm tra math/descriptor/adapter bằng test mock, chưa chứng minh hoạt động native Scene View.
+
+## Phase 2.12 — Group Undo và Prefab Instance Overrides
+
+**Thay đổi kiến trúc:** các Group Move Gizmos ở cả 3D/XY2D/XZ2D dùng `history:'external'`. Cocos-Gizmos v3 vẫn điều khiển drag trực tiếp và gọi callback `begin/update/end/cancel`, nhưng không gửi các callback history mặc định của `SelectGizmo` cho handle này. Splines tự quản lý history **một lần** khi End:
+
+1. Capture vị trí local của toàn bộ Knot được đánh dấu khi bắt đầu drag; trong lúc kéo Node vẫn được cập nhật tức thì.
+2. Khi End, xác minh mọi Node còn sống, vẫn thuộc Container cũ và vị trí hiện tại khớp bản plan.
+3. Chỉ với Knot có thay đổi, ghi **property serialize** của Node bằng `scene:set-property` với `{uuid: knot.node.uuid, path:'position', dump:{type:'cc.Vec3',value:{x,y,z}}, record:false}`.
+4. Chỉ sau khi *toàn bộ* các lệnh cập nhật thành công, yêu cầu **một** `scene:snapshot`. Không tạo snapshot khi no-op/Cancel.
+5. Nếu một lệnh ghi hoặc snapshot bị từ chối, rollback từng Node đã chạm theo thứ tự ngược bằng đường Scene property message; nếu Node bị chuyển parent hoặc có thay đổi mới, không ghi đè tùy tiện.
+
+**Prefab:** dùng chính đường property của Editor thay vì sửa cấu trúc nội bộ `__prefab`. Mục tiêu là để Prefab Instance ghi nhận thay đổi vị trí ở lớp override; **không có thao tác Apply to Prefab hoặc Revert tự động**. Chưa có bằng chứng rằng tất cả trường hợp Prefab nested, root transform, Undo/Redo và save/reopen hoạt động đúng trong Editor thật, nên phải kiểm tra.
+
+**Cài đặt:** bản Cocos-Gizmos v3 preview cùng đợt với Splines này, phải có `Gizmos3D.supportsExternalHistory===true`. Bản Gizmos cũ chỉ có `supportsMoveFrameNode` hoặc chỉ v3.0.3 sẽ **ẩn Group Move** cho an toàn (các handle cá nhân vẫn hiển thị).
+
+**Bài test thủ công trong Cocos Creator 3.8.8:**
+
+- Tạo một Prefab gồm SplineContainer và 3 Knot, kéo vào Scene tạo Prefab Instance. Chọn 2 Knot và Group Move. Trong Inspector kiểm tra `position` của đúng 2 Knot được đánh dấu override; Knot thứ ba không thay đổi.
+- Nhấn Ctrl/Cmd+Z **một lần**: cả nhóm phải về vị trí ban đầu. Ctrl/Cmd+Shift+Z: cả nhóm phải quay lại. Không xuất hiện bước Undo “rỗng” cho computed property.
+- Save Scene, đóng và mở lại; xác minh vị trí/override đúng. Kiểm tra **Revert** Prefab Instance thủ công và xem có trở về Prefab Asset hay không.
+- Lặp lại ở XY2D/XZ2D với Container xoay/scale không đều. Kiểm tra hidden axis, Esc, no-op, đổi selection trong lúc kéo và Nested Prefab.
+- Kiểm tra log Console khi một lệnh Scene property bị từ chối, không được có một nửa nhóm ở vị trí mới.
+
+**Giới hạn:** CI kiểm thử các message được gửi và rollback trên Node giả lập, không mô phỏng native Undo stack, Inspector override state hay Apply/Revert Prefab. Rotate/Tangent individual history chưa chuyển sang commit serialize đầy đủ ở phase này.

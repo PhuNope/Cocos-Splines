@@ -30,3 +30,7 @@ Test both XY2D and XZ2D multi-selection Group Move in Scene View, especially a r
 ### Phase 2.11 preview dependency
 
 Install the matching **Cocos-Gizmos v3 development ZIP** before the Splines `v2` ZIP. Only this updated Gizmos build supports `frameNode`. Stock v3.0.3 cannot show the new true-local 2D Group Move handles; unsupported handles are hidden. No tag, version bump or GitHub Release. Manual Creator 3.8.8 acceptance remains required.
+
+### Phase 2.12 preview dependency and history testing
+
+Install the matching Cocos-Gizmos v3 preview exposing `supportsExternalHistory` before this Splines V2 build. Group Move sends real serialized Knot Node.position through scene:set-property (record:false), then requests exactly one snapshot. Smoke-test one Undo for the group and Prefab Instance overrides, including nested Prefabs. The automated suite validates message contracts only. Preview builds remain artifact-only, with **no tag and no Release**.

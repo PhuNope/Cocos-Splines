@@ -1,3 +1,13 @@
+# Unreleased — Phase 2.12 Multi-Knot Undo Owner / Prefab-Safe Scene Writes
+
+- New opt-in `history:'external'` Cocos-Gizmos v3 handle descriptor suppresses native SelectGizmo onControlBegin/Update/End/Cancel for computed Move ports while continuing the official onGizmoChanged begin/update/end/cancel callbacks and repaint. Other Gizmos retain native handling by default.
+- 3D, XY2D and XZ2D multi-Knot Group Move now require `Gizmos3D.supportsExternalHistory`. The owning Splines transaction writes the REAL serialized `Node.position` for each changed Knot through `Editor.Message.request('scene','set-property',{record:false,...})` and requests exactly one `scene/snapshot` after successful batch writes.
+- This Editor property pathway is intended to let Cocos Creator track Prefab Instance overrides, instead of snapshotting an editor-only computed group property. No private prefab metadata or temporary Scene nodes are modified.
+- Extracted `SplineGizmoGroupHistory` for typed prevalidation, exact-node targeting, no-op handling, rejecting stale or reparented nodes, fail-closed partial writes and reverse serialized rollback when a write/snapshot fails.
+- Added mocked integration regression tests for 3D/2D Group Move, property paths, one snapshot, cancellation, partial write failure, stale edits, rejected snapshot and reparenting.
+- **Important:** native Cocos Creator 3.8.8 Undo stack grouping, serialized Prefab overrides, save/reopen behavior and native Scene-Gizmos event ordering are NOT yet certified by Node mocks. Verify in an actual editor copy of the Scene.
+- Existing individual Knot Tangent/Rotate gestures still use their previous snapshot path; this phase focuses on group transforms. Both plugins are preview builds; no tags or GitHub Releases.
+
 # Unreleased — Phase 2.11 Container-local 2D Gizmo Frames
 
 - Updated Cocos-Gizmos v3 development dependency to use an opt-in `frameNode` Move handle reference. SplineContainer's Node now provides the true coordinate origin and rotated/scaled local axis basis for multi-Knot XY2D and XZ2D Group Move.

@@ -67,3 +67,9 @@ Trong `SplineJunctionMesh` chọn **UV Mode = Road Matched**, đặt **UV Blend 
 Group Move của Knot trong XY2D và XZ2D giờ vẽ và kéo trục theo **transform local thực sự của SplineContainer**, kể cả khi Container bị xoay hoặc có scale không đều. XY2D có trục X/Y và ô XY; XZ2D có trục X/Z và ô XZ. Trục local bị khóa của từng Knot được giữ nguyên.
 
 **Yêu cầu:** Cài bản **Cocos-Gizmos v3 development preview** có `Gizmos3D.supportsMoveFrameNode` **trước khi** cập nhật Cocos Splines V2. Bản Cocos-Gizmos v3.0.3 thông thường chưa có API này; nếu sử dụng nó, Group Move 2D sẽ ẩn an toàn, các thao tác 3D/Tangent/Rotate vẫn hoạt động. Đây không phải bản Release. Hướng dẫn kiểm tra trong [tài liệu Phase 2](docs/SPLINE_EDITOR_PHASE2_VI.md).
+
+## Phase 2.12 — Undo Group Move / Prefab Instance (preview)
+
+Group Move 3D, XY2D, XZ2D hiện có **một chủ sở hữu Undo**: Gizmos dùng `history:'external'` để không ghi thêm native history của getter/editor-only; Splines cập nhật **Node.position** thật qua `scene:set-property` với `record:false`, rồi yêu cầu **một snapshot** sau khi cả nhóm được ghi thành công. Nếu ghi một Knot thất bại, có rollback dữ liệu đã ghi qua Scene API. Khi thay đổi không có tác dụng, không tạo snapshot.
+
+Bắt buộc cài **Cocos-Gizmos v3 preview mới** có cả `supportsMoveFrameNode` và `supportsExternalHistory`, sau đó mới cài Cocos Splines V2. Chưa thể khẳng định Undo/Redo và Prefab overrides đã đúng 100% trước khi test trực tiếp trong Cocos Creator 3.8.8.
