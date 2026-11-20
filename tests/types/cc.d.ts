@@ -25,6 +25,7 @@ declare module 'cc' {
         static transformMat4(out:Vec3,a:Vec3,m:Mat4):Vec3;
     }
     export class Quat {
+        x:number;y:number;z:number;w:number;
         constructor(x?:number,y?:number,z?:number,w?:number);
         clone():Quat;
         static slerp(out:Quat,a:Quat,b:Quat,t:number):Quat;
