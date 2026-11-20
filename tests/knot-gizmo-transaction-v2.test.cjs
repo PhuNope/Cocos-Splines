@@ -6,6 +6,7 @@ const path=require('node:path');
 const os=require('node:os');
 const root=path.resolve(__dirname,'..');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-spline-gesture-test-'));
+(async()=>{
 try{
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),
   '--noEmit','false','--outDir',dir]);
@@ -120,3 +121,4 @@ try{
  assert.equal(failures.length>=4,true);
  console.log('GIZMO TRANSACTION PASS: begin/end, cancel, no-op, sync/async failures, stale rollback guards.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});
