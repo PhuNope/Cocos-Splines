@@ -123,7 +123,9 @@ async function applyKnotPlacement(operation,ids,options){
             });
             const result=await invokeScene('snapToMeshSurface',info.rootUuid,
                 options.targetUuid,world,{height:options.height,maxDrop:options.maxDrop,
-                    alignNormal:options.alignNormal===true});
+                    alignNormal:options.alignNormal===true,
+                    smoothNormal:options.alignNormal===true && options.smoothNormal===true,
+                    creaseAngle:options.creaseAngle});
             if(!result?.ok)throw new Error(result?.error||'Surface raycast failed.');
             if(options.alignNormal===true){
                 const rotations=await invokeScene('queryKnotOrientations',info.rootUuid,selectedIds);
@@ -482,9 +484,10 @@ const methods={
             return response;
         }catch(error){return alertError('list-surface-meshes',error);}
     },
-    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,alignNormal=false){
+    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,
+        alignNormal=false,smoothNormal=false,creaseAngle=60){
         try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop,
-            alignNormal:alignNormal===true});}
+            alignNormal:alignNormal===true,smoothNormal:smoothNormal===true,creaseAngle});}
         catch(error){return alertError('snap-selected-to-surface',error);}
     },
     async snapSelectedKnots(ids,step,space='local'){
