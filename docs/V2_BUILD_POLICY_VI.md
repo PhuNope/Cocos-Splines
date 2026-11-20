@@ -26,3 +26,7 @@ Test selection changes, disabling/deleting a Knot and reparenting during a Gizmo
 ### Phase 2.10 preview
 
 Test both XY2D and XZ2D multi-selection Group Move in Scene View, especially a rotated/scaled Container. Editor may project World-axis dragging onto the authored 2D plane. Validate Undo/Redo, Cancel and save/reopen Scene. CI does not certify native Cocos Editor behavior; no tag or Release.
+
+### Phase 2.11 preview dependency
+
+Install the matching **Cocos-Gizmos v3 development ZIP** before the Splines `v2` ZIP. Only this updated Gizmos build supports `frameNode`. Stock v3.0.3 cannot show the new true-local 2D Group Move handles; unsupported handles are hidden. No tag, version bump or GitHub Release. Manual Creator 3.8.8 acceptance remains required.

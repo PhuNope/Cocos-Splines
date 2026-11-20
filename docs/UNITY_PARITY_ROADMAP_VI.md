@@ -130,3 +130,11 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Local planar delta từ World drag point, giữ nguyên hidden axis, parent rotation/nonuniform scale, Cancel và transaction snapshots.
 - [x] Node/planar math tests for XY2D/XZ2D, tilted parent, no-op, snapshot failure and dimension change.
 - [ ] Native Cocos Creator 3.8.8 mouse picking/Undo/Redo, prefab overrides, tilted-container local-axis visual fidelity.
+
+### Phase 2.11 — True local-plane Group Move visualization
+
+- [x] Bổ sung `frameNode` vào Cocos-Gizmos v3 (renderer, picking, Move solver cùng local basis).
+- [x] XY2D/XZ2D Group Move sử dụng Container-local port + frame, giữ hidden axis và immutable group baseline.
+- [x] Có capability check để ẩn handle 2D khi dependency chưa nâng cấp; không thêm legacy code.
+- [x] Unit tests frame axes, nonuniform scale/rotation, cancellation/no-op và rollback.
+- [ ] Native 3.8.8 Editor mouse picking, one-gesture Undo, Prefab overrides, multi-scene teardown vẫn cần smoke test.

@@ -219,3 +219,21 @@ Các gesture **Group Move / Rotate / Tangent Move** dùng thêm một bộ kiể
 **Kiểm thử thủ công trong Cocos Creator 3.8.8:** kéo X/Y/XY (XY2D), X/Z/XZ (XZ2D), nhóm 2–3 Knot trên parent xoay 45° và scale không đều, kiểm tra các Knot không chọn, Esc, Undo/Redo, save/reopen Scene và prefab overrides.
 
 Đây là **Group Move trong Scene**. Quy tắc **Local-only** của các nút Batch Snap/Align/Move bằng số trong Inspector đối với 2D **không thay đổi**. Native Editor Undo/Redo vẫn cần kiểm chứng thực tế.
+
+## Phase 2.11 — Gizmo axes theo đúng hệ local của Container
+
+Phase này thay thế giới hạn hiển thị trục World khi Container nghiêng của Phase 2.10.
+
+**Cài đặt theo thứ tự:**
+
+1. Cài và bật **Cocos-Gizmos v3 development build** có `Gizmos3D.supportsMoveFrameNode===true` (mã nguồn trên nhánh v3 của Cocos-Gizmos).
+2. Cài **Cocos Splines v2 preview** build tương ứng. Bật cả hai extension, đợi Creator import script hoàn tất rồi mở lại Scene View.
+3. Chọn SplineContainer, dimension **XY2D** hoặc **XZ2D**, đánh dấu ít nhất hai Knot, nhấn **Select in Scene**.
+4. Kéo Group Move tại Knot đầu tiên: **X/Y/XY** trong XY2D, **X/Z/XZ** trong XZ2D. Các handle thực sự nằm theo trục **local của SplineContainer** (không còn mặc định nằm theo World).
+5. Thử xoay Container 30–60° quanh các trục, kết hợp scale khác nhau trên X/Y/Z, và so sánh hướng mũi tên với hệ trục local của Container.
+
+**Thiết kế:** Gizmos v3 nhận `frameNode: spline.node` trong các descriptor Move; giá trị `editorGroupLocalPosition` là local Vec3 của Node Knot. Vẽ, picking và drag solver chuyển qua cùng một reference frame, không thêm Node proxy hoặc xoay Knot để sửa hướng handle. Cổng setter giữ nguyên trục ẩn; Group Move vẫn lấy baseline của từng Knot để tránh cộng delta lặp. Cancel và snapshot failure hoàn nguyên local position nhóm.
+
+**Tương thích:** bản Gizmos v3.0.3 thông thường không có API reference-frame. Khi thiếu, chỉ ẩn Group Move 2D và đưa cảnh báo ở Console; 3D Group Move và Tangent/Rotate không bị đổi. Để thử Phase 2.11, phải dùng **đúng bản Gizmos v3 preview mới**.
+
+**Acceptance Creator 3.8.8:** kéo 2–3 Knot với Container có rotation+nonuniform scale; kiểm tra arrow và ô plane nằm trên mặt phẳng local; Esc hoàn nguyên; Undo/Redo đúng một gesture; save/reopen Scene và Prefab Instance; Knot có rotation riêng khác Container; chuyển selection hoặc dimension khi đang kéo. CI chỉ kiểm tra math/descriptor/adapter bằng test mock, chưa chứng minh hoạt động native Scene View.

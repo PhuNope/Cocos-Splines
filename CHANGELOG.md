@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.11 Container-local 2D Gizmo Frames
+
+- Updated Cocos-Gizmos v3 development dependency to use an opt-in `frameNode` Move handle reference. SplineContainer's Node now provides the true coordinate origin and rotated/scaled local axis basis for multi-Knot XY2D and XZ2D Group Move.
+- Added non-serialized `SplineKnot.editorGroupLocalPosition` Vec3 port that reads/writes Node local positions and clamps the dimension's hidden axis.
+- XY2D Group Move uses X/Y/XY; XZ2D uses X/Z/XZ; both are now framed in the Container's local plane, instead of displaying World-axis handles and projecting the drag afterwards.
+- Gizmo renderer, picking and Move solver receive the same reference frame through Cocos-Gizmos' new `Gizmos3D.supportsMoveFrameNode` capability. No temporary Nodes, component rotation changes, legacy Gizmos callbacks or serialized duplicate position fields.
+- The original 3D World Group Move, normal tangent/rotation handles, Undo snapshot lifecycle and Cancel/rollback continue unchanged.
+- When an older Gizmos extension does not support `frameNode`, the 2D Group Move handles fail closed rather than misleading the user with World-axis visuals. Install the matching Cocos-Gizmos v3 preview build to test this phase.
+- Automated tests cover local port hidden-axis locking, filtered 2D axes, matching root frame reference, rotated/non-uniformly scaled ancestors, no-op, Cancel and snapshot failure. Native Editor mouse picking, Undo history and Prefab overrides still require live Creator 3.8.8 validation.
+- Preview changes pushed to `v2`, no tag or GitHub Release.
+
 # Unreleased — Phase 2.10 2D Multi-Knot Group Move
 
 - Added Group Move Gizmos to XY2D and XZ2D SplineContainer editor modes using official Cocos-Gizmos v3 handles.

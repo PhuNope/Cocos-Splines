@@ -61,3 +61,9 @@ Trong `SplineRoad` → **Sharp Corners**, đặt `Corner Mode = Join And Trim` �
 ### Junction Mesh nối UV của Road (v0.9.12)
 
 Trong `SplineJunctionMesh` chọn **UV Mode = Road Matched**, đặt **UV Blend Start = 0.55**, gán **cùng một Material** cho tất cả `SplineRoad` và Junction Mesh. Texture cần **Wrap U/V = Repeat**. Mesh patch lấy đúng vị trí và UV0 ở biên asphalt Road đã dựng, hỗ trợ UV Length Along U/V, đảo chiều, offset, Width Tiles và Width Modifiers. Tâm giao lộ dùng nội suy UV, nên các vạch kẻ làn phức tạp vẫn có thể bị méo ở khu vực này. `World Projected` là mặc định cũ. Xem `docs/pages/junction-mesh.html`.
+
+## Phase 2.11 — Group Move theo local của SplineContainer
+
+Group Move của Knot trong XY2D và XZ2D giờ vẽ và kéo trục theo **transform local thực sự của SplineContainer**, kể cả khi Container bị xoay hoặc có scale không đều. XY2D có trục X/Y và ô XY; XZ2D có trục X/Z và ô XZ. Trục local bị khóa của từng Knot được giữ nguyên.
+
+**Yêu cầu:** Cài bản **Cocos-Gizmos v3 development preview** có `Gizmos3D.supportsMoveFrameNode` **trước khi** cập nhật Cocos Splines V2. Bản Cocos-Gizmos v3.0.3 thông thường chưa có API này; nếu sử dụng nó, Group Move 2D sẽ ẩn an toàn, các thao tác 3D/Tangent/Rotate vẫn hoạt động. Đây không phải bản Release. Hướng dẫn kiểm tra trong [tài liệu Phase 2](docs/SPLINE_EDITOR_PHASE2_VI.md).
