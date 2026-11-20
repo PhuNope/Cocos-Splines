@@ -101,3 +101,7 @@ Surface Snap now optionally aligns the selected Knots' **local +Y** axis with th
 ### V2 Phase 2.5 — Smooth surface normal alignment (preview)
 
 Surface Snap now offers **Smooth normals on shared mesh vertices**, enabled only when **Align Knot +Y** is on. The default is **off**, with an optional crease-angle threshold (0–89°, default 60°). It reduces Knot rotation discontinuities between neighboring triangles that share vertex indices; split UV/hard-edge vertices remain sharp. The smoothing never alters hit positions. See [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Native Creator Editor smoke tests still required.
+
+### V2 Phase 2.6 — Collider/Terrain Surface Snap (preview)
+
+Surface Snap can now target an explicit **(mesh)** MeshRenderer or **(collider)** 3D Physics Collider (including TerrainCollider, when supported by the selected Physics backend). Collider raycasts use Cocos Creator's PhysicsSystem, filter hits to only the selected target, and do not require mesh Allow Data Access. Smooth normals remain mesh-only; position and optional hitNormal rotation use the existing atomic batch workflow. See [Phase 2 editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Test in an actual Creator 3.8.8 Scene before using for production terrain. `list-surface-meshes` was renamed to `list-surface-targets` in the developing `v2` branch.

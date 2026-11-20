@@ -126,3 +126,20 @@ API có thêm hai tham số tùy chọn:
 Các lời gọi cũ vẫn giữ nguyên kết quả; mặc định `alignNormal=false`, `smoothNormal=false`, `creaseAngle=60`.
 
 Smoke test trong Creator: so sánh Knot rotation khi ở hai bên đường nối giữa tam giác phẳng và tam giác nghiêng, thử crease angle 0/60, bật/tắt smoothing, mesh có hard edge/UV split, và Undo/Redo. Native Editor Undo/Redo và prefab vẫn **chưa được xác minh trực tiếp**.
+
+## Phase 2.6 — Collider/Terrain Surface Snap
+
+**Surface Snap** trong **SplineContainer Inspector → Batch Knot Tools** nay hỗ trợ **hai loại target được chỉ định rõ ràng**: `mesh` (MeshRenderer) hoặc `collider` (Physics 3D Collider).
+
+1. Thêm `BoxCollider`, `MeshCollider`, `TerrainCollider` hoặc Collider 3D phù hợp vào một Node **nằm ngoài SplineContainer**. Với Terrain, phải cấu hình terrain physics/collider trong project.
+2. Đảm bảo hệ thống **3D Physics** của Cocos Creator đã bật và có thể raycast trong Scene Editor. Khi hệ thống vật lý không hoạt động, thao tác sẽ báo lỗi; không tạo collider ngầm.
+3. Nhấn **Refresh meshes** (danh sách bao gồm cả MeshRenderer và Collider). Chọn hàng có nhãn **(collider)** rồi Snap to Surface. Trên cùng một Node có cả MeshRenderer lẫn Collider, có thể chọn từng hàng riêng.
+4. Ray theo hướng -Y World, chỉ lấy **hit trên Collider được chỉ định**, ngay cả khi có Collider khác nằm phía trên. Các Knot phải tìm được hit hợp lệ; một Knot không có hit sẽ hủy cả batch.
+5. **Align Knot +Y to surface normal** tiếp tục là tùy chọn mặc định tắt. Collider normal đến từ Physics raycast và sẽ bị kiểm tra (finite, hướng lên, không quá dốc) trước khi cập nhật rotation. Nếu Physics backend không trả normal, hãy tắt Align.
+6. **Smooth normals on shared mesh vertices** chỉ áp dụng khi chọn **(mesh)**; UI tự tắt tính năng này khi chọn Collider. Không áp dụng thuật toán smoothing của MeshRenderer cho Collider vì không có topology tam giác cần thiết.
+
+Khác với MeshRenderer CPU path, Collider path **không yêu cầu Allow Data Access**. Nó yêu cầu Collider 3D thực sự tham gia Physics world; shape được raycast là **collision shape**, có thể khác mesh hiển thị. Cocos Creator Physics backend/Scene Editor có thể trả kết quả khác nhau; cần test trong project thật.
+
+**Thay đổi API trên nhánh v2:** `Editor.Message.request('cocos-splines','list-surface-targets')` thay thế `list-surface-meshes`; mỗi target chứa `kind:'mesh'|'collider'`. Lệnh Snap giữ tên `snap-selected-to-surface` và nhận thêm tham số cuối `targetKind` (mặc định `mesh`). Scene methods mới là `listSurfaceTargets` / `snapToSurfaceTarget`.
+
+**Bắt buộc kiểm tra thủ công trong Creator 3.8.8:** 3D Physics enabled, TerrainCollider thực tế, backend hitNormal, Collider chồng nhau, Scene Undo/Redo, prefab overrides và Preview/Build; CI chỉ test logic adapter và message contract.

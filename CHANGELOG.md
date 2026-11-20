@@ -1,3 +1,15 @@
+# Unreleased — Phase 2.6 3D Collider & Terrain Surface Snap
+
+- Added explicitly typed MeshRenderer vs Physics Collider surface targets in the SplineContainer Inspector.
+- Added physics raycast support for Box/Sphere/Capsule/Cylinder/Cone/Mesh/Terrain/Plane/Simplex 3D Colliders with Cocos Creator 3.8 `PhysicsSystem.raycast`; no readable mesh data or Allow Data Access required on this path.
+- Filters every raycast result against only the selected node's Collider components; nearer colliders on other objects cannot change the snap target.
+- TerrainCollider relies on enabled 3D Physics backend in the Editor Scene. Returns an actionable error when unavailable or when the selected Collider has no hit.
+- Can align Knot Up to the normalized hit normal where supported. Mesh-only smoothing is disabled for Collider targets. Original CPU MeshRenderer path stays intact.
+- Preserved fail-closed no-hit behavior, batch validation and rollback with one Scene snapshot per successful edit.
+- Renamed the Editor message `list-surface-meshes` to `list-surface-targets`, and Scene methods to `listSurfaceTargets` / `snapToSurfaceTarget`. Updated integration tests.
+- Tests cover exact-target filtering, active Physics, invalid normals, Collider/Mesh co-location and rollback. Native Creator 3.8.8 physics backend, Scene picking and Undo/Redo still require manual validation.
+- No tag and no GitHub Release; `v2` preview build only.
+
 # Unreleased — Phase 2.5 Crease-aware Surface Normal Smoothing
 
 - Added opt-in normal smoothing to Surface Snap when Align Knot +Y is active, with a validated 0–89° crease-angle control (60° default).

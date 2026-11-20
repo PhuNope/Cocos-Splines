@@ -10,3 +10,7 @@
 - Tải build: GitHub → Actions → workflow `Cocos Splines — validation` → chọn run thành công trên `v2` → Artifacts → `cocos-splines-v2-<sha>`. Giải nén artifact GitHub, sau đó giải nén ZIP Cocos Splines vào `<project>/extensions/`.
 - Kiểm thử tự động không thể thay thế thao tác thực tế trong Cocos Creator 3.8.x (Gizmos/Undo/Redo/prefab/build player).
 - Khi cập nhật sau này, gửi kèm link tới **artifact đúng SHA của commit vừa đẩy**; không gửi lại build cũ.
+
+### Phase 2.6 preview
+
+The V2 ZIP includes both MeshRenderer and Collider/Terrain snapping. No tag or GitHub Release. Validate on a real Creator project with 3D Physics enabled; automated tests cannot certify Editor-time TerrainCollider physics.

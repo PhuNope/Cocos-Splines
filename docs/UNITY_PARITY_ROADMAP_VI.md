@@ -96,3 +96,9 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Mặc định tắt; tránh thay đổi path Surface Snap cũ, không tác động vị trí hit.
 - [x] Unit tests cho ranh giới tam giác, crease=0, hard seam, mesh nonuniform scale, opt-in và Scene contract.
 - [ ] Làm mượt qua UV split (cần mesh topology welding option riêng); native Cocos Creator 3.8.8 acceptance vẫn chờ test.
+
+### Phase 2.6 — Collider & Terrain support (preview)
+
+- [x] Physics 3D Collider target selection, strict raycast hit isolation, TerrainCollider/primitive Collider support where physics is active.
+- [x] No hit => no edit; optional hitNormal orientation, mesh-only smoothing, Node regression/Scene contract tests.
+- [ ] Verify 3D Physics Scene behavior and TerrainCollider in Cocos Creator 3.8.8; native Undo/Redo and prefab overrides.
