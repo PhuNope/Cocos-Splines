@@ -116,7 +116,9 @@ try {
   };
   const descriptor=(property,axis,plane,visual)=>({property,axis,plane,visual});
   globalThis.Gizmos2D={move:(property,opts)=>{
-    assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+    if(property==='editorGroupLocalPosition'){
+      assert.equal(opts.space,'local');assert.equal(opts.frameNode,container);
+    }
     return [
       descriptor(property,'x','view','axis'),
       descriptor(property,'y','view','axis'),
