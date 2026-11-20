@@ -75,7 +75,8 @@ export class SplineKnotGizmos {
     onGizmoHandles():any[] {
         this.validateGesture();
         const spline=this.spline();
-        if(!spline||spline.count<2)return [];
+        if(!alive(this.component)||!this.component.enabled||
+           !alive(this.component.node)||!spline||spline.count<2)return [];
         const g2=(globalThis as any).Gizmos2D,g3=(globalThis as any).Gizmos3D;
         const g=spline.dimension===1&&g2?g2:g3;
         if(!g?.move)return [];
@@ -96,12 +97,14 @@ export class SplineKnotGizmos {
     onDrawGizmos():void {
         this.validateGesture();
         const knot=this.component,spline=this.spline();
+        if(!alive(knot)||!alive(knot.node)||!knot.enabled)return;
         if(spline&&knot.editTangentHandles&&knot.hasTangentHandles)
             drawSplineKnot(spline,knot,true);
     }
     onDrawGizmosSelected():void {
         this.validateGesture();
-        const spline=this.spline();if(!spline)return;
+        const spline=this.spline();
+        if(!alive(this.component)||!alive(this.component.node)||!this.component.enabled||!spline)return;
         if(!spline.showGizmosAlways&&!spline.knots.some(k=>k.editTangentHandles&&k.hasTangentHandles))
             drawSplineCurve(spline,true);
         drawSplineKnot(spline,this.component,true);
@@ -159,7 +162,8 @@ export class SplineKnotGizmos {
         const k=this.component;
         if(phase==='begin'){
             const spline=this.spline(),root=k.node?.parent;
-            if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline)return;
+            if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline||
+               spline.enabled===false||root.activeInHierarchy===false)return;
             const group=property==='editorGroupWorldPosition'?this.selectedGroup():[];
             if(property==='editorGroupWorldPosition'&&
                 (group.length<2||group[0]!==k))return;
@@ -172,9 +176,10 @@ export class SplineKnotGizmos {
             const outputHandle=k.tangentOutHandle?.isValid?k.tangentOutHandle:null;
             const valid=()=>{
                 if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||
+                   root.activeInHierarchy===false||spline.enabled===false||
                    k.node.parent!==root||this.spline()!==spline)return false;
                 const currentIds=this.selectedNodeIds();
-                if(ownerSelected&&currentIds&&!currentIds.has(k.node.uuid))
+                if(ownerSelected&&(!currentIds||!currentIds.has(k.node.uuid)))
                     return false;
                 if(property==='editorGroupWorldPosition'){
                     if(spline.dimension!==0)return false;
