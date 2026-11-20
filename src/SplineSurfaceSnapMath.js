@@ -49,13 +49,82 @@ function triangleUpNormal(surface,triangle){
     if(y<.05)throw Error('Surface too steep to align Knot Up; disable Align Normal.');
     return {x:x||0,y:y||0,z:z||0};
 }
-function castDown(surface,point,height=10,maxDrop=100,withNormal=false){
+
+/**
+ * Area-weighted smoothing over SHARED vertex indices, constrained by a
+ * face-to-face crease angle. Explicit split vertices remain hard edges.
+ * Built per surface ray batch only when smoothing is requested.
+ */
+function smoothingData(surface){
+    const {positions:p,indices:ix,triangleCount}=surface;
+    const adjacent=Array.from({length:p.length/3},()=>[]);
+    const normals=new Array(triangleCount),areas=new Array(triangleCount);
+    for(let tri=0;tri<triangleCount;tri++){
+        const ia=ix[tri*3],ib=ix[tri*3+1],ic=ix[tri*3+2];
+        const a=ia*3,b=ib*3,c=ic*3;
+        const abx=p[b]-p[a],aby=p[b+1]-p[a+1],abz=p[b+2]-p[a+2];
+        const acx=p[c]-p[a],acy=p[c+1]-p[a+1],acz=p[c+2]-p[a+2];
+        let x=aby*acz-abz*acy;
+        let y=abz*acx-abx*acz;
+        let z=abx*acy-aby*acx;
+        const area2=Math.hypot(x,y,z);
+        if(area2>1e-12&&Number.isFinite(area2)){
+            x/=area2;y/=area2;z/=area2;
+            if(y<0){x=-x;y=-y;z=-z;}
+            normals[tri]={x,y,z};
+            areas[tri]=area2;
+            adjacent[ia].push(tri);
+            adjacent[ib].push(tri);
+            adjacent[ic].push(tri);
+        }else{
+            normals[tri]=null;
+            areas[tri]=0;
+        }
+    }
+    return {adjacent,normals,areas};
+}
+function smoothHitNormal(surface,triangle,weights,creaseCos,prepared){
+    const {indices:ix}=surface,{adjacent,normals,areas}=prepared;
+    const base=normals[triangle];
+    if(!base||base.y<.05)
+        throw Error('Surface too steep or degenerate to align Knot Up; disable Align Normal.');
+    const vectors=[];
+    for(let corner=0;corner<3;corner++){
+        const vertex=ix[triangle*3+corner];
+        let x=0,y=0,z=0;
+        for(const face of adjacent[vertex]){
+            const normal=normals[face];
+            if(!normal||normal.y<.05)continue;
+            const similarity=normal.x*base.x+normal.y*base.y+normal.z*base.z;
+            if(similarity+1e-10<creaseCos)continue;
+            const area=areas[face];
+            x+=normal.x*area;y+=normal.y*area;z+=normal.z*area;
+        }
+        const magnitude=Math.hypot(x,y,z);
+        if(!(magnitude>1e-12))throw Error('Could not smooth surface normal.');
+        vectors.push({x:x/magnitude,y:y/magnitude,z:z/magnitude});
+    }
+    let x=0,y=0,z=0;
+    for(let i=0;i<3;i++){
+        x+=vectors[i].x*weights[i];
+        y+=vectors[i].y*weights[i];
+        z+=vectors[i].z*weights[i];
+    }
+    const magnitude=Math.hypot(x,y,z);
+    if(!(magnitude>1e-12)||!Number.isFinite(magnitude))
+        throw Error('Smoothed normal has no stable direction.');
+    x/=magnitude;y/=magnitude;z/=magnitude;
+    if(y<.05)throw Error('Smoothed normal is too steep to align Knot Up.');
+    return {x:x||0,y:y||0,z:z||0};
+}
+
+function castDown(surface,point,height=10,maxDrop=100,withNormal=false,smoothing=null){
     if(!valid(point)||!Number.isFinite(height)||height<0||height>1e6||
        !Number.isFinite(maxDrop)||maxDrop<=0||maxDrop>1e6)
         throw Error('Surface ray parameters must be finite; height >= 0 and maxDrop > 0.');
     const {positions:p,indices:ix,triangleCount}=surface;
     const startY=point.y+height,minY=startY-maxDrop;
-    let bestY=-Infinity,bestTriangle=-1;
+    let bestY=-Infinity,bestTriangle=-1,bestWeights=null;
     const eps=1e-9;
     for(let tri=0;tri<triangleCount;tri++){
         const n=tri*3,a=ix[n]*3,b=ix[n+1]*3,c=ix[n+2]*3;
@@ -70,11 +139,13 @@ function castDown(surface,point,height=10,maxDrop=100,withNormal=false){
         if(u<-eps||v<-eps||w<-eps)continue;
         const y=u*p[a+1]+v*p[b+1]+w*p[c+1];
         if(y>startY+eps||y<minY-eps||y<=bestY)continue;
-        bestY=y;bestTriangle=tri;
+        bestY=y;bestTriangle=tri;bestWeights=[u,v,w];
     }
     if(bestTriangle<0)return null;
     const result={x:point.x,y:bestY,z:point.z,triangle:bestTriangle};
-    if(withNormal)result.normal=triangleUpNormal(surface,bestTriangle);
+    if(withNormal)result.normal=smoothing?
+        smoothHitNormal(surface,bestTriangle,bestWeights,smoothing.creaseCos,smoothing.prepared):
+        triangleUpNormal(surface,bestTriangle);
     return result;
 }
 function snapOrigins(surface,entries,options={}){
@@ -86,8 +157,17 @@ function snapOrigins(surface,entries,options={}){
     const maxDrop=options.maxDrop===undefined?100:options.maxDrop;
     const hits=[];
     const alignNormal=options.alignNormal===true;
+    const smoothNormal=alignNormal&&options.smoothNormal===true;
+    let smoothing=null;
+    if(smoothNormal){
+        const creaseAngle=options.creaseAngle===undefined?60:options.creaseAngle;
+        if(typeof creaseAngle!=='number'||!Number.isFinite(creaseAngle)||
+           creaseAngle<0||creaseAngle>89)
+            throw Error('Normal smoothing crease angle must be from 0 to 89 degrees.');
+        smoothing={creaseCos:Math.cos(creaseAngle*Math.PI/180),prepared:smoothingData(surface)};
+    }
     for(const entry of entries){
-        const hit=castDown(surface,entry.position,height,maxDrop,alignNormal);
+        const hit=castDown(surface,entry.position,height,maxDrop,alignNormal,smoothing);
         if(!hit)throw Error('No surface directly below Knot '+entry.uuid+
             ' within cast height and max drop. No changes were applied.');
         const item={uuid:entry.uuid,position:{x:hit.x,y:hit.y,z:hit.z},triangle:hit.triangle};
@@ -96,4 +176,4 @@ function snapOrigins(surface,entries,options={}){
     }
     return hits;
 }
-module.exports={MAX_TRIANGLES,MAX_KNOTS,prepareSurface,castDown,snapOrigins,triangleUpNormal};
+module.exports={MAX_TRIANGLES,MAX_KNOTS,prepareSurface,castDown,snapOrigins,triangleUpNormal,smoothingData,smoothHitNormal};
