@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.8 Shared Gizmo Gesture Transactions
+
+- Refactored Knot tangent Move, Knot Rotate, and 3D selected Knot Group Move to use a single editor-only SplineGizmoEditTransaction abstraction.
+- Preserves existing official Cocos-Gizmos v3 handle registration and begin/update/end/cancel callbacks. No additional serialized properties, transform proxies, nodes or legacy API.
+- Captures immutable before-state per gesture. Cancel/Escape restores exactly the affected tangent/mode, Knot world rotation or selected group positions.
+- On End, tests the actual relevant state and requests one Scene snapshot only when the gesture changed something; duplicate End and no-op do not request snapshots.
+- Handles synchronous/async rejected snapshots with guarded rollback. If a newer gesture or external Scene change has occurred, emits a warning rather than overwriting newer edits.
+- Added regression tests for failure rollback across Group/Tangent/Rotate and standalone async gesture lifecycle, no-op, cancellation and stale state.
+- **Native Creator 3.8.8 Undo/Redo, prefab serialization and the plugin's native hook/snapshot interaction remain unverified in the live Editor.** Automated tests only validate request semantics and rollback.
+- Changes remain on `v2`; no tag or GitHub Release.
+
 # Unreleased — Phase 2.7 Knot Batch Transaction Hardening
 
 - Extracted reusable editor-only `SplineBatchEditTransaction` coordinator to keep Scene writes, verification, native snapshot request and rollback separate from Knot math and Inspector UI.

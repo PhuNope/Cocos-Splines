@@ -162,3 +162,25 @@ So sánh rotation theo quaternion tương đương **q và -q**, tránh báo l�
 **Điều chưa xác nhận**: native Undo/Redo thực sự có lưu/khôi phục đủ Node và Prefab override trong Cocos Creator 3.8.8, hoặc các Gizmos tương tác kéo tangent/group có dùng native transaction giống Inspector. Node mock chỉ chứng minh các lệnh được gọi và rollback, không mô phỏng Undo stack thực tế.
 
 **Smoke test bắt buộc**: trước hết tạo Scene bản sao, Snap 3 Knot khác nhau, nhấn Ctrl/Cmd+Z rồi Ctrl/Cmd+Shift+Z. Lặp lại với Surface Snap + Align Normal, Knot trong Prefab, Scale/Rotation của parent, sau đó save/reopen Scene. Nếu Undo không khôi phục cùng một nhóm, gửi Console log và ảnh để điều chỉnh cơ chế snapshot theo phiên bản Creator thực tế.
+
+## Phase 2.8 — Gesture transactions cho Knot / Tangent / Group Move
+
+Các Gizmos hiện dùng một lớp Editor-only `SplineGizmoEditTransaction` để quản lý lifecycle `begin → update → end/cancel`:
+
+- **Group Move 3D:** chọn ít nhất hai Knot cùng SplineContainer, kéo handle tại Knot đầu tiên theo thứ tự Hierarchy. Cancel/Esc khôi phục tất cả Knot cùng nhóm, không đụng Knot không chọn.
+- **Knot Rotate:** chọn Knot, kéo Rotate ring. Cancel/Esc trả lại chính xác World rotation trước thao tác.
+- **Tangent Move:** chọn Knot, kéo incoming/outgoing tangent. Cancel/Esc trả lại tangent đã serialize, TangentMode và vị trí handle-node cũ nếu có.
+- **End:** so sánh dữ liệu hiện tại với baseline; nếu thực sự thay đổi, gọi một yêu cầu `scene/snapshot`. Không snapshot khi drag không tạo thay đổi hoặc callback End lặp.
+- **Snapshot từ chối/thất bại:** khi dữ liệu vẫn là kết quả của thao tác vừa xong và chưa bắt đầu gesture mới, trả lại baseline, hiện cảnh báo trong Console. Nếu đã có gesture mới hoặc có thay đổi từ bên ngoài, chỉ cảnh báo, không ghi đè dữ liệu mới.
+
+Lớp transaction chỉ sống trong Editor, không thêm trường serialize hoặc Node, không dùng callback Gizmos legacy, không thay đổi API `@registerGizmos`.
+
+**Giới hạn quan trọng:** Cocos-Gizmos v3 còn có native control `onControlBegin/onControlEnd` song song với callbacks của drawer. Chưa xác minh Editor thực tế có bao nhiêu entry trong Undo history, và liệu prefab overrides có được khôi phục đủ hay không. Vì vậy **đừng coi đây là chứng nhận native Undo/Redo**.
+
+### Smoke test với ZIP mới
+
+1. Trong Scene bản sao, chọn 2–3 Knot của spline 3D, kéo Group Move theo X/Y/Z và mặt phẳng. Nhấn Esc giữa chừng: tất cả Knot cần trở lại vị trí cũ.
+2. Kéo Group Move rồi thả: thử Ctrl+Z, Ctrl+Shift+Z. Kiểm tra số lần Undo cần thiết cho mỗi gesture, vị trí Knot không chọn và road preview.
+3. Đổi Knot AutoSmooth → Broken bằng kéo tangent, thả rồi Undo/Redo. Thử lại với Cancel để xác minh TangentMode và tangent còn lại.
+4. Rotate Knot, thử Cancel rồi Undo/Redo; thử dưới Container có parent rotation/nonuniform scale.
+5. Save/reopen Scene hoặc Prefab Instance để kiểm tra serialized state và override. Nếu Undo/Redo không đúng, gửi ảnh Scene, console log và mô tả kết quả để sửa theo Editor thực tế.

@@ -58,7 +58,14 @@ export class SplineGizmoEditTransaction<T> {
         this.active=null;
         let after:T;
         try{after=gesture.port.capture();}
-        catch(error){this.onFailure(error);return false;}
+        catch(error){
+            // A member may disappear mid-drag. Restore any surviving state
+            // rather than leaving half of the selected group transformed.
+            try{gesture.port.restore(gesture.before);}
+            catch(rollbackError){this.onFailure(rollbackError);}
+            this.onFailure(error);
+            return false;
+        }
         if(!gesture.port.changed(gesture.before,after))return false;
         const version=gesture.version;
         const fail=(error:unknown)=>{

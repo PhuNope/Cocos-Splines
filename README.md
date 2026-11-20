@@ -109,3 +109,7 @@ Surface Snap can now target an explicit **(mesh)** MeshRenderer or **(collider)*
 ### V2 Phase 2.7 — Verified batch editing (preview)
 
 All Inspector batch Knot operations use an isolated transaction coordinator: read Scene transform state before editing to avoid overwriting stale data, apply edits via official Scene property messages, read back results, then request one native Scene snapshot. Failed writes, mismatched read-back and rejected snapshots trigger best-effort reverse rollback. Unit tests cover these paths; **Creator Editor native Undo/Redo is not certified until verified in a real 3.8.8 scene**. See [test checklist](docs/SPLINE_EDITOR_PHASE2_VI.md).
+
+### V2 Phase 2.8 — Shared Gizmo transaction lifecycle (preview)
+
+Knot tangent Move, Knot Rotate and 3D multi-Knot Group Move now share `SplineGizmoEditTransaction` for baseline capture, cancel restoration, no-op detection, one requested Scene snapshot on completed edits, and guarded rollback when a snapshot request fails. This uses the existing official Gizmos v3 `begin/update/end/cancel` lifecycle rather than an extra legacy handle system. **Automated tests do not certify native Editor Undo/Redo or prefab overrides**; test in a real Creator 3.8.8 Scene before production use.
