@@ -76,10 +76,11 @@ try{
  state.x=15;
  transaction.end('move');
  assert.equal(transaction.pendingCount,1);
+ const rejectFirst=rejectOld;
  transaction.begin('move',port);
  state.x=22;
  transaction.end('move');
- rejectOld(Error('Delayed snapshot failure'));
+ rejectFirst(Error('Delayed snapshot failure'));
  await flush();
  assert.equal(state.x,22,'Late failing snapshot cannot corrupt later edit');
  // The second pending promise has no callback; no Node process keepalive.
