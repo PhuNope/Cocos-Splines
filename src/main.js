@@ -121,8 +121,8 @@ async function applyKnotPlacement(operation,ids,options){
                 const knot=info.knots.find(k=>k.uuid===uuid);
                 return {uuid,position:frame.toWorld(knot.position)};
             });
-            const result=await invokeScene('snapToMeshSurface',info.rootUuid,
-                options.targetUuid,world,{height:options.height,maxDrop:options.maxDrop,
+            const result=await invokeScene('snapToSurfaceTarget',info.rootUuid,
+                options.targetUuid,world,{kind:options.targetKind,height:options.height,maxDrop:options.maxDrop,
                     alignNormal:options.alignNormal===true,
                     smoothNormal:options.alignNormal===true && options.smoothNormal===true,
                     creaseAngle:options.creaseAngle});
@@ -475,19 +475,20 @@ const methods={
             return {ok:true,count:knots.length,message:'Selected '+knots.length+' Knot(s) in Scene.'};
         }catch(error){return alertError('select-knot-ids',error);}
     },
-    async listSurfaceMeshes(){
+    async listSurfaceTargets(){
         try{
             const info=await selectedSpline();
             if(!info?.found)throw Error(info?.message||'Select a spline.');
-            const response=await invokeScene('listSurfaceMeshes',info.rootUuid);
+            const response=await invokeScene('listSurfaceTargets',info.rootUuid);
             if(!response?.ok)throw Error(response?.error||'Could not list scene mesh surfaces.');
             return response;
-        }catch(error){return alertError('list-surface-meshes',error);}
+        }catch(error){return alertError('list-surface-targets',error);}
     },
     async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,
-        alignNormal=false,smoothNormal=false,creaseAngle=60){
+        alignNormal=false,smoothNormal=false,creaseAngle=60,targetKind='mesh'){
         try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop,
-            alignNormal:alignNormal===true,smoothNormal:smoothNormal===true,creaseAngle});}
+            alignNormal:alignNormal===true,smoothNormal:smoothNormal===true,
+            creaseAngle,targetKind});}
         catch(error){return alertError('snap-selected-to-surface',error);}
     },
     async snapSelectedKnots(ids,step,space='local'){

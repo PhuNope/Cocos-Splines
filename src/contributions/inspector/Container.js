@@ -30,8 +30,8 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>ΔX <input class="spl-move-x" type="number" step="0.5" value="0" aria-label="Move delta X"></label><label>ΔY <input class="spl-move-y" type="number" step="0.5" value="0" aria-label="Move delta Y"></label><label>ΔZ <input class="spl-move-z" type="number" step="0.5" value="0" aria-label="Move delta Z"></label><button type="button" class="spl-btn spl-move-marked">Move marked</button></div>
     <div class="spl-surface-panel">
-      <p class="spl-note">Surface Snap · 3D only. Target must be a readable MeshRenderer outside this spline. Cast downward in World Y; no Physics Collider required.</p>
-      <div class="spl-btns spl-batch-inputs"><label>Target mesh <select class="spl-surface-target" aria-label="Surface target mesh"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
+      <p class="spl-note">Surface Snap · 3D only. Choose a readable MeshRenderer (CPU raycast) or a 3D Physics Collider / TerrainCollider. Cast downward in World Y. Collider targets require an active Physics world.</p>
+      <div class="spl-btns spl-batch-inputs"><label>Surface target <select class="spl-surface-target" aria-label="Surface target mesh or collider"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
       <p class="spl-note"><label><input class="spl-surface-align-normal" type="checkbox"> Align Knot +Y to surface normal (changes Knot rotation; knot-space tangents may rotate the curve)</label></p>
       <div class="spl-btns spl-batch-inputs"><label><input class="spl-surface-smooth-normal" type="checkbox" disabled> Smooth normals on shared mesh vertices</label><label>Crease angle (°) <input class="spl-surface-crease-angle" type="number" min="0" max="89" step="1" value="60" disabled aria-label="Surface normal smoothing crease angle"></label></div>
       <div class="spl-btns spl-batch-inputs"><label>Start above <input class="spl-surface-height" type="number" step="1" min="0" max="1000000" value="10" aria-label="Surface cast height"></label><label>Cast depth <input class="spl-surface-drop" type="number" step="1" min="0.01" max="1000000" value="100" aria-label="Surface max drop"></label><button type="button" class="spl-btn spl-surface-snap">Snap to Surface</button></div>
@@ -254,7 +254,7 @@ module.exports={
         const updateSurfaces=async()=>{
             if(!this._splineData?.rootUuid)return show(this,'Select the SplineContainer first.',true);
             const rootUuid=this._splineData.rootUuid;
-            const result=await callEditor(this,'list-surface-meshes');
+            const result=await callEditor(this,'list-surface-targets');
             if(this._closed||this._splineData?.rootUuid!==rootUuid)return;
             if(!result?.ok)return;
             const selector=this.$.surfaceTarget,previous=selector.value;
@@ -263,27 +263,36 @@ module.exports={
             none.value='';none.textContent='Choose a target mesh…';selector.append(none);
             for(const target of result.targets||[]){
                 const item=document.createElement('option');
-                item.value=target.uuid;item.textContent=target.name+' ['+target.uuid.slice(0,8)+']';
+                item.value=target.kind+':'+target.uuid;
+                item.textContent=target.name+' ('+target.kind+') ['+target.uuid.slice(0,8)+']';
                 selector.append(item);
             }
             if(Array.from(selector.options).some(item=>item.value===previous))selector.value=previous;
             this._surfaceRoot=rootUuid;
+            syncNormalOptions();
             show(this,'Found '+(result.targets?.length||0)+' readable mesh surface(s).');
         };
         const syncNormalOptions=()=>{
-            const canSmooth=this.$.surfaceAlignNormal.checked;
+            const selected=this.$.surfaceTarget.value;
+            const collider=selected.startsWith('collider:');
+            const canSmooth=this.$.surfaceAlignNormal.checked&&!collider;
+            if(collider)this.$.surfaceSmoothNormal.checked=false;
             this.$.surfaceSmoothNormal.disabled=!canSmooth;
             this.$.surfaceCreaseAngle.disabled=!canSmooth||!this.$.surfaceSmoothNormal.checked;
         };
+        this.$.surfaceTarget.addEventListener('change',syncNormalOptions);
         this.$.surfaceAlignNormal.addEventListener('change',syncNormalOptions);
         this.$.surfaceSmoothNormal.addEventListener('change',syncNormalOptions);
         syncNormalOptions();
         this.$.surfaceRefresh.addEventListener('click',()=>void updateSurfaces());
         this.$.surfaceSnap.addEventListener('click',()=>{
-            const target=this.$.surfaceTarget.value;
+            const value=this.$.surfaceTarget.value;
+            const colon=value.indexOf(':');
+            const kind=value.slice(0,colon),target=value.slice(colon+1);
             const height=Number(this.$.surfaceHeight.value);
             const maxDrop=Number(this.$.surfaceDrop.value);
-            if(!target)return show(this,'Choose a MeshRenderer surface target.',true);
+            if(!target||!['mesh','collider'].includes(kind))
+                return show(this,'Choose a MeshRenderer or Collider target.',true);
             if(!Number.isFinite(height)||height<0||height>1e6||
                !Number.isFinite(maxDrop)||maxDrop<=0||maxDrop>1e6)
                 return show(this,'Start above >= 0 and cast depth > 0; both <= 1000000.',true);
@@ -293,7 +302,8 @@ module.exports={
                 return show(this,'Crease angle must be a finite number from 0 to 89 degrees.',true);
             void batch('snap-selected-to-surface',target,height,maxDrop,
                 this.$.surfaceAlignNormal.checked,
-                this.$.surfaceAlignNormal.checked&&this.$.surfaceSmoothNormal.checked,creaseAngle);
+                this.$.surfaceAlignNormal.checked&&this.$.surfaceSmoothNormal.checked,
+                creaseAngle,kind);
         });
         this.$.add.addEventListener('click',async()=>{const r=await callEditor(this,'add-knot');if(r?.ok)await refresh(this);});
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
