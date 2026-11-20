@@ -17,6 +17,10 @@ interface Before {
 }
 const point=(v:Vec3)=>[v.x,v.y,v.z].every(Number.isFinite);
 const alive=(node:any)=>!!node&&node.isValid!==false;
+const GROUP_WORLD='editorGroupWorldPosition';
+const GROUP_LOCAL='editorGroupLocalPosition';
+const groupProperty=(property:string)=>
+    property===GROUP_WORLD||property===GROUP_LOCAL;
 const different=(a:Vec3,b:Vec3)=>Math.abs(a.x-b.x)>1e-7||
     Math.abs(a.y-b.y)>1e-7||Math.abs(a.z-b.z)>1e-7;
 const maybeDifferent=(a:Vec3|null,b:Vec3|null)=>
@@ -32,6 +36,7 @@ const quaternionChanged=(a:Quat,b:Quat)=>{
  * shared gesture transaction, not independent snapshot callbacks.
  */
 export class SplineKnotGizmos {
+    private static warnedFrameDependency=false;
     private readonly edits=new SplineGizmoEditTransaction<Before>(
         ()=>{
             const editor=(globalThis as any).Editor||(globalThis as any).window?.Editor;
@@ -89,23 +94,27 @@ export class SplineKnotGizmos {
         if(g.rotate)handles.push(...g.rotate('editorWorldEuler',{space:'world',ringSize:70,pickSize:14}));
         const group=this.selectedGroup();
         if(group.length>=2&&group[0]===this.component){
-            const opts={space:'world',axisSize:60,planeSize:18,pickSize:25,
+            const opts={axisSize:60,planeSize:18,pickSize:25,
                 showPositionLabel:true};
-            const all3D=g3?.move?
-                g3.move('editorGroupWorldPosition',opts):[];
-            if(spline.dimension===0)handles.push(...all3D);
-            else if(spline.dimension===1){
-                // Gizmos2D.move exposes X/Y/XY only. On non-Canvas 2D
-                // scenes the 3D equivalent remains an explicit fallback.
-                const xy=g2?.move?g2.move('editorGroupWorldPosition',opts):
-                    all3D.filter((h:any)=>(h.axis==='x'||h.axis==='y')||
-                        h.plane==='xy');
-                handles.push(...xy);
-            }else if(spline.dimension===2){
-                // No Gizmos2D XZ preset; filter the official Gizmos3D move
-                // descriptors so Y/YZ/XY can never be picked.
-                handles.push(...all3D.filter((h:any)=>(h.axis==='x'||h.axis==='z')||
-                    h.plane==='xz'));
+            if(spline.dimension===0&&g3?.move){
+                handles.push(...g3.move(GROUP_WORLD,{...opts,space:'world'}));
+            }else if(spline.dimension!==0&&g3?.supportsMoveFrameNode===true){
+                // The reference-frame Gizmos v3 adapter transforms both
+                // visible axis geometry and the editable Vec3 through the
+                // SplineContainer. No temporary Node or rotation overrides.
+                const frameOpts={...opts,space:'local',frameNode:spline.node};
+                const all=g3.move(GROUP_LOCAL,frameOpts);
+                if(spline.dimension===1){
+                    const xy=g2?.move?g2.move(GROUP_LOCAL,frameOpts):
+                        all.filter((h:any)=>h.axis==='x'||h.axis==='y'||h.plane==='xy');
+                    handles.push(...xy);
+                }else if(spline.dimension===2){
+                    handles.push(...all.filter((h:any)=>
+                        h.axis==='x'||h.axis==='z'||h.plane==='xz'));
+                }
+            }else if(spline.dimension!==0&&!SplineKnotGizmos.warnedFrameDependency){
+                SplineKnotGizmos.warnedFrameDependency=true;
+                console.warn('[cocos-splines] 2D Group Move requires a Cocos-Gizmos v3 development build with supportsMoveFrameNode.');
             }
         }
         return handles;
@@ -141,7 +150,7 @@ export class SplineKnotGizmos {
         };
     }
     private changed(property:string,a:Before,b:Before):boolean {
-        if(property==='editorGroupWorldPosition') {
+        if(groupProperty(property)) {
             if(a.group.length!==b.group.length)return true;
             return a.group.some((entry,i)=>entry.knot!==b.group[i].knot||
                 (a.dimension===0?different(entry.position,b.group[i].position):
@@ -157,7 +166,7 @@ export class SplineKnotGizmos {
     }
     private restore(property:string,b:Before):void {
         const k=this.component;
-        if(property==='editorGroupWorldPosition') {
+        if(groupProperty(property)) {
             // A deleted or reparented Knot belongs to another operation now.
             // Restore only surviving Nodes still under their original spline.
             const originalParent=b.parent;
@@ -187,9 +196,9 @@ export class SplineKnotGizmos {
         if(!before||!before.group.length||!alive(k.node))return;
         const anchor=before.group.find(entry=>entry.knot===k);
         if(!anchor)return;
-        const world=k.node.worldPosition;
-        if(!point(world))throw new Error('Group Move world point is invalid.');
         if(before.dimension===0){
+            const world=k.node.worldPosition;
+            if(!point(world))throw new Error('Group Move world point is invalid.');
             const delta=Vec3.subtract(new Vec3(),world,anchor.position);
             for(const entry of before.group){
                 if(entry.knot===k||!alive(entry.knot.node)||
@@ -198,7 +207,9 @@ export class SplineKnotGizmos {
             }
         }else{
             const root=before.parent;
-            const target=root.inverseTransformPoint(new Vec3(),world);
+            // The Gizmos v3 reference frame has already converted the mouse
+            // position to Container-local. Do not apply inverseTransform twice.
+            const target=k.node.position;
             const positions=planarMovePositions(before.dimension as 1|2,
                 anchor.localPosition,target,before.group.map(entry=>entry.localPosition));
             for(let i=0;i<before.group.length;i++){
@@ -216,9 +227,12 @@ export class SplineKnotGizmos {
             const spline=this.spline(),root=k.node?.parent;
             if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline||
                spline.enabled===false||(root as any)?.activeInHierarchy===false)return;
-            const group=property==='editorGroupWorldPosition'?this.selectedGroup():[];
+            if(property===GROUP_LOCAL&&
+               (spline.dimension===0||(globalThis as any).Gizmos3D?.supportsMoveFrameNode!==true))return;
+            if(property===GROUP_WORLD&&spline.dimension!==0)return;
+            const group=groupProperty(property)?this.selectedGroup():[];
             const startDimension=spline.dimension;
-            if(property==='editorGroupWorldPosition'&&
+            if(groupProperty(property)&&
                 (group.length<2||group[0]!==k))return;
             const selectedAtBegin=this.selectedNodeIds();
             // The Editor may show a custom Knot handle even when node selection
@@ -234,7 +248,7 @@ export class SplineKnotGizmos {
                 const currentIds=this.selectedNodeIds();
                 if(ownerSelected&&(!currentIds||!currentIds.has(k.node.uuid)))
                     return false;
-                if(property==='editorGroupWorldPosition'){
+                if(groupProperty(property)){
                     if(spline.dimension!==startDimension)return false;
                     const current=this.selectedGroup();
                     if(current.length!==group.length||current.some((member,i)=>member!==group[i]))
@@ -257,7 +271,7 @@ export class SplineKnotGizmos {
         }
         if(phase==='update'||phase==='end'){
             if(!this.validateGesture())return;
-            if(property==='editorGroupWorldPosition'&&this.edits.property===property){
+            if(groupProperty(property)&&this.edits.property===property){
                 try{this.updateGroupMove();}
                 catch(error){
                     this.edits.cancelActive();

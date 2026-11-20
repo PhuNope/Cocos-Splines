@@ -55,6 +55,23 @@ export class SplineKnot extends Component {
             this.node.setWorldPosition(value);
     }
 
+    /**
+     * Non-serialized position port used only by reference-frame Gizmos v3.
+     * Handles are framed in the owning SplineContainer's local coordinates,
+     * not in the (possibly independently rotated) Knot node coordinates.
+     * Clamp the hidden spline axis at the Node setter boundary.
+     */
+    get editorGroupLocalPosition():Vec3 {return this.node.position.clone();}
+    set editorGroupLocalPosition(value:Vec3) {
+        if(!value||![value.x,value.y,value.z].every(Number.isFinite))return;
+        const dimension=this.editorSpline()?.dimension;
+        const before=this.node.position;
+        if(dimension===1)
+            this.node.setPosition(new Vec3(value.x,value.y,before.z));
+        else if(dimension===2)
+            this.node.setPosition(new Vec3(value.x,before.y,value.z));
+    }
+
     /** Read and write editor-only world orientation without duplicate serialized state. */
     get editorWorldEuler():Vec3 {return Quat.toEuler(new Vec3(),this.node.worldRotation);}
     set editorWorldEuler(euler:Vec3) {
