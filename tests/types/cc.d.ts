@@ -44,6 +44,7 @@ declare module 'cc' {
         parent:Node|null;worldPosition:Vec3;
         uuid:string;name:string;isValid:boolean;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
+        inverseTransformPoint(out:Vec3,world:Vec3):Vec3;
         setPosition(v:Vec3):void;setWorldPosition(v:Vec3):void;setWorldRotation(v:Quat):void;setParent(n:Node|null):void;removeFromParent():void;setScale(v:Vec3):void;
         emit(event:string,payload?:any):void;
         destroy():void;
