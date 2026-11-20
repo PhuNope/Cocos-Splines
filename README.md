@@ -93,3 +93,7 @@ Select multiple 3D Knot nodes belonging to one SplineContainer in the **Batch Kn
 ### V2 Phase 2.3 — Mesh Surface Snap (preview)
 
 In SplineContainer Inspector → Batch Knot Tools, mark 3D Knots, click **Refresh meshes**, select a readable MeshRenderer outside the spline and **Snap to Surface**. A CPU World-Y raycast lands knots on the triangle mesh without Physics Collider. Requires imported mesh **Allow Data Access**, single submesh and RGB32F position attributes; max 20,000 triangles and 64 knots. Missing ray hits abort the entire batch. See [guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Live Creator Editor Undo/Redo, asset import variations and prefab overrides still need testing.
+
+### V2 Phase 2.4 — Surface normal alignment (preview)
+
+Surface Snap now optionally aligns the selected Knots' **local +Y** axis with the upward mesh surface normal while attempting to preserve their existing world forward heading. The checkbox is **off by default**, and position-only snapping remains unchanged. Rotation changes may affect knot-local tangent curves; see [Vietnamese editor guide](docs/SPLINE_EDITOR_PHASE2_VI.md). Requires real Cocos Editor testing for native Undo/Redo and Prefab overrides.

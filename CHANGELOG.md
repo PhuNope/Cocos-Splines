@@ -1,3 +1,12 @@
+# Unreleased — Phase 2.4 Surface Normal Alignment
+
+- Added opt-in **Align Knot +Y to surface normal** in Surface Snap. Default is disabled to preserve existing geometry and behavior.
+- Compute upward triangle normals in World space and stable Knot local quaternions using parent orientation, preserving World forward heading where possible.
+- Extend surface batch commits/rollback to include actual Node `rotation` property alongside `position`, including rotation-only edits and no-op detection.
+- Validate steep surfaces and invalid rotation data before any Scene write; new regressions cover inverted winding, parent rotations, Scene service, combined snapshot and rollback.
+- Knots with knot-space tangents or tangent-handle Nodes can change spline curvature when rotated; Editor integration and Undo/Redo still need live validation.
+- Changes pushed directly to `v2`; no tag or GitHub Release.
+
 # Unreleased — Phase 2.3 Surface Snap (MeshRenderer)
 
 - Added downward World-Y surface snapping for selected 3D Knots against an explicitly chosen readable MeshRenderer, with no physics Collider dependency.

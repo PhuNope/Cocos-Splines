@@ -91,3 +91,20 @@ Editor messages:
 - `Editor.Message.request('cocos-splines','snap-selected-to-surface',ids,targetNodeUuid,startAbove,castDepth)`
 
 **Cần test thủ công Cocos Creator 3.8.8:** asset import format, refresh danh sách MeshRenderer, parent transforms, Scene Undo/Redo, mesh có cạnh dốc và prefab overrides. CI Node chỉ chứng minh thuật toán và message contract, không chứng minh tương tác thật trong Scene.
+
+## Phase 2.4 — Align Knot Up to Surface Normal (opt-in)
+
+Trong **Surface Snap**, bật checkbox **Align Knot +Y to surface normal** nếu muốn Knot xoay theo mặt phẳng terrain. Mặc định **tắt**, nên các Scene dùng Snap cũ giữ nguyên rotation.
+
+- Raycast tìm tam giác theo World -Y, trả thêm **pháp tuyến mặt tam giác theo World**; luôn chọn phía hướng lên (normal.Y dương) kể cả mesh bị đảo winding.
+- Với Align bật, trục **+Y của Knot** sẽ được xoay về normal. Cố giữ hướng **+Z (forward)** trước khi xoay bằng cách chiếu forward hiện tại lên mặt phẳng tiếp xúc; nếu forward song song normal thì dùng local +X để chọn hướng ổn định.
+- World-space orientation được đổi về **Knot local quaternion** so với rotation của SplineContainer, không ghi world quaternion vào property local.
+- Mặt quá dốc (`normal.Y < 0.05`), normal không hợp lệ, quaternion không hợp lệ hoặc bất kỳ Knot nào không có giao điểm sẽ **từ chối toàn batch trước khi ghi**.
+- Vị trí và rotation cùng dùng một Scene snapshot; nếu ghi lỗi giữa chừng, rollback cả hai loại property. Nếu chỉ rotation đổi (vị trí không đổi), vẫn ghi và snapshot. Không tạo snapshot cho no-op.
+- **Quan trọng:** Nếu Knot bật `tangentsInKnotSpace` hoặc có child tangent-handle nodes, xoay Knot cũng có thể xoay tangent và thay hình dạng curve. Bật Align là quyết định thay đổi orientation có chủ đích; hãy thử trên Scene bản sao trước khi dùng cho road production.
+
+API cũ được giữ nguyên khi bỏ qua tham số cuối:
+`Editor.Message.request('cocos-splines','snap-selected-to-surface',ids,targetUuid,startAbove,castDepth,alignNormal)`.
+`alignNormal` mặc định `false`.
+
+Đã có Node regression tests cho pháp tuyến, mesh winding ngược, orientation với parent rotation, batch chỉ thay rotation, no-op và rollback khi `set-property('rotation')` thất bại. **Chưa chứng nhận native Cocos Creator 3.8.8 Undo/Redo, Gizmo mouse picking, prefab override hay terrain nhập thực tế.**

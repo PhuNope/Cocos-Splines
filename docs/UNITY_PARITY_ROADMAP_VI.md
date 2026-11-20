@@ -81,3 +81,11 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Raycast MeshRenderer đích được chọn, World-Y, CPU triangles, hỗ trợ mesh transform và toàn batch rollback/snapshot.
 - [x] UI chọn surface target, refresh, cast height/drop; không phụ thuộc Collider hoặc copy Unity code.
 - [ ] Surface snapping lên Physics Terrain/Collider tùy chọn, surface normal orientation, 2D projected snap và Cocos Editor 3.8.8 smoke tests.
+
+### Phase 2.4 — Surface Normal Alignment (preview)
+
+- [x] Triangulated World normal với winding correction; từ chối tam giác quá dốc khi Align bật.
+- [x] Opt-in checkbox (mặc định tắt); Knot +Y theo normal, giữ hướng heading +Z nhiều nhất có thể.
+- [x] Đồng bộ position / local rotation trong một batch, snapshot + rollback, không thay rotation ở chế độ cũ.
+- [x] Unit + integration tests cho orientation với parent rotation, rotation-only, cancel khi lỗi.
+- [ ] Cocos Editor 3.8.8 smoke tests, bảo toàn hình dạng spline khi dùng Knot-space tangent (hiện cần kiểm tra thủ công).

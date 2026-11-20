@@ -10,7 +10,12 @@ function node(uuid,name){
 function child(parent,entry){entry.parent=parent;parent.children.push(entry);return entry;}
 const scene=node('scene','Scene');
 const spline=child(scene,node('spline','Spline'));
-spline.components.push({kind:'Splines.SplineContainer'});
+  spline.components.push({kind:'Splines.SplineContainer'});
+const knot=child(spline,node('knot-1','Knot A'));
+knot.components.push({kind:'Splines.SplineKnot'});
+const identityRotation={x:0,y:0,z:0,w:1};
+spline.worldRotation=identityRotation;
+knot.rotation=identityRotation;
 const ownedMesh=child(spline,node('own','Own Extrusion'));
 const target=child(scene,node('mesh','Ground'));
 const bad=child(scene,node('bad','Unreadable'));
@@ -44,6 +49,16 @@ try{
  assert(r.ok,r.error);
  assert.deepEqual(r.hits[0].position,{x:0,y:2,z:0});
  assert.equal(r.triangles,2);
+ const normals=methods.snapToMeshSurface('spline','mesh',origins,
+  {height:1,maxDrop:10,alignNormal:true});
+ assert(normals.ok,normals.error);
+ assert.deepEqual(normals.hits[0].normal,{x:0,y:1,z:0});
+ const orientations=methods.queryKnotOrientations('spline',['knot-1']);
+ assert(orientations.ok,orientations.error);
+ assert.deepEqual(orientations.parentRotation,identityRotation);
+ assert.deepEqual(orientations.rotations,[{uuid:'knot-1',rotation:identityRotation}]);
+ assert(!methods.queryKnotOrientations('spline',['mesh']).ok);
+ assert(!methods.queryKnotOrientations('spline',['knot-1','knot-1']).ok);
  assert(!methods.snapToMeshSurface('spline','own',origins).ok,
     'Sculpting should never raycast against spline-owned meshes');
  assert(!methods.snapToMeshSurface('spline','bad',origins).ok,
@@ -56,5 +71,5 @@ try{
  target.components[0].mesh=mesh(true,'RGB16F');
  assert.match(methods.snapToMeshSurface('spline','mesh',origins).error,/RGB32F/);
  target.components[0].mesh=old;
- console.log('SURFACE SCENE CONTRACT PASS: target discovery, readable triangles, exclusion, fail-closed.');
+ console.log('SURFACE SCENE CONTRACT PASS: target discovery, normals, read-only rotations, exclusion and fail-closed.');
 }finally{Module._load=original;}
