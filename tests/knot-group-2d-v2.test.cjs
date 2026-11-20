@@ -66,12 +66,12 @@ try {
    this.worldRotation=new Quat();}
   get position(){return this._local.clone();}
   set position(v){this._local=v.clone();}
-  get worldPosition(){return this.parent===container?world(this._local):this._local.clone();}
-  setWorldPosition(v){this._local=this.parent===container?local(v):v.clone();}
+  get worldPosition(){return this.parent?.uuid==='root'?world(this._local):this._local.clone();}
+  setWorldPosition(v){this._local=this.parent?.uuid==='root'?local(v):v.clone();}
   setPosition(v){this._local=v.clone();}
   setWorldRotation(v){this.worldRotation=v.clone();}
   inverseTransformPoint(out,value){
-   if(this!==container)throw Error('Unexpected transform root');
+   if(this.uuid!=='root')throw Error('Unexpected transform root');
    return out.set(local(value));
   }
   getComponent(name){
