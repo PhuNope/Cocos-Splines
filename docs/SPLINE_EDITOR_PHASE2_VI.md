@@ -261,3 +261,28 @@ Phase này thay thế giới hạn hiển thị trục World khi Container nghi�
 - Kiểm tra log Console khi một lệnh Scene property bị từ chối, không được có một nửa nhóm ở vị trí mới.
 
 **Giới hạn:** CI kiểm thử các message được gửi và rollback trên Node giả lập, không mô phỏng native Undo stack, Inspector override state hay Apply/Revert Prefab. Rotate/Tangent individual history chưa chuyển sang commit serialize đầy đủ ở phase này.
+
+## Phase 2.13 — Tangent/Rotate serialized history
+
+Phase này hoàn thiện cơ chế history của **Knot đơn lẻ** để cùng mô hình với Group Move. Các handle Move/Rotate dùng `history:'external'` trong Cocos-Gizmos V3 và được điều phối bởi `SplineGizmoEditTransaction`.
+
+**Tangent Move:**
+- Khi người dùng kéo tangent của Knot ở `AutoSmooth`, setter materialize trạng thái `Broken`. Một commit có thể thay đổi đồng thời `mode`, `tangentIn`, `tangentOut` và vị trí Node handle (nếu có).
+- Editor đọc `query-node` để tìm đúng component index, rồi gửi `scene:set-property` đến `__comps__.<index>.mode/tangentIn/tangentOut`, với `record:false`. Node handle (nếu có) được cập nhật bằng `path:'position'` trên UUID thật.
+- Nếu Handle/parent thay đổi giữa chừng, quá trình từ chối ghi; nếu một lệnh ghi lỗi, những thuộc tính đã thay đổi được rollback theo thứ tự ngược.
+
+**Knot Rotate:**
+- Gizmo cho phép xoay theo World Euler trong Scene, nhưng lịch sử serialize được ghi bằng `Node.rotation` **quaternion local** để tôn trọng transform của parent.
+- So sánh quaternion nhận `q` và `-q` là cùng hướng, tránh snapshot không cần thiết.
+
+**Snapshot:** chỉ yêu cầu một `scene:snapshot` sau toàn bộ các lệnh serialize thành công; no-op/Cancel không snapshot. Bản Cocos-Gizmos v3 preview phải có `Gizmos3D.supportsExternalHistory===true`. Nếu thiếu, các computed Knot handles sẽ ẩn thay vì gây Undo trùng.
+
+**Bài test trong Creator 3.8.8:**
+
+1. Tạo Knot đang AutoSmooth, kéo Tangent Out rồi thả. Xác minh mode thành Broken; Undo đúng **một lần** trả về AutoSmooth và hai tangent gốc; Redo khôi phục Broken.
+2. Thử với `tangentInHandle/tangentOutHandle` là Node con thật. Kéo handle và kiểm tra Undo/Redo, save/reopen Scene và Prefab Instance override cho **Node.position**.
+3. Xoay Knot khi SplineContainer và parent đã xoay/scale. Undo đúng một lần trả Node về quaternion local cũ; kiểm tra không phát sinh rotation drift.
+4. Với Prefab Instance, xem override của `mode`, vector tangent, handle Node position và Node rotation. Test Revert và Nested Prefab thủ công.
+5. Dùng Esc, thao tác no-op, disable/xóa handle trong drag để kiểm tra không tạo Undo rỗng, không crash.
+
+**Giới hạn:** CI chỉ kiểm thử property paths, một yêu cầu snapshot và rollback trên Scene mock, không chứng minh Creator 3.8.8 native Undo stack hoặc Prefab override đã hoạt động đúng. Các hook native và timing Editor khác nhau giữa bản 3.8.x; gửi log nếu gặp lỗi trong dự án thật.

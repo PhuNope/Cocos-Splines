@@ -34,3 +34,7 @@ Install the matching **Cocos-Gizmos v3 development ZIP** before the Splines `v2`
 ### Phase 2.12 preview dependency and history testing
 
 Install the matching Cocos-Gizmos v3 preview exposing `supportsExternalHistory` before this Splines V2 build. Group Move sends real serialized Knot Node.position through scene:set-property (record:false), then requests exactly one snapshot. Smoke-test one Undo for the group and Prefab Instance overrides, including nested Prefabs. The automated suite validates message contracts only. Preview builds remain artifact-only, with **no tag and no Release**.
+
+### Phase 2.13 preview
+
+Knot Tangent Move and Knot Rotate now require matching Gizmos v3 with `supportsExternalHistory`. Scene writes serialize real component fields and Node local rotation/handle positions, one snapshot on successful End. Preview CI verifies property messages and rollback, **not** real Creator Undo/Redo/Prefab override persistence. Test in a copy of a project; no tag/Release.

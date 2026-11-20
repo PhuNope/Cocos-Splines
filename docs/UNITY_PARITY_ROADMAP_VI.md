@@ -146,3 +146,11 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Typed, prevalidated group commit, serialized reverse rollback, stale and reparent protection, Node integration regression tests.
 - [ ] Real Editor 3.8.8 Undo/Redo one-gesture acceptance, Prefab Instance/nested overrides, apply/revert and on-disk save/reopen validation.
 - [ ] Upgrade single-Knot Tangent/Rotate to serialized transaction after Group acceptance.
+
+### Phase 2.13 — Individual Knot Tangent / Rotate serialized history
+
+- [x] Tangent Move external-history path writes component mode and tangentIn/out through scene set-property, plus changed handle Node position.
+- [x] Knot Rotate writes Node.rotation local quaternion rather than editor-only World Euler; q/-q equivalence.
+- [x] Component index from query-node, one snapshot, no-op/Cancel skip, partial failure rollback and stale handle guards.
+- [x] Regression tests for serialized field paths, AutoSmooth→Broken, handle position, local quaternion and IPC failures.
+- [ ] Native Creator 3.8.8 Undo one-gesture consistency and Prefab overrides, especially Nested Prefab/handle Nodes.

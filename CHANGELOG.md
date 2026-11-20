@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.13 Serialized Tangent / Knot Rotate History
+
+- Converted individual Knot Tangent Move and Knot Rotate Gizmos to `history:'external'`, matching the single-owner Group Move design. Requires a Cocos-Gizmos v3 preview exposing `Gizmos3D.supportsExternalHistory`.
+- Implemented `SplineGizmoKnotHistory`: an editor-only, isolated writer for **real serialized fields**. When dragging an AutoSmooth tangent into Broken, it writes `__comps__.<index>.mode`, `tangentIn`, `tangentOut`, and changed tangent-handle Node `position` as appropriate, with `record:false`.
+- Knot Rotate commits the affected Node **local quaternion** through `scene:set-property(path:'rotation', type:'cc.Quat')`, even when the Gizmo interacts in World Euler space and its parent is transformed.
+- All changed fields in a gesture are sent through Scene property messages before **one** `scene:snapshot`; no-op / Cancel do not request a snapshot.
+- Added real-component-index lookup via `scene:query-node`, validation against stale Scene and reparented/deleted handle Nodes, strict partial-write rollback, and quaternion sign-equivalence for no-op detection.
+- Added tests for TangentMode materialization, two tangents, tangent handle position, rotation, failed writes/snapshot, late query-node result, stale hierarchy, exact paths, and native-hook suppression by the matching Gizmos v3 preview.
+- This is an Editor property pathway intended to preserve Prefab Instance overrides without altering internal prefab metadata. **Native Creator 3.8.8 Undo/Redo, Nested Prefab overrides and actual override persistence still require live acceptance testing**; CI cannot certify them.
+- No legacy callbacks, tags or GitHub Releases were added. Preview code on `v2` only.
+
 # Unreleased — Phase 2.12 Multi-Knot Undo Owner / Prefab-Safe Scene Writes
 
 - New opt-in `history:'external'` Cocos-Gizmos v3 handle descriptor suppresses native SelectGizmo onControlBegin/Update/End/Cancel for computed Move ports while continuing the official onGizmoChanged begin/update/end/cancel callbacks and repaint. Other Gizmos retain native handling by default.

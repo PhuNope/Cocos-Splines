@@ -73,3 +73,9 @@ Group Move của Knot trong XY2D và XZ2D giờ vẽ và kéo trục theo **tran
 Group Move 3D, XY2D, XZ2D hiện có **một chủ sở hữu Undo**: Gizmos dùng `history:'external'` để không ghi thêm native history của getter/editor-only; Splines cập nhật **Node.position** thật qua `scene:set-property` với `record:false`, rồi yêu cầu **một snapshot** sau khi cả nhóm được ghi thành công. Nếu ghi một Knot thất bại, có rollback dữ liệu đã ghi qua Scene API. Khi thay đổi không có tác dụng, không tạo snapshot.
 
 Bắt buộc cài **Cocos-Gizmos v3 preview mới** có cả `supportsMoveFrameNode` và `supportsExternalHistory`, sau đó mới cài Cocos Splines V2. Chưa thể khẳng định Undo/Redo và Prefab overrides đã đúng 100% trước khi test trực tiếp trong Cocos Creator 3.8.8.
+
+## Phase 2.13 — Tangent / Rotate có serialized history
+
+Kéo tangent của Knot (AutoSmooth → Broken) giờ ghi `mode`, `tangentIn/out` thật qua Scene Editor; nếu có Node làm tangent handle, thay đổi vị trí handle cũng được ghi `Node.position`. Xoay Knot dùng `Node.rotation` dạng quaternion local, không cố serialize getter World Euler. Mỗi gesture đã chỉnh có một yêu cầu snapshot, no-op/Cancel không tạo snapshot, lỗi ghi sẽ rollback theo thứ tự ngược.
+
+Cần **Cocos-Gizmos V3 preview mới** có `supportsExternalHistory`, tương tự Phase 2.12. Với bản Gizmos cũ, các handle editor-only unsupported sẽ ẩn thay vì tạo lịch sử Undo sai. CI đã kiểm thử contract, nhưng native Undo/Redo và Prefab overrides vẫn chờ test Creator 3.8.8 thực tế.
