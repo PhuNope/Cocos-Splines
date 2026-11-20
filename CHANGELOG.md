@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.14 Serialized Gizmo History Concurrency & Revision Recovery
+
+- Added `SplineGizmoHistoryGate`, an Editor-only WeakMap keyed by SplineContainer Node. Prevents overlapping serialized Scene transactions across distinct Knot drawers on the same spline.
+- Group Move, Tangent Move and Knot Rotate now claim the same per-spline lock at `begin`. A blocked native Gizmo gesture aborts before its computed property can be mutated; handles are hidden while a prior gesture's serialized commit is pending.
+- The lock is released only after the Editor request succeeds or **all asynchronous rollback/error handlers finish**, not merely when the user releases the mouse. Cancel, stale input and no-op release immediately.
+- The gate is scoped to each SplineContainer, so independent splines remain editable concurrently. No global Editor listener, polling, temporary Node or private Undo API.
+- Commit completion invalidates the **original** SplineContainer's arc-length cache even if the edited Knot was deleted/reparented. Road/Extrude/MeshDeform already watch `getRevision()` in their `update()` loops, so existing revision tracking can pick up native Undo/Redo or rollback results on the next Editor update.
+- Added regression tests for two drawers racing while Scene snapshot IPC is delayed, lock ownership, async rollback-before-unlock, Cancel, no-op and independent splines.
+- **Limits:** Node tests do not prove Cocos Creator 3.8.8 reliably dispatches redraw/Undo events, preserves Nested Prefab overrides or groups native Undo history into one user-visible step. Manual Editor validation remains mandatory.
+- Preview code on `v2`; no tag or GitHub Release.
+
 # Unreleased — Phase 2.13 Serialized Tangent / Knot Rotate History
 
 - Converted individual Knot Tangent Move and Knot Rotate Gizmos to `history:'external'`, matching the single-owner Group Move design. Requires a Cocos-Gizmos v3 preview exposing `Gizmos3D.supportsExternalHistory`.

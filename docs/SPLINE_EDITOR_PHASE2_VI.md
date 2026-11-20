@@ -286,3 +286,26 @@ Phase này hoàn thiện cơ chế history của **Knot đơn lẻ** để cùng
 5. Dùng Esc, thao tác no-op, disable/xóa handle trong drag để kiểm tra không tạo Undo rỗng, không crash.
 
 **Giới hạn:** CI chỉ kiểm thử property paths, một yêu cầu snapshot và rollback trên Scene mock, không chứng minh Creator 3.8.8 native Undo stack hoặc Prefab override đã hoạt động đúng. Các hook native và timing Editor khác nhau giữa bản 3.8.x; gửi log nếu gặp lỗi trong dự án thật.
+
+## Phase 2.14 — Giao dịch Gizmos bất đồng bộ và Undo/Redo preview sync
+
+**Vấn đề:** Phase 2.12–2.13 đã ghi trực tiếp serialized properties qua `scene:set-property`, sau đó một `scene:snapshot`. Các lệnh Scene IPC có thể hoàn thành **sau khi thả chuột**. Trong khoảng đó, một Knot Gizmo khác của cùng spline nếu bắt đầu kéo có thể làm hai snapshot/rollback xen vào nhau.
+
+**Giải pháp:** `SplineGizmoHistoryGate` dùng WeakMap theo Node của SplineContainer:
+
+- `begin`: chiếm khóa trước khi native Gizmo bắt đầu ghi getter/setter editor-only; nếu bận thì từ chối gesture. Không thêm Undo entry cho thao tác bị từ chối.
+- Trong lúc đang kéo, Knot đang chỉnh vẫn hiển thị handle và cập nhật realtime.
+- Sau `end` có thay đổi, khóa giữ nguyên đến khi lệnh set-property + snapshot **thành công hoặc rollback hoàn tất**. Trước thời điểm đó, các handle của Knot trong cùng spline sẽ tạm ẩn.
+- `cancel`, `no-op`, invalid selection và lỗi bắt đầu: giải phóng khóa ngay.
+- Những spline khác không bị khóa. Không đăng ký Editor listener không được API hỗ trợ.
+- Khi khóa được giải phóng, gọi `refresh()` cho **SplineContainer gốc**, không theo parent mới của Knot. Road/Extrude/MeshDeform đã kiểm tra revision trong `update()`, nên khi Editor khôi phục Knot qua Undo/Redo, các component này có thể tái dựng preview khi tick tiếp theo xảy ra.
+
+**Test thủ công trong Cocos Creator 3.8.8:**
+
+1. Tạo 2 Knot cùng Spline và 1 Knot thuộc SplineContainer khác. Kéo Group Move hoặc Tangent, thả rồi thử kéo Knot khác ngay sau đó. Không được có hai history commits chồng nhau; với Scene lớn, handle có thể ẩn ngắn trong lúc chờ IPC.
+2. Cancel và no-op phải cho thao tác mới ngay lập tức, không tạo Undo entry.
+3. Undo/Redo liên tục sau khi thả; kiểm tra Road, Extrude, MeshDeform rebuild đúng theo Knot mới mà không phải bấm Refresh.
+4. Thử Parent/Prefab Instance, Nested Prefab và save/reopen Scene. Xác minh một Undo cho một gesture và override không mất.
+5. Khi Scene snapshot lỗi, kiểm tra Console warning, vị trí/rotation/tangent rollback và việc Gizmos hoạt động lại sau lỗi.
+
+**Chưa xác minh:** giao tiếp native Editor Undo/Redo, Prefab apply/revert và việc Editor luôn tick `update()` trong mọi tình huống. CI chỉ chứng minh khóa, đúng thứ tự lệnh và revision invalidation; không mô phỏng Undo stack native.

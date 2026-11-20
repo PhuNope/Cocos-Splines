@@ -38,3 +38,7 @@ Install the matching Cocos-Gizmos v3 preview exposing `supportsExternalHistory` 
 ### Phase 2.13 preview
 
 Knot Tangent Move and Knot Rotate now require matching Gizmos v3 with `supportsExternalHistory`. Scene writes serialize real component fields and Node local rotation/handle positions, one snapshot on successful End. Preview CI verifies property messages and rollback, **not** real Creator Undo/Redo/Prefab override persistence. Test in a copy of a project; no tag/Release.
+
+### Phase 2.14 — Pending serialized history gate
+
+The preview blocks overlapping Knot Gizmo transactions within one spline while any set-property/snapshot/rollback is pending; independent splines remain editable. Cancel, no-op and failed operations must release correctly. The original spline's cache is invalidated on commit completion, allowing existing dependent components to rebuild on subsequent Editor updates. Validate Undo/Redo and nested Prefab instances in Creator 3.8.8; CI does not certify native undo. No tag/Release.

@@ -154,3 +154,12 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Component index from query-node, one snapshot, no-op/Cancel skip, partial failure rollback and stale handle guards.
 - [x] Regression tests for serialized field paths, AutoSmooth→Broken, handle position, local quaternion and IPC failures.
 - [ ] Native Creator 3.8.8 Undo one-gesture consistency and Prefab overrides, especially Nested Prefab/handle Nodes.
+
+### Phase 2.14 — Cross-Knot serialized history coordination
+
+- [x] Per-SplineContainer WeakMap history gate for Group/Tangent/Rotate, including different Knot drawer instances.
+- [x] Hold through async set-property/snapshot/rollback, release on Cancel/no-op/error.
+- [x] Suppress stale handle selection during pending Scene commits; unrelated splines remain independent.
+- [x] Invalidate original spline arc LUT on transaction completion; existing road/extrude/deform revision observers can respond after Editor restores state.
+- [x] Regression tests for pending snapshot races and rollback-before-release.
+- [ ] Native Editor undo-stack grouping, Prefab Instance overrides, Editor update cadence and actual multi-scene lifecycle still need Creator 3.8.8 smoke testing.

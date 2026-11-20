@@ -79,3 +79,9 @@ Bắt buộc cài **Cocos-Gizmos v3 preview mới** có cả `supportsMoveFrameN
 Kéo tangent của Knot (AutoSmooth → Broken) giờ ghi `mode`, `tangentIn/out` thật qua Scene Editor; nếu có Node làm tangent handle, thay đổi vị trí handle cũng được ghi `Node.position`. Xoay Knot dùng `Node.rotation` dạng quaternion local, không cố serialize getter World Euler. Mỗi gesture đã chỉnh có một yêu cầu snapshot, no-op/Cancel không tạo snapshot, lỗi ghi sẽ rollback theo thứ tự ngược.
 
 Cần **Cocos-Gizmos V3 preview mới** có `supportsExternalHistory`, tương tự Phase 2.12. Với bản Gizmos cũ, các handle editor-only unsupported sẽ ẩn thay vì tạo lịch sử Undo sai. CI đã kiểm thử contract, nhưng native Undo/Redo và Prefab overrides vẫn chờ test Creator 3.8.8 thực tế.
+
+## Phase 2.14 — Chặn transaction Gizmos chồng nhau
+
+Group Move, Tangent Move và Knot Rotate của các Knot **cùng một SplineContainer** nay có chung một khóa lịch sử Editor. Khi Knot A đã thả chuột nhưng Scene Editor vẫn đang ghi serialized properties / chờ snapshot / rollback, Knot B không thể bắt đầu một thao tác mới; các handle tạm ẩn để tránh xung đột. Khóa nhả sau khi tác vụ ghi hoặc rollback hoàn tất. SplineContainer khác vẫn hoạt động độc lập.
+
+Cache của spline gốc được invalidated sau commit hoặc rollback, kể cả nếu Knot đổi parent. Road/Extrude/MeshDeform tiếp tục dùng hệ thống `getRevision()` và `update()` đang có để phát hiện thay đổi sau Editor Undo/Redo. Không thêm legacy listener. Cần Creator 3.8.8 để kiểm thử native Undo stack, Prefab và tình huống đổi selection khi commit đang chờ.
