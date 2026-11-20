@@ -60,6 +60,67 @@ function queryKnotEditFrame(rootUuid){
         return {ok:false,error:'Spline world matrix has invalid values.'};
     return {ok:true,matrix};
 }
+/**
+ * Returns explicit targets rather than snapping against every Scene mesh.
+ * Prevents accidental snaps onto the spline's own generated road/extrusion.
+ */
+function listSurfaceMeshes(rootUuid){
+    const root=resolve(rootUuid);
+    if(!root||containerOf(root)!==root)return {ok:false,error:'Select a SplineContainer.'};
+    const {director}=require('cc');
+    const scene=director.getScene();
+    const targets=[];
+    const isInsideSpline=n=>{
+        for(let p=n;p;p=p.parent)if(p===root)return true;
+        return false;
+    };
+    const walk=node=>{
+        if(targets.length>=128)return;
+        if(!isInsideSpline(node)){
+            const renderer=node.components.find(c=>classOf(c)==='cc.MeshRenderer'||classOf(c)==='MeshRenderer');
+            const mesh=renderer?.mesh;
+            if(mesh&&mesh.isValid!==false&&mesh.allowDataAccess&&mesh.struct?.primitives?.length===1)
+                targets.push({uuid:node.uuid,name:node.name,vertexCount:mesh.struct.vertexBundles?.length||0});
+        }
+        for(const child of node.children)walk(child);
+    };
+    if(scene)walk(scene);
+    return {ok:true,targets};
+}
+function snapToMeshSurface(rootUuid,targetUuid,origins,options={}){
+    const spline=resolve(rootUuid),node=resolve(targetUuid);
+    if(!spline||containerOf(spline)!==spline||!node||
+       !spline.components.some(c=>classOf(c)==='Splines.SplineContainer'))
+        return {ok:false,error:'Invalid spline or surface target.'};
+    for(let p=node;p;p=p.parent)if(p===spline)
+        return {ok:false,error:'Cannot snap against mesh inside the edited spline.'};
+    const {gfx}=require('cc');
+    const renderer=node.components.find(c=>classOf(c)==='cc.MeshRenderer'||classOf(c)==='MeshRenderer');
+    const mesh=renderer?.mesh;
+    if(!mesh)return {ok:false,error:'Target node must contain a MeshRenderer with a mesh.'};
+    if(!mesh.allowDataAccess)
+        return {ok:false,error:'Enable Allow Data Access on the target mesh import.'};
+    if(mesh.struct?.primitives?.length!==1)
+        return {ok:false,error:'Surface target must have one submesh (20,000 triangles max).'};
+    try{
+        const positions=mesh.readAttribute(0,gfx.AttributeName.ATTR_POSITION);
+        const indices=mesh.readIndices(0);
+        const format=mesh.readAttributeFormat(0,gfx.AttributeName.ATTR_POSITION);
+        const formatName=typeof format==='string'?format:format?.name;
+        if(!positions||!indices||!(positions instanceof Float32Array)||
+            (formatName&&formatName!=='RGB32F'))
+            return {ok:false,error:'Surface requires readable RGB32F position attributes. Reimport mesh without compressed positions.'};
+        const m=node.worldMatrix;
+        const matrix=[m.m00,m.m01,m.m02,m.m03,m.m04,m.m05,m.m06,m.m07,
+            m.m08,m.m09,m.m10,m.m11,m.m12,m.m13,m.m14,m.m15];
+        const {prepareSurface,snapOrigins}=require('./SplineSurfaceSnapMath');
+        const geometry=prepareSurface(Array.from(positions),Array.from(indices),matrix);
+        const hits=snapOrigins(geometry,origins,options);
+        return {ok:true,hits,triangles:geometry.triangleCount};
+    }catch(error){
+        return {ok:false,error:String(error?.message||error)};
+    }
+}
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
     const {js}=require('cc');let count=0;
@@ -239,5 +300,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceMeshes,snapToMeshSurface,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
