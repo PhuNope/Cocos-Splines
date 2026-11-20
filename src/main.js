@@ -1,6 +1,6 @@
 'use strict';
 const NAME='cocos-splines';
-const {planKnotPositions,validatedKnots}=require('./SplineKnotEditMath');
+const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -91,13 +91,32 @@ async function applyKnotPlacement(operation,ids,options){
         const info=await selectedSpline();
         if(!info?.found)throw new Error(info?.message||'Select a SplineContainer or Knot.');
         const selectedIds=selectedKnotIds(info,ids);
-        let frame=null;
-        if(options.space==='world'){
-            const result=await invokeScene('queryKnotEditFrame',info.rootUuid);
-            if(!result?.ok)throw new Error(result?.error||'Cannot read spline world transform.');
-            frame=result.matrix;
+        let edits;
+        if(operation==='surface'){
+            if(info.dimension!==0)throw new Error('Mesh surface snapping supports 3D splines only.');
+            if(selectedIds.length>64)throw new Error('Surface snap supports at most 64 Knots per batch.');
+            if(typeof options.targetUuid!=='string'||!options.targetUuid)
+                throw new Error('Choose a MeshRenderer target before snapping.');
+            const matrixResult=await invokeScene('queryKnotEditFrame',info.rootUuid);
+            if(!matrixResult?.ok)throw new Error(matrixResult?.error||'Cannot read spline world transform.');
+            const frame=transformFrame(matrixResult.matrix);
+            const world=selectedIds.map(uuid=>{
+                const knot=info.knots.find(k=>k.uuid===uuid);
+                return {uuid,position:frame.toWorld(knot.position)};
+            });
+            const result=await invokeScene('snapToMeshSurface',info.rootUuid,
+                options.targetUuid,world,{height:options.height,maxDrop:options.maxDrop});
+            if(!result?.ok)throw new Error(result?.error||'Surface raycast failed.');
+            edits=planSurfaceKnotPositions(info.knots,selectedIds,result.hits,matrixResult.matrix);
+        }else{
+            let frame=null;
+            if(options.space==='world'){
+                const result=await invokeScene('queryKnotEditFrame',info.rootUuid);
+                if(!result?.ok)throw new Error(result?.error||'Cannot read spline world transform.');
+                frame=result.matrix;
+            }
+            edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
         }
-        const edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
         if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
         const applied=[];
         try{
@@ -119,7 +138,8 @@ async function applyKnotPlacement(operation,ids,options){
         try{await invokeScene('refreshPreview',info.rootUuid);}
         catch(error){warning='Positions saved, but preview refresh failed: '+String(error);}
         return {ok:true,changed:true,count:edits.length,warning,
-            message:operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
+            message:operation==='surface'?'Snapped '+edits.length+' knot(s) to mesh surface.':
+                operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
                 operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
                 'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
@@ -424,6 +444,19 @@ const methods={
             for(const uuid of knots)Editor.Selection.select('node',uuid);
             return {ok:true,count:knots.length,message:'Selected '+knots.length+' Knot(s) in Scene.'};
         }catch(error){return alertError('select-knot-ids',error);}
+    },
+    async listSurfaceMeshes(){
+        try{
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a spline.');
+            const response=await invokeScene('listSurfaceMeshes',info.rootUuid);
+            if(!response?.ok)throw Error(response?.error||'Could not list scene mesh surfaces.');
+            return response;
+        }catch(error){return alertError('list-surface-meshes',error);}
+    },
+    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100){
+        try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop});}
+        catch(error){return alertError('snap-selected-to-surface',error);}
     },
     async snapSelectedKnots(ids,step,space='local'){
         try{return await applyKnotPlacement('snap',ids,{step,space});}

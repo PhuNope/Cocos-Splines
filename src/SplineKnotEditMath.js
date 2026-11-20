@@ -101,4 +101,30 @@ function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatri
         return {uuid:knot.uuid,before,after,changed};
     }).filter(e=>e.changed);
 }
-module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions};
+
+/**
+ * Surface hits are generated in the Scene process from a single explicit
+ * target MeshRenderer. Validate the entire batch before any Scene mutation.
+ */
+function planSurfaceKnotPositions(knots,ids,hits,worldMatrix){
+    const selected=validatedKnots(knots,ids);
+    if(selected.length>64||!Array.isArray(hits)||hits.length!==selected.length)
+        throw Error('Every selected Knot must have exactly one surface hit (max 64).');
+    const frame=transformFrame(worldMatrix);
+    const mapped=new Map();
+    for(const hit of hits){
+        if(typeof hit?.uuid!=='string'||mapped.has(hit.uuid)||!validPoint(hit.position))
+            throw Error('Surface returned duplicate or invalid world positions.');
+        mapped.set(hit.uuid,hit.position);
+    }
+    return selected.map(knot=>{
+        const world=mapped.get(knot.uuid);
+        if(!world)throw Error('Surface results did not match selected Knot UUIDs.');
+        const before={x:knot.position.x,y:knot.position.y,z:knot.position.z};
+        const after=frame.toLocal(world);
+        if(!validPoint(after))throw Error('Surface produced an invalid local position.');
+        return {uuid:knot.uuid,before,after,
+            changed:AXES.some(axis=>Math.abs(before[axis]-after[axis])>1e-8)};
+    }).filter(edit=>edit.changed);
+}
+module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions,planSurfaceKnotPositions};
