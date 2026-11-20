@@ -60,11 +60,21 @@ function queryKnotEditFrame(rootUuid){
         return {ok:false,error:'Spline world matrix has invalid values.'};
     return {ok:true,matrix};
 }
+const COLLIDER_CLASSES=new Set([
+    'BoxCollider','SphereCollider','CapsuleCollider','CylinderCollider',
+    'ConeCollider','MeshCollider','TerrainCollider','PlaneCollider','SimplexCollider',
+]);
+function activePhysicsColliders(node){
+    return node.components.filter(component=>{
+        const name=classOf(component).replace(/^cc\./,'');
+        return COLLIDER_CLASSES.has(name)&&component.enabled!==false&&component.isValid!==false;
+    });
+}
 /**
  * Returns explicit targets rather than snapping against every Scene mesh.
  * Prevents accidental snaps onto the spline's own generated road/extrusion.
  */
-function listSurfaceMeshes(rootUuid){
+function listSurfaceTargets(rootUuid){
     const root=resolve(rootUuid);
     if(!root||containerOf(root)!==root)return {ok:false,error:'Select a SplineContainer.'};
     const {director}=require('cc');
@@ -79,21 +89,46 @@ function listSurfaceMeshes(rootUuid){
         if(!isInsideSpline(node)){
             const renderer=node.components.find(c=>classOf(c)==='cc.MeshRenderer'||classOf(c)==='MeshRenderer');
             const mesh=renderer?.mesh;
-            if(mesh&&mesh.isValid!==false&&mesh.allowDataAccess&&mesh.struct?.primitives?.length===1)
-                targets.push({uuid:node.uuid,name:node.name,vertexCount:mesh.struct.vertexBundles?.length||0});
+            if(mesh&&mesh.isValid!==false&&mesh.allowDataAccess&&mesh.struct?.primitives?.length===1&&targets.length<128)
+                targets.push({uuid:node.uuid,name:node.name,kind:'mesh'});
+            const colliders=activePhysicsColliders(node);
+            if(colliders.length&&targets.length<128)
+                targets.push({uuid:node.uuid,name:node.name,kind:'collider',
+                    colliderTypes:colliders.map(c=>classOf(c).replace(/^cc./,''))});
         }
         for(const child of node.children)walk(child);
     };
     if(scene)walk(scene);
     return {ok:true,targets};
 }
-function snapToMeshSurface(rootUuid,targetUuid,origins,options={}){
+function snapToSurfaceTarget(rootUuid,targetUuid,origins,options={}){
     const spline=resolve(rootUuid),node=resolve(targetUuid);
     if(!spline||containerOf(spline)!==spline||!node||
        !spline.components.some(c=>classOf(c)==='Splines.SplineContainer'))
         return {ok:false,error:'Invalid spline or surface target.'};
     for(let p=node;p;p=p.parent)if(p===spline)
         return {ok:false,error:'Cannot snap against mesh inside the edited spline.'};
+    const kind=options.kind===undefined?'mesh':options.kind;
+    if(kind!=='mesh'&&kind!=='collider')
+        return {ok:false,error:'Surface target kind must be mesh or collider.'};
+    if(kind==='collider'){
+        try{
+            const colliders=activePhysicsColliders(node);
+            const {PhysicsSystem,geometry}=require('cc');
+            const physics=PhysicsSystem?.instance;
+            if(!physics||typeof physics.raycast!=='function'||typeof geometry?.Ray!=='function')
+                return {ok:false,error:'3D Physics raycasting is unavailable in this Scene; enable Physics or use MeshRenderer.'};
+            const {snapColliderOrigins}=require('./SplineColliderSnapMath');
+            const hits=snapColliderOrigins(origins,colliders,options,(origin,depth)=>{
+                const ray=new geometry.Ray(origin.x,origin.y,origin.z,0,-1,0);
+                if(!physics.raycast(ray,0xffffffff,depth,false))return [];
+                // PhysicsRayResult objects are engine-owned/reused; consume
+                // them immediately, before the next raycast call.
+                return physics.raycastResults;
+            });
+            return {ok:true,hits,source:'collider'};
+        }catch(error){return {ok:false,error:String(error?.message||error)};}
+    }
     const {gfx}=require('cc');
     const renderer=node.components.find(c=>classOf(c)==='cc.MeshRenderer'||classOf(c)==='MeshRenderer');
     const mesh=renderer?.mesh;
@@ -318,5 +353,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceMeshes,snapToMeshSurface,queryKnotOrientations,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
