@@ -7,6 +7,8 @@ import { planarMovePositions } from './SplineGroupMoveMath';
 import { commitGroupPositions } from './SplineGizmoGroupHistory';
 import { commitKnotSerializedGesture } from './SplineGizmoKnotHistory';
 import { SplineGizmoHistoryGate } from './SplineGizmoHistoryGate';
+import { captureSceneLease } from './SplineGizmoSceneLease';
+import type { SceneLease } from './SplineGizmoSceneLease';
 
 interface GroupMember {knot:SplineKnot;position:Vec3;localPosition:Vec3;}
 interface Before {
@@ -22,6 +24,7 @@ interface Before {
     group:GroupMember[];
     parent:any;
     dimension:number;
+    sceneLease:SceneLease;
 }
 const point=(v:Vec3)=>[v.x,v.y,v.z].every(Number.isFinite);
 const alive=(node:any)=>!!node&&node.isValid!==false;
@@ -47,6 +50,7 @@ export class SplineKnotGizmos {
     private static warnedFrameDependency=false;
     private heldScope:object|null=null;
     private heldContainer:SplineContainer|null=null;
+    private heldLease:SceneLease|null=null;
     /** Called after a native gesture completes or serialized IPC rollback settles. */
     private releaseHistory():void {
         const scope=this.heldScope,original=this.heldContainer;
@@ -54,6 +58,7 @@ export class SplineKnotGizmos {
         SplineGizmoHistoryGate.release(scope,this);
         this.heldScope=null;
         this.heldContainer=null;
+        this.heldLease=null;
         // Undo/Redo and asynchronous serialized rollback can change Knot
         // fields before an Editor redraw. Always invalidate the ORIGINAL
         // container, even if the edited Knot was reparented meanwhile.
@@ -79,11 +84,12 @@ export class SplineKnotGizmos {
                     node:entry.knot.node,
                     before:entry.localPosition,after:after.group[i].localPosition,
                     parent:before.parent,
-                })),message);
+                })),message,()=>before.sceneLease.isCurrent());
             }
             if(property==='editorTangentIn'||property==='editorTangentOut'||
                property==='editorWorldEuler')
-                return commitKnotSerializedGesture(property,this.component,before,after,message);
+                return commitKnotSerializedGesture(property,this.component,before,after,
+                    message,()=>before.sceneLease.isCurrent());
             throw new Error('Unsupported Gizmo history field '+property);
         },
         error=>console.warn('[cocos-splines] Gizmo snapshot/rollback failed:',error),
@@ -203,6 +209,7 @@ export class SplineKnotGizmos {
             inHandleParent:k.tangentInHandle?.isValid?k.tangentInHandle.parent:null,
             outHandleParent:k.tangentOutHandle?.isValid?k.tangentOutHandle.parent:null,
             parent:k.node.parent,dimension:this.spline()?.dimension??0,
+            sceneLease:this.heldLease||captureSceneLease(k.node.parent),
             group:group.map(knot=>{
                 if(!knot.node.isValid)throw new Error('Group Knot deleted during Gizmo drag');
                 return {knot,position:knot.node.worldPosition.clone(),
@@ -226,6 +233,9 @@ export class SplineKnotGizmos {
         return false;
     }
     private restore(property:string,b:Before):void {
+        // After Scene unload/reload, old Scene Nodes must NEVER be mutated.
+        // The current Scene property messages may already address a new Scene.
+        if(!b.sceneLease.isCurrent())return;
         const k=this.component;
         if(groupProperty(property)) {
             // A deleted or reparented Knot belongs to another operation now.
@@ -298,6 +308,7 @@ export class SplineKnotGizmos {
                 (globalThis as any).Gizmos3D?.supportsExternalHistory!==true)return;
             const group=groupProperty(property)?this.selectedGroup():[];
             const startDimension=spline.dimension;
+            const sceneLease=captureSceneLease(root);
             if(groupProperty(property)&&
                 (group.length<2||group[0]!==k))return;
             const selectedAtBegin=this.selectedNodeIds();
@@ -308,6 +319,7 @@ export class SplineKnotGizmos {
             const inputHandle=k.tangentInHandle?.isValid?k.tangentInHandle:null;
             const outputHandle=k.tangentOutHandle?.isValid?k.tangentOutHandle:null;
             const valid=()=>{
+                if(!sceneLease.isCurrent())return false;
                 if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||
                    (root as any)?.activeInHierarchy===false||spline.enabled===false||
                    k.node.parent!==root||this.spline()!==spline)return false;
@@ -336,6 +348,7 @@ export class SplineKnotGizmos {
                 throw Error('Another Knot history transaction is still committing in this SplineContainer.');
             this.heldScope=root;
             this.heldContainer=spline;
+            this.heldLease=sceneLease;
             try{
                 const accepted=this.edits.begin(property,{
                     capture:()=>this.read(group),
