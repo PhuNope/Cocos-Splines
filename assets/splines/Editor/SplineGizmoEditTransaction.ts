@@ -14,6 +14,8 @@ export interface SplineGizmoEditPort<T> {
     capture():T;
     restore(before:T):void;
     changed(before:T,after:T):boolean;
+    /** Optional live Scene/Selection guard. A false result cancels without snapshot. */
+    valid?():boolean;
 }
 export type SplineSnapshotRequest=()=>unknown|Promise<unknown>;
 export type SplineGestureFailure=(reason:unknown)=>void;
@@ -37,8 +39,28 @@ export class SplineGizmoEditTransaction<T> {
     get property():string|null{return this.active?.property??null;}
     get pendingCount():number{return this.pending.size;}
 
+    /** Cancels the current gesture even when its property is unknown to the caller. */
+    cancelActive():boolean {
+        return this.active ? this.cancel(this.active.property) : false;
+    }
+    /** Called at drag updates, redraws and before End; fail closed on stale context. */
+    validateActive():boolean {
+        const gesture=this.active;
+        if(!gesture)return false;
+        try {
+            if(gesture.port.valid?.()!==false)return true;
+            this.cancel(gesture.property);
+            return false;
+        }catch(error){
+            this.cancel(gesture.property);
+            this.onFailure(error);
+            return false;
+        }
+    }
+
     begin(property:string,port:SplineGizmoEditPort<T>):boolean {
         if(!property||this.active)return false;
+        if(port.valid?.()===false)return false;
         const before=port.capture();
         this.active={property,before,port,version:++this.version};
         return true;
@@ -55,6 +77,7 @@ export class SplineGizmoEditTransaction<T> {
     end(property:string):boolean {
         const gesture=this.active;
         if(!gesture||gesture.property!==property)return false;
+        if(!this.validateActive())return false;
         this.active=null;
         let after:T;
         try{after=gesture.port.capture();}
@@ -73,6 +96,11 @@ export class SplineGizmoEditTransaction<T> {
             // after-state still matches. Otherwise report but leave it intact.
             if(this.version===version&&!this.active){
                 try{
+                    if(gesture.port.valid?.()===false){
+                        this.onFailure(new Error('Gizmo scene context changed before snapshot response; skip rollback.'));
+                        this.onFailure(error);
+                        return;
+                    }
                     const now=gesture.port.capture();
                     if(!gesture.port.changed(after,now))
                         gesture.port.restore(gesture.before);
