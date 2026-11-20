@@ -238,6 +238,32 @@ try {
         b.onGizmoChanged('editorTangentOut','begin');
         b.onGizmoChanged('editorTangentOut','cancel');
         assert.equal(snapshots,3,'Cancel after unlock does not create history');
+        // Unloading a Scene while the drag is still active invalidates the
+        // original ancestor lease, even though old Knot objects still exist
+        // in memory. No snapshot or restoration may target the next Scene.
+        const originalScene=new Node('scene-before-reload');
+        container.parent=originalScene;
+        selection=['a','b'];
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        const preUnload=nodes[0].worldPosition.clone();
+        knots[0].editorGroupWorldPosition=new Vec3(
+            preUnload.x+7,preUnload.y+3,preUnload.z+2);
+        a.onGizmoChanged('editorGroupWorldPosition','update');
+        const staleWorld=nodes[0].worldPosition.clone();
+        originalScene.isValid=false;
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,3,'No Group Move snapshot after Scene unload');
+        assert.deepEqual(nodes[0].worldPosition,staleWorld,
+            'Never restore unloaded Scene nodes through stale callbacks');
+        // Replacing the Scene root with a different Node bearing the same
+        // UUID is also stale: identity, not name/UUID, defines this lease.
+        originalScene.isValid=true;
+        a.onGizmoChanged('editorGroupWorldPosition','begin');
+        const replacementScene=new Node('scene-before-reload');
+        container.parent=replacementScene;
+        a.onGizmoChanged('editorGroupWorldPosition','end');
+        assert.equal(snapshots,3);
+        container.parent=null;
         delete globalThis.Editor;
         assert(!a.onGizmoHandles().some(h=>h.property==='editorGroupWorldPosition'),
             'Unavailable Editor Selection must fail closed');
