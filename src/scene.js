@@ -44,6 +44,22 @@ function query(uuid){
     return {found:true,rootUuid:root.uuid,rootName:root.name,parentUuid:root.parent?.uuid,containerIndex,closed:component.closed,dimension:component.dimension,
       reversed:component.reversed,length,segments,knots};
 }
+function queryKnotEditFrame(rootUuid){
+    const root=resolve(rootUuid);
+    if(!root||containerOf(root)!==root||
+       !root.components.some(c=>classOf(c)==='Splines.SplineContainer'))
+        return {ok:false,error:'Not an active SplineContainer.'};
+    const m=root.worldMatrix;
+    // The Cocos Mat4 field order matches Vec3.transformMat4 and keeps parent
+    // rotation, translation and non-uniform scale. Only return JSON numbers.
+    const matrix=[
+        m.m00,m.m01,m.m02,m.m03,m.m04,m.m05,m.m06,m.m07,
+        m.m08,m.m09,m.m10,m.m11,m.m12,m.m13,m.m14,m.m15,
+    ];
+    if(matrix.some(x=>typeof x!=='number'||!Number.isFinite(x)))
+        return {ok:false,error:'Spline world matrix has invalid values.'};
+    return {ok:true,matrix};
+}
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
     const {js}=require('cc');let count=0;
@@ -223,5 +239,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

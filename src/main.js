@@ -91,7 +91,13 @@ async function applyKnotPlacement(operation,ids,options){
         const info=await selectedSpline();
         if(!info?.found)throw new Error(info?.message||'Select a SplineContainer or Knot.');
         const selectedIds=selectedKnotIds(info,ids);
-        const edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension);
+        let frame=null;
+        if(options.space==='world'){
+            const result=await invokeScene('queryKnotEditFrame',info.rootUuid);
+            if(!result?.ok)throw new Error(result?.error||'Cannot read spline world transform.');
+            frame=result.matrix;
+        }
+        const edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
         if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
         const applied=[];
         try{
@@ -114,7 +120,8 @@ async function applyKnotPlacement(operation,ids,options){
         catch(error){warning='Positions saved, but preview refresh failed: '+String(error);}
         return {ok:true,changed:true,count:edits.length,warning,
             message:operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
-                'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.'};
+                operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
+                'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
 }
 const methods={
@@ -418,13 +425,17 @@ const methods={
             return {ok:true,count:knots.length,message:'Selected '+knots.length+' Knot(s) in Scene.'};
         }catch(error){return alertError('select-knot-ids',error);}
     },
-    async snapSelectedKnots(ids,step){
-        try{return await applyKnotPlacement('snap',ids,{step});}
+    async snapSelectedKnots(ids,step,space='local'){
+        try{return await applyKnotPlacement('snap',ids,{step,space});}
         catch(error){return alertError('snap-selected-knots',error);}
     },
-    async alignSelectedKnots(ids,axis){
-        try{return await applyKnotPlacement('align',ids,{axis});}
+    async alignSelectedKnots(ids,axis,space='local'){
+        try{return await applyKnotPlacement('align',ids,{axis,space});}
         catch(error){return alertError('align-selected-knots',error);}
+    },
+    async moveSelectedKnots(ids,delta,space='local'){
+        try{return await applyKnotPlacement('move',ids,{delta,space});}
+        catch(error){return alertError('move-selected-knots',error);}
     },
     async deleteKnotId(uuid){
         try {const s=await selectedSpline();
