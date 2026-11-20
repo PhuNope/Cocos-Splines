@@ -158,7 +158,14 @@ global.Editor={
       lastOptions,origin=>mockResults(origin))};
     }catch(error){return {ok:false,error:error.message};}
    }
-   if(payload.method==='refreshPreview')return {ok:true};
+   if(payload.method==='queryKnotBatchState')return {ok:true,
+        states:payload.args[1].map(uuid=>{
+            const node=records.find(k=>k.uuid===uuid);
+            if(!node)throw Error('Missing Knot '+uuid);
+            return {uuid,position:{...node.position},
+                rotation:{...(node.rotation||{x:0,y:0,z:0,w:1})}};
+        })};
+    if(payload.method==='refreshPreview')return {ok:true};
    throw Error('Unexpected Scene method '+payload.method);
   }
   if(method==='set-property'){

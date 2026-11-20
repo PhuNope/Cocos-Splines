@@ -53,7 +53,14 @@ global.Editor={
    if(arg.method==='querySpline')return {found:true,rootUuid:'root',dimension,
     knots:state.map(k=>({uuid:k.uuid,position:{...k.position}}))};
    if(arg.method==='queryKnotEditFrame'){queries++;return {ok:true,matrix};}
-   if(arg.method==='refreshPreview'){refreshes++;return {ok:true};}
+   if(arg.method==='queryKnotBatchState')return {ok:true,
+        states:arg.args[1].map(uuid=>{
+            const node=state.find(k=>k.uuid===uuid);
+            if(!node)throw Error('Missing Knot '+uuid);
+            return {uuid,position:{...node.position},
+                rotation:{...(node.rotation||{x:0,y:0,z:0,w:1})}};
+        })};
+    if(arg.method==='refreshPreview'){refreshes++;return {ok:true};}
    throw new Error('Unexpected scene method '+arg.method);
   }
   if(method==='set-property'){

@@ -39,7 +39,14 @@ global.Editor={
    if(payload.method==='querySpline')return {
      found:true,rootUuid:'root',dimension,knots:state.map(k=>({...k,position:clone(k.position)})),
    };
-   if(payload.method==='refreshPreview'){refreshes++;return {ok:true};}
+   if(payload.method==='queryKnotBatchState')return {ok:true,
+        states:payload.args[1].map(uuid=>{
+            const node=state.find(k=>k.uuid===uuid);
+            if(!node)throw Error('Missing Knot '+uuid);
+            return {uuid,position:{...node.position},
+                rotation:{...(node.rotation||{x:0,y:0,z:0,w:1})}};
+        })};
+    if(payload.method==='refreshPreview'){refreshes++;return {ok:true};}
    throw new Error('Unexpected method '+payload.method);
   }
   if(method==='set-property'){

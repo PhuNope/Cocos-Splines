@@ -82,7 +82,14 @@ global.Editor={
             try{return {ok:true,hits:snapOrigins(surface,payload.args[2],lastOptions)};}
             catch(e){return {ok:false,error:e.message};}
         }
-        if(payload.method==='refreshPreview')return {ok:true};
+        if(payload.method==='queryKnotBatchState')return {ok:true,
+        states:payload.args[1].map(uuid=>{
+            const node=knots.find(k=>k.uuid===uuid);
+            if(!node)throw Error('Missing Knot '+uuid);
+            return {uuid,position:{...node.position},
+                rotation:{...(node.rotation||{x:0,y:0,z:0,w:1})}};
+        })};
+    if(payload.method==='refreshPreview')return {ok:true};
         throw Error('Unexpected Scene command '+payload.method);
     }
     if(method==='set-property'){
