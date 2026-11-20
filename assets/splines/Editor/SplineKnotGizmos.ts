@@ -3,8 +3,9 @@ import type { SplineKnot } from '../Core/SplineKnot';
 import type { SplineContainer } from '../Core/SplineContainer';
 import { drawSplineCurve, drawSplineKnot } from './SplineContainerGizmos';
 import { SplineGizmoEditTransaction } from './SplineGizmoEditTransaction';
+import { planarMovePositions } from './SplineGroupMoveMath';
 
-interface GroupMember {knot:SplineKnot;position:Vec3;}
+interface GroupMember {knot:SplineKnot;position:Vec3;localPosition:Vec3;}
 interface Before {
     mode:number;
     inTangent:Vec3;outTangent:Vec3;
@@ -12,6 +13,7 @@ interface Before {
     worldRotation:Quat;
     group:GroupMember[];
     parent:any;
+    dimension:number;
 }
 const point=(v:Vec3)=>[v.x,v.y,v.z].every(Number.isFinite);
 const alive=(node:any)=>!!node&&node.isValid!==false;
@@ -56,7 +58,7 @@ export class SplineKnotGizmos {
     }
     private selectedGroup():SplineKnot[] {
         const spline=this.spline();
-        if(!spline||spline.dimension!==0)return [];
+        if(!spline||![0,1,2].includes(spline.dimension))return [];
         const ids=this.selectedNodeIds();
         if(!ids)return [];
         return spline.node.children.map(node=>(node as any).getComponent('Splines.SplineKnot') as SplineKnot|null)
@@ -86,11 +88,25 @@ export class SplineKnotGizmos {
         ];
         if(g.rotate)handles.push(...g.rotate('editorWorldEuler',{space:'world',ringSize:70,pickSize:14}));
         const group=this.selectedGroup();
-        if(group.length>=2 && group[0]===this.component && g3?.move) {
-            handles.push(...g3.move('editorGroupWorldPosition',{
-                space:'world',axisSize:60,planeSize:18,pickSize:25,
-                showPositionLabel:true,
-            }));
+        if(group.length>=2&&group[0]===this.component){
+            const opts={space:'world',axisSize:60,planeSize:18,pickSize:25,
+                showPositionLabel:true};
+            const all3D=g3?.move?
+                g3.move('editorGroupWorldPosition',opts):[];
+            if(spline.dimension===0)handles.push(...all3D);
+            else if(spline.dimension===1){
+                // Gizmos2D.move exposes X/Y/XY only. On non-Canvas 2D
+                // scenes the 3D equivalent remains an explicit fallback.
+                const xy=g2?.move?g2.move('editorGroupWorldPosition',opts):
+                    all3D.filter((h:any)=>(h.axis==='x'||h.axis==='y')||
+                        h.plane==='xy');
+                handles.push(...xy);
+            }else if(spline.dimension===2){
+                // No Gizmos2D XZ preset; filter the official Gizmos3D move
+                // descriptors so Y/YZ/XY can never be picked.
+                handles.push(...all3D.filter((h:any)=>(h.axis==='x'||h.axis==='z')||
+                    h.plane==='xz'));
+            }
         }
         return handles;
     }
@@ -116,9 +132,11 @@ export class SplineKnotGizmos {
             inHandle:k.tangentInHandle?.isValid?k.tangentInHandle.position.clone():null,
             outHandle:k.tangentOutHandle?.isValid?k.tangentOutHandle.position.clone():null,
             worldRotation:k.node.worldRotation.clone(),parent:k.node.parent,
+            dimension:this.spline()?.dimension??0,
             group:group.map(knot=>{
                 if(!knot.node.isValid)throw new Error('Group Knot deleted during Gizmo drag');
-                return {knot,position:knot.node.worldPosition.clone()};
+                return {knot,position:knot.node.worldPosition.clone(),
+                    localPosition:knot.node.position.clone()};
             }),
         };
     }
@@ -126,7 +144,8 @@ export class SplineKnotGizmos {
         if(property==='editorGroupWorldPosition') {
             if(a.group.length!==b.group.length)return true;
             return a.group.some((entry,i)=>entry.knot!==b.group[i].knot||
-                different(entry.position,b.group[i].position));
+                (a.dimension===0?different(entry.position,b.group[i].position):
+                    different(entry.localPosition,b.group[i].localPosition)));
         }
         if(property==='editorWorldEuler')
             return quaternionChanged(a.worldRotation,b.worldRotation);
@@ -143,8 +162,10 @@ export class SplineKnotGizmos {
             // Restore only surviving Nodes still under their original spline.
             const originalParent=b.parent;
             for(const entry of b.group)
-                if(alive(entry.knot.node)&&entry.knot.node.parent===originalParent)
-                    entry.knot.node.setWorldPosition(entry.position);
+                if(alive(entry.knot.node)&&entry.knot.node.parent===originalParent){
+                    if(b.dimension===0)entry.knot.node.setWorldPosition(entry.position);
+                    else entry.knot.node.setPosition(entry.localPosition);
+                }
         }else if(property==='editorWorldEuler'){
             if(alive(k.node)&&k.node.parent===b.parent)k.node.setWorldRotation(b.worldRotation);
         }else if(property==='editorTangentIn'||property==='editorTangentOut'){
@@ -158,6 +179,37 @@ export class SplineKnotGizmos {
         }
         this.spline()?.refresh();
     }
+    /** Apply a common, baseline-derived delta. 2D always edits the
+     * Container's LOCAL plane; no world-axis translation can add hidden Y/Z.
+     */
+    private updateGroupMove():void {
+        const before=this.edits.baseline,k=this.component;
+        if(!before||!before.group.length||!alive(k.node))return;
+        const anchor=before.group.find(entry=>entry.knot===k);
+        if(!anchor)return;
+        const world=k.node.worldPosition;
+        if(!point(world))throw new Error('Group Move world point is invalid.');
+        if(before.dimension===0){
+            const delta=Vec3.subtract(new Vec3(),world,anchor.position);
+            for(const entry of before.group){
+                if(entry.knot===k||!alive(entry.knot.node)||
+                   entry.knot.node.parent!==before.parent)continue;
+                entry.knot.node.setWorldPosition(Vec3.add(new Vec3(),entry.position,delta));
+            }
+        }else{
+            const root=before.parent;
+            const target=root.inverseTransformPoint(new Vec3(),world);
+            const positions=planarMovePositions(before.dimension as 1|2,
+                anchor.localPosition,target,before.group.map(entry=>entry.localPosition));
+            for(let i=0;i<before.group.length;i++){
+                const node=before.group[i].knot.node;
+                if(!alive(node)||node.parent!==root)continue;
+                const desired=positions[i];
+                node.setPosition(new Vec3(desired.x,desired.y,desired.z));
+            }
+        }
+    }
+
     onGizmoChanged(property:string,phase:string):void {
         const k=this.component;
         if(phase==='begin'){
@@ -165,6 +217,7 @@ export class SplineKnotGizmos {
             if(!alive(k)||!k.enabled||!alive(k.node)||!alive(root)||!spline||
                spline.enabled===false||(root as any)?.activeInHierarchy===false)return;
             const group=property==='editorGroupWorldPosition'?this.selectedGroup():[];
+            const startDimension=spline.dimension;
             if(property==='editorGroupWorldPosition'&&
                 (group.length<2||group[0]!==k))return;
             const selectedAtBegin=this.selectedNodeIds();
@@ -182,7 +235,7 @@ export class SplineKnotGizmos {
                 if(ownerSelected&&(!currentIds||!currentIds.has(k.node.uuid)))
                     return false;
                 if(property==='editorGroupWorldPosition'){
-                    if(spline.dimension!==0)return false;
+                    if(spline.dimension!==startDimension)return false;
                     const current=this.selectedGroup();
                     if(current.length!==group.length||current.some((member,i)=>member!==group[i]))
                         return false;
@@ -202,19 +255,14 @@ export class SplineKnotGizmos {
                 valid,
             });
         }
-        if(phase==='update'){
+        if(phase==='update'||phase==='end'){
             if(!this.validateGesture())return;
             if(property==='editorGroupWorldPosition'&&this.edits.property===property){
-                const before=this.edits.baseline;
-                const origin=before?.group.find(entry=>entry.knot===k);
-                const owner=k.node.worldPosition;
-                if(origin&&point(owner)){
-                    const delta=Vec3.subtract(new Vec3(),owner,origin.position);
-                    for(const entry of before!.group){
-                        if(entry.knot===k||!alive(entry.knot.node)||entry.knot.node.parent!==k.node.parent)
-                            continue;
-                        entry.knot.node.setWorldPosition(Vec3.add(new Vec3(),entry.position,delta));
-                    }
+                try{this.updateGroupMove();}
+                catch(error){
+                    this.edits.cancelActive();
+                    console.warn('[cocos-splines] Group Move cancelled:',error);
+                    return;
                 }
             }
         }
