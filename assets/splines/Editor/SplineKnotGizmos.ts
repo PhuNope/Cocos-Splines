@@ -5,6 +5,7 @@ import { drawSplineCurve, drawSplineKnot } from './SplineContainerGizmos';
 import { SplineGizmoEditTransaction } from './SplineGizmoEditTransaction';
 import { planarMovePositions } from './SplineGroupMoveMath';
 import { commitGroupPositions } from './SplineGizmoGroupHistory';
+import { commitKnotSerializedGesture } from './SplineGizmoKnotHistory';
 
 interface GroupMember {knot:SplineKnot;position:Vec3;localPosition:Vec3;}
 interface Before {
@@ -12,6 +13,11 @@ interface Before {
     inTangent:Vec3;outTangent:Vec3;
     inHandle:Vec3|null;outHandle:Vec3|null;
     worldRotation:Quat;
+    localRotation:Quat;
+    inHandleNode:any|null;
+    outHandleNode:any|null;
+    inHandleParent:any|null;
+    outHandleParent:any|null;
     group:GroupMember[];
     parent:any;
     dimension:number;
@@ -55,7 +61,10 @@ export class SplineKnotGizmos {
                     parent:before.parent,
                 })),message);
             }
-            return message('scene','snapshot');
+            if(property==='editorTangentIn'||property==='editorTangentOut'||
+               property==='editorWorldEuler')
+                return commitKnotSerializedGesture(property,this.component,before,after,message);
+            throw new Error('Unsupported Gizmo history field '+property);
         },
         error=>console.warn('[cocos-splines] Gizmo snapshot/rollback failed:',error),
     );
@@ -99,12 +108,16 @@ export class SplineKnotGizmos {
            !alive(this.component.node)||!spline||spline.count<2)return [];
         const g2=(globalThis as any).Gizmos2D,g3=(globalThis as any).Gizmos3D;
         const g=spline.dimension===1&&g2?g2:g3;
-        if(!g?.move)return [];
+        // All Knot handles are computed editor-only ports. Do not allow old
+        // native-history fallback to create bogus Undo entries for them.
+        if(!g?.move||g3?.supportsExternalHistory!==true)return [];
         const handles=[
-            ...g.move('editorTangentIn',{space:'local',pickSize:25}),
-            ...g.move('editorTangentOut',{space:'local',pickSize:25}),
+            ...g.move('editorTangentIn',{space:'local',pickSize:25,history:'external'}),
+            ...g.move('editorTangentOut',{space:'local',pickSize:25,history:'external'}),
         ];
-        if(g.rotate)handles.push(...g.rotate('editorWorldEuler',{space:'world',ringSize:70,pickSize:14}));
+        if(g.rotate)handles.push(...g.rotate('editorWorldEuler',{
+            space:'world',ringSize:70,pickSize:14,history:'external',
+        }));
         const group=this.selectedGroup();
         if(group.length>=2&&group[0]===this.component &&
            g3?.supportsExternalHistory===true){
@@ -158,8 +171,13 @@ export class SplineKnotGizmos {
             mode:k.mode,inTangent:k.tangentIn.clone(),outTangent:k.tangentOut.clone(),
             inHandle:k.tangentInHandle?.isValid?k.tangentInHandle.position.clone():null,
             outHandle:k.tangentOutHandle?.isValid?k.tangentOutHandle.position.clone():null,
-            worldRotation:k.node.worldRotation.clone(),parent:k.node.parent,
-            dimension:this.spline()?.dimension??0,
+            worldRotation:k.node.worldRotation.clone(),
+            localRotation:k.node.rotation.clone(),
+            inHandleNode:k.tangentInHandle?.isValid?k.tangentInHandle:null,
+            outHandleNode:k.tangentOutHandle?.isValid?k.tangentOutHandle:null,
+            inHandleParent:k.tangentInHandle?.isValid?k.tangentInHandle.parent:null,
+            outHandleParent:k.tangentOutHandle?.isValid?k.tangentOutHandle.parent:null,
+            parent:k.node.parent,dimension:this.spline()?.dimension??0,
             group:group.map(knot=>{
                 if(!knot.node.isValid)throw new Error('Group Knot deleted during Gizmo drag');
                 return {knot,position:knot.node.worldPosition.clone(),
@@ -248,6 +266,9 @@ export class SplineKnotGizmos {
             if(property===GROUP_LOCAL&&
                (spline.dimension===0||(globalThis as any).Gizmos3D?.supportsMoveFrameNode!==true))return;
             if(property===GROUP_WORLD&&spline.dimension!==0)return;
+            if((property==='editorTangentIn'||property==='editorTangentOut'||
+                property==='editorWorldEuler')&&
+                (globalThis as any).Gizmos3D?.supportsExternalHistory!==true)return;
             if(groupProperty(property)&&
                 (globalThis as any).Gizmos3D?.supportsExternalHistory!==true)return;
             const group=groupProperty(property)?this.selectedGroup():[];
