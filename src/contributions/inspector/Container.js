@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -22,11 +22,13 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <p class="spl-note">Bật Cocos-Gizmos v3.0.3+. Chọn Knot sẽ luôn hiện tangent dù Show Tangent Gizmos tắt. Knot có handles: bật Edit Handles để luôn thấy đường + tangent khi chỉnh, không cần bật Show Gizmos Always.</p>
   </details>
   <div class="spl-info">Đang tải knots…</div>
-  <details class="spl-section" open><summary>Batch Knot Tools · Multi-select / Snap / Align</summary>
-    <p class="spl-note">Đánh dấu Knot trong danh sách bên dưới. Snap dùng tọa độ local của Spline; Align dùng Knot đầu tiên theo Hierarchy làm mốc.</p>
+  <details class="spl-section" open><summary>Batch Knot Tools · Multi-select / Snap / Align / Move</summary>
+    <p class="spl-note">Mark Knots below. Local works in all dimensions; World supports 3D splines, including rotated or non-uniformly scaled parents. Alignment uses the first marked Knot in Hierarchy.</p>
+    <div class="spl-btns spl-batch-inputs"><label>Coordinate space <select class="spl-coordinate-space" aria-label="Knot coordinate space"><option value="local">Local (Container)</option><option value="world">World (3D only)</option></select></label></div>
     <div class="spl-btns"><button type="button" class="spl-btn spl-mark-all">✓ Mark all</button><button type="button" class="spl-btn spl-mark-none">Clear marks</button><button type="button" class="spl-btn spl-select-marked">Select in Scene</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Grid step <input class="spl-grid-step" type="number" min="0.0001" max="1000000" step="0.25" value="1" aria-label="Grid step (local units)"></label><button type="button" class="spl-btn spl-snap-marked">Snap marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button></div>
+    <div class="spl-btns spl-batch-inputs"><label>ΔX <input class="spl-move-x" type="number" step="0.5" value="0" aria-label="Move delta X"></label><label>ΔY <input class="spl-move-y" type="number" step="0.5" value="0" aria-label="Move delta Y"></label><label>ΔZ <input class="spl-move-z" type="number" step="0.5" value="0" aria-label="Move delta Z"></label><button type="button" class="spl-btn spl-move-marked">Move marked</button></div>
   </details>
   <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
@@ -170,6 +172,14 @@ async function refresh(panel){
         panel._splineData=s;
         panel.$.info.textContent=`${s.knots.length} knots · ${s.segments} curves · ${Number(s.length).toFixed(2)} units`;
         const hiddenAxis=s.dimension===1?'z':s.dimension===2?'y':null;
+        const space=panel.$.coordinateSpace;
+        for(const option of space.options)option.disabled=option.value==='world'&&s.dimension!==0;
+        if(s.dimension!==0&&space.value==='world')space.value='local';
+        for(const axis of ['x','y','z']){
+            const entry=panel.$['move'+axis.toUpperCase()];
+            entry.disabled=axis===hiddenAxis;
+            if(entry.disabled)entry.value='0';
+        }
         const axis=panel.$.alignAxis;
         for(const option of axis.options)option.disabled=option.value===hiddenAxis;
         if(axis.value===hiddenAxis)axis.value='x';
@@ -215,12 +225,19 @@ module.exports={
             if(this._splineData)renderKnots(this,this._splineData);
         });
         this.$.selectMarked.addEventListener('click',()=>void batch('select-knot-ids'));
+        const space=()=>this.$.coordinateSpace.value;
         this.$.snapMarked.addEventListener('click',()=>{
             const step=Number(this.$.gridStep.value);
             if(!Number.isFinite(step)||step<=0||step>1e6)return show(this,'Grid step must be > 0 and <= 1000000.',true);
-            void batch('snap-selected-knots',step);
+            void batch('snap-selected-knots',step,space());
         });
-        this.$.alignMarked.addEventListener('click',()=>void batch('align-selected-knots',this.$.alignAxis.value));
+        this.$.alignMarked.addEventListener('click',()=>void batch('align-selected-knots',this.$.alignAxis.value,space()));
+        this.$.moveMarked.addEventListener('click',()=>{
+            const delta={x:Number(this.$.moveX.value),y:Number(this.$.moveY.value),z:Number(this.$.moveZ.value)};
+            if(Object.values(delta).some(n=>!Number.isFinite(n)||Math.abs(n)>1e6))
+                return show(this,'Move delta must contain finite values within ±1000000.',true);
+            void batch('move-selected-knots',delta,space());
+        });
         this.$.add.addEventListener('click',async()=>{const r=await callEditor(this,'add-knot');if(r?.ok)await refresh(this);});
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
         this.$.reverse.addEventListener('click',async()=>{const r=await callEditor(this,'reverse-direction');if(r?.ok)await refresh(this);});
