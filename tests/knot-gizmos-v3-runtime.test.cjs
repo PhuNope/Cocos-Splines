@@ -87,7 +87,7 @@ try {
         assert.equal(nodeA.worldRotation.z,30,'Rotate Gizmo writes node world rotation');
         gizmo.onGizmoChanged('editorWorldEuler','cancel');
         assert.equal(nodeA.worldRotation.z,0,'Cancel restores node world rotation');
-        let requests=0,writes=0;
+        let requests=0,writes=0,rejectSnapshot=true;
         globalThis.Editor={Message:{request:(channel,method,payload)=>{
             assert.equal(channel,'scene');
             if(method==='query-node')return {
@@ -112,7 +112,7 @@ try {
             }
             assert.equal(method,'snapshot');
             requests++;
-            return false; // reject the one serialized snapshot
+            return !rejectSnapshot;
         }}};
         gizmo.onGizmoChanged('editorTangentOut','begin');
         knot.editorTangentOut=new Vec3(7,3,0);
@@ -128,6 +128,21 @@ try {
         await new Promise(resolve=>setImmediate(resolve));
         assert.equal(nodeA.worldRotation.y,0,'Failed rotate snapshot restores previous world rotation');
         assert.equal(requests,2);
+        // Successful tangent drag: mode, both tangent vectors and one snapshot.
+        rejectSnapshot=false;
+        const writesBefore=writes;
+        gizmo.onGizmoChanged('editorTangentOut','begin');
+        knot.editorTangentOut=new Vec3(5,1,0);
+        gizmo.onGizmoChanged('editorTangentOut','end');
+        await new Promise(resolve=>setImmediate(resolve));
+        assert.equal(requests,3,'One snapshot for AutoSmooth-to-Broken tangent gesture');
+        assert.equal(knot.mode,TangentMode.Broken);
+        assert.equal(knot.tangentOut.x,5);
+        assert(writes>=writesBefore+3,'Mode and both vectors are serialized');
+        // Reset baseline for invalidated-gesture tests.
+        knot.mode=TangentMode.AutoSmooth;
+        knot.tangentIn=new Vec3(-1,0,0);
+        knot.tangentOut=new Vec3(1,0,0);
         // Component disabled mid-drag: no snapshot, tangent/mode restored.
         knot.enabled=true;
         gizmo.onGizmoChanged('editorTangentOut','begin');
@@ -136,7 +151,7 @@ try {
         gizmo.onGizmoChanged('editorTangentOut','end');
         assert.equal(knot.mode,TangentMode.AutoSmooth);
         assert.equal(knot.tangentOut.x,1);
-        assert.equal(requests,2,'Disabled component does not commit');
+        assert.equal(requests,3,'Disabled component does not commit');
         knot.enabled=true;
         // Owner moved to a different parent; do not restore its new transform
         // when cancelling a rotation from the original spline.
@@ -148,7 +163,7 @@ try {
         gizmo.onGizmoChanged('editorWorldEuler','end');
         assert.deepEqual(nodeA.worldRotation,changedRotation,
             'Reparented owner is left for its new hierarchy to manage');
-        assert.equal(requests,2);
+        assert.equal(requests,3);
         nodeA.parent=rootNode;
         nodeA.setWorldRotation(new Quat());
         delete globalThis.Editor;
