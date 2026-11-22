@@ -299,12 +299,13 @@ function queryResamplePlan(rootUuid,options){
             rotation:{x:root.rotation.x,y:root.rotation.y,z:root.rotation.z,w:root.rotation.w},
             scale:{x:root.scale.x,y:root.scale.y,z:root.scale.z},
         };
-        return {ok:true,revision,parentUuid:root.parent?.uuid||null,
+        // Geometry planning result must never override source identity
+        // or the revision token used by the Editor's stale-Scene guard.
+        return {...result,ok:true,revision,parentUuid:root.parent?.uuid||null,
             rootUuid:root.uuid,sourceName:root.name,
             dimension:spline.dimension,
             closed:spline.closed,samplesPerCurve:spline.samplesPerCurve,
-            rootTransform:tr,
-            ...result};
+            rootTransform:tr};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
 function queryResampleValid(rootUuid,revision){
