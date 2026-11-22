@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -40,7 +40,18 @@ const template=`<div class="spl-inspector spl-container-inspector">
       <div class="spl-btns spl-batch-inputs"><label>Start above <input class="spl-surface-height" type="number" step="1" min="0" max="1000000" value="10" aria-label="Surface cast height"></label><label>Cast depth <input class="spl-surface-drop" type="number" step="1" min="0.01" max="1000000" value="100" aria-label="Surface max drop"></label><button type="button" class="spl-btn spl-surface-snap">Snap to Surface</button></div>
     </div>
   </details>
-  <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
+  <details class="spl-section"><summary>Resample Spline · new copy</summary>
+     <p class="spl-note">Fits a new cubic spline at even arc intervals. Your original spline/Prefab is never replaced. Approximation error is measured at dense samples and must be within tolerance. Individual Knot rotations and other attached components are not copied.</p>
+     <div class="spl-btns spl-batch-inputs">
+       <label>Mode <select class="spl-resample-mode" aria-label="Resample mode"><option value="count">Knot count</option><option value="spacing">Max spacing</option></select></label>
+       <label>Target <input type="number" class="spl-resample-target" aria-label="Resample target" min="2" max="128" step="1" value="12"></label>
+       <label>Max error <input type="number" class="spl-resample-tolerance" aria-label="Maximum resample deviation" min="0.0001" max="10000" step="0.05" value="0.25"></label>
+       <label>Arc metric <select class="spl-resample-space" aria-label="Resample distance metric"><option value="local">Local</option><option value="world">World</option></select></label>
+       <button type="button" class="spl-btn spl-resample-create">Create resampled copy</button>
+     </div>
+     <p class="spl-note">2–128 Knots for an open curve; 3–128 for closed. Spacing mode derives the count from total length. The original stays untouched, including its tangent handles and Prefab overrides.</p>
+   </details>
+   <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
     <p class="spl-note">Dựng road mesh bằng Inspector, không cần code. Gắn Trigger để nhận event; Junction dùng để nối nhiều Spline.</p>
     <div class="spl-btns"><button type="button" class="spl-btn spl-create-2d-path">＋ Add 2D Path</button><button type="button" class="spl-btn spl-create-deform">＋ Add Mesh Deform</button></div>
@@ -192,6 +203,7 @@ async function refresh(panel){
         if(s.dimension!==0&&space.value==='world')space.value='local';
         panel.$.surfaceSnap.disabled=s.dimension!==0;
         panel.$.distributeArc.disabled=s.knots.length<3;
+        panel.$.resampleButton.disabled=s.knots.length<2;
         for(const axis of ['x','y','z']){
             const entry=panel.$['move'+axis.toUpperCase()];
             entry.disabled=axis===hiddenAxis;
@@ -252,6 +264,29 @@ module.exports={
         this.$.distributeMarked.addEventListener('click',()=>{
             if(chosen().length<3)return show(this,'Mark at least three Knots to distribute.',true);
             void batch('distribute-selected-knots',this.$.alignAxis.value,space());
+        });
+        this.$.resampleMode.addEventListener('change',()=>{
+            const count=this.$.resampleMode.value==='count';
+            this.$.resampleTarget.min=count?'2':'0.0001';
+            this.$.resampleTarget.max=count?'128':'1000000';
+            this.$.resampleTarget.step=count?'1':'0.25';
+            this.$.resampleTarget.value=count?'12':'1';
+        });
+        this.$.resampleButton.addEventListener('click',async()=>{
+            if(!this._splineData?.found)return show(this,'Select a SplineContainer first.',true);
+            const mode=this.$.resampleMode.value;
+            const target=Number(this.$.resampleTarget.value);
+            const tolerance=Number(this.$.resampleTolerance.value);
+            if(!Number.isFinite(target)||target<=0||(mode==='count'&&!Number.isInteger(target)))
+                return show(this,'Enter a positive target (integer Knot count).',true);
+            if(!Number.isFinite(tolerance)||tolerance<0.0001||tolerance>10000)
+                return show(this,'Maximum deviation must be 0.0001–10000.',true);
+            const result=await callEditor(this,'resample-selected-spline',mode,target,tolerance,
+                this.$.resampleSpace.value);
+            if(result?.ok){
+                show(this,result.message||'Created a separate spline.');
+                await refresh(this);
+            }
         });
         this.$.distributeArc.addEventListener('click',()=>{
             if(chosen().length<3)return show(this,'Mark at least three consecutive Knots.',true);
