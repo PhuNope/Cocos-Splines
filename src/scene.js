@@ -178,7 +178,7 @@ function queryKnotOrientations(rootUuid,uuids){
  * Read-back contract for Editor batch transactions. Only immediate Knot
  * children of the selected spline may participate, and no Node is modified.
  */
-function queryKnotBatchState(rootUuid,uuids){
+function queryKnotBatchState(rootUuid,uuids,expectedRevision){
     const root=resolve(rootUuid);
     if(!root||containerOf(root)!==root||
        !root.components.some(c=>classOf(c)==='Splines.SplineContainer')||
@@ -186,6 +186,14 @@ function queryKnotBatchState(rootUuid,uuids){
        uuids.some(id=>typeof id!=='string'||!id)||
        new Set(uuids).size!==uuids.length)
         return {ok:false,error:'Invalid spline or batch Knot selection.'};
+    if(expectedRevision!==undefined){
+        const spline=root.components.find(c=>classOf(c)==='Splines.SplineContainer');
+        try{
+            if(typeof expectedRevision!=='string'||typeof spline.getRevision!=='function'||
+               spline.getRevision()!==expectedRevision)
+                return {ok:false,error:'Spline geometry changed after arc distribution planning.'};
+        }catch(error){return {ok:false,error:String(error?.message||error)};}
+    }
     const states=[];
     for(const uuid of uuids){
         const node=resolve(uuid);
@@ -201,6 +209,28 @@ function queryKnotBatchState(rootUuid,uuids){
         states.push({uuid,position,rotation});
     }
     return {ok:true,states};
+}
+/** Read-only plan from the exact runtime evaluator, in its traversal order. */
+function queryArcDistribution(rootUuid,ids){
+    const root=resolve(rootUuid);
+    const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
+    if(!root||!spline||spline.enabled===false||root.isValid===false)
+        return {ok:false,error:'Not an active SplineContainer.'};
+    try{
+        if(typeof spline.getRevision!=='function'||!Array.isArray(spline.knots))
+            throw Error('Spline arc evaluator is unavailable.');
+        const knots=spline.knots.map(k=>{
+            const n=k.node;
+            if(!n||n.parent!==root||n.isValid===false)
+                throw Error('Invalid Knot hierarchy.');
+            return {uuid:n.uuid,position:{x:n.position.x,y:n.position.y,z:n.position.z}};
+        });
+        const revision=spline.getRevision();
+        const {planArcDistribution}=require('./SplineKnotEditMath');
+        const edits=planArcDistribution(knots,ids,spline.dimension,spline.closed,spline);
+        if(spline.getRevision()!==revision)throw Error('Spline changed while planning arc distribution.');
+        return {ok:true,edits,revision};
+    }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
@@ -381,5 +411,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

@@ -1,3 +1,7 @@
+# Unreleased — Phase 2.17 Local Arc Distribution
+
+- Redistribute interior Knots along the original open spline's local arc using the runtime evaluator; fixed endpoints, contiguous enabled selection, reverse traversal, planar constraints and revision preflight. Reuses batch position history. Not shape-preserving resampling.
+
 # Unreleased — Phase 2.16 Axis Distribution
 
 - Added Distribute marked to Batch Knot Tools; deterministic axis spacing with fixed extremes, Local/World and planar constraints, existing batch transaction and rollback. Not arc-length resampling. Regression tests cover planner, Inspector and Editor message flow.

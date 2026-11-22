@@ -132,6 +132,41 @@ function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatri
     }).filter(e=>e.changed);
 }
 
+/**
+ * Redistribute interior Knots on the ORIGINAL open spline's local arc.
+ * orderedKnots must match the evaluator's traversal order (including reversed).
+ * The evaluator is read-only throughout planning. No control-vector retargeting.
+ */
+function planArcDistribution(orderedKnots,ids,dimension,closed,evaluator){
+    if(closed!==false)throw Error('Arc distribution currently requires an open spline.');
+    if(![0,1,2].includes(dimension))throw Error('Invalid spline dimension.');
+    const selected=validatedKnots(orderedKnots,ids);
+    if(selected.length<3)throw Error('Arc distribution requires at least three marked Knots.');
+    const start=orderedKnots.indexOf(selected[0]),end=orderedKnots.indexOf(selected[selected.length-1]);
+    if(end-start+1!==selected.length)throw Error('Mark a contiguous run of Knots in the spline.');
+    if(!evaluator||typeof evaluator.distanceAtT!=='function'||typeof evaluator.evaluateAtDistance!=='function')
+        throw Error('Spline arc evaluator is unavailable.');
+    const segments=orderedKnots.length-1;
+    if(evaluator.segmentCount!==segments)throw Error('Spline segment count changed.');
+    const a=evaluator.distanceAtT(start/segments),b=evaluator.distanceAtT(end/segments);
+    if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<a)
+        throw Error('Invalid spline arc distances.');
+    if(b-a<=1e-8)return [];
+    const axes=dimensionAxes(dimension);
+    const edits=[];
+    for(let i=1;i<selected.length-1;i++){
+        const knot=selected[i],t=i/(selected.length-1);
+        const point=evaluator.evaluateAtDistance(a+(b-a)*t)?.position;
+        if(!validPoint(point))throw Error('Spline returned an invalid arc sample.');
+        const before={x:knot.position.x,y:knot.position.y,z:knot.position.z};
+        const after={...before};
+        for(const axis of axes)after[axis]=point[axis];
+        if(AXES.some(axis=>Math.abs(after[axis]-before[axis])>1e-8))
+            edits.push({uuid:knot.uuid,before,after,changed:true});
+    }
+    return edits;
+}
+
 /** Unit quaternions, independent of Cocos math / Editor runtime. */
 function validQuaternion(q){
     return !!q&&['x','y','z','w'].every(k=>typeof q[k]==='number'&&Number.isFinite(q[k]));
@@ -250,4 +285,4 @@ function planSurfaceKnotPositions(knots,ids,hits,worldMatrix,alignNormal=false,p
             changed:positionChanged||rotationChanged};
     }).filter(edit=>edit.changed);
 }
-module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions,planSurfaceKnotPositions,alignLocalRotationToNormal,quaternionChanged};
+module.exports={dimensionAxes,gridStep,validatedKnots,transformFrame,planKnotPositions,planArcDistribution,planSurfaceKnotPositions,alignLocalRotationToNormal,quaternionChanged};

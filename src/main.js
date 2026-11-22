@@ -104,8 +104,16 @@ async function applyKnotPlacement(operation,ids,options){
         const info=await selectedSpline();
         if(!info?.found)throw new Error(info?.message||'Select a SplineContainer or Knot.');
         const selectedIds=selectedKnotIds(info,ids);
-        let edits;
-        if(operation==='surface'){
+        let edits,arcRevision;
+        if(operation==='distribute-arc'){
+            const result=await invokeScene('queryArcDistribution',info.rootUuid,selectedIds);
+            if(!result?.ok||!Array.isArray(result.edits)||typeof result.revision!=='string')
+                throw Error(result?.error||'Cannot plan arc distribution.');
+            if(result.edits.some(edit=>!selectedIds.includes(edit.uuid)))
+                throw Error('Arc distribution returned a foreign Knot.');
+            edits=result.edits;
+            arcRevision=result.revision;
+        }else if(operation==='surface'){
             if(info.dimension!==0)throw new Error('Mesh surface snapping supports 3D splines only.');
             if(selectedIds.length>64)throw new Error('Surface snap supports at most 64 Knots per batch.');
             if(typeof options.targetUuid!=='string'||!options.targetUuid)
@@ -143,8 +151,14 @@ async function applyKnotPlacement(operation,ids,options){
             edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
         }
         if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
+        let initialRead=true;
         await commitKnotEdits(edits,{
-            read:uuids=>invokeScene('queryKnotBatchState',info.rootUuid,uuids),
+            read:uuids=>{
+                const revision=initialRead?arcRevision:undefined;
+                initialRead=false;
+                return revision===undefined?invokeScene('queryKnotBatchState',info.rootUuid,uuids):
+                    invokeScene('queryKnotBatchState',info.rootUuid,uuids,revision);
+            },
             writePosition:writeKnotPosition,
             writeRotation:writeKnotRotation,
             snapshot,
@@ -157,6 +171,7 @@ async function applyKnotPlacement(operation,ids,options){
                 operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
                 operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
                 operation==='distribute'?'Distributed '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
+                operation==='distribute-arc'?'Distributed '+edits.length+' knot(s) on the original local spline arc.':
                 'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
 }
@@ -488,6 +503,10 @@ const methods={
     async distributeSelectedKnots(ids,axis,space='local'){
         try{return await applyKnotPlacement('distribute',ids,{axis,space});}
         catch(error){return alertError('distribute-selected-knots',error);}
+    },
+    async distributeSelectedKnotsByArc(ids){
+        try{return await applyKnotPlacement('distribute-arc',ids,{});}
+        catch(error){return alertError('distribute-selected-knots-by-arc',error);}
     },
     async moveSelectedKnots(ids,delta,space='local'){
         try{return await applyKnotPlacement('move',ids,{delta,space});}

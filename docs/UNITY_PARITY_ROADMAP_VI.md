@@ -176,3 +176,9 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Distribute marked Knot coordinates evenly on an active axis, preserving extremes and hierarchy.
 - [x] Local/World 3D and Local 2D constraints; shared batch transaction and regression tests.
 - [ ] Creator native Undo/Redo and Prefab smoke test; arc-length redistribution is separate.
+
+### Phase 2.17 — Local Arc Distribution
+
+- [x] Distribute interior Knot positions along original local arc, contiguous open spline selection, reversed and 2D constraints.
+- [x] Reuse evaluator and batch transaction; geometry revision guard and regression tests.
+- [ ] Closed-loop redistribution, World arc metric, shape-preserving resampling and native Creator acceptance.
