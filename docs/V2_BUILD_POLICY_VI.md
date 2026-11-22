@@ -46,3 +46,7 @@ The preview blocks overlapping Knot Gizmo transactions within one spline while a
 ### Phase 2.15 Scene lease safety
 
 Builds reject further serialized Scene writes/snapshots/rollback once the original Scene/Prefab ancestry becomes invalid. Already-dispatched native IPC cannot be cancelled by the extension. Verify rapid Scene switch/unload in a copy of a Creator 3.8.8 project and check Prefab overrides, Undo/Redo. Use existing Gizmos v3 preview with `supportsExternalHistory`. No tag/Release.
+
+### Phase 2.19 preview acceptance
+
+Resample Spline creates a separate sibling spline; source/Prefab topology remains untouched. Test Count/Spacing and Local/World metrics, low-error refusal, closed/reversed curves, native one-step Undo for creation and save/reopen. The math reports a sampled deviation estimate, not a certified continuous bound. Only geometry/Container settings are copied — individual Knot rotation and associated generators are not cloned. The existing Gizmos v3 preview is sufficient; no tag/Release.

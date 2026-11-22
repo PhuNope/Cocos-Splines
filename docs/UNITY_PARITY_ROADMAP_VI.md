@@ -188,3 +188,12 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Closed partial run across seam and full-loop distribution, Local/World metric with transformed chord lengths.
 - [x] Runtime metric LUT, revision/order/matrix preflight and planar constraints.
 - [ ] Shape-preserving resampling and native Creator acceptance.
+
+### Phase 2.19 — Non-destructive Resample Spline
+
+- [x] Resample with Knot count or target spacing and Local/World arc metric; open/closed and planar geometry supported.
+- [x] Fit independent Bezier handles, sample-estimated maximum deviation threshold, bounded 128 new Knots and 65536 source LUT samples.
+- [x] Editor creates a separate sibling spline with copied root transform and spline settings; source topology/Prefab untouched, best-effort failure cleanup and source revision checks.
+- [x] Pure math and Editor-message integration tests.
+- [ ] Certified continuous geometric error bound, native Undo/Redo for structural edits, orientation/child-component copying, destructive source replacement.
+- [ ] Phase 2.20: Simplify spline by removing redundant Knot geometry within tolerance.

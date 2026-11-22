@@ -1,3 +1,14 @@
+# Unreleased — Phase 2.19 Non-Destructive Spline Resampling
+
+- Added **Resample Spline · new copy** to SplineContainer Inspector, with target Knot count (open 2–128 / closed 3–128) or maximum nominal arc spacing, Local/World length metric and explicit maximum estimated deviation.
+- New pure TypeScript `SplineResampleMath` fits cubic Bezier spans by least squares over arc-distance samples of the ORIGINAL curve. Generates Broken tangent pairs at evenly spaced arc targets, measures the maximum correspondence deviation at 49 samples/span and refuses the plan if that sample estimate exceeds tolerance. The value is not a mathematically certified continuous Hausdorff bound.
+- Generates a separate sibling SplineContainer, preserving the original spline, Knot nodes, handles and Prefab Instance data. Reuses official Scene Editor create-node/create-component/set-property, checks original source revision/transforms/hierarchy before creation and before snapshot, and requests one final snapshot on success. On failure, best-effort cleanup removes the newly constructed spline only when the original Scene identity remains current.
+- Copies the source root local position/rotation/scale and spline closed/dimension/samplesPerCurve settings; source reversed traversal is materialized as new natural Knot hierarchy (`reversed=false` on the copy).
+- World option uses the original Container affine matrix for both sampling distances and deviation metric, supporting non-uniform scale. Tangent vectors remain in the new Container's local coordinates; 2D projections remain in their authored plane.
+- Does **not** copy per-Knot rotations, arbitrary Knot child Nodes, bound Road/MeshDeform components, junction links or the source Prefab's identity; the generated sibling is intentionally independent. No destructive Knot deletion/replacement or unreliable external Prefab edits.
+- New regression tests cover count/spacing, curved/straight/closed splines, World metric, error rejection, generated Inspector controls, one-snapshot sibling creation, source untouched, failure cleanup and stale source fingerprint.
+- Native Creator 3.8.8 structural Undo/Redo and Prefab override behavior still require a real Editor smoke test. No tag or GitHub Release; preview branch only.
+
 # Unreleased — Phase 2.18 Closed / World Arc Distribution
 
 - Supports cyclic contiguous selections and full-loop distribution, deterministic seam anchor, local/world arc metric on original Bezier geometry, 2D hidden-axis preservation and metric-aware preflight. Bounded LUT sampling.

@@ -342,3 +342,27 @@ Trong Batch Knot Tools, chọn ít nhất 3 Knot liên tiếp đang enabled trê
 ## Phase 2.18 — Closed Spline / World Arc Distribution
 
 Batch Knot Tools → Arc metric (Local/World) → Distribute along Arc. Mark ít nhất 3 Knot enabled liên tiếp. Với spline kín, hỗ trợ đoạn chọn đi qua seam; giữ hai Knot biên. Nếu chọn toàn bộ loop, giữ Knot đầu theo thứ tự evaluator (reversed làm đổi anchor) và chia cả vòng thành N khoảng. World đo chiều dài sau affine transform của Container (rotation, non-uniform scale, shear), trả vị trí local, giữ trục ẩn XY2D/XZ2D. Dùng LUT của evaluator, độ chính xác theo Samples Per Curve, giới hạn 65536 mẫu; từ chối world transform suy biến. Kiểm tra revision, thứ tự UUID và world matrix trước khi ghi. Không đảm bảo shape preservation hoặc khoảng cách đều trên spline SAU khi chỉnh. Native Undo/Redo và Prefab cần Creator smoke test. Không nâng cấp Gizmos.
+
+## Phase 2.19 — Resample Spline (độc lập, không phá dữ liệu nguồn)
+
+**Thao tác:**
+
+1. Chọn SplineContainer trong Hierarchy, mở **Resample Spline · new copy**.
+2. Chọn `Knot count` hoặc `Max spacing`. Số Knot tối đa 128 để giới hạn lượng Node IPC trong Editor. Với spline kín, số Knot tối thiểu 3.
+3. Chọn Arc metric **Local** hoặc **World**. World tính chiều dài sau non-uniform scale/rotation/shear; các Knot mới vẫn được lưu dưới dạng tọa độ local trong Container.
+4. Chọn `Max error` tính bằng unit của metric (mặc định 0.25) và nhấn **Create resampled copy**.
+5. Nếu fit thành công, plugin tạo một **SplineContainer sibling** chứa các Knot mới và chọn Node mới. Spline/Prefab nguồn không thay đổi. Nếu sai số vượt tolerance, plugin từ chối không tạo Node.
+
+**Thuật toán:** sử dụng `SplineMath.buildArcLUT` trên đường cong gốc, chia chiều dài cung thành các khoảng gần đều, fit mỗi khoảng bằng Bezier cubic với least squares ở 23 điểm nội bộ. Đo sai số giữa mẫu trên đường cong gốc và spline fit tại 49 điểm/đoạn. Đây là **ước lượng sai số theo mẫu có tham số tương ứng**, không phải chứng minh chặn tuyệt đối trên toàn miền liên tục. Tangent được xuất dưới dạng Broken và parent-local. Geometry 2D giữ trục không hoạt động bằng 0.
+
+**Undo, Prefab và bảo toàn nguồn:** ghi qua Editor create-node/create-component/set-property với `record:false` cho các property, rồi gọi một Scene snapshot cuối. Source fingerprint gồm geometry revision, Hierarchy UUID order, transform và ma trận World, được kiểm tra trước và sau tạo Node. Nếu thất bại trong Scene còn hợp lệ, thử xóa sibling dở dang; không xóa/ghi đè nguồn. Khi Scene đã đổi, không gửi cleanup sang Scene mới. Khả năng Editor gom toàn bộ thao tác tạo Node thành một bước Undo **chưa được xác minh native**.
+
+**Smoke test Creator 3.8.8:**
+
+- Spline thẳng và Spline cong (AutoSmooth / Broken): thử Knot count 8, 16; Max spacing 0.5, 1; chọn Max error chặt để kiểm tra từ chối.
+- Spline kín và reversed: kiểm tra mối nối, thứ tự Knot mới và đoạn cong không bị lộn.
+- SplineContainer parent xoay/scale không đều: so sánh Local/World length, vị trí spline mới và hình dạng Road tạo mới từ spline mới.
+- Spline XY2D/XZ2D: kiểm tra không trôi trục ẩn; undo/reload Scene và Nested Prefab nguồn.
+- Giả lập create-node/set-property lỗi, kiểm tra sibling dở dang được cleanup và nguồn không đổi.
+
+**Giới hạn:** không sao chép các component phụ, orientation riêng của Knot hoặc handle Node; tạo ra spline hình học mới. Không thay đổi Prefab instance gốc và không sửa metadata `__prefab`.

@@ -103,3 +103,11 @@ Trong Batch Knot Tools, chọn ít nhất 3 Knot liên tiếp đang enabled trê
 ## Phase 2.18 — Closed Spline / World Arc Distribution
 
 Batch Knot Tools → Arc metric (Local/World) → Distribute along Arc. Mark ít nhất 3 Knot enabled liên tiếp. Với spline kín, hỗ trợ đoạn chọn đi qua seam; giữ hai Knot biên. Nếu chọn toàn bộ loop, giữ Knot đầu theo thứ tự evaluator (reversed làm đổi anchor) và chia cả vòng thành N khoảng. World đo chiều dài sau affine transform của Container (rotation, non-uniform scale, shear), trả vị trí local, giữ trục ẩn XY2D/XZ2D. Dùng LUT của evaluator, độ chính xác theo Samples Per Curve, giới hạn 65536 mẫu; từ chối world transform suy biến. Kiểm tra revision, thứ tự UUID và world matrix trước khi ghi. Không đảm bảo shape preservation hoặc khoảng cách đều trên spline SAU khi chỉnh. Native Undo/Redo và Prefab cần Creator smoke test. Không nâng cấp Gizmos.
+
+## Phase 2.19 — Resample Spline (tạo bản sao mới)
+
+Trong **SplineContainer Inspector → Resample Spline · new copy**, chọn `Knot count` (số Knot: spline mở 2–128, kín 3–128) hoặc `Max spacing` (khoảng cách cung mục tiêu, suy ra số Knot), chọn metric **Local/World** và `Max error`. Hệ thống lấy mẫu cung của spline gốc, fit từng đoạn Bezier với hai tangent độc lập (`Broken`) và đo sai số tại 49 điểm/đoạn. Nếu giá trị đo vượt giới hạn thì **không tạo spline mới**.
+
+Thao tác tạo **một SplineContainer mới cùng cấp**, copy local position/rotation/scale và thuộc tính closed/dimension/samplesPerCurve. Spline gốc vẫn giữ nguyên, bao gồm Prefab overrides. Thứ tự Knot mới là thứ tự evaluator; nếu spline gốc bật `reversed`, spline mới dùng Hierarchy tương ứng và `reversed=false`.
+
+**Không phải clone Prefab hoàn chỉnh:** không sao chép rotation riêng từng Knot, handle Node, Road, Extrude, MeshDeform, Junction hoặc các component con khác. Resample xấp xỉ hình dạng theo giới hạn sai số *lấy mẫu*, không bảo đảm khoảng cách Hausdorff liên tục. Undo/Redo việc tạo cả cấu trúc vẫn cần test Creator 3.8.8 thực tế.
