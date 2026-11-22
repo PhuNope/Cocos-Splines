@@ -26,16 +26,24 @@ async function position(node,xyz){
         uuid:node,path:'position',dump:{type:'cc.Vec3',value:{x:xyz[0],y:xyz[1],z:xyz[2]}},record:false});
     if(ok===false)throw new Error(`Cannot set position of ${node}`);
 }
-async function property(root,index,key,value,type){
+async function property(root,index,key,value,type,record=true){
     const result=await Editor.Message.request('scene','set-property',{
-        uuid:root,path:`__comps__.${index}.${key}`,dump:{type,value},record:true});
-    if(result===false)throw new Error(`set-property failed for ${key}`);
+        uuid:root,path:`__comps__.${index}.${key}`,dump:{type,value},record});
+    if(result===false||(result&&result.ok===false))throw new Error(`set-property failed for ${key}`);
 }
 async function snapshot(){
     const result=await Editor.Message.request('scene','snapshot');
     if(result===false||(result&&typeof result==='object'&&result.ok===false))
         throw Error('Scene snapshot was rejected.');
     return result;
+}
+/** Author a genuine Node serialized field; never use computed Gizmo ports. */
+async function setNodeSerialized(uuid,path,type,value){
+    const response=await Editor.Message.request('scene','set-property',{
+        uuid,path,dump:{type,value},record:false,
+    });
+    if(response===false||(response&&response.ok===false))
+        throw Error('Cannot serialize '+path+' for '+uuid);
 }
 async function setKnotValue(uuid,key,value,fallbackType,record=false){
     const dump=await Editor.Message.request('scene','query-node',uuid);
@@ -442,6 +450,94 @@ const methods={
             }
             await snapshot();selectOnly(root);await invokeScene('refreshPreview',root);return {ok:true,root};
         }catch(e){return alertError('create',e);}
+    },
+    /**
+     * Resample as a NEW sibling spline. The original, including Prefab
+     * instance children, remains unchanged. No destructive delete/reorder
+     * is attempted. The entire generated sibling uses one final snapshot.
+     */
+    async resampleSelectedSpline(mode,target,tolerance,space='local'){
+        if(knotEditBusy)return alertError('resample-spline',Error('Another Knot edit is in progress.'));
+        knotEditBusy=true;
+        let created=null,sourceUuid=null,revision=null;
+        try{
+            if(mode!=='count'&&mode!=='spacing')throw Error('Choose Count or Spacing for resample.');
+            if(space!=='local'&&space!=='world')throw Error('Resample metric must be Local or World.');
+            if(!Number.isFinite(target)||!Number.isFinite(tolerance))
+                throw Error('Resample target/tolerance must be finite numbers.');
+            await ensureClasses();
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a SplineContainer.');
+            const plan=await invokeScene('queryResamplePlan',info.rootUuid,
+                {mode,target,tolerance,space});
+            if(!plan?.ok)throw Error(plan?.error||'Resample planner failed.');
+            sourceUuid=info.rootUuid;revision=plan.revision;
+            const finiteVec=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            const finiteQuat=q=>finiteVec(q)&&Number.isFinite(q.w);
+            if(plan.rootUuid!==sourceUuid||typeof revision!=='string'||!revision||
+                !Number.isInteger(plan.count)||plan.count<2||plan.count>128||
+                !Array.isArray(plan.knots)||plan.knots.length!==plan.count||
+                !Number.isFinite(plan.estimatedMaxError)||
+                plan.estimatedMaxError>tolerance||
+                !finiteVec(plan.rootTransform?.position)||
+                !finiteVec(plan.rootTransform?.scale)||
+                !finiteQuat(plan.rootTransform?.rotation)||
+                plan.knots.some(k=>!finiteVec(k.position)||!finiteVec(k.tangentIn)||
+                    !finiteVec(k.tangentOut)||k.mode!==4))
+                throw Error('Invalid or stale resample result from Scene.');
+            const assertOriginal=async()=>{
+                const check=await invokeScene('queryResampleValid',sourceUuid,revision);
+                if(!check?.ok)throw Error(check?.error||'Original spline changed during resample.');
+            };
+            await assertOriginal();
+            created=await makeNode(plan.parentUuid,
+                String(plan.sourceName||'Spline').slice(0,72)+' (Resampled)');
+            await component(created,'Splines.SplineContainer');
+            await setNodeSerialized(created,'position','cc.Vec3',plan.rootTransform.position);
+            await setNodeSerialized(created,'rotation','cc.Quat',plan.rootTransform.rotation);
+            await setNodeSerialized(created,'scale','cc.Vec3',plan.rootTransform.scale);
+            // Source collect() is in evaluator order (possibly reversed).
+            // New Knot hierarchy follows this order with reversed=false.
+            await property(created,0,'closed',plan.closed,'Boolean',false);
+            await property(created,0,'reversed',false,'Boolean',false);
+            await property(created,0,'dimension',plan.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',plan.samplesPerCurve,'Integer',false);
+            for(let i=0;i<plan.knots.length;i++){
+                if(i%8===0)await assertOriginal();
+                const k=plan.knots[i];
+                const id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(id,'Splines.SplineKnot');
+                await position(id,[k.position.x,k.position.y,k.position.z]);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',k.tangentIn,'cc.Vec3');
+                await setKnotValue(id,'tangentOut',k.tangentOut,'cc.Vec3');
+            }
+            await assertOriginal();
+            await snapshot();
+            selectOnly(created);
+            return {ok:true,root:created,count:plan.count,
+                estimatedMaxError:plan.estimatedMaxError,
+                message:'Created a separate resampled spline with '+plan.count+
+                    ' Knots; estimated '+space+' deviation '+
+                    plan.estimatedMaxError.toFixed(5)+'. Original preserved.'};
+        }catch(error){
+            let cleanupWarning='';
+            if(created&&sourceUuid&&revision){
+                try{
+                    // Do not send remove-node to a different Scene after unload.
+                    const check=await invokeScene('queryResampleValid',sourceUuid,revision);
+                    if(check?.ok){
+                        const removed=await Editor.Message.request('scene','remove-node',{
+                            uuid:created,snapshot:false,
+                        });
+                        if(removed===false||(removed&&removed.ok===false))
+                            throw Error('Editor rejected generated-spline cleanup.');
+                    }else cleanupWarning='; old Scene changed — cleanup skipped';
+                }catch(cleanupError){cleanupWarning='; cleanup failed: '+String(cleanupError);}
+            }
+            return alertError('resample-spline',
+                Error(String(error?.message||error)+cleanupWarning));
+        }finally{knotEditBusy=false;}
     },
     async addKnot(){
         try{
