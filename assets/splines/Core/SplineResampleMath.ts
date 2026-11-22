@@ -110,7 +110,7 @@ export function resampleSpline(
     const knots:M.KnotData[]=[];
     for(let i=0;i<count;i++){
         const prev=spans[(i-1+spanCount)%spanCount],next=spans[i%spanCount];
-        const pos=next.p0;
+        const pos=!closed&&i===count-1?prev.p3:next.p0;
         const incoming=closed||i>0?M.sub(prev.p2,prev.p3):point();
         const outgoing=closed||i<spanCount?M.sub(next.p1,next.p0):point();
         knots.push({position:point(pos.x,pos.y,pos.z),
