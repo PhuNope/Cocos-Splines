@@ -252,6 +252,70 @@ function queryArcDistribution(rootUuid,ids,space='local'){
         return {ok:true,edits,revision};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
+/** Structural resampling fingerprint includes Node transforms, parent,
+ * Knot order and geometry; a stale plan must not create more Scene Nodes. */
+function resampleFingerprint(root,spline) {
+    if(!root||root.isValid===false||!spline||spline.enabled===false)
+        throw Error('Resample source is no longer active.');
+    const frame=queryKnotEditFrame(root.uuid);
+    if(!frame.ok)throw Error(frame.error);
+    const point=node=>({
+        x:node.x,y:node.y,z:node.z,
+        ...(typeof node.w==='number'?{w:node.w}:{})
+    });
+    return JSON.stringify([
+        root.uuid,root.parent?.uuid||null,
+        point(root.position),point(root.rotation),point(root.scale),
+        frame.matrix,
+        spline.getRevision(),spline.knots.map(k=>k.node.uuid),
+    ]);
+}
+/** A read-only plan, independent of any editor scene mutations. */
+function queryResamplePlan(rootUuid,options){
+    const root=resolve(rootUuid);
+    const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
+    if(!root||containerOf(root)!==root||!spline||root.isValid===false||
+       !options||typeof options!=='object')
+        return {ok:false,error:'Invalid SplineContainer or resample options.'};
+    try{
+        if(typeof spline.createResamplePlan!=='function')
+            throw Error('Resample runtime method unavailable; import scripts and retry.');
+        const space=options.space||'local';
+        if(space!=='local'&&space!=='world')throw Error('Invalid resample space.');
+        const revision=resampleFingerprint(root,spline);
+        let metric;
+        if(space==='world'){
+            const frame=queryKnotEditFrame(rootUuid);
+            if(!frame.ok)throw Error(frame.error);
+            const matrix=frame.matrix.slice();
+            matrix[12]=matrix[13]=matrix[14]=0;
+            metric=require('./SplineKnotEditMath').transformFrame(matrix).toWorld;
+        }
+        const result=spline.createResamplePlan(options,metric);
+        if(resampleFingerprint(root,spline)!==revision)
+            throw Error('Source spline changed while planning resample.');
+        const tr={
+            position:{x:root.position.x,y:root.position.y,z:root.position.z},
+            rotation:{x:root.rotation.x,y:root.rotation.y,z:root.rotation.z,w:root.rotation.w},
+            scale:{x:root.scale.x,y:root.scale.y,z:root.scale.z},
+        };
+        return {ok:true,revision,parentUuid:root.parent?.uuid||null,
+            rootUuid:root.uuid,sourceName:root.name,
+            dimension:spline.dimension,
+            closed:spline.closed,samplesPerCurve:spline.samplesPerCurve,
+            rootTransform:tr,
+            ...result};
+    }catch(error){return {ok:false,error:String(error?.message||error)};}
+}
+function queryResampleValid(rootUuid,revision){
+    const root=resolve(rootUuid);
+    const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
+    try {
+        if(typeof revision!=='string'||!revision||resampleFingerprint(root,spline)!==revision)
+            throw Error('Source spline or parent transform changed during resample.');
+        return {ok:true};
+    }catch(error){return {ok:false,error:String(error?.message||error)};}
+}
 function refreshPreview(uuid){
     const root=resolve(uuid);if(!root)return {ok:false,error:'Spline not found'};
     const {js}=require('cc');let count=0;
@@ -431,5 +495,5 @@ function spawnPrefabs(uuid,kind,action){
             'Spawned '+after+' prefab instances in Scene Hierarchy.'};
     }catch(error){return {ok:false,error:String(error)};}
 }
-exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

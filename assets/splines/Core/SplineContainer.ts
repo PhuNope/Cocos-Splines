@@ -1,6 +1,7 @@
 import { _decorator, Component, Vec3, Quat, Enum, Color } from 'cc';
 import { SplineKnot, TangentMode } from './SplineKnot';
 import * as M from './SplineMath';
+import {resampleSpline, ResampleOptions, ResampleResult} from './SplineResampleMath';
 import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
 import { SplineContainerGizmos } from '../Editor/SplineContainerGizmos';
 import { closestParameter } from './SplineProjectionMath';
@@ -76,6 +77,12 @@ export class SplineContainer extends Component {
         return {segmentCount:lut.segments,
             distanceAtT:(t:number)=>M.distanceAtParameter(lut,t),
             evaluateAtDistance:(distance:number)=>M.sampleDistance(lut,distance)};
+    }
+    /** Non-destructive topology plan. Editor creates a NEW spline sibling.
+     * Source Knot nodes / Prefab instance data are never modified. */
+    public createResamplePlan(options:ResampleOptions,metric?:(point:M.V3)=>M.V3):ResampleResult {
+        return resampleSpline(this.collect(),this.closed,
+            {...options,samplesPerCurve:this.samplesPerCurve},metric);
     }
     public get length():number{return this.ensure().total;}
     public get count():number{return this.knots.length;}
