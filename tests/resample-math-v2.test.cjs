@@ -7,7 +7,7 @@ try{
   '--noEmit','false','--outDir',tmp]);
  const {resampleSpline}=require(path.join(tmp,'Core/SplineResampleMath.js'));
  const M=require(path.join(tmp,'Core/SplineMath.js'));
- const v=(x,y=0,z=0)=>({x,y,z}),linear=(x)=>({
+ const v=(x=0,y=0,z=0)=>({x,y,z}),linear=(x)=>({
   position:v(x),tangentIn:v(),tangentOut:v(),mode:1,
  });
  const options=(mode,target,tolerance=0.25,space='local')=>({mode,target,tolerance,space});
