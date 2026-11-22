@@ -1,3 +1,7 @@
+# Unreleased — Phase 2.18 Closed / World Arc Distribution
+
+- Supports cyclic contiguous selections and full-loop distribution, deterministic seam anchor, local/world arc metric on original Bezier geometry, 2D hidden-axis preservation and metric-aware preflight. Bounded LUT sampling.
+
 # Unreleased — Phase 2.17 Local Arc Distribution
 
 - Redistribute interior Knots along the original open spline's local arc using the runtime evaluator; fixed endpoints, contiguous enabled selection, reverse traversal, planar constraints and revision preflight. Reuses batch position history. Not shape-preserving resampling.

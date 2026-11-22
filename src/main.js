@@ -106,7 +106,7 @@ async function applyKnotPlacement(operation,ids,options){
         const selectedIds=selectedKnotIds(info,ids);
         let edits,arcRevision;
         if(operation==='distribute-arc'){
-            const result=await invokeScene('queryArcDistribution',info.rootUuid,selectedIds);
+            const result=await invokeScene('queryArcDistribution',info.rootUuid,selectedIds,options.space);
             if(!result?.ok||!Array.isArray(result.edits)||typeof result.revision!=='string')
                 throw Error(result?.error||'Cannot plan arc distribution.');
             if(result.edits.some(edit=>!selectedIds.includes(edit.uuid)))
@@ -157,7 +157,7 @@ async function applyKnotPlacement(operation,ids,options){
                 const revision=initialRead?arcRevision:undefined;
                 initialRead=false;
                 return revision===undefined?invokeScene('queryKnotBatchState',info.rootUuid,uuids):
-                    invokeScene('queryKnotBatchState',info.rootUuid,uuids,revision);
+                    invokeScene('queryKnotBatchState',info.rootUuid,uuids,revision,options.space);
             },
             writePosition:writeKnotPosition,
             writeRotation:writeKnotRotation,
@@ -171,7 +171,7 @@ async function applyKnotPlacement(operation,ids,options){
                 operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
                 operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
                 operation==='distribute'?'Distributed '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
-                operation==='distribute-arc'?'Distributed '+edits.length+' knot(s) on the original local spline arc.':
+                operation==='distribute-arc'?'Distributed '+edits.length+' knot(s) on the original '+options.space+' spline arc.':
                 'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
 }
@@ -504,8 +504,8 @@ const methods={
         try{return await applyKnotPlacement('distribute',ids,{axis,space});}
         catch(error){return alertError('distribute-selected-knots',error);}
     },
-    async distributeSelectedKnotsByArc(ids){
-        try{return await applyKnotPlacement('distribute-arc',ids,{});}
+    async distributeSelectedKnotsByArc(ids,space='local'){
+        try{return await applyKnotPlacement('distribute-arc',ids,{space});}
         catch(error){return alertError('distribute-selected-knots-by-arc',error);}
     },
     async moveSelectedKnots(ids,delta,space='local'){

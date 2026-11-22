@@ -26,7 +26,7 @@ const reversed={segmentCount:4,distanceAtT:t=>12-cumulative[4-Math.round(t*4)],
 const reversePlan=planArcDistribution([...raw].reverse(),ids,1,false,reversed);
 for(const e of reversePlan){const f=plan.find(x=>x.uuid===e.uuid);assert(Math.abs(e.after.y-f.after.y)<1e-8);}
 assert.throws(()=>planArcDistribution(raw,['0','2','3'],1,false,evaluator),/contiguous/);
-assert.throws(()=>planArcDistribution(raw,ids,1,true,evaluator),/open spline/);
+assert.throws(()=>planArcDistribution(raw,ids,1,true,evaluator),/segment count/);
 assert.throws(()=>planArcDistribution(raw,['0','1'],1,false,evaluator),/at least three/);
 assert.throws(()=>planArcDistribution(raw,ids,1,false,{...evaluator,segmentCount:3}),/segment count/);
 assert.deepEqual(planArcDistribution(raw,ids,1,false,{...evaluator,distanceAtT:()=>0}),[]);
@@ -39,7 +39,7 @@ const root={uuid:'root',parent:null,children:state,components:[]};
 state.forEach(n=>{n.parent=root;n.components=[{kind:'Splines.SplineKnot',node:n,enabled:true}];});
 let revision='original';
 const spline={kind:'Splines.SplineContainer',enabled:true,dimension:1,closed:false,
- get knots(){return state.map(n=>n.components[0]);},getRevision:()=>revision,...evaluator};
+ get knots(){return state.map(n=>n.components[0]);},getRevision:()=>revision,createArcDistributionEvaluator:()=>evaluator,...evaluator};
 root.components=[spline];
 const old=Module._load;
 Module._load=function(name,...args){if(name==='cc')return {director:{getScene:()=>root},js:{getClassName:c=>c.kind}};return old.call(this,name,...args);};
@@ -47,8 +47,8 @@ const scene=require('../src/scene.js').methods;
 try{
  const result=scene.queryArcDistribution('root',ids);
  assert(result.ok,result.error);assert.deepEqual(result.edits,plan);
- assert(scene.queryKnotBatchState('root',['1'],'original').ok);
- revision='changed';assert(!scene.queryKnotBatchState('root',['1'],'original').ok);
+ assert(scene.queryKnotBatchState('root',['1'],result.revision).ok);
+ revision='changed';assert(!scene.queryKnotBatchState('root',['1'],result.revision).ok);
  revision='original';
  assert(!scene.queryArcDistribution('foreign',ids).ok);
 }finally{Module._load=old;}
@@ -59,7 +59,7 @@ global.Editor={Selection:{getSelected:()=>['root']},Message:{request:async(chann
   if(arg.method==='querySpline')return {found:true,rootUuid:'root',dimension:1,knots:state.map(k=>({uuid:k.uuid,position:{...k.position}}))};
   if(arg.method==='queryArcDistribution')return {ok:true,edits:plan,revision:'original'};
   if(arg.method==='queryKnotBatchState'){
-   if(arg.args.length===3){assert.equal(arg.args[2],'original');if(stale)return {ok:false,error:'geometry changed'};}
+   if(arg.args.length===4){assert.equal(arg.args[2],'original');assert.equal(arg.args[3],'local');if(stale)return {ok:false,error:'geometry changed'};}
    return {ok:true,states:arg.args[1].map(uuid=>{const n=state.find(k=>k.uuid===uuid);return {uuid,position:{...n.position},rotation:n.rotation};})};
   }
   if(arg.method==='refreshPreview')return {ok:true};

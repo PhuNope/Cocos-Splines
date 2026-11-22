@@ -67,6 +67,16 @@ export class SplineContainer extends Component {
         return this._lut;
     }
     public refresh():void{this._lut=null;this._signature='';}
+    /** A single immutable planning LUT; metric affects distance, not geometry. */
+    public createArcDistributionEvaluator(metric?:(point:M.V3)=>M.V3){
+        const steps=Math.max(4,Math.min(256,Math.floor(this.samplesPerCurve)||24));
+        const segments=Math.max(0,this.knots.length-(this.closed?0:1));
+        if(segments*steps>65536)throw Error('Arc distribution exceeds 65536 samples; reduce Samples Per Curve.');
+        const lut=metric?M.buildArcLUT(this.collect(),this.closed,steps,metric):this.ensure();
+        return {segmentCount:lut.segments,
+            distanceAtT:(t:number)=>M.distanceAtParameter(lut,t),
+            evaluateAtDistance:(distance:number)=>M.sampleDistance(lut,distance)};
+    }
     public get length():number{return this.ensure().total;}
     public get count():number{return this.knots.length;}
     public get segmentCount():number{return this.ensure().segments;}

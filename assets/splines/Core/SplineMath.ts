@@ -69,12 +69,12 @@ export function sample(knots:KnotData[],closed:boolean,t:number):SplinePoint {
     return {position:bezier(...c,u),tangent:norm(tangent),segment:idx,u,distance:0};
 }
 /** Table stores cumulative chord length at fixed parameter intervals. */
-export function buildArcLUT(input:KnotData[],closed:boolean,steps=24):ArcLUT {
+export function buildArcLUT(input:KnotData[],closed:boolean,steps=24,metric:(point:V3)=>V3=p=>p):ArcLUT {
     const knots=resolvedKnots(input,closed),segments=segmentCount(knots,closed);
     const res=Math.max(4,Math.min(256,Math.floor(steps)||24));
-    const ts=[0],lengths=[0];let total=0,previous=sample(knots,closed,0).position;
+    const ts=[0],lengths=[0];let total=0,previous=metric(sample(knots,closed,0).position);
     for(let i=1;i<=segments*res;i++) {
-        const t=i/(segments*res),point=sample(knots,closed,t).position;
+        const t=i/(segments*res),point=metric(sample(knots,closed,t).position);
         total+=distance(previous,point);previous=point;
         ts.push(t);lengths.push(total);
     }

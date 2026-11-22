@@ -178,7 +178,7 @@ function queryKnotOrientations(rootUuid,uuids){
  * Read-back contract for Editor batch transactions. Only immediate Knot
  * children of the selected spline may participate, and no Node is modified.
  */
-function queryKnotBatchState(rootUuid,uuids,expectedRevision){
+function queryKnotBatchState(rootUuid,uuids,expectedRevision,arcSpace='local'){
     const root=resolve(rootUuid);
     if(!root||containerOf(root)!==root||
        !root.components.some(c=>classOf(c)==='Splines.SplineContainer')||
@@ -190,7 +190,7 @@ function queryKnotBatchState(rootUuid,uuids,expectedRevision){
         const spline=root.components.find(c=>classOf(c)==='Splines.SplineContainer');
         try{
             if(typeof expectedRevision!=='string'||typeof spline.getRevision!=='function'||
-               spline.getRevision()!==expectedRevision)
+               arcRevision(root,spline,arcSpace)!==expectedRevision)
                 return {ok:false,error:'Spline geometry changed after arc distribution planning.'};
         }catch(error){return {ok:false,error:String(error?.message||error)};}
     }
@@ -210,8 +210,14 @@ function queryKnotBatchState(rootUuid,uuids,expectedRevision){
     }
     return {ok:true,states};
 }
-/** Read-only plan from the exact runtime evaluator, in its traversal order. */
-function queryArcDistribution(rootUuid,ids){
+/** The token includes identity order and the world metric transform. */
+function arcRevision(root,spline,space){
+    if(space!=='local'&&space!=='world')throw Error('Arc metric must be local or world.');
+    const frame=space==='world'?queryKnotEditFrame(root.uuid):null;
+    if(frame&&!frame.ok)throw Error(frame.error);
+    return JSON.stringify([spline.getRevision(),spline.knots.map(k=>k.node.uuid),frame?.matrix||null]);
+}
+function queryArcDistribution(rootUuid,ids,space='local'){
     const root=resolve(rootUuid);
     const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
     if(!root||!spline||spline.enabled===false||root.isValid===false)
@@ -225,10 +231,24 @@ function queryArcDistribution(rootUuid,ids){
                 throw Error('Invalid Knot hierarchy.');
             return {uuid:n.uuid,position:{x:n.position.x,y:n.position.y,z:n.position.z}};
         });
-        const revision=spline.getRevision();
-        const {planArcDistribution}=require('./SplineKnotEditMath');
-        const edits=planArcDistribution(knots,ids,spline.dimension,spline.closed,spline);
-        if(spline.getRevision()!==revision)throw Error('Spline changed while planning arc distribution.');
+
+        if(typeof spline.createArcDistributionEvaluator!=='function')
+            throw Error('Update the runtime SplineContainer scripts before arc distribution.');
+        const steps=Math.max(4,Math.min(256,Math.floor(spline.samplesPerCurve)||24));
+        if(knots.length*steps>65536)throw Error('Arc distribution exceeds 65536 samples; reduce Samples Per Curve.');
+        const revision=arcRevision(root,spline,space);
+        const {planArcDistribution,transformFrame}=require('./SplineKnotEditMath');
+        let metric;
+        if(space==='world'){
+            const frame=queryKnotEditFrame(rootUuid);
+            if(!frame.ok)throw Error(frame.error);
+            // Translation cancels from length; avoid precision loss at large origins.
+            const matrix=frame.matrix.slice();matrix[12]=matrix[13]=matrix[14]=0;
+            metric=transformFrame(matrix).toWorld;
+        }
+        const evaluator=spline.createArcDistributionEvaluator(metric);
+        const edits=planArcDistribution(knots,ids,spline.dimension,spline.closed,evaluator);
+        if(arcRevision(root,spline,space)!==revision)throw Error('Spline changed while planning arc distribution.');
         return {ok:true,edits,revision};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }

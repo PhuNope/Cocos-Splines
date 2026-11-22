@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -30,8 +30,8 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button><button type="button" class="spl-btn spl-distribute-marked" title="Evenly space at least three marked Knots on this axis, preserving extremes and other coordinates">Distribute marked</button></div>
     <p class="spl-note">Distribute uses the selected axis and coordinate space. At least three Knots; extreme Knots stay fixed. This changes the curve, not its Knot order.</p>
     <div class="spl-btns spl-batch-inputs"><label>ΔX <input class="spl-move-x" type="number" step="0.5" value="0" aria-label="Move delta X"></label><label>ΔY <input class="spl-move-y" type="number" step="0.5" value="0" aria-label="Move delta Y"></label><label>ΔZ <input class="spl-move-z" type="number" step="0.5" value="0" aria-label="Move delta Z"></label><button type="button" class="spl-btn spl-move-marked">Move marked</button></div>
-    <div class="spl-btns"><button type="button" class="spl-btn spl-distribute-arc">Distribute along Arc (Local)</button></div>
-    <p class="spl-note">Open spline · mark 3+ consecutive active Knots. Places interior Knots at equal arc-distance intervals on the original local curve; final curve may change. Endpoints stay fixed.</p>
+    <div class="spl-btns spl-batch-inputs"><label>Arc metric <select class="spl-arc-metric" aria-label="Arc distance metric"><option value="local">Local</option><option value="world">World</option></select></label><button type="button" class="spl-btn spl-distribute-arc">Distribute along Arc</button></div>
+    <p class="spl-note">Mark 3+ consecutive active Knots (wrap across closed seam allowed). Full closed loop keeps its first traversal Knot fixed. Local/World measures the original curve; final shape may change.</p>
     <div class="spl-surface-panel">
       <p class="spl-note">Surface Snap · 3D only. Choose a readable MeshRenderer (CPU raycast) or a 3D Physics Collider / TerrainCollider. Cast downward in World Y. Collider targets require an active Physics world.</p>
       <div class="spl-btns spl-batch-inputs"><label>Surface target <select class="spl-surface-target" aria-label="Surface target mesh or collider"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
@@ -191,7 +191,7 @@ async function refresh(panel){
         for(const option of space.options)option.disabled=option.value==='world'&&s.dimension!==0;
         if(s.dimension!==0&&space.value==='world')space.value='local';
         panel.$.surfaceSnap.disabled=s.dimension!==0;
-        panel.$.distributeArc.disabled=s.closed===true;
+        panel.$.distributeArc.disabled=s.knots.length<3;
         for(const axis of ['x','y','z']){
             const entry=panel.$['move'+axis.toUpperCase()];
             entry.disabled=axis===hiddenAxis;
@@ -255,8 +255,7 @@ module.exports={
         });
         this.$.distributeArc.addEventListener('click',()=>{
             if(chosen().length<3)return show(this,'Mark at least three consecutive Knots.',true);
-            if(this._splineData?.closed)return show(this,'Arc distribution requires an open spline.',true);
-            void batch('distribute-selected-knots-by-arc');
+            void batch('distribute-selected-knots-by-arc',this.$.arcMetric.value);
         });
         this.$.moveMarked.addEventListener('click',()=>{
             const delta={x:Number(this.$.moveX.value),y:Number(this.$.moveY.value),z:Number(this.$.moveZ.value)};

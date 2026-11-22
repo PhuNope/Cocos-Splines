@@ -182,3 +182,9 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Distribute interior Knot positions along original local arc, contiguous open spline selection, reversed and 2D constraints.
 - [x] Reuse evaluator and batch transaction; geometry revision guard and regression tests.
 - [ ] Closed-loop redistribution, World arc metric, shape-preserving resampling and native Creator acceptance.
+
+### Phase 2.18 — Closed / World Arc Distribution
+
+- [x] Closed partial run across seam and full-loop distribution, Local/World metric with transformed chord lengths.
+- [x] Runtime metric LUT, revision/order/matrix preflight and planar constraints.
+- [ ] Shape-preserving resampling and native Creator acceptance.

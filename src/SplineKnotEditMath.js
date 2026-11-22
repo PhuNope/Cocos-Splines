@@ -132,31 +132,46 @@ function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatri
     }).filter(e=>e.changed);
 }
 
-/**
- * Redistribute interior Knots on the ORIGINAL open spline's local arc.
- * orderedKnots must match the evaluator's traversal order (including reversed).
- * The evaluator is read-only throughout planning. No control-vector retargeting.
- */
+/** Distribute on the original curve. Partial runs retain endpoints;
+ * full closed loops retain the first traversal Knot as their seam anchor.
+ * Arc distances may use a world metric; sampled positions remain local. */
 function planArcDistribution(orderedKnots,ids,dimension,closed,evaluator){
-    if(closed!==false)throw Error('Arc distribution currently requires an open spline.');
-    if(![0,1,2].includes(dimension))throw Error('Invalid spline dimension.');
+    if(typeof closed!=='boolean'||![0,1,2].includes(dimension))
+        throw Error('Invalid spline dimension or closure.');
     const selected=validatedKnots(orderedKnots,ids);
     if(selected.length<3)throw Error('Arc distribution requires at least three marked Knots.');
-    const start=orderedKnots.indexOf(selected[0]),end=orderedKnots.indexOf(selected[selected.length-1]);
-    if(end-start+1!==selected.length)throw Error('Mark a contiguous run of Knots in the spline.');
+    const n=orderedKnots.length,segments=closed?n:n-1;
+    if(new Set(orderedKnots.map(k=>k.uuid)).size!==n)
+        throw Error('Duplicate Knot identity in spline.');
     if(!evaluator||typeof evaluator.distanceAtT!=='function'||typeof evaluator.evaluateAtDistance!=='function')
         throw Error('Spline arc evaluator is unavailable.');
-    const segments=orderedKnots.length-1;
     if(evaluator.segmentCount!==segments)throw Error('Spline segment count changed.');
-    const a=evaluator.distanceAtT(start/segments),b=evaluator.distanceAtT(end/segments);
-    if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<a)
+    const marked=new Set(selected),full=closed&&selected.length===n;
+    let start=orderedKnots.indexOf(selected[0]),run=selected;
+    if(closed&&!full){
+        const starts=orderedKnots.map((k,i)=>marked.has(k)&&!marked.has(orderedKnots[(i+n-1)%n])?i:-1).filter(i=>i>=0);
+        if(starts.length!==1)throw Error('Mark a contiguous run of Knots in the closed spline.');
+        start=starts[0];
+        run=Array.from({length:selected.length},(_,i)=>orderedKnots[(start+i)%n]);
+        if(run.some(k=>!marked.has(k)))throw Error('Mark a contiguous run of Knots in the closed spline.');
+    }else if(!closed&&orderedKnots.indexOf(selected[selected.length-1])-start+1!==selected.length)
+        throw Error('Mark a contiguous run of Knots in the spline.');
+    const total=evaluator.distanceAtT(1);
+    if(!Number.isFinite(total)||total<0)throw Error('Invalid total spline arc distance.');
+    const intervals=full?run.length:run.length-1,end=start+intervals;
+    const a=evaluator.distanceAtT(start/segments);
+    const b=end<=segments?evaluator.distanceAtT(end/segments):
+        total+evaluator.distanceAtT((end-segments)/segments);
+    if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||a>total||b<a||
+       b-a>total+1e-8*Math.max(1,total))
         throw Error('Invalid spline arc distances.');
     if(b-a<=1e-8)return [];
-    const axes=dimensionAxes(dimension);
-    const edits=[];
-    for(let i=1;i<selected.length-1;i++){
-        const knot=selected[i],t=i/(selected.length-1);
-        const point=evaluator.evaluateAtDistance(a+(b-a)*t)?.position;
+    const axes=dimensionAxes(dimension),edits=[];
+    for(let i=1;i<intervals;i++){
+        const knot=run[i];
+        let distance=a+(b-a)*(i/intervals);
+        if(closed&&distance>total)distance-=total;
+        const point=evaluator.evaluateAtDistance(distance)?.position;
         if(!validPoint(point))throw Error('Spline returned an invalid arc sample.');
         const before={x:knot.position.x,y:knot.position.y,z:knot.position.z};
         const after={...before};
