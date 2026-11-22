@@ -156,6 +156,7 @@ async function applyKnotPlacement(operation,ids,options){
             message:operation==='surface'?'Snapped '+edits.length+' knot(s) to mesh surface.':
                 operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
                 operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
+                operation==='distribute'?'Distributed '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
                 'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
 }
@@ -483,6 +484,10 @@ const methods={
     async alignSelectedKnots(ids,axis,space='local'){
         try{return await applyKnotPlacement('align',ids,{axis,space});}
         catch(error){return alertError('align-selected-knots',error);}
+    },
+    async distributeSelectedKnots(ids,axis,space='local'){
+        try{return await applyKnotPlacement('distribute',ids,{axis,space});}
+        catch(error){return alertError('distribute-selected-knots',error);}
     },
     async moveSelectedKnots(ids,delta,space='local'){
         try{return await applyKnotPlacement('move',ids,{delta,space});}

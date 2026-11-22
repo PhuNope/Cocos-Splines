@@ -170,3 +170,9 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Stop follow-up query/set-property/snapshot/rollback after Scene unload, ancestor reparent or same-UUID nested Prefab root replacement.
 - [x] Preserve normal single-snapshot flow while Scene lease remains valid; tests cover delayed IPC and active Group Move invalidation.
 - [ ] Actual Creator native Scene-switch cancellation, Undo/Redo history and Nested Prefab override/apply/revert still require live validation.
+
+### Phase 2.16 — Axis Distribution
+
+- [x] Distribute marked Knot coordinates evenly on an active axis, preserving extremes and hierarchy.
+- [x] Local/World 3D and Local 2D constraints; shared batch transaction and regression tests.
+- [ ] Creator native Undo/Redo and Prefab smoke test; arc-length redistribution is separate.

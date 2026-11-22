@@ -1,3 +1,7 @@
+# Unreleased — Phase 2.16 Axis Distribution
+
+- Added Distribute marked to Batch Knot Tools; deterministic axis spacing with fixed extremes, Local/World and planar constraints, existing batch transaction and rollback. Not arc-length resampling. Regression tests cover planner, Inspector and Editor message flow.
+
 # Unreleased — Phase 2.15 Scene Lease / Async Editor IPC Invalidation
 
 - Added `SplineGizmoSceneLease`: immutable Scene hierarchy identity captured when a Knot Gizmo gesture begins, including ancestor/root Node object identities and validity. This detects Scene unload/reload, nested Prefab editing-root replacement and ancestor reparenting even when a newly opened Scene reuses UUIDs.

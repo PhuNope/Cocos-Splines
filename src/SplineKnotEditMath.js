@@ -72,7 +72,7 @@ function transformFrame(matrix){
 function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatrix=null){
     const selected=validatedKnots(knots,ids);
     const axes=dimensionAxes(dimension);
-    if(!['snap','align','move'].includes(operation))throw new Error('Unknown knot operation.');
+    if(!['snap','align','move','distribute'].includes(operation))throw new Error('Unknown knot operation.');
     const space=options.space===undefined?'local':options.space;
     if(space!=='local'&&space!=='world')throw new Error('Coordinate space must be local or world.');
     // Moving the 2D spline in three independent world axes would leave its
@@ -81,9 +81,39 @@ function planKnotPositions(knots,ids,operation,options={},dimension=0,worldMatri
         throw new Error('World editing is only available for 3D splines; use Local for XY2D or XZ2D.');
     const frame=space==='world'?transformFrame(worldMatrix):null;
     if(operation==='snap')gridStep(options.step);
-    if(operation==='align'&&(!AXES.includes(options.axis)||
+    if((operation==='align'||operation==='distribute')&&(!AXES.includes(options.axis)||
         (space==='local'&&!axes.includes(options.axis))))
         throw new Error('Alignment axis is not active in this spline dimension.');
+    // Distribute in spatial axis order, not mark-click or hierarchy order.
+    // Keep the two extreme Knots fixed and leave all other coordinates intact.
+    if(operation==='distribute'){
+        if(selected.length<3)throw new Error('Distribute requires at least three marked Knots.');
+        const axis=options.axis;
+        const sorted=selected.map((knot,index)=>({
+            knot,index,point:frame?frame.toWorld(knot.position):{...knot.position},
+        }));
+        if(sorted.some(entry=>!validPoint(entry.point)))
+            throw new Error('Distribution requires finite transformed Knot positions.');
+        sorted.sort((a,b)=>a.point[axis]-b.point[axis]||a.index-b.index);
+        const lo=sorted[0].point[axis],hi=sorted[sorted.length-1].point[axis];
+        if(lo===hi)return [];
+        const edits=[];
+        for(let i=1;i<sorted.length-1;i++){
+            const {knot,point}=sorted[i];
+            const t=i/(sorted.length-1);
+            // A weighted interpolation avoids overflow from hi-lo.
+            const value=lo*(1-t)+hi*t;
+            const target={...point,[axis]:value};
+            const before={...knot.position};
+            const after=frame?frame.toLocal(target):target;
+            if(!validPoint(after))throw new Error('Distribution produced a non-finite position.');
+            if(AXES.some(k=>Math.abs(after[k]-before[k])>1e-8))
+                edits.push({uuid:knot.uuid,before,after,changed:true});
+        }
+        // Use the established hierarchy order for serialized batch writes.
+        const order=new Map(selected.map((k,i)=>[k.uuid,i]));
+        return edits.sort((a,b)=>order.get(a.uuid)-order.get(b.uuid));
+    }
     const delta=operation==='move'?validDelta(options.delta):null;
     if(delta&&space==='local'&&AXES.some(axis=>!axes.includes(axis)&&delta[axis]!==0))
         throw new Error('Move delta cannot change the inactive 2D axis.');

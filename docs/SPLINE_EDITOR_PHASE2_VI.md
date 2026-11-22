@@ -330,3 +330,7 @@ Phase này hoàn thiện cơ chế history của **Knot đơn lẻ** để cùng
 - Trở lại Scene ban đầu rồi thử kéo lại, Undo/Redo và save/reopen. Kiểm tra Road/Extrude/Deform tiếp tục theo dữ liệu Knot thật.
 
 **Giới hạn kỹ thuật:** Cocos Editor IPC đã gửi không có khả năng cancel được xác nhận, nên chức năng này không thể đảm bảo một request *đang bay* sẽ không được xử lý khi Scene đổi. Nó ngăn **các request tiếp theo** và tránh rollback sai Scene. Native Undo stack, Prefab apply/revert, unload/reload timing và Editor UI lifecycle vẫn phải test thực tế.
+
+## Phase 2.16 — Distribute Marked Knots
+
+Trong SplineContainer Inspector → Batch Knot Tools, đánh dấu ít nhất 3 Knot, chọn Coordinate space và Axis rồi bấm **Distribute marked**. Khoảng cách tọa độ trên trục được chọn được chia đều giữa hai Knot cực trị; thứ tự không gian trên trục được giữ (tọa độ trùng nhau dùng thứ tự Hierarchy). Hai đầu, các tọa độ khác trong hệ đã chọn, Knot không đánh dấu và thứ tự Hierarchy không đổi. Local hỗ trợ 3D/XY2D/XZ2D; World chỉ hỗ trợ 3D, kể cả Container xoay hoặc scale không đều. Thao tác có thể đổi hình dạng đường cong, không phải chia đều chiều dài cung Bezier. Dùng transaction batch hiện có, một yêu cầu snapshot nếu có thay đổi, không snapshot khi no-op, rollback khi ghi lỗi. Native Undo/Redo và Prefab vẫn cần kiểm tra trong Creator 3.8.8. Không cần nâng cấp Gizmos.
