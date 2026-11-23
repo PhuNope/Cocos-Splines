@@ -69,8 +69,13 @@ export function planSplineProximity(
             previous=point;
         }
     }
-    return {fraction:first,limited:first<1-1e-8,stopped:first<=1e-8,
-        obstacle,nearestWorldDistance:nearest===Infinity?null:nearest};
+    // Conservative tolerance for imminent contact: without this, repeated
+    // sweeps can asymptotically creep toward a sphere by microscopic steps,
+    // never entering an actual stopped state or firing the blocked event.
+    const safeFraction=first<=1e-3?0:first;
+    return {fraction:safeFraction,limited:safeFraction<1-1e-8,
+        stopped:safeFraction===0,obstacle,
+        nearestWorldDistance:nearest===Infinity?null:nearest};
 }
 export class SplineProximityRegistry {
     private readonly occupants=new Map<object,ProximityOccupant>();
