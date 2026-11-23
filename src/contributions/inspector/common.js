@@ -45,6 +45,7 @@ const configs={
   animate:{title:'Spline Animate' ,note:'Kéo Node chứa SplineContainer vào trường Spline. Target để trống sẽ di chuyển chính Node gắn SplineAnimate. Nếu Animate đặt trên chính Container, hãy gán Target là Node khác. Bật Preview in Editor để xem vị trí mà không cần Play. Start/Preview hỗ trợ Normalized Distance, Distance và Spline t.',groups:[
     {title:'Spline source',fields:['spline','target','modifiers','worldOffset','splineOffset','constantSpeedWithOffset']},
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
+    {title:'Follower headway (opt-in)',fields:['enableHeadway','headwayWorldGap','headwayBrakeDistance']},
     {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
@@ -157,6 +158,7 @@ function makeInspector(type){
             if(['routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived'].includes(field))
                 return Number(v('junctionMode'))===4;
             if(field==='rerouteAroundTraffic')return Number(v('junctionMode'))===4&&v('enableTrafficCapacity')===true;
+            if(['headwayWorldGap','headwayBrakeDistance'].includes(field))return v('enableHeadway')===true;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;
             if(field==='previewProgress')return Number(v('previewPositionMode'))!==1;

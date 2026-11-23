@@ -7,6 +7,8 @@ import { SplineJunction, JunctionExitDirection, type SplineJunctionLink } from '
 import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,findUnavailableTrafficExits,
     type SplineRoute,type SplineRouteDiagnosis} from '../Core/SplineNetwork';
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
+import {splineHeadwayRegistry} from '../Core/SplineHeadway';
+import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -95,6 +97,12 @@ export class SplineAnimate extends Component {
     enableTrafficCapacity=false;
     @property({tooltip:'Opt-in with Enable Traffic Capacity: Shortest Route tries a different reachable Junction exit when the preferred exit is full. Default waits in FIFO queue.'})
     rerouteAroundTraffic=false;
+    @property({tooltip:'Opt-in centerline headway: prevent moving within Headway World Gap of another registered follower on the same spline. No 3D collision, no cross-spline detection.'})
+    enableHeadway=false;
+    @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
+    headwayWorldGap=2;
+    @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
+    headwayBrakeDistance=4;
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 1 in the forward direction.'})
     onEndReached:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 0 in the backward direction.'})
@@ -118,6 +126,7 @@ export class SplineAnimate extends Component {
     private _activeSpline:SplineContainer|null=null;
     private _requestedExit=-1;
     private _arrivalDelivered:{spline:SplineContainer;progress:number}|null=null;
+    private _headwayBlocked=false;
     private _trafficWait:{junction:SplineJunction;entryIndex:number;exitIndex:number;
         link:SplineJunctionLink;source:SplineContainer;progress:number;direction:Direction}|null=null;
     private elapsed=0;
@@ -139,6 +148,10 @@ export class SplineAnimate extends Component {
     /** Uniform Bezier parameter of the current visible position (not raw easing time). */
     public get currentT():number{return this.source()?.tAtProgress(this.currentProgress)||0;}
     public get isPlaying():boolean{return this.playing;}
+    /** True when the current frame cannot advance because the nearest registered
+     * same-spline follower occupies the configured world-arc clearance.
+     */
+    public get isHeadwayBlocked():boolean{return this._headwayBlocked;}
     public get isWaitingForTraffic():boolean{return this._trafficWait!==null;}
     /** 1-based position in this follower's destination-link FIFO; 0 otherwise. */
     public get trafficQueuePosition():number{
@@ -268,18 +281,18 @@ export class SplineAnimate extends Component {
         this._raw=this.coordinateRaw(this.source(),this.startPositionMode,this.startProgress,this.startDistance);
         this.elapsed=this._raw*this.getDuration();
         this.playing=this.playOnStart;
-        this.apply(this._raw);
+        this.apply(this._raw);this.syncHeadway();
     }
-    onDisable():void { this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
-    onDestroy():void { this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
+    onDisable():void { this.clearHeadway();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
+    onDestroy():void { this.clearHeadway();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
     public pause():void {this.playing=false;}
     public restart():void {
         this.clearTraffic();
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
-        this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
+        this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);this.syncHeadway();
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();}
+    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncHeadway();}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -322,6 +335,33 @@ export class SplineAnimate extends Component {
         EventHandler.emitEvents(this.onRouteArrived,payload);
         this._routeArrivedCallbacks.emit(payload);
         this.node.emit('spline-route-arrived',payload);
+    }
+    /** Keep paused followers registered: their target still occupies a position.
+     * No registration or headway gameplay event is created in Editor preview.
+     */
+    private syncHeadway():void{
+        if(EDITOR_NOT_IN_PREVIEW)return;
+        const spline=this.source();
+        if(!this.enableHeadway||!this.enabled||!spline||
+           spline.node?.isValid===false||spline.count<2){
+            splineHeadwayRegistry.remove(this);
+            this._headwayBlocked=false;
+            return;
+        }
+        splineHeadwayRegistry.set(this,spline,clamp01(this.currentProgress),this._travelDirection);
+    }
+    private clearHeadway():void{
+        splineHeadwayRegistry.remove(this);
+        this._headwayBlocked=false;
+    }
+    private headwayStatus(blocked:boolean,spline:SplineContainer,leader:object|null,
+        nearestWorldGap:number|null):void{
+        if(blocked===this._headwayBlocked)return;
+        this._headwayBlocked=blocked;
+        this.node.emit(blocked?'spline-headway-blocked':'spline-headway-cleared',{
+            follower:this,spline,leader,nearestWorldGap,
+            requiredWorldGap:this.headwayWorldGap,
+        });
     }
     private cancelTrafficWait():void{
         this._trafficWait=null;
@@ -396,6 +436,7 @@ export class SplineAnimate extends Component {
         this._travelDirection=exitDir;
         this._raw=this.rawAtProgress(nextProgress,nextSpline);
         this.elapsed=this._raw*this.getDuration();
+        this.syncHeadway();
         junction.switched(this,entryIndex,destination.index,dir);
     }
     /** Retry a blocked link only while the original entry is still valid.
@@ -458,7 +499,7 @@ export class SplineAnimate extends Component {
         this.clearTraffic();
         this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
-        this.elapsed=this._raw*this.getDuration();this.apply(this._raw);
+        this.elapsed=this._raw*this.getDuration();this.apply(this._raw);this.syncHeadway();
     }
     /** Switch spline at an absolute distance, not at a normalized progress. */
     public setCurrentSplineAtDistance(spline:SplineContainer,distance:number,direction:Direction=1):void {
@@ -489,7 +530,7 @@ export class SplineAnimate extends Component {
             const spline=this.source();
             if(spline)this.deliverEvents(spline,previous,next,dir);
         }
-        this.apply(this._raw);
+        this.apply(this._raw);this.syncHeadway();
     }
     private previewKey(spline:SplineContainer|null):string {
         const m=spline?.node.worldMatrix;
@@ -507,6 +548,7 @@ export class SplineAnimate extends Component {
             if(this._previewKey!==key)this.previewAt(this.coordinateRaw(s,this.previewPositionMode,this.previewProgress,this.previewDistance));
             return;
         }
+        this.syncHeadway();
         const spline=this.source();
         if(!this.playing||!spline||spline.count<2||!Number.isFinite(dt)||dt<=0)return;
         const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
@@ -618,6 +660,24 @@ export class SplineAnimate extends Component {
             let next=clamp01(this._raw+dir*step);
             const from=this.progressAtRaw(this._raw,spline);
             let to=this.progressAtRaw(next,spline);
+            let headwayLimited=false;
+            if(this.enableHeadway&&Number.isFinite(this.headwayWorldGap)&&
+               this.headwayWorldGap>=0&&Number.isFinite(this.headwayBrakeDistance)&&
+               this.headwayBrakeDistance>=0){
+                const report=splineHeadwayRegistry.limit(this,spline,from,to,dir,
+                    headwayWorldArc(spline),!!spline.closed,
+                    this.headwayWorldGap,this.headwayBrakeDistance);
+                headwayLimited=report.limited;
+                this.headwayStatus(report.stopped,spline,report.leader,report.nearestWorldGap);
+                if(headwayLimited){
+                    next=this.rawAtProgress(report.progress,spline);
+                    step=Math.min(step,Math.abs(next-this._raw));
+                    to=this.progressAtRaw(next,spline);
+                    if(step<=1e-10){this.apply(this._raw);break;}
+                }
+            }else if(this._headwayBlocked){
+                this.headwayStatus(false,spline,null,null);
+            }
             const goal=this.pendingRouteArrival(spline);
             let arriving=false;
             if(goal!==null&&crosses(from,to,goal,dir)){
@@ -702,7 +762,7 @@ export class SplineAnimate extends Component {
                         source:spline,progress:hit.progress,direction:dir};
                     this._raw=rawAtMarker;
                     this.elapsed=this._raw*duration;
-                    this.apply(this._raw);
+                    this.syncHeadway();this.apply(this._raw);
                     this.node.emit('spline-traffic-blocked',{
                         follower:this,junction,entryIndex:e.entry,
                         exitIndex:destination.index,progress:hit.progress,
@@ -717,8 +777,9 @@ export class SplineAnimate extends Component {
                 break;
             }
             if(jumped)continue;
-            remaining=Math.max(0,remaining-step*duration);
+            remaining=headwayLimited?0:Math.max(0,remaining-step*duration);
             this._raw=next;this.elapsed=this._raw*this.getDuration();
+            this.syncHeadway();
             const reachedEnd=toBoundary-step<=1e-8;
             if(reachedEnd)this.reachedBoundary(dir);
             if(arriving&&goal!==null){
@@ -733,7 +794,7 @@ export class SplineAnimate extends Component {
                 else {this.resetJunctionBlend();this._raw=dir===1?0:1;}
             }
         }
-        this.apply(this._raw);
+        this.apply(this._raw);this.syncHeadway();
     }
     private captureTargetLocalUp():void {
         const target=this.target||this.node;

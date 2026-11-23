@@ -159,3 +159,27 @@ follower.followRouteTo(roadC, .8, true);
 - Node events: `spline-traffic-blocked` phát lúc bắt đầu chờ, payload thêm `queuePosition`; `spline-traffic-rerouted` khi chọn nhánh thay thế. `onReach`, `onSwitch`, `onRouteArrived` vẫn theo đường đi thực tế, không spam khi đứng chờ.
 
 **Giới hạn:** FIFO chỉ công bằng giữa các follower được quản lý bởi cùng runtime instance; không kiểm soát thứ tự tick từ mạng multiplayer, không dự đoán thời gian hết tắc, không mô phỏng xe cộ/đo khoảng cách an toàn giữa follower. Slot hiện chỉ được nhả khi chuyển link, teleport hoặc lifecycle, không tự động nhả khi một follower đi ra khỏi đoạn hình học đã vượt qua Junction. Reroute không chạy liên tục mỗi frame cho follower đang di chuyển; chỉ chạy tại lúc cần đổi spline hoặc chờ slot. Trường hợp Scene save/reopen, nested Prefab và nhiều follower trong Cocos Creator 3.8.8 vẫn cần test trực tiếp.
+
+## Phase 3.6b2a — Safe headway along shared spline (opt-in)
+
+`SplineAnimate` bổ sung mục Inspector **Follower headway (opt-in)**:
+
+- `Enable Headway` (mặc định **Off**): chỉ các follower bật tùy chọn này mới đăng ký vật cản cho nhau. Follower đang `pause()` vẫn giữ chỗ, cho tới khi được `onDisable()`, `onDestroy()` hoặc tắt Enable Headway.
+- `Headway World Gap` (mặc định 2 world units): khoảng cách tối thiểu theo **chiều dài cung của SplineContainer trong World**, không phải khoảng cách đường thẳng Euclidean hoặc local-progress.
+- `Headway Brake Distance` (mặc định 4 world units, 0 = hard clamp): khi khoảng cách an toàn còn lại nhỏ hơn ngưỡng này, giảm bước di chuyển tối đa tỉ lệ với khoảng cách còn lại. Nếu đã hết khoảng cách an toàn, follower đứng chờ mà `isPlaying` vẫn true, tự đi tiếp khi xe phía trước tiến lên.
+
+Mỗi frame, follower đồng bộ spline/progress/hướng vào `splineHeadwayRegistry`; trước khi xử lý Trigger, Junction hoặc On Arrived, bước cập nhật bị giới hạn ở mốc an toàn. Nếu bước ngắn hơn yêu cầu, thời gian còn lại trong frame được bỏ qua để không vượt quá vật cản khi chạy tốc độ cao hoặc `dt` lớn. Tính toán dùng world arc polyline samples như tính năng World-distance Routing và có cache theo `getRevision()` + worldMatrix của spline. Với closed spline, khoảng cách được kiểm tra qua vòng nối progress 1→0 hoặc 0→1 theo hướng chạy; hỗ trợ Forward/Backward, World scale và parent transform.
+
+Runtime API: `follower.isHeadwayBlocked` (true khi không thể tiến thêm), Node events `spline-headway-blocked` và `spline-headway-cleared` (chỉ phát khi trạng thái thay đổi; payload gồm follower, spline, leader, nearestWorldGap, requiredWorldGap). Registry singleton `splineHeadwayRegistry` nằm trong Core/SplineHeadway; chỉ dùng trong gameplay, không dùng Editor preview.
+
+Ví dụ test:
+
+```ts
+leader.enableHeadway = true;
+follower.enableHeadway = true;
+follower.headwayWorldGap = 2;
+follower.headwayBrakeDistance = 4;
+follower.node.on('spline-headway-blocked', (e) => console.log(e.leader));
+```
+
+**Giới hạn quan trọng:** Đây là headway 1 chiều dọc centerline của **cùng SplineContainer**, không phải collision detection 3D: không xét chiều dài/width vehicle, các đối tượng không có SplineAnimate opt-in, các spline khác nhau, offset/lane geometry, nút giao cắt vật lý, đoạn spline tự giao, vật thể đi ngược trên lane khác hay đường link teleport. Follower xuất hiện ban đầu quá gần nhau không được tách vật lý; chỉ ngăn di chuyển *tiến thêm*. Với scene có nhiều lane dùng chung centerline, tính năng có thể hạn chế xe thuộc lane khác nhau. Cần phối hợp traffic reservation hiện có để xử lý chuyển nhánh và kiểm tra trực tiếp trong Creator 3.8.8 trước khi dùng ở production. Các hạng mục traffic lights, priority, server authority và collision 3D vẫn chưa được triển khai.

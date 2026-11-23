@@ -388,6 +388,68 @@ try {
     exit.maxFollowers=0;
     junction.connections=[entry,exit];
     splineTrafficGate.clear();
+    // Phase 3.6b2 — opt-in world-arc headway works with gameplay traversal,
+    // including paused obstacles, reverse direction, runtime toggling, cleanup.
+    const {splineHeadwayRegistry}=require(path.join(out,'Core','SplineHeadway.js'));
+    splineHeadwayRegistry.clear();
+    const road={...source,node:new Node('headway-road'),closed:false,
+      segmentCount:1,samplesPerCurve:32,
+      evaluateWorldPosition:t=>new Vec3(t*10,0,0)};
+    road.node.worldMatrix={m00:1,m05:1,m10:1,m12:0,m13:0,m14:0};
+    const headFollower=(progress,direction=1)=>{
+       const f=new SplineAnimate();f.node=new Node('headway-'+progress);
+       f.target=new Node('headway-target-'+progress);
+       f.spline=road;f.alignToSpline=false;f.duration=4;
+       f.method=AnimateMethod.Time;f.loopMode=LoopMode.Once;
+       f.startProgress=progress;f.playOnStart=true;
+       f.enableHeadway=true;f.headwayWorldGap=2;f.headwayBrakeDistance=0;
+       f.onEnable();
+       if(direction===-1)f.setCurrentSpline(road,progress,-1);
+       return f;
+    };
+    const leader=headFollower(.6);
+    const following=headFollower(.2);
+    assert.equal(splineHeadwayRegistry.size,2);
+    following.update(3);
+    near(following.currentProgress,.4);
+    assert(following.isPlaying,'Following is not paused by headway limit');
+    following.update(.1);
+    assert(following.isHeadwayBlocked);
+    assert.equal(following.node.events.filter(x=>x.name==='spline-headway-blocked').length,1);
+    following.update(.1);
+    assert.equal(following.node.events.filter(x=>x.name==='spline-headway-blocked').length,1,
+      'Blocked event is not spammed every tick');
+    leader.pause();
+    following.update(.4);
+    near(following.currentProgress,.4);
+    leader.play();leader.update(.4); // .7, new clearance
+    following.update(.4);
+    near(following.currentProgress,.5);
+    assert(!following.isHeadwayBlocked);
+    assert.equal(following.node.events.filter(x=>x.name==='spline-headway-cleared').length,1);
+    assert.equal(following.target.worldPosition.x,5);
+    leader.onDisable();following.onDisable();
+    assert.equal(splineHeadwayRegistry.size,0);
+    // Direction-aware nearest leader in backward traversal.
+    const frontBack=headFollower(.2,-1),rearBack=headFollower(.8,-1);
+    rearBack.update(3.8);
+    near(rearBack.currentProgress,.4);
+    rearBack.onDestroy();frontBack.onDestroy();
+    assert.equal(splineHeadwayRegistry.size,0);
+    // Opt-in can change at runtime and must leave no ghost obstacles.
+    const toggled=headFollower(.6);
+    toggled.enableHeadway=false;toggled.update(.01);
+    assert.equal(splineHeadwayRegistry.size,0);
+    toggled.enableHeadway=true;toggled.update(.01);
+    assert.equal(splineHeadwayRegistry.size,1);
+    toggled.onDestroy();
+    assert.equal(splineHeadwayRegistry.size,0);
+    // Headway is runtime-only: Scene Editor preview cannot register.
+    env.EDITOR_NOT_IN_PREVIEW=true;
+    const preview=headFollower(.4);
+    assert.equal(splineHeadwayRegistry.size,0);
+    preview.onDisable();
+    env.EDITOR_NOT_IN_PREVIEW=false;
     junction.onReach=originalReach;
     const calls=triggerCalls.length;
     trigger.workOnce=true;trigger.resetTrigger();trigger.fire(follower,1);trigger.fire(follower,1);
