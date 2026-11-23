@@ -3,7 +3,7 @@ import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
 import { SplineTrigger } from './SplineTrigger';
-import { SplineJunction, JunctionExitDirection, type SplineJunctionLink } from './SplineJunction';
+import { SplineJunction, JunctionExitDirection, JunctionTrafficSignal, type SplineJunctionLink } from './SplineJunction';
 import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,findUnavailableTrafficExits,
     type SplineRoute,type SplineRouteDiagnosis} from '../Core/SplineNetwork';
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
@@ -97,6 +97,8 @@ export class SplineAnimate extends Component {
     enableTrafficCapacity=false;
     @property({tooltip:'Opt-in with Enable Traffic Capacity: Shortest Route tries a different reachable Junction exit when the preferred exit is full. Default waits in FIFO queue.'})
     rerouteAroundTraffic=false;
+    @property({range:[0,10,1],slide:true,tooltip:'0..10. Traffic admission priority for opt-in followers: higher priority is served first; same priority remains FIFO. No preemption of occupied slots.'})
+    trafficPriority=0;
     @property({tooltip:'Opt-in centerline headway: prevent moving within Headway World Gap of another registered follower on the same spline. No 3D collision, no cross-spline detection.'})
     enableHeadway=false;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
@@ -380,7 +382,8 @@ export class SplineAnimate extends Component {
         if(!Number.isInteger(cap)||cap<0||cap>4096||
            !Number.isInteger(this.trafficPriority)||this.trafficPriority<0||
            this.trafficPriority>10)return false;
-        return splineTrafficGate.move(this,junction,exit.index,cap);
+        return splineTrafficGate.move(this,junction,exit.index,cap,
+            exit.link.trafficSignal===JunctionTrafficSignal.Green,this.trafficPriority);
     }
     /** A temporary per-query exclusion, not a mutation of Junction graph.
      * Do not queue on the original exit until alternate routing is exhausted.
@@ -394,9 +397,11 @@ export class SplineAnimate extends Component {
            !Number.isInteger(this.trafficPriority)||this.trafficPriority<0||
            this.trafficPriority>10)return null;
         const cap=current.link.maxFollowers;
-        if(!Number.isInteger(cap)||cap<=0||cap>4096||
-           splineTrafficGate.canEnter(this,junction,current.index,cap))return null;
-        const excluded=findUnavailableTrafficExits(this);
+        if(!Number.isInteger(cap)||cap<0||cap>4096||
+           splineTrafficGate.canEnter(this,junction,current.index,cap,
+               current.link.trafficSignal===JunctionTrafficSignal.Green,
+               this.trafficPriority))return null;
+        const excluded=findUnavailableTrafficExits(this,this.trafficPriority);
         if(!excluded.some(x=>x.junctionId===junction.node.uuid&&x.exitIndex===current.index))
             excluded.push({junctionId:junction.node.uuid,exitIndex:current.index});
         const other=nextShortestJunctionExit(junction,entryIndex,spline,progress,
@@ -412,7 +417,9 @@ export class SplineAnimate extends Component {
            candidate.link.spline.node?.isValid===false)return null;
         const otherCap=candidate.link.maxFollowers;
         if(!Number.isInteger(otherCap)||otherCap<0||otherCap>4096||
-           !splineTrafficGate.canEnter(this,junction,candidate.index,otherCap))return null;
+           !splineTrafficGate.canEnter(this,junction,candidate.index,otherCap,
+               candidate.link.trafficSignal===JunctionTrafficSignal.Green,
+               this.trafficPriority))return null;
         return candidate;
     }
     /** Only invoked when the destination exit has an acquired slot (or traffic
@@ -771,6 +778,8 @@ export class SplineAnimate extends Component {
                         follower:this,junction,entryIndex:e.entry,
                         exitIndex:destination.index,progress:hit.progress,
                         capacity:destination.link.maxFollowers,
+                        trafficSignal:destination.link.trafficSignal,
+                        trafficPriority:this.trafficPriority,
                         queuePosition:this.trafficQueuePosition,
                     });
                     remaining=0;
