@@ -48,7 +48,8 @@ try{
  // merely because a second direction has higher raw queue demand.
  s=new SplineAdaptiveTraffic(program,config);
  sample(s,1,[9,3,2]);assert.equal(s.sample.phaseIndex,0);
- sample(s,3,[9,3,2]);assert.equal(s.sample.stage,'yellow');
+ sample(s,2,[9,3,2]);assert.equal(s.sample.stage,'yellow',
+   'Initial All-Red also contributes to waiting demand age');
  sample(s,1,[9,3,2]);assert.equal(s.sample.stage,'all-red');
  p=sample(s,1,[9,3,2]);assert.equal(p.phaseIndex,1);
  sample(s,2,[9,3,2]);assert.equal(s.sample.stage,'yellow');
