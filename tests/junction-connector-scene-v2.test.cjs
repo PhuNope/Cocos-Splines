@@ -15,7 +15,11 @@ function spline(name,offset){
  const knots=[knot(name+'-start',node,0),knot(name+'-end',node,10)];
  return {kind:'Splines.SplineContainer',node,enabled:true,closed:false,reversed:false,
   dimension:0,samplesPerCurve:32,count:2,get knots(){return knots;},
-  evaluateWorldPosition:p=>v(knots[0].node.position.x*(1-p)+knots[1].node.position.x*p+offset),
+  evaluateWorldPosition:p=>({
+    x:knots[0].node.position.x*(1-p)+knots[1].node.position.x*p+offset,
+    y:knots[0].node.position.y*(1-p)+knots[1].node.position.y*p,
+    z:knots[0].node.position.z*(1-p)+knots[1].node.position.z*p,
+  }),
   evaluateTangent:()=>v(1)};
 }
 const a=spline('a',0),b=spline('b',5);
@@ -71,7 +75,7 @@ b.closed=false;
 junction.connections[1].spline=a;
 assert(!scene.queryJunctionSnapPlan(node.uuid,0,1).ok,'same spline');
 junction.connections[1].spline=b;
-b.dimension=1;
+b.dimension=2;
 a.knots[1].node.position.y=3;
 assert(!scene.queryJunctionSnapPlan(node.uuid,0,1).ok,'2D off-plane anchor');
 a.knots[1].node.position.y=0;
