@@ -27,7 +27,10 @@ try{
  assert.deepEqual(permuted,route);
  // A forward-only follower cannot jump backwards to reach a marker it passed.
  assert.equal(findNetworkRoute(S,J,anchor('A',.8),anchor('C',.95),{startDirection:1}),null);
- assert(findNetworkRoute(S,J,anchor('A',.8),anchor('C',.95),{startDirection:-1}));
+ assert.equal(findNetworkRoute(S,J,anchor('A',.8),anchor('C',.95),{startDirection:-1}),
+   null,'Preserve exit direction cannot turn around on C to reach .95');
+ assert(findNetworkRoute(S,J,anchor('A',.8),anchor('C',.1),{startDirection:-1}),
+   'Backward travel can reach a target behind the exit marker');
  // Preserve/force destination direction determines whether the target is reachable.
  const only=[spline('X',10),spline('Y',10)];
  const wrong=[{id:'J',links:[link('X',.5,0),link('Y',.1,3,2)]}];

@@ -130,6 +130,12 @@ export function findNetworkRoute(
             insert({splineId:l.splineId,progress:l.progress});
         }
     }
+    // Fail before allocating millions of edges for highly connected junctions.
+    // Every ordered pair of distinct links can transfer in both directions.
+    const possibleTransfers=orderedJunctions.reduce(
+        (total,j)=>total+2*j.links.length*(j.links.length-1),0);
+    if(possibleTransfers>65536)
+        throw Error('Network exceeds 65536 possible transfer edges.');
     const sortedSplines=[...bySpline.values()].sort((a,b)=>a.id.localeCompare(b.id));
     const state:State[]=[],index=new Map<string,number>(),adj:Edge[][]=[];
     const stateKey=(id:string,p:number,dir:NetworkDirection)=>key(id,p)+':'+dir;
