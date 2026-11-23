@@ -62,6 +62,12 @@ export class SplineTrafficController extends Component {
     conflictProbeLookahead=20;
     @property({min:0,tooltip:'Read-only geometry diagnostic: ignore the common junction origin for this distance (WORLD units).'})
     conflictProbeIgnoreOrigin=1;
+    @property({tooltip:'Read-only diagnostics only: use explicitly supplied per-exit World asphalt HALF widths. Off retains centerline-only behavior.'})
+    conflictUseRoadWidths=false;
+    @property({type:[Number],tooltip:'Half widths in WORLD units by serialized Junction Connections index; provide one nonnegative value per Connection. 0 uses centerline on that exit. This does not change the road Mesh.'})
+    conflictRoadHalfWidths:number[]=[];
+    @property({min:.01,tooltip:'World height separation for road-width diagnostic. Roads above this vertical gap are not flagged just because asphalt footprints overlap in XZ.'})
+    conflictVerticalTolerance=.75;
 
     private _owned:SplineJunction|null=null;
     private _original=new Map<SplineJunctionLink,JunctionTrafficSignal>();
@@ -102,6 +108,10 @@ export class SplineTrafficController extends Component {
             tolerance:this.conflictProbeTolerance,
             lookaheadWorldDistance:this.conflictProbeLookahead,
             ignoreJunctionWorldDistance:this.conflictProbeIgnoreOrigin,
+            ...(this.conflictUseRoadWidths?{
+                roadHalfWidths:this.conflictRoadHalfWidths,
+                verticalTolerance:this.conflictVerticalTolerance,
+            }:{}),
         });
     }
 

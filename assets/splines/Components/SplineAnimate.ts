@@ -1,4 +1,4 @@
-import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat } from 'cc';
+import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
@@ -11,6 +11,7 @@ import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
+import {colliderProximityRadius} from '../Core/SplineColliderBounds';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -115,6 +116,10 @@ export class SplineAnimate extends Component {
     enableProximityAvoidance=false;
     @property({min:.01,tooltip:'Approximate follower sphere radius in WORLD units. Actual Collider bounds are not read.'})
     proximityRadius=.5;
+    @property({tooltip:'Opt-in: use the world AABB of a 3D Cocos Collider to calculate a conservative bounding sphere around Target. Falls back to Proximity Radius when unavailable.'})
+    proximityUseColliderBounds=false;
+    @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child. When blank, reads 3D Collider on the Target node. Collider2D is not supported.'})
+    proximityCollider:Collider|null=null;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
     proximitySafetyGap=.2;
     @property({min:2,max:64,step:1,tooltip:'Samples per proximity movement sweep (2..64). Default 16. Higher values improve detection on sharp bends at extra CPU cost; shared spatial broadphase limits candidates.'})
@@ -174,6 +179,30 @@ export class SplineAnimate extends Component {
      */
     public get isHeadwayBlocked():boolean{return this._headwayBlocked;}
     public get isProximityBlocked():boolean{return this._proximityBlocked;}
+    /** Whether a usable 3D Collider.worldBounds was read (opt-in only). */
+    public get proximityBoundsValid():boolean{
+        return this.enableProximityAvoidance&&this.proximityUseColliderBounds&&
+            this.proximityBounds().valid;
+    }
+    public get proximityEffectiveRadius():number{return this.proximityBounds().radius;}
+    private proximityBounds():{radius:number;valid:boolean}{
+        const fallback=Number.isFinite(this.proximityRadius)&&this.proximityRadius>0&&
+            this.proximityRadius<=100?this.proximityRadius:.5;
+        if(!this.proximityUseColliderBounds)return {radius:fallback,valid:false};
+        const target=this.target||this.node;
+        try{
+            const collider=this.proximityCollider||(target&&Collider?
+                target.getComponent(Collider):null);
+            if(!collider||!collider.enabled||collider.node?.isValid===false)
+                return {radius:fallback,valid:false};
+            const bounds=collider.worldBounds;
+            const report=colliderProximityRadius(bounds,target?.worldPosition,fallback);
+            return {radius:report.radius,valid:report.valid};
+        }catch{
+            // A disabled physics world / stale shape never breaks playback.
+            return {radius:fallback,valid:false};
+        }
+    }
     /** Invalid runtime lane settings intentionally fall back to zero shift. */
     public get laneLayoutValid():boolean {
         if(!this.enableLanePlacement)return true;
@@ -392,7 +421,7 @@ export class SplineAnimate extends Component {
             this._proximityBlocked=false;
         }else{
             const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
-            splineProximityRegistry.set(this,position,this.proximityRadius);
+            splineProximityRegistry.set(this,position,this.proximityEffectiveRadius);
         }
     }
     private clearSpatialTraffic():void{
@@ -416,7 +445,9 @@ export class SplineAnimate extends Component {
         this._proximityBlocked=blocked;
         this.node.emit(blocked?'spline-proximity-blocked':'spline-proximity-cleared',{
             follower:this,spline,obstacle,nearestWorldDistance,
-            proximityRadius:this.proximityRadius,safetyGap:this.proximitySafetyGap,
+            proximityRadius:this.proximityEffectiveRadius,
+            source:this.proximityBoundsValid?'collider':'manual',
+            safetyGap:this.proximitySafetyGap,
         });
     }
     private cancelTrafficWait():void{
@@ -756,7 +787,7 @@ export class SplineAnimate extends Component {
                 const movement=to-from;
                 const report=splineProximityRegistry.limit(this,
                     ratio=>this.blendedWorldPosition(spline,from+movement*ratio),
-                    this.proximityRadius,this.proximitySafetyGap,this.proximitySweepSamples);
+                    this.proximityEffectiveRadius,this.proximitySafetyGap,this.proximitySweepSamples);
                 proximityLimited=report.limited;
                 this.proximityStatus(report.stopped,spline,report.obstacle,
                     report.nearestWorldDistance);

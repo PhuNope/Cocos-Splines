@@ -41,6 +41,26 @@ try{
     {exitIndex:1,points:[v(5,0,-5),v(5,0,5)]},
  ],[],[{greenExits:[0,1]}],.5);
  assert.equal(multidir.candidates.length,1,'Only one candidate per serialized pair');
+ // Asphalt-half-width diagnostics find close, parallel carriageways that
+ // centerline-only sampling does not flag, while respecting bridge elevation.
+ const parallel=[
+   {exitIndex:0,points:[v(0,0,0),v(10,0,0)],halfWidth:1},
+   {exitIndex:1,points:[v(0,0,2.2),v(10,0,2.2)],halfWidth:1},
+ ];
+ const withoutWidths=parallel.map(x=>({...x,halfWidth:0}));
+ assert.equal(analyzeTrafficConflictPaths(withoutWidths,[],[{greenExits:[0,1]}],.1).candidates.length,0);
+ const wide=analyzeTrafficConflictPaths(parallel,[],[{greenExits:[0,1]}],.3,.5);
+ assert.equal(wide.candidates.length,1);
+ close(wide.candidates[0].horizontalDistance,2.2);
+ assert.equal(wide.candidates[0].roadWidthsApplied,true);
+ assert.deepEqual(wide.missingPairs.map(x=>[x.firstExit,x.secondExit]),[[0,1]]);
+ assert.deepEqual(wide.unsafePhases,[0]);
+ const upper=parallel.map((x,i)=>i===1?{...x,points:[v(0,4,2.2),v(10,4,2.2)]}:x);
+ assert.equal(analyzeTrafficConflictPaths(upper,[],[{greenExits:[0,1]}],.3,.5).candidates.length,0,
+   'Asphalt width cannot automatically bridge a World-height gap');
+ assert.throws(()=>analyzeTrafficConflictPaths([
+   {...parallel[0],halfWidth:-1}],[],[],.3,.5),/trajectory/);
+ assert.throws(()=>analyzeTrafficConflictPaths(parallel,[],[],.3,-1),/options/);
  assert.throws(()=>analyzeTrafficConflictPaths([{exitIndex:0,points:[v(0,0,0)]}],[],[],1),/trajectory/);
  assert.throws(()=>analyzeTrafficConflictPaths([],[],[],NaN),/options/);
 
@@ -103,6 +123,16 @@ try{
    j.connections[2].spline=null;
    diag=ctrl.diagnoseConflicts();
    assert(diag.skipped.some(x=>x.exitIndex===2));
+   // Widths are an explicit opt-in and are indexed by Junction Connections.
+   // Verify sample-path wiring and strict array length validation.
+   j.connections[2].spline=lines[2];
+   ctrl.conflictUseRoadWidths=true;
+   ctrl.conflictRoadHalfWidths=[1,1,0];ctrl.conflictVerticalTolerance=.5;
+   diag=ctrl.diagnoseConflicts();
+   assert(diag.candidates[0].roadWidthsApplied,'Controller forwards World asphalt widths');
+   ctrl.conflictRoadHalfWidths=[1];
+   assert.throws(()=>ctrl.diagnoseConflicts(),/settings/);
+   ctrl.conflictUseRoadWidths=false;
    assert.throws(()=>{ctrl.conflictProbeIgnoreOrigin=100;ctrl.diagnoseConflicts();},/settings/);
    console.log('TRAFFIC GEOMETRY PASS: 3D crossing/bridge, declared and missing pairs, same-Green warnings, world sampling, preserve direction and safe skips.');
  }finally{Module._load=original;}

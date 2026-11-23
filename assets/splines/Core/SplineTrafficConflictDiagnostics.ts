@@ -12,6 +12,10 @@ export interface TrafficProbeSettings {
     tolerance:number;
     lookaheadWorldDistance:number;
     ignoreJunctionWorldDistance:number;
+    /** Optional per-exit WORLD road half-width; empty => centerline-only. */
+    roadHalfWidths?:readonly number[];
+    /** Vertical threshold independent of asphalt width. */
+    verticalTolerance?:number;
 }
 export interface TrafficProbeReport extends ConflictGeometryReport {
     ok:boolean;
@@ -60,7 +64,14 @@ export function probeJunctionTrafficConflicts(
        settings.lookaheadWorldDistance>200||
        !finite(settings.ignoreJunctionWorldDistance)||
        settings.ignoreJunctionWorldDistance<0||
-       settings.ignoreJunctionWorldDistance>=settings.lookaheadWorldDistance)
+       settings.ignoreJunctionWorldDistance>=settings.lookaheadWorldDistance||
+       (settings.roadHalfWidths!==undefined&&(
+           !Array.isArray(settings.roadHalfWidths)||
+           settings.roadHalfWidths.length!==junction.connections.length||
+           settings.roadHalfWidths.some((n:number)=>!finite(n)||n<0||n>100)))||
+       (settings.verticalTolerance!==undefined&&(
+           !finite(settings.verticalTolerance)||settings.verticalTolerance<=0||
+           settings.verticalTolerance>100)))
         throw Error('Invalid traffic conflict diagnostic settings/Junction (2–32 connections).');
     const paths:ConflictProbePath[]=[],skipped:TrafficProbeReport['skipped']=[];
     const ambiguousExits:number[]=[];
@@ -92,7 +103,8 @@ export function probeJunctionTrafficConflicts(
                         (available-settings.ignoreJunctionWorldDistance)*step/16;
                     points.push(pointAtDistance(spline,arc,from+dir*walked,closed));
                 }
-                paths.push({exitIndex:i,points,uncertainDirection:uncertain});
+                paths.push({exitIndex:i,points,uncertainDirection:uncertain,
+                    halfWidth:settings.roadHalfWidths?.[i]??0});
                 added++;
             }
             if(added)validExits++;
@@ -101,8 +113,9 @@ export function probeJunctionTrafficConflicts(
             skipped.push({exitIndex:i,reason:String(error instanceof Error?error.message:error)});
         }
     }
-    const report=analyzeTrafficConflictPaths(paths,conflicts,phases,settings.tolerance);
+    const report=analyzeTrafficConflictPaths(paths,conflicts,phases,settings.tolerance,
+        settings.verticalTolerance??settings.tolerance);
     return {...report,ok:true,validExits,sampledTrajectories:paths.length,
         skipped,ambiguousExits,
-        warning:'Potential centerline 3D proximity only: road widths, offset lanes, preserve direction, physics and vehicle bounds are not verified. Declare conflict pairs manually.'};
+        warning:'Approximate sampled World trajectory proximity. Explicit road half-widths are optional; vertical clearance is checked separately. No Mesh/Collider collision is solved; verify every candidate and declare conflicts manually.'};
 }

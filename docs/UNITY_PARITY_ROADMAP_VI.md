@@ -60,7 +60,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b2b2a — Read-only bounded sampled 3D exit proximity diagnostics (candidate/missing/same-Green/uncertain, Editor Inspector action) and opt-in logical headway Lane ID (0–31) with regression tests.
 - [x] Phase 3.6b2b2b2b1 — Opt-in physical lane centers using spline-frame offset and World sweep-sphere proximity against other opt-in followers (including cross-spline), offset-speed integration and mock regression.
 - [x] Phase 3.6b2b2b2b2a — Sparse 3D spatial-hash broadphase for opt-in proximity, cached sampled sweep, safe oversized-query fallback, configurable sweep precision and read-only cross-system traffic telemetry with regression tests.
-- [ ] Phase 3.6b2b2b2b2b — Collider/Mesh-based collision volumes, road-width conflict regions, headway telemetry/performance profiling in Creator 3.8.8 and server-authoritative multiplayer traffic.
+- [x] Phase 3.6b2b2b2b2b1 — Opt-in Cocos 3D Collider.worldBounds-derived conservative bounding-sphere proximity and explicit per-exit World asphalt half-width 3D conflict diagnostics (with vertical clearance), Inspector and mock regression.
+- [ ] Phase 3.6b2b2b2b2b2 — Actual Collider/Mesh shape-aware sweep and mesh/road-width sampling, live Creator 3.8.8 performance profiling, physical collision resolution and authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 

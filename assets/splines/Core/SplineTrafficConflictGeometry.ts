@@ -9,6 +9,8 @@ export interface ConflictProbePath {
     points:readonly ConflictPoint3[];
     /** Preserve direction was probed in both possible directions. */
     uncertainDirection?:boolean;
+    /** Opt-in World-space road half-width, 0 = centerline-only. */
+    halfWidth?:number;
 }
 export interface ConflictCandidate {
     firstExit:number;secondExit:number;
@@ -17,6 +19,9 @@ export interface ConflictCandidate {
     declared:boolean;
     samePhase:number[];
     uncertainDirection:boolean;
+    horizontalDistance?:number;
+    verticalGap?:number;
+    roadWidthsApplied?:boolean;
 }
 export interface ConflictGeometryReport {
     candidates:ConflictCandidate[];
@@ -70,6 +75,23 @@ export function closestConflictSegments(
     return {distance:Math.hypot(pointA.x-pointB.x,pointA.y-pointB.y,pointA.z-pointB.z),
         point:{x:(pointA.x+pointB.x)/2,y:(pointA.y+pointB.y)/2,z:(pointA.z+pointB.z)/2}};
 }
+/** Width-only diagnostic: closest approach in XZ with independent WORLD Y
+ * clearance. Widths extend laterally, NOT vertically (bridge awareness).
+ */
+export function closestConflictRoadFootprints(
+    p:ConflictPoint3,p1:ConflictPoint3,q:ConflictPoint3,q1:ConflictPoint3,
+):{horizontalDistance:number;verticalGap:number;point:ConflictPoint3}{
+    const flat=(x:ConflictPoint3)=>({x:x.x,y:0,z:x.z});
+    const near=closestConflictSegments(flat(p),flat(p1),flat(q),flat(q1));
+    const projection=(a:ConflictPoint3,b:ConflictPoint3)=>{
+        const dx=b.x-a.x,dz=b.z-a.z,denom=dx*dx+dz*dz;
+        return denom<1e-12?0:clamp(((near.point.x-a.x)*dx+(near.point.z-a.z)*dz)/denom);
+    };
+    const ta=projection(p,p1),tb=projection(q,q1);
+    const yA=p.y+(p1.y-p.y)*ta,yB=q.y+(q1.y-q.y)*tb;
+    return {horizontalDistance:near.distance,verticalGap:Math.abs(yA-yB),
+        point:{x:near.point.x,y:(yA+yB)*.5,z:near.point.z}};
+}
 /** Output only unordered index pairs. If multiple directions are sampled for
  * one exit, report a single nearest candidate and mark direction uncertain.
  * A geometrically near pair is a warning, never auto-added as a conflict.
@@ -78,16 +100,19 @@ export function analyzeTrafficConflictPaths(
     paths:readonly ConflictProbePath[],
     declared:readonly {firstExit:number;secondExit:number}[],
     phases:readonly {greenExits:readonly number[]}[],
-    threshold=0.75,
+    threshold=0.75,verticalTolerance=0.75,
 ):ConflictGeometryReport{
     if(!Array.isArray(paths)||paths.length>64||!Array.isArray(declared)||
        declared.length>2048||!Array.isArray(phases)||phases.length>32||
-       !Number.isFinite(threshold)||threshold<=0||threshold>100)
+       !Number.isFinite(threshold)||threshold<=0||threshold>100||
+       !Number.isFinite(verticalTolerance)||verticalTolerance<=0||verticalTolerance>100)
         throw Error('Invalid traffic conflict diagnostic options.');
     for(const path of paths){
         if(!path||!Number.isInteger(path.exitIndex)||path.exitIndex<0||
            !Array.isArray(path.points)||path.points.length<2||path.points.length>33||
-           path.points.some((x:ConflictPoint3)=>!finite(x)))
+           path.points.some((x:ConflictPoint3)=>!finite(x))||
+           (path.halfWidth!==undefined&&(!Number.isFinite(path.halfWidth)||
+            path.halfWidth<0||path.halfWidth>100)))
             throw Error('Invalid traffic exit trajectory.');
     }
     const key=(a:number,b:number)=>[Math.min(a,b),Math.max(a,b)].join(':');
@@ -111,12 +136,24 @@ export function analyzeTrafficConflictPaths(
         const pairKey=key(a.exitIndex,b.exitIndex);
         for(let k=1;k<a.points.length;k++)for(let m=1;m<b.points.length;m++){
             comparisons++;
-            const v=closestConflictSegments(
+            const widths=(a.halfWidth??0)+(b.halfWidth??0);
+            const widthMode=widths>0;
+            const road=widthMode?closestConflictRoadFootprints(
+                a.points[k-1],a.points[k],b.points[m-1],b.points[m]):null;
+            const center=road?null:closestConflictSegments(
                 a.points[k-1],a.points[k],b.points[m-1],b.points[m]);
+            const horizontal=road?.horizontalDistance;
+            const vertical=road?.verticalGap;
+            const distance=road?road.horizontalDistance:center!.distance;
+            const point=road?road.point:center!.point;
             const previous=nearest.get(pairKey);
-            if(v.distance>threshold||(previous&&v.distance>=previous.distance))continue;
+            if((widthMode&&vertical!==undefined&&vertical>verticalTolerance)||
+               distance>threshold+widths||
+               (previous&&distance>=previous.distance))continue;
             const firstExit=Math.min(a.exitIndex,b.exitIndex),secondExit=Math.max(a.exitIndex,b.exitIndex);
-            nearest.set(pairKey,{firstExit,secondExit,distance:v.distance,point:v.point,
+            nearest.set(pairKey,{firstExit,secondExit,distance,point,
+                ...(widthMode?{horizontalDistance:horizontal,verticalGap:vertical,
+                    roadWidthsApplied:true}:{}),
                 declared:declaredPairs.has(pairKey),
                 samePhase:phaseSets.flatMap((group,index)=>
                     group.has(firstExit)&&group.has(secondExit)?[index]:[]),

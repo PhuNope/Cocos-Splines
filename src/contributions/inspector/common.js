@@ -41,7 +41,7 @@ const configs={
       {title:'Automatic phases',fields:['phases','allRedSeconds']},
       {title:'Adaptive queue demand (opt-in)',fields:['adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds']},
       {title:'Explicit forbidden Green pairs',fields:['conflicts']},
-      {title:'Read-only 3D conflict probe',fields:['conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin']}]},
+      {title:'Read-only 3D conflict probe',fields:['conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin','conflictUseRoadWidths','conflictRoadHalfWidths','conflictVerticalTolerance']}]},
   junction:{title:'Spline Junction',note:'Connector Check đo gap/hướng tangent theo World. Snap Endpoint chỉ dịch chuyển một Knot đầu/cuối của spline mở, không tự xoay tangent hoặc chỉnh Junction links. Thêm ít nhất 2 Connections. Gán mỗi link SplineContainer + Position Mode; nhập Progress 0..1 hoặc Distance theo chiều dài spline. SplineAnimate chọn Junction Mode: First Other / Round Robin / Manual. Exit Direction ở từng link đích: Preserve giữ chiều đến, Forward tăng Progress về 1, Backward giảm Progress về 0. Event payload cung cấp follower để gọi requestJunctionExit(index).',groups:[{title:'Routes',fields:['connections']},{title:'Events',fields:['onReach','onSwitch']}]},
   instantiate:{title:'Spline Instantiate',note:'Spawn / Respawn tạo prefab ngay trong Scene Hierarchy; Spawn On Start không tạo trùng nếu các instance đã được lưu trong Scene.',groups:[{title:'Source',fields:['spline','prefab','parentNode']},{title:'Distribution',fields:['count','method','spacing','rangeMode','startProgress','endProgress','startDistance','endDistance','includeEndPoint','alignToSpline','positionOffset','rotationOffset','randomOffset','seed','scaleMultiplier','spawnOnStart','rebuildOnChange']}]},
   path2d:{title:'Spline 2D Path',note:'Sử dụng dưới Canvas/RenderRoot2D + UITransform, thuộc tính Dimension của spline phải là XY2D. Đường được vẽ bằng Graphics; không cần MeshRenderer.',groups:[{title:'Spline & appearance',fields:['spline','lineWidth','strokeColor','stepsPerCurve','rebuildOnChange']}]},
@@ -54,7 +54,7 @@ const configs={
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
     {title:'Follower lane & headway (opt-in)',fields:['headwayLaneId','enableHeadway','headwayWorldGap','headwayBrakeDistance']},
     {title:'Physical lane position (opt-in)',fields:['enableLanePlacement','laneCount','laneWidth']},
-    {title:'3D proximity sweep (opt-in)',fields:['enableProximityAvoidance','proximityRadius','proximitySafetyGap','proximitySweepSamples']},
+    {title:'3D proximity sweep (opt-in)',fields:['enableProximityAvoidance','proximityRadius','proximityUseColliderBounds','proximityCollider','proximitySafetyGap','proximitySweepSamples']},
     {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
@@ -168,6 +168,7 @@ function makeInspector(type){
             if(['startDistance','endDistance'].includes(field))return Number(v('rangeMode'))===1;
         }
         if(type==='trafficController'&&['minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds'].includes(field))return v('adaptiveTraffic')===true;
+        if(type==='trafficController'&&['conflictRoadHalfWidths','conflictVerticalTolerance'].includes(field))return v('conflictUseRoadWidths')===true;
         if(type==='animate'){
             if(['routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived'].includes(field))
                 return Number(v('junctionMode'))===4;
@@ -175,7 +176,8 @@ function makeInspector(type){
             if(field==='trafficPriority')return v('enableTrafficCapacity')===true;
             if(['headwayWorldGap','headwayBrakeDistance'].includes(field))return v('enableHeadway')===true;
             if(['laneCount','laneWidth'].includes(field))return v('enableLanePlacement')===true;
-            if(['proximityRadius','proximitySafetyGap','proximitySweepSamples'].includes(field))return v('enableProximityAvoidance')===true;
+            if(['proximityRadius','proximitySafetyGap','proximitySweepSamples','proximityUseColliderBounds'].includes(field))return v('enableProximityAvoidance')===true;
+            if(field==='proximityCollider')return v('enableProximityAvoidance')===true&&v('proximityUseColliderBounds')===true;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;
             if(field==='previewProgress')return Number(v('previewPositionMode'))!==1;

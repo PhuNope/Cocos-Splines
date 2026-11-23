@@ -26,6 +26,7 @@ try {
   const noOp=()=>{};
   const deco=(...args)=>args.length>1?undefined:noOp;
   class Component {constructor(){this.enabled=true;}getComponent(type){return this.node.getComponent(type);}}
+  class Collider extends Component {constructor(){super();this.worldBounds={center:new Vec3(),halfExtents:new Vec3(.5,.5,.5)};}}
   class Node {
     constructor(uuid){this.uuid=uuid;this.isValid=true;this.parent=null;this.worldPosition=new Vec3(4,0,0);this.worldRotation=new Quat();this.events=[];}
     emit(name,payload){this.events.push({name,payload});}
@@ -37,7 +38,7 @@ try {
   class EventHandler { static emitEvents(events,...payload){for(const e of events||[])if(typeof e==='function')e(...payload);else if(typeof e?.handler==='function')e.handler(...payload);handlers.push(...payload);}}
   const env={EDITOR_NOT_IN_PREVIEW:true};
   const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls},
-    Component,Node,Vec3,Quat,EventHandler,Enum:x=>x};
+    Component,Collider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
   const original=Module._load;
   Module._load=function(request,parent,isMain){if(request==='cc')return cc;if(request==='cc/env')return env;return original.call(this,request,parent,isMain);};
   try{
@@ -573,6 +574,25 @@ try {
     assert(!collisionMover.isProximityBlocked);
     assert.equal(collisionMover.node.events.filter(e=>e.name==='spline-proximity-cleared').length,1);
     collisionMover.onDestroy();assert.equal(splineProximityRegistry.size,0);
+    // Collider.worldBounds radius is conservative and off-center aware.
+    const boundsFollower=headFollower(.3);
+    boundsFollower.enableHeadway=false;boundsFollower.enableProximityAvoidance=true;
+    boundsFollower.proximityUseColliderBounds=true;boundsFollower.proximityRadius=.25;
+    const bodyCollider=new Collider();bodyCollider.node=boundsFollower.target;
+    bodyCollider.worldBounds={center:new Vec3(3.5,0,0),halfExtents:new Vec3(1,.5,.25)};
+    boundsFollower.proximityCollider=bodyCollider;
+    assert(boundsFollower.proximityBoundsValid);
+    const expectedBodyRadius=Math.hypot(1,.5,.25)+.5;
+    near(boundsFollower.proximityEffectiveRadius,expectedBodyRadius);
+    boundsFollower.pause();boundsFollower.update(.001);
+    near(splineProximityRegistry.get(boundsFollower).radius,expectedBodyRadius);
+    bodyCollider.worldBounds={center:new Vec3(Infinity,0,0),
+      halfExtents:new Vec3(1,.5,.25)};
+    assert.equal(boundsFollower.proximityBoundsValid,false);
+    near(boundsFollower.proximityEffectiveRadius,.25);
+    boundsFollower.update(.001);
+    near(splineProximityRegistry.get(boundsFollower).radius,.25);
+    boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
     // Cross-spline follower at the same 3D intersection is a real blocker;
     // elevated bridge (Y=3) is not, even with identical XZ projection.
     const junctionBlocker=headFollower(.5);

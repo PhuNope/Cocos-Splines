@@ -8,11 +8,11 @@ assert(!Object.keys(pkg.contributions.messages).includes('open-panel'));
 const animate=require(root+'/dist/contributions/inspector/Animate.js');
 const container=require(root+'/dist/contributions/inspector/Container.js');
 const traffic=require(root+'/dist/contributions/inspector/TrafficController.js');
-for(const field of ['junction','phases','allRedSeconds','adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds','conflicts','conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin'])
+for(const field of ['junction','phases','allRedSeconds','adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds','conflicts','conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin','conflictUseRoadWidths','conflictRoadHalfWidths','conflictVerticalTolerance'])
  assert(traffic.template.includes('spl-field-'+field),'Traffic Controller Inspector missing '+field);
 assert(pkg.contributions.inspector.section.node['Splines.SplineTrafficController']===
   './dist/contributions/inspector/TrafficController.js');
-assert.equal(traffic.template.match(/<ui-prop /g)?.length,11);
+assert.equal(traffic.template.match(/<ui-prop /g)?.length,14);
 assert(traffic.template.includes('spl-check-traffic-conflicts'));
 assert.equal(traffic.$.checkTrafficConflicts,'.spl-check-traffic-conflicts');
 const signalRows=Object.fromEntries(Object.keys(traffic.$).map(k=>[k,{hidden:false,render(){}}]));
@@ -24,7 +24,15 @@ traffic.update.call({$:signalRows},{value:{adaptiveTraffic:{value:true},
    minGreenSeconds:{value:2},maxGreenSeconds:{value:15},maxDemandWaitSeconds:{value:30}}});
 for(const key of ['minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds'])
  assert.equal(signalRows['r_'+key].hidden,false,key+' must display in Adaptive mode');
-for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance','enableLanePlacement','laneCount','laneWidth','enableProximityAvoidance','proximityRadius','proximitySafetyGap','proximitySweepSamples','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
+traffic.update.call({$:signalRows},{value:{conflictUseRoadWidths:{value:false},
+  conflictRoadHalfWidths:{value:[]},conflictVerticalTolerance:{value:.75}}});
+assert.equal(signalRows.r_conflictRoadHalfWidths.hidden,true);
+assert.equal(signalRows.r_conflictVerticalTolerance.hidden,true);
+traffic.update.call({$:signalRows},{value:{conflictUseRoadWidths:{value:true},
+  conflictRoadHalfWidths:{value:[1,1]},conflictVerticalTolerance:{value:.75}}});
+assert.equal(signalRows.r_conflictRoadHalfWidths.hidden,false);
+assert.equal(signalRows.r_conflictVerticalTolerance.hidden,false);
+for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance','enableLanePlacement','laneCount','laneWidth','enableProximityAvoidance','proximityRadius','proximityUseColliderBounds','proximityCollider','proximitySafetyGap','proximitySweepSamples','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }
 for(const f of ['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','gizmoSteps','gizmoColor'])assert(container.template.includes('spl-field-'+f));
@@ -41,7 +49,7 @@ const panel={$:selectors,_previewState:'false|undefined'};
 const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.Object'},previewInEditor:{value:false},previewProgress:{value:0.2}}};
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
-assert.equal(animate.template.match(/<ui-prop /g)?.length,51);
+assert.equal(animate.template.match(/<ui-prop /g)?.length,53);
 const routePanel={$:Object.fromEntries(Object.keys(animate.$).map(k=>[k,{hidden:false,render(){}}]))};
 animate.update.call(routePanel,{value:{junctionMode:{value:4},routeDestination:{value:null},stopOnRouteArrival:{value:false},routeCostSpace:{value:0},onRouteArrived:{value:[]},enableTrafficCapacity:{value:true},trafficPriority:{value:0},rerouteAroundTraffic:{value:false}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,false);
@@ -68,6 +76,12 @@ animate.update.call(routePanel,{value:{enableLanePlacement:{value:true},
     enableProximityAvoidance:{value:true},proximityRadius:{value:.5},proximitySafetyGap:{value:.2},proximitySweepSamples:{value:16}}});
 for(const k of ['laneCount','laneWidth','proximityRadius','proximitySafetyGap','proximitySweepSamples'])
     assert.equal(routePanel.$['r_'+k].hidden,false,k+' visible when opt-in');
+animate.update.call(routePanel,{value:{enableProximityAvoidance:{value:true},
+  proximityUseColliderBounds:{value:false},proximityCollider:{value:null}}});
+assert.equal(routePanel.$.r_proximityCollider.hidden,true);
+animate.update.call(routePanel,{value:{enableProximityAvoidance:{value:true},
+  proximityUseColliderBounds:{value:true},proximityCollider:{value:null}}});
+assert.equal(routePanel.$.r_proximityCollider.hidden,false);
 animate.update.call(routePanel,{value:{junctionMode:{value:0},routeDestination:{value:null},stopOnRouteArrival:{value:false},onRouteArrived:{value:[]}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,true);
 assert.equal(routePanel.$.r_stopOnRouteArrival.hidden,true);

@@ -53,6 +53,9 @@ declare module 'cc' {
         node:Node;enabled:boolean;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
     }
+    export class Collider extends Component {
+        worldBounds:Readonly<{center:Vec3;halfExtents:Vec3}>;
+    }
     export class EventHandler { static emitEvents(events:EventHandler[],...args:any[]):void; }
     export class Prefab {uuid:string}
     export function instantiate(p:Prefab):Node;

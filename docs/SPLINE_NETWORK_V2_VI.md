@@ -308,3 +308,28 @@ console.log(snapshot.proximity); // occupants, spatialCells, queries, fallbackQu
 **Test:** đối chiếu swept-sphere optimized với solver full-scan; 250 sphere ngoài vùng quét chỉ cho 1 ứng viên; cập nhật cell khi mover đi xa; sphere bán kính 100; đường cong chữ U có endpoint gần nhau; vùng quét quá lớn kích hoạt fallback; số lần sample đường đi cố định `samples+1` thay vì `N*(samples+1)`; so sánh số slot/queue/headway/proximity qua telemetry.
 
 **Giới hạn:** chưa dùng Cocos Physics Collider shape, mesh boolean, broadphase cho Headway (headway cùng spline/lane vẫn dùng registry), mô phỏng tương lai của vật cản đang chạy hay server authority. Chi phí query phụ thuộc vào vùng World bao polyline được lấy mẫu, mật độ sphere và số cell; các vùng lớn fallback full scan. Kết quả theo snapshot vị trí cập nhật gần nhất nên có thể khác nhau theo thứ tự cập nhật các follower cùng frame. Cần thử trực tiếp với nhiều follower, scale và prefab trong Creator 3.8.8.
+
+## Phase 3.6b2b2b2b2b1 — Conservative 3D Collider bounds & road half-width conflicts
+
+**Collider-derived Proximity (SplineAnimate, opt-in):** `Enable Proximity Avoidance = true`, `Proximity Use Collider Bounds = true`. Tùy chọn kéo một **Cocos Physics 3D Collider** vào `Proximity Collider` hoặc để trống để đọc Collider trên Target Node. Plugin lấy `Collider.worldBounds` (World AABB), tính hình cầu bao bảo thủ nằm tại Target bằng công thức:
+
+```ts
+effectiveRadius = hypot(bounds.halfExtents.x, bounds.halfExtents.y, bounds.halfExtents.z)
+                + distance(bounds.center, target.worldPosition);
+```
+
+Nhờ tâm Collider có thể lệch tâm Target, bán kính bao tính cả phần lệch vị trí và World scale/rotation trong AABB. Registry SpatialHash và swept-sphere dùng `proximityEffectiveRadius` thay cho `proximityRadius`; khi bounds không khả dụng, Collider disabled, số không hữu hạn hoặc bán kính quá giới hạn (100 World units), dùng `Proximity Radius` thủ công. Hai getter `follower.proximityBoundsValid` và `follower.proximityEffectiveRadius` hỗ trợ debug. Khi không bật, toàn bộ cơ chế cũ không đổi. `spline-proximity-blocked` / `cleared` payload cung cấp `proximityRadius` thực tế và `source: 'collider'|'manual'`.
+
+**Quan trọng:** Đây chỉ là **world bounding sphere bao lấy 3D Collider.worldBounds**, không phải mesh/OBB SAT, Cocos Physics contact solver hoặc capsule/box sweep chính xác. Hình cầu bao làm tăng false positives ở Collider dạng hộp dài. Vật thể di chuyển trong cùng frame có thể gây lệch snapshot; hiệu năng/đa collider/nested Prefab và Physics backend phải thử trực tiếp trong Creator 3.8.8. Một Collider trên child Node chỉ được dùng khi gán rõ vào `Proximity Collider`; trường tự động chỉ tìm trên Target. Không áp dụng Collider2D và không động chạm Collider physics settings.
+
+**Road-width conflict diagnostics (SplineTrafficController, opt-in):** Bật `Conflict Use Road Widths`, nhập `Conflict Road Half Widths` gồm **đúng một số half-width World cho mỗi Junction Connection index**. Lấy giá trị từ SplineRoad Width/End Width thực tế tại vùng exit (tính cả modifiers khi cần); các giá trị này hiện do người dựng scene nhập, **chưa tự đọc Mesh hoặc phát hiện chiều rộng tại Knot**. Nếu không bật, chẩn đoán dùng phép đo 3D centerline cũ. Khi bật, hai trajectory được xét giao cắt giả định trong hình chiếu XZ khi:
+
+`horizontalDistance <= tolerance + halfWidthA + halfWidthB`
+
+và đồng thời:
+
+`verticalGap <= Conflict Vertical Tolerance` (mặc định 0.75 World).
+
+Vì chiều rộng đường chỉ làm tăng vùng giao nhau **theo phương ngang** chứ không tăng chiều cao, bridge/overpass cao hơn ngưỡng không bị đánh dấu chỉ vì road width lớn. Các số liệu `candidates[*].horizontalDistance`, `verticalGap`, `roadWidthsApplied` giúp phân biệt kết quả bề rộng với kết quả centerline. `missingPairs` và `unsafePhases` giữ nguyên, thao tác **Check 3D Conflict Candidates** chỉ đọc, không tự sửa đèn hoặc thêm conflict pair. Lưu ý thuật toán lấy mẫu polyline và nearest XZ projection chỉ xấp xỉ; road shoulder, curb, lane body, mesh triangles, miter corners, collider volumes và physics chưa được tính chính xác. Một cặp gần nhau vẫn cần xác minh bằng mắt và thêm conflict thủ công.
+
+**Compatibility / smoke:** `Proximity Use Collider Bounds = false` và `Conflict Use Road Widths = false` theo mặc định. Test Collider Box lệch tâm/nonuniform World bounds, fallback khi không có shape; hai road song song cách 2.2 World units với half-width 1 mỗi bên và tolerance 0.3 phát ra warning; nâng một road lên Y=4, vertical tolerance 0.5 thì không còn warning. Test Editor Prefab/Undo, inspector arrays và runtime onDisable/Destroy riêng trong Creator 3.8.8.
