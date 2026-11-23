@@ -254,6 +254,7 @@ function queryArcDistribution(rootUuid,ids,space='local'){
 }
 /** Structural resampling fingerprint includes Node transforms, parent,
  * Knot order and geometry; a stale plan must not create more Scene Nodes. */
+const {captureContainerAppearance,omittedDataSummary}=require('./SplineTopologyCopyPolicy');
 function resampleFingerprint(root,spline) {
     if(!root||root.isValid===false||!spline||spline.enabled===false)
         throw Error('Resample source is no longer active.');
@@ -264,7 +265,9 @@ function resampleFingerprint(root,spline) {
         ...(typeof node.w==='number'?{w:node.w}:{})
     });
     return JSON.stringify([
-        root.uuid,root.parent?.uuid||null,
+        root.uuid,root.name,root.parent?.uuid||null,
+        captureContainerAppearance(spline),
+        [spline.closed,spline.reversed,spline.dimension,spline.samplesPerCurve],
         point(root.position),point(root.rotation),point(root.scale),
         frame.matrix,
         spline.getRevision(),spline.knots.map(k=>[
@@ -291,6 +294,7 @@ function queryResamplePlan(rootUuid,options){
         const space=options.space||'local';
         if(space!=='local'&&space!=='world')throw Error('Invalid resample space.');
         const revision=resampleFingerprint(root,spline);
+        const containerAppearance=captureContainerAppearance(spline);
         let metric;
         if(space==='world'){
             const frame=queryKnotEditFrame(rootUuid);
@@ -300,7 +304,7 @@ function queryResamplePlan(rootUuid,options){
             metric=require('./SplineKnotEditMath').transformFrame(matrix).toWorld;
         }
         const result=simplifying?spline.createSimplifyPlan(options,metric):spline.createResamplePlan(options,metric);
-        let retainedKnots;
+        let retainedKnots,omittedData;
         if(simplifying){
             const ordered=spline.knots;
             if(!Array.isArray(result.sourceIndices)||result.sourceIndices.length!==result.count||
@@ -331,6 +335,7 @@ function queryResamplePlan(rootUuid,options){
             });
             if(retainedKnots.some(k=>Object.values(k.rotation).some(v=>!Number.isFinite(v))))
                 throw Error('Invalid retained Knot rotation.');
+            omittedData=omittedDataSummary(root,result.sourceIndices.map(i=>ordered[i]));
         }
         if(resampleFingerprint(root,spline)!==revision)
             throw Error('Source spline changed while planning resample.');
@@ -345,7 +350,8 @@ function queryResamplePlan(rootUuid,options){
             rootUuid:root.uuid,sourceName:root.name,
             dimension:spline.dimension,
             closed:spline.closed,samplesPerCurve:spline.samplesPerCurve,
-            rootTransform:tr, ...(simplifying?{retainedKnots}:{})};
+            rootTransform:tr,containerAppearance,
+            ...(simplifying?{retainedKnots,omittedData}:{})};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
 function queryResampleValid(rootUuid,revision){
