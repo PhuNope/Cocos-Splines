@@ -240,3 +240,18 @@ Controller có quyền điều khiển các exit đang quản lý: nếu gamepla
 Tạo Junction có 3 Connections. Phase 0: `Green Exits = [0]`, Green=2s, Yellow=1s; Phase 1: `Green Exits = [1,2]`, Green=2s, Yellow=1s; All-Red=1s; Conflicts=`(0,1)`. Khi Play: 0–1s toàn Red, 1–3s exit 0 Green, 3–4s exit 0 Yellow, 4–5s toàn Red, 5–7s exits 1 và 2 Green, 7–8s Yellow, 8–9s toàn Red, 9s quay về Phase 0. Đổi `Phase 0 Green Exits = [0,1]` khi Play: cấu hình bị chặn và tất cả Red.
 
 **Giới hạn:** Chưa có tự động lựa chọn pha theo lưu lượng, minimum yellow clearance theo tốc độ xe, controller vật lý vùng giao cắt hoặc tính toán conflict từ road mesh. Đây là **tín hiệu điều tiết admission**: nó không ngăn một xe đã được cấp slot tiếp tục chạy, không preempt slot, không phối hợp traffic lights giữa các Junction. CI dùng mock Cocos; cần thử thêm trong Creator 3.8.8 với serialization của nested Phase/Conflict arrays, Prefab override, Undo/Redo và hot reload.
+
+## Phase 3.6b2b2b1 — Adaptive Traffic Controller (preview)
+
+Trong **SplineTrafficController → Adaptive queue demand**, bật `Adaptive Traffic` (mặc định **false**). Chế độ Fixed Cycle của Phase 3.6b2b2a giữ nguyên nếu tắt. Khi bật, controller đo nhu cầu bằng **số follower opt-in đang thực sự xếp hàng** qua `splineTrafficGate.waiting(junction, exitIndex)`. Với một Phase chứa nhiều exit, nhu cầu là tổng số người chờ của từng exit thuộc Phase. Controller không quét toàn Scene hoặc giả định có xe ở đầu đường.
+
+- `Min Green Seconds` (mặc định **2**) — không chuyển sang Yellow trước khi Phase hiện tại đã Green tối thiểu khoảng thời gian này.
+- `Max Green Seconds` (mặc định **15**) — giới hạn Green tối đa cho một Phase; khi chỉ một nhóm có nhu cầu, Green có thể kéo dài đến giới hạn này.
+- `Max Demand Wait Seconds` (mặc định **30**) — ưu tiên các Phase có nhu cầu liên tục bị bỏ qua. Đây là **ngưỡng lập lịch theo nhu cầu của một Phase**, không phải bảo đảm mỗi follower được cấp slot trong 30 giây (có thể bị chặn bởi Max Followers/Traffic Signal/các controller khác).
+- `Green Seconds` của mỗi Phase là thời gian Green thông thường trong Adaptive: clamp giữa Min/Max. Khi không có nhu cầu nào, controller quay vòng qua các Phase theo thứ tự cấu hình; khi có nhu cầu, chọn nhóm có hàng đợi, ưu tiên số người chờ nhiều, trừ khi một nhóm đã chờ quá ngưỡng. Cùng mức xét theo thời gian chờ rồi theo vòng tuần tự để tránh phụ thuộc update order.
+
+Một Phase bắt buộc **Yellow → All-Red → Green** khi thay nhóm, kể cả có nhu cầu ưu tiên cao. `Yellow Seconds` được phép bằng 0 theo config hiện tại (khi đó chuyển trực tiếp sang All-Red); `All Red Seconds` luôn tối thiểu 0.05. Một tick có `dt` lớn được xử lý giới hạn tối đa 120 giây để tránh bù một lượng lớn đèn ảo khi app vừa resume; chỉ trạng thái cuối được áp lên Junction, không phát các đợt Green trung gian. Nếu cấu hình Adaptive không hợp lệ (Min/Max Green, Max Demand Wait) thì **All-Red** và error event giống fixed mode; sửa config sẽ khởi động lại từ All-Red.
+
+Các API đọc trên controller: `phaseDemand: readonly number[]` và `phaseDemandAges: readonly number[]`, `stage`, `phaseIndex`, `remainingSeconds`. `restartCycle()`/`resumeCycle()` reset lượt chọn và All-Red mở đầu. Scene old/prefab không bị thay đổi vì `adaptiveTraffic=false` là mặc định. Để chương trình hoạt động với nhu cầu thật, bật `Enable Traffic Capacity` trên follower và cấu hình `Traffic Signal`/Max Followers tại Junction.
+
+**Không bao gồm:** tự tính xung đột bằng mesh, cảm biến xe chưa tới Junction, ưu tiên dựa trên tổng số xe trên spline, điều phối toàn thành phố hoặc hard guarantee thời gian đợi khi capacity không giải phóng. Cần kiểm chứng Creator 3.8.8 với timer lifecycle, pause/resume, Prefab, multi-Junction và dữ liệu Scene thực tế.

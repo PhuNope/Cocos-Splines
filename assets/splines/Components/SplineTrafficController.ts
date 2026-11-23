@@ -4,6 +4,9 @@ import {SplineJunction,JunctionTrafficSignal,type SplineJunctionLink}
     from './SplineJunction';
 import {compileTrafficCycle,sampleTrafficCycle,
     type TrafficCycleProgram,type TrafficCycleStage} from '../Core/SplineTrafficCycle';
+import {SplineAdaptiveTraffic,validateAdaptiveTraffic}
+    from '../Core/SplineAdaptiveTraffic';
+import {splineTrafficGate} from '../Core/SplineTrafficGate';
 const {ccclass,property,menu}= _decorator;
 
 /** Each phase opens only the listed serialized Junction link indices.
@@ -43,10 +46,19 @@ export class SplineTrafficController extends Component {
     conflicts:SplineTrafficConflict[]=[];
     @property({min:.05,tooltip:'All-Red clearance in seconds before phase 0 and after every phase; mandatory for safe changes.'})
     allRedSeconds=1;
+    @property({tooltip:'Opt-in demand-responsive phase selection using queued followers at the Junction exits. Off = original deterministic fixed cycle.'})
+    adaptiveTraffic=false;
+    @property({min:.05,tooltip:'Adaptive only. Minimum Green seconds before another phase can interrupt. Does not shorten mandatory Yellow/All-Red.'})
+    minGreenSeconds=2;
+    @property({min:.05,tooltip:'Adaptive only. Maximum Green seconds per phase, even when the phase has the only waiting traffic.'})
+    maxGreenSeconds=15;
+    @property({min:.05,tooltip:'Adaptive only. Waiting demand age that triggers urgent phase selection after the current minimum Green. Approximate fairness policy, not a hard individual vehicle wait guarantee.'})
+    maxDemandWaitSeconds=30;
 
     private _owned:SplineJunction|null=null;
     private _original=new Map<SplineJunctionLink,JunctionTrafficSignal>();
     private _program:TrafficCycleProgram|null=null;
+    private _adaptive:SplineAdaptiveTraffic|null=null;
     private _signature='';
     private _elapsed=0;
     private _paused=false;
@@ -59,6 +71,19 @@ export class SplineTrafficController extends Component {
     public get remainingSeconds():number{return this._remainingSeconds;}
     public get validationError():string{return this._error;}
     public get isCycling():boolean{return !!this._owned&&!!this._program&&!this._paused;}
+    /** Current queue sizes per phase (summed over its distinct Green exits). */
+    public get phaseDemand():readonly number[]{
+        const junction=this._owned,program=this._program;
+        if(!junction||!program)return [];
+        return program.phases.map(phase=>phase.greenExits.reduce((count,index)=>
+            count+splineTrafficGate.waiting(junction,index),0));
+    }
+    /** Time in seconds that each phase has had continuous unmet demand since
+     * its last Green opportunity. Empty while adaptive mode is disabled.
+     */
+    public get phaseDemandAges():readonly number[]{
+        return this._adaptive?.waitingAges??[];
+    }
 
     onEnable():void {
         if(EDITOR_NOT_IN_PREVIEW)return;
@@ -80,12 +105,14 @@ export class SplineTrafficController extends Component {
         if(!this._owned)return;
         this._paused=false;
         this._elapsed=0;
+        this.resetAdaptive();
         this.applyCurrent();
     }
     public restartCycle():void{
         if(!this._owned)return;
         this._elapsed=0;
         this._paused=false;
+        this.resetAdaptive();
         this.applyCurrent();
     }
     /** Runtime settings may change from scripts without reloading the Scene.
@@ -109,7 +136,18 @@ export class SplineTrafficController extends Component {
             this.applyAllRed();
             return;
         }
-        if(Number.isFinite(dt)&&dt>0){
+        if(this._adaptive){
+            try{
+                this._adaptive.tick(Number.isFinite(dt)&&dt>0?dt:0,this.phaseDemand);
+            }catch(error){
+                this._error=String(error instanceof Error?error.message:error);
+                this._program=null;
+                this._adaptive=null;
+                this.applyAllRed();
+                this.changeStage('invalid',-1,0);
+                return;
+            }
+        }else if(Number.isFinite(dt)&&dt>0){
             this._elapsed+=dt;
             // Bound the clock for arbitrarily long runtime sessions.
             const initial=this._program.initialAllRedSeconds;
@@ -156,6 +194,7 @@ export class SplineTrafficController extends Component {
         }
         this._owned=null;
         this._program=null;
+        this._adaptive=null;
         this._original.clear();
         this._signature='';
         this._elapsed=0;
@@ -180,6 +219,8 @@ export class SplineTrafficController extends Component {
     private configurationSignature():string{
         const junction=this._owned;
         return JSON.stringify([this.allRedSeconds,
+            this.adaptiveTraffic,this.minGreenSeconds,
+            this.maxGreenSeconds,this.maxDemandWaitSeconds,
             junction?.connections.length??-1,
             // Link identity changes are handled separately from phase timing.
             this.phases?.map(p=>p?[p.greenExits,p.greenSeconds,p.yellowSeconds]:null),
@@ -189,6 +230,7 @@ export class SplineTrafficController extends Component {
         this._signature=signature;
         this._elapsed=0;
         this._program=null;
+        this._adaptive=null;
         this.rememberNewLinks();
         const junction=this._owned;
         if(!junction)return;
@@ -201,7 +243,13 @@ export class SplineTrafficController extends Component {
                 if(phase.greenExits.some(index=>!junction.connections[index]))
                     throw Error('Traffic phase references a missing Junction link.');
             }
+            if(this.adaptiveTraffic)validateAdaptiveTraffic({
+                minGreenSeconds:this.minGreenSeconds,
+                maxGreenSeconds:this.maxGreenSeconds,
+                maxDemandWaitSeconds:this.maxDemandWaitSeconds,
+            });
             this._program=spec;
+            this.resetAdaptive();
             this._error='';
         }catch(error){
             const message=String(error instanceof Error?error.message:error);
@@ -215,6 +263,14 @@ export class SplineTrafficController extends Component {
         }
         this.applyCurrent(); // Always starts at mandatory all-red.
     }
+    private resetAdaptive():void{
+        this._adaptive=this.adaptiveTraffic&&this._program?
+            new SplineAdaptiveTraffic(this._program,{
+                minGreenSeconds:this.minGreenSeconds,
+                maxGreenSeconds:this.maxGreenSeconds,
+                maxDemandWaitSeconds:this.maxDemandWaitSeconds,
+            }):null;
+    }
     private applyAllRed():void{
         const junction=this._owned;
         if(!junction)return;
@@ -226,7 +282,7 @@ export class SplineTrafficController extends Component {
         const junction=this._owned,program=this._program;
         if(!junction||!program)return;
         this.rememberNewLinks();
-        const state=sampleTrafficCycle(program,this._elapsed);
+        const state=this._adaptive?.sample??sampleTrafficCycle(program,this._elapsed);
         const exits=new Set(state.greenExits);
         // Close all previous Greens before opening any next phase Greens.
         // This prevents transient conflicting Green states even in event hooks.
