@@ -1,0 +1,41 @@
+'use strict';
+const assert=require('node:assert/strict'),cp=require('node:child_process'),
+ fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'spline-traffic-'));
+try{
+ cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),'--noEmit','false','--outDir',tmp]);
+ const {SplineTrafficGate}=require(path.join(tmp,'Core/SplineTrafficGate.js'));
+ const gate=new SplineTrafficGate(),j1={},j2={},a={},b={},c={};
+ assert(gate.move(a,j1,2,1));assert.equal(gate.count(j1,2),1);
+ assert(gate.move(a,j1,2,1),'Owner already occupies the slot');
+ assert.equal(gate.move(b,j1,2,1),false,'Second follower must wait');
+ assert.equal(gate.count(j1,2),1);
+ assert(gate.move(b,j1,3,1),'Different link has independent capacity');
+ assert.equal(gate.count(j1,3),1);
+ assert.equal(gate.move(a,j1,3,1),false,'Atomic move retains old reservation');
+ assert.equal(gate.count(j1,2),1);
+ assert(gate.move(a,j2,2,1),'Different Junction has independent capacity');
+ assert.equal(gate.count(j1,2),0);
+ assert.equal(gate.count(j2,2),1);
+ assert(gate.move(c,j1,3,0),'Unlimited exit admits without reservation');
+ assert.equal(gate.count(j1,3),1);
+ assert.deepEqual(gate.reservation(a),{junction:j2,exitIndex:2});
+ assert(gate.move(a,j1,8,0),'Unlimited exit releases old slot');
+ assert.equal(gate.reservation(a),null);
+ assert.equal(gate.count(j2,2),0);
+ gate.release(b);gate.release(b);
+ assert.equal(gate.size,0);
+ assert.throws(()=>gate.move(a,j1,-1,1),/Invalid/);
+ assert.throws(()=>gate.move(a,j1,0,-2),/Invalid/);
+ assert.throws(()=>gate.move(a,j1,0,4097),/Invalid/);
+ gate.move(a,j1,0,2);gate.move(b,j1,0,2);
+ assert.equal(gate.count(j1,0),2);
+ gate.releaseJunction(j1);
+ assert.equal(gate.count(j1,0),0,'Disabling Junction releases all occupant slots');
+ assert.equal(gate.reservation(a),null);
+ assert.equal(gate.reservation(b),null);
+ gate.move(a,j2,0,2);
+ gate.clear();assert.equal(gate.size,0);
+ assert.equal(gate.count(j1,0),0);
+ console.log('SPLINE TRAFFIC GATE PASS: opt-in capacity, atomic admission, independent links, release and unlimited fallback.');
+}finally{fs.rmSync(tmp,{recursive:true,force:true});}

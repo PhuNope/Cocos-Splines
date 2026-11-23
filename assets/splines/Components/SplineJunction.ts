@@ -1,4 +1,5 @@
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
+import {splineTrafficGate} from '../Core/SplineTrafficGate';
 import { _decorator, Component, Enum, EventHandler, Color } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
@@ -20,6 +21,11 @@ export class SplineJunctionLink {
     positionMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({range:[0,1,0.001],slide:true,tooltip:'0..1 coordinate for Normalized Distance or Spline t mode.'}) progress=0;
     @property({min:0,tooltip:'Absolute distance from beginning; applies only in Distance mode.'}) distance=0;
+    /** Opt-in admission gate. 0 = unlimited (backward-compatible).
+     * Counts followers admitted through this exit, not all objects on spline.
+     */
+    @property({min:0,step:1,tooltip:'Traffic capacity for this destination link. 0 = unlimited. Enforced only for SplineAnimate followers with Enable Traffic Capacity.'})
+    maxFollowers=0;
     public getProgress():number{return this.spline?toNormalizedDistance(this.spline,this.positionMode,this.progress,this.distance):0;}
     @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination. Preserve: keep incoming travel direction; Forward: increase destination progress (0 toward 1); Backward: decrease destination progress (1 toward 0). It does not choose a branch.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
 }
@@ -58,8 +64,8 @@ export class SplineJunction extends Component {
     public addOnSwitchEvent(cb:SplineEventCallback<JunctionEvent>,target?:object|null):void{this.AddOnSwitchEvent(cb,target);}
     public removeOnSwitchEvent(cb:SplineEventCallback<JunctionEvent>,target?:object|null):void{this.RemoveOnSwitchEvent(cb,target);}
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW)SplineJunction.active.add(this);}
-    onDisable():void{SplineJunction.active.delete(this);}
-    onDestroy():void{SplineJunction.active.delete(this);this._reachCallbacks.clear();this._switchCallbacks.clear();}
+    onDisable():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);}
+    onDestroy():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);this._reachCallbacks.clear();this._switchCallbacks.clear();}
     public onDrawGizmosSelected():void{
         const g3=(globalThis as any).Gizmos3D;
         const g2=(globalThis as any).Gizmos2D;

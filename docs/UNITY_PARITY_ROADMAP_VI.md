@@ -51,7 +51,9 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.3 — ShortestRoute On Arrived + opt-in auto-stop at exact normalized arc progress (including same-frame junction switch, reverse, boundary and editor/runtime event subscriptions), with rearm and regression tests.
 - [x] Phase 3.4 — Shared bounded graph/route LRU with automatic invalidation on spline getRevision/worldMatrix/active Junction/links, negative-result caching, explicit clear/stats APIs and mock regression coverage.
 - [x] Phase 3.5 — Opt-in World-distance shortest routes (sampled cumulative world arc, scale/rotation-aware, bounded 4096 samples/spline), Route Cost Space Inspector, independent world/local cache snapshots and regression tests.
-- [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph, traffic capacity/reservations.
+- [x] Phase 3.6a — Route diagnostics (reachable/unreachable/invalid), opt-in per-Junction-exit Max Followers admission, waiting at marker + retry, occupied slot release on lifecycle/teleport, runtime & pure regression tests.
+- [ ] Phase 3.6b — Fair traffic queues, occupancy-aware reroute, traffic signals, actual spline collision/proximity, multiplayer authority.
+- [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

@@ -3,8 +3,10 @@ import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
 import { SplineTrigger } from './SplineTrigger';
-import { SplineJunction, JunctionExitDirection } from './SplineJunction';
-import {nextShortestJunctionExit,planSplineRoute,type SplineRoute} from '../Core/SplineNetwork';
+import { SplineJunction, JunctionExitDirection, type SplineJunctionLink } from './SplineJunction';
+import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,
+    type SplineRoute,type SplineRouteDiagnosis} from '../Core/SplineNetwork';
+import {splineTrafficGate} from '../Core/SplineTrafficGate';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -89,6 +91,8 @@ export class SplineAnimate extends Component {
     stopOnRouteArrival=false;
     @property({type:[EventHandler],tooltip:'Fires once when Shortest Route reaches the configured SplineContainer + normalized distance, even if auto-stop is off.'})
     onRouteArrived:EventHandler[]=[];
+    @property({tooltip:'Opt-in: enforce destination-link Max Followers on Junction switches. A full exit holds this follower at the Junction until another follower releases a slot. Off by default.'})
+    enableTrafficCapacity=false;
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 1 in the forward direction.'})
     onEndReached:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 0 in the backward direction.'})
@@ -112,6 +116,8 @@ export class SplineAnimate extends Component {
     private _activeSpline:SplineContainer|null=null;
     private _requestedExit=-1;
     private _arrivalDelivered:{spline:SplineContainer;progress:number}|null=null;
+    private _trafficWait:{junction:SplineJunction;entryIndex:number;exitIndex:number;
+        link:SplineJunctionLink;source:SplineContainer;progress:number;direction:Direction}|null=null;
     private elapsed=0;
     private playing=false;
     private _previewNode:Node|null=null;
@@ -131,6 +137,12 @@ export class SplineAnimate extends Component {
     /** Uniform Bezier parameter of the current visible position (not raw easing time). */
     public get currentT():number{return this.source()?.tAtProgress(this.currentProgress)||0;}
     public get isPlaying():boolean{return this.playing;}
+    public get isWaitingForTraffic():boolean{return this._trafficWait!==null;}
+    /** Managed slot held on the last admitted Junction exit, if any. */
+    public get trafficReservation():{junction:SplineJunction;exitIndex:number}|null{
+        const slot=splineTrafficGate.reservation(this);
+        return slot?{junction:slot.junction as SplineJunction,exitIndex:slot.exitIndex}:null;
+    }
     /** Whether the current Shortest Route destination has already fired On Arrived. */
     public get routeArrived():boolean{
         const goal=this.routeDestinationProgress;
@@ -238,6 +250,7 @@ export class SplineAnimate extends Component {
             : Math.max(0.001,this.duration);
     }
     onEnable():void {
+        this.clearTraffic();
         if(this.upMode===SplineUpMode.TargetLocal)this.captureTargetLocalUp();
         if(EDITOR_NOT_IN_PREVIEW){
             if(this.previewInEditor)this.previewAt(this.coordinateRaw(this.source(),this.previewPositionMode,this.previewProgress,this.previewDistance));
@@ -249,15 +262,16 @@ export class SplineAnimate extends Component {
         this.playing=this.playOnStart;
         this.apply(this._raw);
     }
-    onDisable():void { if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
-    onDestroy():void { if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
+    onDisable():void { this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
+    onDestroy():void { this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
     public pause():void {this.playing=false;}
     public restart():void {
+        this.clearTraffic();
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;}
+    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this._trafficWait=null;}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -266,6 +280,15 @@ export class SplineAnimate extends Component {
             costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
             ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
         }):null;
+    }
+    /** Safe read-only explanation for reachable, no-route, or invalid topology. */
+    public inspectRouteTo(destination:SplineContainer,progress=1):SplineRouteDiagnosis{
+        const current=this.source();
+        return inspectSplineRoute(current!,this.currentProgress,destination,progress,{
+            startDirection:this._travelDirection,transferPenalty:this.routeTransferPenalty,
+            costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
+            ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
+        });
     }
     /** Activate runtime shortest-route junction choice without changing existing modes by default. */
     public followRouteTo(destination:SplineContainer,progress=1,stopOnArrival=this.stopOnRouteArrival):void{
@@ -291,12 +314,92 @@ export class SplineAnimate extends Component {
         this._routeArrivedCallbacks.emit(payload);
         this.node.emit('spline-route-arrived',payload);
     }
+    private clearTraffic():void{
+        this._trafficWait=null;
+        splineTrafficGate.release(this);
+    }
+    private admitTraffic(junction:SplineJunction,exit:{index:number;link:SplineJunctionLink}):boolean{
+        if(!this.enableTrafficCapacity){
+            splineTrafficGate.release(this);
+            return true;
+        }
+        const cap=exit.link.maxFollowers;
+        if(!Number.isInteger(cap)||cap<0||cap>4096)return false;
+        return splineTrafficGate.move(this,junction,exit.index,cap);
+    }
+    /** Only invoked when the destination exit has an acquired slot (or traffic
+     * admission was explicitly disabled). No Reach event is emitted here.
+     */
+    private commitJunctionSwitch(junction:SplineJunction,entryIndex:number,
+        destination:{index:number;link:SplineJunctionLink},dir:Direction,
+        spline:SplineContainer,atProgress:number):void{
+        const entryWorld=this.blendedWorldPosition(spline,atProgress);
+        const nextSpline=destination.link.spline!;
+        const nextProgress=destination.link.getProgress();
+        const nextWorld=this.pathWorldPosition(nextSpline,nextProgress);
+        const difference=new Vec3(entryWorld.x-nextWorld.x,entryWorld.y-nextWorld.y,entryWorld.z-nextWorld.z);
+        const newDir=destination.link.exitDirection;
+        const exitDir:Direction=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
+        this._activeSpline=nextSpline;
+        this.resetJunctionBlend();
+        const hasSplineOffset=!!(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z)||
+            !!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
+        if(hasSplineOffset&&this.junctionOffsetBlendDistance>0&&
+            Math.hypot(difference.x,difference.y,difference.z)>1e-6){
+            this._junctionOffsetBlend={spline:nextSpline,entryProgress:nextProgress,
+                direction:exitDir,distance:this.junctionOffsetBlendDistance,correction:difference};
+        }
+        this._travelDirection=exitDir;
+        this._raw=this.rawAtProgress(nextProgress,nextSpline);
+        this.elapsed=this._raw*this.getDuration();
+        junction.switched(this,entryIndex,destination.index,dir);
+    }
+    /** Retry a blocked link only while the original entry is still valid.
+     * Shortest Route recalculates at retry time, so a changed destination can
+     * select another valid exit without needing another marker crossing.
+     */
+    private retryTrafficWait():boolean{
+        const wait=this._trafficWait;
+        if(!wait)return false;
+        if(!this.enableTrafficCapacity||this.source()!==wait.source||
+           !wait.junction.enabled||!SplineJunction.active.has(wait.junction)||
+           this._travelDirection!==wait.direction||
+           wait.junction.connections[wait.entryIndex]?.spline!==wait.source||
+           Math.abs(wait.junction.connections[wait.entryIndex].getProgress()-wait.progress)>1e-6){
+            this._trafficWait=null;return false;
+        }
+        let exitIndex=wait.exitIndex;
+        if(this.junctionMode===JunctionMode.ShortestRoute){
+            if(!this.routeDestination){this._trafficWait=null;return false;}
+            const resolved=nextShortestJunctionExit(wait.junction,wait.entryIndex,
+                wait.source,wait.progress,wait.direction,
+                this.routeDestination,this.routeDestinationProgress,{
+                    transferPenalty:this.routeTransferPenalty,
+                    costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
+                    ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
+                });
+            if(resolved===null){this._trafficWait=null;return false;}
+            exitIndex=resolved;
+        }
+        const link=wait.junction.connections[exitIndex];
+        if(!link?.spline||link.spline.enabled===false||link.spline.node?.isValid===false||
+            (this.junctionMode!==JunctionMode.ShortestRoute&&link!==wait.link)){
+            this._trafficWait=null;return false;
+        }
+        const destination={index:exitIndex,link};
+        if(!this.admitTraffic(wait.junction,destination))return true; // still waiting
+        this._trafficWait=null;
+        this.commitJunctionSwitch(wait.junction,wait.entryIndex,destination,
+            wait.direction,wait.source,wait.progress);
+        return false;
+    }
     /** Select exit link in a Junction.onReach callback. Only honored for that crossing. */
     public requestJunctionExit(index:number):void {
         this._requestedExit=Number.isInteger(index)&&index>=0?index:-1;
     }
     /** Switch to a source manually, without firing triggers or traveling. */
     public setCurrentSpline(spline:SplineContainer,progress=0,direction:Direction=1):void{
+        this.clearTraffic();
         this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);
@@ -317,6 +420,7 @@ export class SplineAnimate extends Component {
     }
     /** Seek does not dispatch triggers unless explicitly requested. */
     public seek(t:number,fireEvents=false):void {
+        this.clearTraffic();
         this._arrivalDelivered=null;
         const previous=this.currentProgress;
         // An explicit seek intentionally cancels any in-progress junction interpolation.
@@ -427,6 +531,13 @@ export class SplineAnimate extends Component {
         let iterations=0;
         while(remaining>1e-8&&this.playing&&iterations++<512){
             const spline=this.source();if(!spline||spline.count<2)break;
+            if(!this.enableTrafficCapacity&&this.trafficReservation)
+                splineTrafficGate.release(this);
+            if(this._trafficWait){
+                const waiting=this.retryTrafficWait();
+                if(waiting){this.apply(this._raw);break;}
+                if(this.source()!==spline)continue; // admitted transfer
+            }
             // Arrivals at the spawn/seek/switch position must fire once without
             // requiring a movement that crosses the same normalized marker.
             const immediate=this.pendingRouteArrival(spline);
@@ -518,28 +629,24 @@ export class SplineAnimate extends Component {
                 const rawAtMarker=this.rawAtProgress(hit.progress,spline);
                 const elapsed=Math.min(remaining,Math.max(0,Math.abs(rawAtMarker-this._raw)*duration));
                 remaining=Math.max(0,remaining-elapsed);
-                const entryWorld=this.blendedWorldPosition(spline,hit.progress);
-                const nextSpline=destination.link.spline;
-                const nextProgress=destination.link.getProgress();
-                const nextWorld=this.pathWorldPosition(nextSpline,nextProgress);
-                const difference=new Vec3(entryWorld.x-nextWorld.x,entryWorld.y-nextWorld.y,entryWorld.z-nextWorld.z);
-                const newDir=destination.link.exitDirection;
-                const exitDir:Direction=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
-                this._activeSpline=nextSpline;
-                this.resetJunctionBlend();
-                // Junction offset frames are independently oriented on each spline.
-                // Preserve the entry world point, then settle into the new frame.
-                const hasSplineOffset=!!(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z)||
-                    !!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
-                if(hasSplineOffset&&this.junctionOffsetBlendDistance>0&&
-                    Math.hypot(difference.x,difference.y,difference.z)>1e-6){
-                    this._junctionOffsetBlend={spline:nextSpline,entryProgress:nextProgress,
-                        direction:exitDir,distance:this.junctionOffsetBlendDistance,correction:difference};
+                if(!this.admitTraffic(junction,destination)){
+                    // Hold exactly at the Junction marker; consume this frame's
+                    // remaining time, then retry admission in the next frame.
+                    this._trafficWait={junction,entryIndex:e.entry,
+                        exitIndex:destination.index,link:destination.link,
+                        source:spline,progress:hit.progress,direction:dir};
+                    this._raw=rawAtMarker;
+                    this.elapsed=this._raw*duration;
+                    this.apply(this._raw);
+                    this.node.emit('spline-traffic-blocked',{
+                        follower:this,junction,entryIndex:e.entry,
+                        exitIndex:destination.index,progress:hit.progress,
+                        capacity:destination.link.maxFollowers,
+                    });
+                    remaining=0;
+                }else{
+                    this.commitJunctionSwitch(junction,e.entry,destination,dir,spline,hit.progress);
                 }
-                this._travelDirection=exitDir;
-                this._raw=this.rawAtProgress(nextProgress,nextSpline);
-                this.elapsed=this._raw*this.getDuration();
-                junction.switched(this,e.entry,destination.index,dir);
                 jumped=true;
                 break;
             }

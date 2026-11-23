@@ -11,6 +11,7 @@ import { findNetworkRoute, type NetworkJunction, type NetworkRoute,
     type NetworkDirection } from './SplineNetworkGraph';
 import { SplineNetworkMemo, type NetworkCacheStats } from './SplineNetworkCache';
 import { buildWorldArcLength } from './SplineWorldArcLength';
+import {splineTrafficGate} from './SplineTrafficGate';
 
 export interface SplineRoute extends NetworkRoute {
     readonly splines:ReadonlyMap<string,SplineContainer>;
@@ -165,6 +166,51 @@ export function planSplineRoute(startSpline:SplineContainer,startProgress:number
     return route?{...route,
         splines:new Map(graph.splines),junctions:new Map(graph.junctions)}:null;
 }
+/** Read-only diagnostics for route planning; never throws for invalid networks.
+ * A saturated exit does not make the graph unreachable because traffic may
+ * clear later; admission is decided atomically at the actual Junction crossing.
+ */
+export interface SplineRouteDiagnosis {
+    status:'reachable'|'unreachable'|'invalid';
+    message:string;
+    route:SplineRoute|null;
+    junctionCount:number;
+    linkCount:number;
+    saturatedExits:number;
+}
+export function inspectSplineRoute(startSpline:SplineContainer,startProgress:number,
+    targetSpline:SplineContainer,targetProgress:number,
+    options:SplineRouteOptions={}):SplineRouteDiagnosis{
+    let junctionCount=0,linkCount=0,saturatedExits=0;
+    try{
+        const junctions=options.junctions??[...SplineJunction.active];
+        const active=junctions.filter(j=>j&&j.enabled&&j.node?.isValid!==false);
+        junctionCount=active.length;
+        for(const junction of active){
+            const entries=junction.entries();
+            linkCount+=entries.length;
+            for(const entry of entries){
+                const limit=entry.link.maxFollowers;
+                if(Number.isInteger(limit)&&limit>0&&
+                   splineTrafficGate.count(junction,entry.index)>=limit)saturatedExits++;
+            }
+        }
+        const route=planSplineRoute(startSpline,startProgress,targetSpline,targetProgress,options);
+        return {status:route?'reachable':'unreachable',
+            message:route?'Route available.':
+                'No direction-compatible path exists with current Junction links and filters.',
+            route,junctionCount,linkCount,saturatedExits};
+    }catch(error){
+        return {status:'invalid',message:String(error instanceof Error?error.message:error),
+            route:null,junctionCount,linkCount,saturatedExits};
+    }
+}
+
+/** Current managed admission count on a serialized Junction link index. */
+export function getSplineTrafficOccupancy(junction:SplineJunction,exitIndex:number):number{
+    return splineTrafficGate.count(junction,exitIndex);
+}
+
 /** Existing serialized exit index, not filtered link position. Fail closed while
  * a Scene is being edited or the dynamic network is temporarily invalid.
  */

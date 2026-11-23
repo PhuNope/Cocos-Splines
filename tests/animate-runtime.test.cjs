@@ -262,6 +262,80 @@ try {
     assert(!legacyArrival.routeArrived);
     assert(legacyArrival.isPlaying);
     assert.equal(legacyArrival.node.events.filter(e=>e.name==='spline-route-arrived').length,0);
+    // Phase 3.6 — opt-in exit occupancy with deterministic stall/resume.
+    const {getSplineTrafficOccupancy,inspectSplineRoute}=require(path.join(out,'Core','SplineNetwork.js'));
+    const {splineTrafficGate}=require(path.join(out,'Core','SplineTrafficGate.js'));
+    splineTrafficGate.clear();
+    exit.maxFollowers=1; // capacity applies only to followers that opted in
+    assert.equal(exit.maxFollowers,1);
+    const holder=makeFollower(JunctionMode.ShortestRoute);
+    holder.enableTrafficCapacity=true;
+    holder.followRouteTo(b,.85,false);
+    holder.update(2.5);
+    assert.equal(holder.currentSpline,b);
+    assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    assert(holder.trafficReservation);
+    const waiter=makeFollower(JunctionMode.ShortestRoute);
+    waiter.enableTrafficCapacity=true;
+    waiter.followRouteTo(b,.85,false);
+    waiter.update(2.5);
+    assert.equal(waiter.currentSpline,a);
+    near(waiter.currentProgress,.5);
+    assert(waiter.isWaitingForTraffic);
+    assert(waiter.isPlaying);
+    assert.equal(waiter.node.events.filter(e=>e.name==='spline-traffic-blocked').length,1);
+    const diagnostics=waiter.inspectRouteTo(b,.85);
+    assert.equal(diagnostics.status,'reachable',
+      'Capacity saturation does not mark graph unreachable');
+    assert.equal(diagnostics.saturatedExits,1);
+    assert.equal(diagnostics.linkCount,2);
+    const invalid=inspectSplineRoute(a,-.5,b,.85);
+    assert.equal(invalid.status,'invalid');
+    const disconnected=inspectSplineRoute(a,.1,b,.85,{junctions:[]});
+    assert.equal(disconnected.status,'unreachable');
+    waiter.update(.5);
+    assert.equal(waiter.node.events.filter(e=>e.name==='spline-traffic-blocked').length,1,
+      'Wait retry does not spam On Blocked');
+    assert.equal(waiter.currentSpline,a);
+    holder.onDisable();
+    assert.equal(getSplineTrafficOccupancy(junction,1),0);
+    waiter.update(.2);
+    assert.equal(waiter.currentSpline,b,'Waiter resumes after capacity is released');
+    assert(!waiter.isWaitingForTraffic);
+    assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    const legacyTraffic=makeFollower(JunctionMode.FirstOther);
+    legacyTraffic.update(2.5);
+    assert.equal(legacyTraffic.currentSpline,b,
+      'Legacy follower bypasses traffic gate without opt-in');
+    assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    waiter.setCurrentSpline(a,0);
+    assert.equal(getSplineTrafficOccupancy(junction,1),0,
+      'Manual teleport releases reserved traffic slot');
+    const unrestricted=makeFollower(JunctionMode.ShortestRoute);
+    unrestricted.enableTrafficCapacity=true;unrestricted.followRouteTo(b,.85,false);
+    exit.maxFollowers=0;unrestricted.update(2.5);
+    assert.equal(unrestricted.currentSpline,b);
+    assert.equal(getSplineTrafficOccupancy(junction,1),0,
+      'Unlimited exit requires no managed reservation');
+    // When a waiting destination is removed, follower must not transfer.
+    exit.maxFollowers=1;
+    const holder2=makeFollower(JunctionMode.ShortestRoute);
+    holder2.enableTrafficCapacity=true;holder2.followRouteTo(b,.85,false);
+    holder2.update(2.5);
+    const abandoned=makeFollower(JunctionMode.ShortestRoute);
+    abandoned.enableTrafficCapacity=true;abandoned.followRouteTo(b,.85,false);
+    abandoned.update(2.5);
+    assert(abandoned.isWaitingForTraffic);
+    exit.spline=null;
+    abandoned.update(.2);
+    assert(!abandoned.isWaitingForTraffic);
+    assert.equal(abandoned.currentSpline,a);
+    exit.spline=b;
+    holder2.onDestroy();
+    abandoned.onDestroy();unrestricted.onDestroy();waiter.onDestroy();
+    assert.equal(getSplineTrafficOccupancy(junction,1),0);
+    exit.maxFollowers=0;
+    splineTrafficGate.clear();
     junction.onReach=originalReach;
     const calls=triggerCalls.length;
     trigger.workOnce=true;trigger.resetTrigger();trigger.fire(follower,1);trigger.fire(follower,1);

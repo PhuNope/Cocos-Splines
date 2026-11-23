@@ -45,7 +45,7 @@ const configs={
   animate:{title:'Spline Animate' ,note:'Kéo Node chứa SplineContainer vào trường Spline. Target để trống sẽ di chuyển chính Node gắn SplineAnimate. Nếu Animate đặt trên chính Container, hãy gán Target là Node khác. Bật Preview in Editor để xem vị trí mà không cần Play. Start/Preview hỗ trợ Normalized Distance, Distance và Spline t.',groups:[
     {title:'Spline source',fields:['spline','target','modifiers','worldOffset','splineOffset','constantSpeedWithOffset']},
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
-    {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
+    {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
 };
