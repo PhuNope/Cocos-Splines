@@ -87,7 +87,7 @@ export function analyzeTrafficConflictPaths(
     for(const path of paths){
         if(!path||!Number.isInteger(path.exitIndex)||path.exitIndex<0||
            !Array.isArray(path.points)||path.points.length<2||path.points.length>33||
-           path.points.some(x=>!finite(x)))
+           path.points.some((x:ConflictPoint3)=>!finite(x)))
             throw Error('Invalid traffic exit trajectory.');
     }
     const key=(a:number,b:number)=>[Math.min(a,b),Math.max(a,b)].join(':');
@@ -99,7 +99,7 @@ export function analyzeTrafficConflictPaths(
         declaredPairs.add(key(c.firstExit,c.secondExit));
     }
     const phaseSets=phases.map(p=>{
-        if(!p||!Array.isArray(p.greenExits)||p.greenExits.some(x=>!Number.isInteger(x)||x<0))
+        if(!p||!Array.isArray(p.greenExits)||p.greenExits.some((x:number)=>!Number.isInteger(x)||x<0))
             throw Error('Invalid traffic conflict phase.');
         return new Set(p.greenExits);
     });
