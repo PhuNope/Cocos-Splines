@@ -161,6 +161,99 @@ try {
     assert.equal(direct.junctionMode,JunctionMode.ShortestRoute);
     direct.update(2.5);
     assert.equal(direct.currentSpline,a,'Shortest path on current spline needs no switch');
+    // Phase 3.3 — arrive at the exact normalized route marker, including a
+    // single update that switches between multiple splines.
+    const near=(x,y)=>assert(Math.abs(x-y)<1e-5,String(x)+' != '+String(y));
+    const ending=makeFollower(JunctionMode.ShortestRoute);
+    const arrived=[],editorArrivals=[];
+    ending.onRouteArrived=[event=>editorArrivals.push(event)];
+    ending.AddOnRouteArrivedEvent(event=>arrived.push(event));
+    ending.followRouteTo(a,.35,true);
+    ending.update(3); // would overshoot .35 without route arrival clipping
+    assert.strictEqual(ending.currentSpline,a);
+    near(ending.currentProgress,.35);
+    near(ending.target.worldPosition.x,3.5);
+    assert(!ending.isPlaying);
+    assert(ending.routeArrived);
+    assert.equal(arrived.length,1);
+    assert.equal(editorArrivals.length,1);
+    assert.equal(arrived[0].stopped,true);
+    assert.strictEqual(arrived[0].spline,a);
+    assert.equal(arrived[0].direction,1);
+    assert.equal(ending.node.events.filter(e=>e.name==='spline-route-arrived').length,1);
+    // Resume without changing the destination must not emit a second arrival.
+    ending.play();ending.update(.2);
+    assert.equal(arrived.length,1);
+    // A newly requested destination re-arms arrival even after auto-stop.
+    ending.followRouteTo(a,.65,true);
+    ending.update(2);
+    assert(!ending.isPlaying);near(ending.currentProgress,.65);
+    assert.equal(arrived.length,2);
+
+    const continuous=makeFollower(JunctionMode.ShortestRoute);
+    const uninterrupted=[];
+    continuous.AddOnRouteArrivedEvent(event=>uninterrupted.push(event));
+    continuous.followRouteTo(a,.3,false);
+    continuous.update(1.7);
+    assert.equal(uninterrupted.length,1,'Event fires even with auto-stop disabled');
+    assert.equal(uninterrupted[0].stopped,false);
+    near(continuous.currentProgress,.425);
+    assert(continuous.isPlaying);
+    continuous.update(.15);
+    assert.equal(uninterrupted.length,1,'No duplicate On Arrived in subsequent frames');
+    continuous.restart();continuous.update(1.7);
+    assert.equal(uninterrupted.length,2,'Restart re-arms route arrival');
+
+    const branchArrival=makeFollower(JunctionMode.ShortestRoute);
+    let branches=0;branchArrival.AddOnRouteArrivedEvent(()=>branches++);
+    branchArrival.followRouteTo(b,.3,true);
+    branchArrival.update(4); // crosses A->B switch, then B .3, in same update
+    assert.strictEqual(branchArrival.currentSpline,b);
+    near(branchArrival.currentProgress,.3);
+    near(branchArrival.target.worldPosition.x,103);
+    assert.equal(branches,1);
+    assert(!branchArrival.isPlaying);
+
+    const sameJunction=makeFollower(JunctionMode.ShortestRoute);
+    sameJunction.followRouteTo(a,.5,true);
+    sameJunction.update(3);
+    assert.strictEqual(sameJunction.currentSpline,a,
+      'Do not switch away from a coincident Junction destination');
+    near(sameJunction.currentProgress,.5);
+    assert(sameJunction.routeArrived);
+
+    const backwardArrival=makeFollower(JunctionMode.ShortestRoute);
+    backwardArrival.setCurrentSpline(a,.9,-1);
+    const backwardEvents=[];backwardArrival.AddOnRouteArrivedEvent(e=>backwardEvents.push(e));
+    backwardArrival.followRouteTo(a,.7,true);backwardArrival.update(2);
+    near(backwardArrival.currentProgress,.7);
+    assert.equal(backwardEvents[0].direction,-1);
+    assert(!backwardArrival.isPlaying);
+
+    const atStart=makeFollower(JunctionMode.ShortestRoute);
+    atStart.followRouteTo(a,0,true);
+    atStart.update(.05);
+    assert(atStart.routeArrived);
+    near(atStart.currentProgress,0);
+    assert(!atStart.isPlaying);
+    assert.equal(atStart.node.events.filter(e=>e.name==='spline-route-arrived').length,1);
+
+    const boundaryArrival=makeFollower(JunctionMode.ShortestRoute,LoopMode.Loop);
+    let ends=0;boundaryArrival.onEndReached=[()=>ends++];
+    boundaryArrival.followRouteTo(a,1,true);
+    boundaryArrival.update(10);
+    near(boundaryArrival.currentProgress,1);
+    assert.equal(ends,1,'Boundary event is preserved at route destination 1');
+    assert(!boundaryArrival.isPlaying);
+
+    const legacyArrival=makeFollower(JunctionMode.Off);
+    legacyArrival.routeDestination=a;
+    legacyArrival.routeDestinationProgress=.3;
+    legacyArrival.stopOnRouteArrival=true;
+    legacyArrival.update(1.5);
+    assert(!legacyArrival.routeArrived);
+    assert(legacyArrival.isPlaying);
+    assert.equal(legacyArrival.node.events.filter(e=>e.name==='spline-route-arrived').length,0);
     junction.onReach=originalReach;
     const calls=triggerCalls.length;
     trigger.workOnce=true;trigger.resetTrigger();trigger.fire(follower,1);trigger.fire(follower,1);

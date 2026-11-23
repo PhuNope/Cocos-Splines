@@ -21,7 +21,7 @@ Sử dụng `junctionOffsetBlendDistance` (mặc định **1 unit**) để giữ
 
 ### Spline Network — Shortest Route + Connector Check (v2 preview)
 
-SplineAnimate nay có Junction Mode = Shortest Route, Route Destination, Route Destination Progress và giới hạn Max World Gap. Route planner có xét hướng di chuyển, đi qua nhiều Junction, hỗ trợ spline đóng và không sửa scene/mesh. Xem [hướng dẫn Network](docs/SPLINE_NETWORK_V2_VI.md). Editor có Check Connectors, Snap Target Endpoint, và Align Tangent G1/C1 cho Knot đích ở Broken mode. Tangent handle node, Knot Rotation, World scale và Reversed được hỗ trợ; một Scene snapshot khi thành công, rollback khi lỗi. Chưa hỗ trợ auto-stop tại đích hoặc traffic reservation.
+SplineAnimate nay có Junction Mode = Shortest Route, Route Destination, Route Destination Progress và giới hạn Max World Gap. Route planner có xét hướng di chuyển, đi qua nhiều Junction, hỗ trợ spline đóng và không sửa scene/mesh. Xem [hướng dẫn Network](docs/SPLINE_NETWORK_V2_VI.md). Editor có Check Connectors, Snap Target Endpoint, và Align Tangent G1/C1 cho Knot đích ở Broken mode. Tangent handle node, Knot Rotation, World scale và Reversed được hỗ trợ; một Scene snapshot khi thành công, rollback khi lỗi. Đã hỗ trợ On Route Arrived và tùy chọn Stop On Route Arrival (mặc định tắt); chưa có route cache/traffic reservation.
 
 ## Bộ tài liệu HTML
 

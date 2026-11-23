@@ -12,6 +12,12 @@ const {ccclass,property,menu,executeInEditMode}= _decorator;
 export interface SplineBoundaryEvent {
     follower:SplineAnimate;target:Node;spline:SplineContainer;progress:number;direction:Direction;
 }
+/** Emitted exactly once per programmed destination until followRouteTo/restart/seek
+ * re-arms it. Only gameplay playback dispatches this event, never Editor preview.
+ */
+export interface SplineRouteArrivalEvent extends SplineBoundaryEvent {
+    stopped:boolean;
+}
 export enum AnimateMethod { Time=0, Speed=1 }
 export enum LoopMode { Once=0, Loop=1, PingPong=2 }
 export enum Easing { Linear=0, EaseInOut=1, EaseIn=2, EaseOut=3, SmootherStep=4 }
@@ -76,6 +82,10 @@ export class SplineAnimate extends Component {
     routeTransferPenalty=0.01;
     @property({min:0,tooltip:'Maximum world gap allowed between link positions when >0. Set 0 to disable gap validation (teleports may occur).'})
     routeMaxWorldGap=0;
+    @property({tooltip:'Opt-in: stop precisely at Route Destination Progress when reached. Off preserves legacy ShortestRoute movement, but On Arrived still fires.'})
+    stopOnRouteArrival=false;
+    @property({type:[EventHandler],tooltip:'Fires once when Shortest Route reaches the configured SplineContainer + normalized distance, even if auto-stop is off.'})
+    onRouteArrived:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 1 in the forward direction.'})
     onEndReached:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 0 in the backward direction.'})
@@ -83,10 +93,13 @@ export class SplineAnimate extends Component {
 
     private readonly _endReachedCallbacks=new SplineEventCallbacks<SplineBoundaryEvent>();
     private readonly _beginningReachedCallbacks=new SplineEventCallbacks<SplineBoundaryEvent>();
+    private readonly _routeArrivedCallbacks=new SplineEventCallbacks<SplineRouteArrivalEvent>();
     public AddOnEndReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._endReachedCallbacks.add(cb,target);}
     public RemoveOnEndReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._endReachedCallbacks.remove(cb,target);}
     public AddOnBeginningReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._beginningReachedCallbacks.add(cb,target);}
-    public RemoveOnBeginningReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null):void{this._beginningReachedCallbacks.remove(cb,target);}
+    public RemoveOnBeginningReachedEvent(cb:SplineEventCallback<SplineBoundaryEvent>,target?:object|null){this._beginningReachedCallbacks.remove(cb,target);}
+    public AddOnRouteArrivedEvent(cb:SplineEventCallback<SplineRouteArrivalEvent>,target?:object|null):void{this._routeArrivedCallbacks.add(cb,target);}
+    public RemoveOnRouteArrivedEvent(cb:SplineEventCallback<SplineRouteArrivalEvent>,target?:object|null):void{this._routeArrivedCallbacks.remove(cb,target);}
     /** Captured before the first playback/editor-preview rotation to prevent the
      * animated Target from feeding its own output rotation back into Up. */
     private _initialTargetWorldUp:Vec3|null=null;
@@ -95,6 +108,7 @@ export class SplineAnimate extends Component {
     private _travelDirection:Direction=1;
     private _activeSpline:SplineContainer|null=null;
     private _requestedExit=-1;
+    private _arrivalDelivered:{spline:SplineContainer;progress:number}|null=null;
     private elapsed=0;
     private playing=false;
     private _previewNode:Node|null=null;
@@ -113,6 +127,16 @@ export class SplineAnimate extends Component {
     public get currentDistance():number{return this.currentProgress*(this.source()?.length||0);}
     /** Uniform Bezier parameter of the current visible position (not raw easing time). */
     public get currentT():number{return this.source()?.tAtProgress(this.currentProgress)||0;}
+    public get isPlaying():boolean{return this.playing;}
+    /** Whether the current Shortest Route destination has already fired On Arrived. */
+    public get routeArrived():boolean{
+        const goal=this.routeDestinationProgress;
+        return this.junctionMode===JunctionMode.ShortestRoute&&
+            this.routeDestination!==null&&this.source()===this.routeDestination&&
+            Number.isFinite(goal)&&this._arrivalDelivered?.spline===this.routeDestination&&
+            Math.abs(this._arrivalDelivered.progress-clamp01(goal))<=1e-8;
+    }
+
     private coordinateRaw(spline:SplineContainer|null,mode:SplinePositionMode,progress:number,distance:number):number {
         if(!spline)return clamp01(progress);
         // With the compensation disabled, retain the original normalized start
@@ -216,18 +240,18 @@ export class SplineAnimate extends Component {
             if(this.previewInEditor)this.previewAt(this.coordinateRaw(this.source(),this.previewPositionMode,this.previewProgress,this.previewDistance));
             return;
         }
-        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this.resetJunctionBlend();
+        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=this.coordinateRaw(this.source(),this.startPositionMode,this.startProgress,this.startDistance);
         this.elapsed=this._raw*this.getDuration();
         this.playing=this.playOnStart;
         this.apply(this._raw);
     }
     onDisable():void { if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
-    onDestroy():void { if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear(); }
+    onDestroy():void { if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
     public pause():void {this.playing=false;}
     public restart():void {
-        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this.resetJunctionBlend();
+        this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
     }
     public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;}
@@ -240,10 +264,28 @@ export class SplineAnimate extends Component {
         }):null;
     }
     /** Activate runtime shortest-route junction choice without changing existing modes by default. */
-    public followRouteTo(destination:SplineContainer,progress=1):void{
+    public followRouteTo(destination:SplineContainer,progress=1,stopOnArrival=this.stopOnRouteArrival):void{
         this.routeDestination=destination;
         this.routeDestinationProgress=clamp01(progress);
+        this.stopOnRouteArrival=stopOnArrival;
         this.junctionMode=JunctionMode.ShortestRoute;
+        this._arrivalDelivered=null;
+    }
+    private pendingRouteArrival(spline:SplineContainer):number|null{
+        if(this.junctionMode!==JunctionMode.ShortestRoute||
+           this.routeDestination!==spline||!Number.isFinite(this.routeDestinationProgress))return null;
+        return this.routeArrived?null:clamp01(this.routeDestinationProgress);
+    }
+    private notifyRouteArrival(spline:SplineContainer,progress:number,direction:Direction):void{
+        // Mark delivered before callbacks, to be safe against re-entrant scripts.
+        this._arrivalDelivered={spline,progress};
+        const stopped=this.stopOnRouteArrival;
+        if(stopped)this.playing=false;
+        const payload:SplineRouteArrivalEvent={follower:this,target:this.target||this.node,
+            spline,progress,direction,stopped};
+        EventHandler.emitEvents(this.onRouteArrived,payload);
+        this._routeArrivedCallbacks.emit(payload);
+        this.node.emit('spline-route-arrived',payload);
     }
     /** Select exit link in a Junction.onReach callback. Only honored for that crossing. */
     public requestJunctionExit(index:number):void {
@@ -251,7 +293,7 @@ export class SplineAnimate extends Component {
     }
     /** Switch to a source manually, without firing triggers or traveling. */
     public setCurrentSpline(spline:SplineContainer,progress=0,direction:Direction=1):void{
-        this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
+        this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);
     }
@@ -271,6 +313,7 @@ export class SplineAnimate extends Component {
     }
     /** Seek does not dispatch triggers unless explicitly requested. */
     public seek(t:number,fireEvents=false):void {
+        this._arrivalDelivered=null;
         const previous=this.currentProgress;
         // An explicit seek intentionally cancels any in-progress junction interpolation.
         this.resetJunctionBlend();
@@ -380,6 +423,14 @@ export class SplineAnimate extends Component {
         let iterations=0;
         while(remaining>1e-8&&this.playing&&iterations++<512){
             const spline=this.source();if(!spline||spline.count<2)break;
+            // Arrivals at the spawn/seek/switch position must fire once without
+            // requiring a movement that crosses the same normalized marker.
+            const immediate=this.pendingRouteArrival(spline);
+            if(immediate!==null&&Math.abs(this.currentProgress-immediate)<=1e-8){
+                this.apply(this._raw);
+                this.notifyRouteArrival(spline,immediate,this._travelDirection);
+                if(!this.playing)break;
+            }
             const duration=this.getDuration();
             const dir=this._travelDirection;
             const boundary=dir===1?1:0;
@@ -391,9 +442,29 @@ export class SplineAnimate extends Component {
                 else {this.resetJunctionBlend();this._raw=dir===1?0:1;}
                 continue;
             }
-            const step=Math.min(toBoundary,remaining/duration);
+            let step=Math.min(toBoundary,remaining/duration);
             if(step<=1e-10)break;
-            const next=clamp01(this._raw+dir*step),from=this.progressAtRaw(this._raw,spline),to=this.progressAtRaw(next,spline);
+            let next=clamp01(this._raw+dir*step);
+            const from=this.progressAtRaw(this._raw,spline);
+            let to=this.progressAtRaw(next,spline);
+            const goal=this.pendingRouteArrival(spline);
+            let arriving=false;
+            if(goal!==null&&crosses(from,to,goal,dir)){
+                const atRaw=this.rawAtProgress(goal,spline);
+                const arrivalStep=Math.abs(atRaw-this._raw);
+                if(arrivalStep<=step+1e-8&&dir*(atRaw-this._raw)>=-1e-8){
+                    step=Math.min(step,arrivalStep);
+                    next=atRaw;
+                    to=goal;
+                    arriving=true;
+                }
+            }
+            if(arriving&&step<=1e-10){
+                this.apply(this._raw);
+                this.notifyRouteArrival(spline,goal!,dir);
+                if(!this.playing)break;
+                continue;
+            }
             let jumped=false;
             for(const hit of this.crossings(spline,from,to,dir)){
                 const e=hit.payload;
@@ -402,6 +473,12 @@ export class SplineAnimate extends Component {
                 const junction=e.junction;
                 this._requestedExit=-1;
                 junction.reaches(this,e.entry,dir);
+                // At the configured destination, an On Reach event may fire
+                // but must not switch onto another spline before On Arrived.
+                if(arriving&&goal!==null&&Math.abs(hit.progress-goal)<=1e-8){
+                    this._requestedExit=-1;
+                    continue;
+                }
                 const requested=this._requestedExit;
                 this._requestedExit=-1;
                 let destination:null|{index:number;link:import('./SplineJunction').SplineJunctionLink}=null;
@@ -464,8 +541,15 @@ export class SplineAnimate extends Component {
             if(jumped)continue;
             remaining=Math.max(0,remaining-step*duration);
             this._raw=next;this.elapsed=this._raw*this.getDuration();
-            if(toBoundary-step<=1e-8){
-                this.reachedBoundary(dir);
+            const reachedEnd=toBoundary-step<=1e-8;
+            if(reachedEnd)this.reachedBoundary(dir);
+            if(arriving&&goal!==null){
+                // Materialize the exact waypoint before calling gameplay hooks.
+                this.apply(this._raw);
+                this.notifyRouteArrival(spline,goal,dir);
+                if(!this.playing)break;
+            }
+            if(reachedEnd){
                 if(this.loopMode===LoopMode.Once){this.playing=false;break;}
                 if(this.loopMode===LoopMode.PingPong)this._travelDirection=dir===1?-1:1;
                 else {this.resetJunctionBlend();this._raw=dir===1?0:1;}

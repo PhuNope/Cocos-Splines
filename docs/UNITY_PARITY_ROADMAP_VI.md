@@ -48,7 +48,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.1 — Network graph + direction-aware shortest routes across existing Junction links, seam support, optional world-gap validation, route preview API and SplineAnimate ShortestRoute (new enum 4; modes 0–3 unchanged).
 - [x] Phase 3.2a — Editor Check Connectors (world gap + tangent axis-angle), safe position-only snap of an open spline endpoint to a link, Scene lease/revision preflight, serialized transaction + rollback and regression tests.
 - [x] Phase 3.2b1 — G1/C1 endpoint tangent alignment for Broken target knots, including handle-node overrides, Knot rotation, nonuniform scale, Reversed spline side mapping, Scene guard and single-snapshot rollback.
-- [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph, route cache/revisions, world-distance routing, capacity and arrival events.
+- [x] Phase 3.3 — ShortestRoute On Arrived + opt-in auto-stop at exact normalized arc progress (including same-frame junction switch, reverse, boundary and editor/runtime event subscriptions), with rearm and regression tests.
+- [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph, route cache/revisions, world-distance routing, capacity and traffic reservations.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

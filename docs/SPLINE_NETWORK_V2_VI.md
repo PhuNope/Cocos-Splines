@@ -31,7 +31,7 @@ Ví dụ:
         startDirection: 1, transferPenalty: 0.01, maxWorldGap: 0.2,
     });
     console.log(route?.distance, route?.switchCount, route?.steps);
-    follower.followRouteTo(roadC, 0.8);
+    follower.followRouteTo(roadC, 0.8, true); // true = stop on arrival (opt-in)
     const inspection = follower.planRouteTo(roadC, 0.8);
 
 Route trả về các step 'travel' (splineId, progress, direction, distance) và 'switch' (junctionId, entryIndex, exitIndex, from/toSplineId, direction). Maps route.splines và route.junctions tra component từ Node UUID.
@@ -40,7 +40,7 @@ Route trả về các step 'travel' (splineId, progress, direction, distance) v�
 
 - Chi phí route tính theo local arc-length, không phải world-length dưới non-uniform scale.
 - Không ghép road mesh, snapping hay tự sửa spline. Không có world gap validation khi Route Max World Gap = 0.
-- Shortest Route chỉ chọn exit khi cắt qua Junction. **Chưa có auto-stop tại Route Destination Progress**, sự kiện arrived, traffic reservation, hoặc routing đoàn tàu.
+- Shortest Route chọn exit khi cắt qua Junction và có thể phát On Arrived/auto-stop tại Route Destination Progress. Chưa có traffic reservation hoặc routing đoàn tàu.
 - Đường bị thay đổi trong Play sẽ được tính lại tại crossing tiếp theo. Nếu không có đường hợp lệ, follower tiếp tục trên spline hiện tại theo Loop Mode.
 - Native Cocos Creator 3.8.8 Undo/Prefab/Scene smoke test còn phải kiểm tra. CI hiện test graph và mock runtime.
 
@@ -73,3 +73,25 @@ Trong Inspector `Spline Junction → Connector validation / endpoint snap`: ch�
 - Editor dùng `record:false`, read-back xác nhận giá trị, **một Scene snapshot** khi thao tác thành công, rollback target field nếu write/snapshot lỗi; nếu đã chuyển Scene, không viết rollback sang Scene mới.
 
 **Giới hạn:** không hàn hình học hoặc road mesh, không dùng cubic refit để giữ curvature bên trong một đoạn sau khi sửa tangent, chưa áp dụng tangent align cho interior link hoặc closed spline. G1/C1 mô tả tính liên tục tại **hai vị trí endpoint đã trùng nhau**, không bảo đảm toàn bộ Junction mesh trơn. Kiểm tra Undo/Redo, Prefab override và save/reopen vẫn phải thực hiện trực tiếp trong Cocos Creator 3.8.8.
+
+## Phase 3.3 — Runtime route arrival & optional auto-stop
+
+`SplineAnimate` có thêm `Stop On Route Arrival` (mặc định **false**, giữ chuyển động cũ) và danh sách Inspector `On Route Arrived`. Khi `Junction Mode = Shortest Route` và `Route Destination` đúng bằng spline hiện tại, follower nhận biết lúc di chuyển qua `Route Destination Progress` (chuẩn hóa khoảng cách arc 0–1), cắt frame tại **chính mốc** và phát sự kiện một lần. Tính năng hoạt động khi tuyến đi qua Junction khác trong cùng frame, đi tiến/lùi, hoặc spawn trực tiếp trên vị trí đích.
+
+Nếu `Stop On Route Arrival = true`, `SplineAnimate` đặt trạng thái playing=false tại mốc, không di chuyển quá. Nếu false, sự kiện vẫn phát nhưng follower tiếp tục qua đích; không bị gọi lại mỗi vòng Loop/PingPong. `On End Reached` / `On Beginning Reached` vẫn được phát nếu đích nằm ở biên 0/1.
+
+Các API runtime:
+```ts
+follower.followRouteTo(roadC, 0.8, true); // yêu cầu mới: dừng ở mốc
+follower.AddOnRouteArrivedEvent((event) => {
+    console.log(event.spline, event.progress, event.direction, event.stopped);
+});
+follower.RemoveOnRouteArrivedEvent(callback, optionalTarget);
+console.log(follower.routeArrived, follower.isPlaying);
+```
+
+Cũng có `onRouteArrived` (`EventHandler[]`) và Node event `spline-route-arrived`, payload `{follower,target,spline,progress,direction,stopped}`.
+
+Gọi `followRouteTo`, `restart`, `seek` hay `setCurrentSpline` sẽ re-arm cho một lượt đến đích mới. Chỉnh đích/progress qua Inspector cũng sẽ phát lại khi đi tới đích mới. `play()` sau khi dừng **không tự re-arm** cùng đích để tránh duplicate. Chế độ Off/Manual/FirstOther/RoundRobin và Scene Editor preview không phát On Arrived.
+
+**Giới hạn:** Tính năng này chỉ xử lý khi follower **thực sự đi tới mốc** theo hướng di chuyển trên spline đích; nếu đích nằm phía sau mà không có route reverse hợp lệ, không teleport hay tự quay đầu. Không có global route distance caching, traffic reservation hoặc báo route-unreachable tự động. Kiểm chứng Cocos Creator 3.8.8 trong runtime thật vẫn cần bổ sung.
