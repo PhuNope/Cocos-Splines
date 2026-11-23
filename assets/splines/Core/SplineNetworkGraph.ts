@@ -147,8 +147,9 @@ export function findNetworkRoute(
         if(found===undefined)throw Error('Network waypoint does not exist.');
         return found;
     };
-    const edge=(from:number,to:number,step:NetworkRouteStep,cost:number):void=>
+    const edge=(from:number,to:number,step:NetworkRouteStep,cost:number):void=>{
         adj[from].push({to,step,cost});
+    };
     for(const s of sortedSplines){
         const positions=[...points.get(s.id)!.values()].sort((a,b)=>a-b);
         for(let i=0;i<positions.length-1;i++){
