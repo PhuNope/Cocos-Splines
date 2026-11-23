@@ -53,7 +53,7 @@ try{
    getComponent(){return null;}
  }
  class Component{constructor(){this.enabled=true;}getComponent(){return null;}}
- const cc={_decorator:{ccclass:()=>c=>c,property:decor,menu:()=>c=>c},
+ const cc={_decorator:{ccclass:()=>c=>c,property:decor,menu:()=>c=>c,executeInEditMode:()=>c=>c},
    Component,Node,Enum:v=>v,Color:class{},Vec3:class{},Quat:class{}};
  const original=Module._load;
  Module._load=function(request,parent,isMain){
