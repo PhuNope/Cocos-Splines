@@ -160,12 +160,12 @@ function makeInspector(type){
             if(['startProgress','endProgress'].includes(field))return Number(v('rangeMode'))!==1;
             if(['startDistance','endDistance'].includes(field))return Number(v('rangeMode'))===1;
         }
+        if(type==='trafficController'&&['minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds'].includes(field))return v('adaptiveTraffic')===true;
         if(type==='animate'){
             if(['routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived'].includes(field))
                 return Number(v('junctionMode'))===4;
             if(field==='rerouteAroundTraffic')return Number(v('junctionMode'))===4&&v('enableTrafficCapacity')===true;
             if(field==='trafficPriority')return v('enableTrafficCapacity')===true;
-            if(type==='trafficController'&&['minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds'].includes(field))return v('adaptiveTraffic')===true;
             if(['headwayWorldGap','headwayBrakeDistance'].includes(field))return v('enableHeadway')===true;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;
