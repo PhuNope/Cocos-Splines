@@ -24,7 +24,7 @@ traffic.update.call({$:signalRows},{value:{adaptiveTraffic:{value:true},
    minGreenSeconds:{value:2},maxGreenSeconds:{value:15},maxDemandWaitSeconds:{value:30}}});
 for(const key of ['minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds'])
  assert.equal(signalRows['r_'+key].hidden,false,key+' must display in Adaptive mode');
-for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
+for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance','enableLanePlacement','laneCount','laneWidth','enableProximityAvoidance','proximityRadius','proximitySafetyGap','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }
 for(const f of ['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','gizmoSteps','gizmoColor'])assert(container.template.includes('spl-field-'+f));
@@ -41,7 +41,7 @@ const panel={$:selectors,_previewState:'false|undefined'};
 const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.Object'},previewInEditor:{value:false},previewProgress:{value:0.2}}};
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
-assert.equal(animate.template.match(/<ui-prop /g)?.length,44);
+assert.equal(animate.template.match(/<ui-prop /g)?.length,50);
 const routePanel={$:Object.fromEntries(Object.keys(animate.$).map(k=>[k,{hidden:false,render(){}}]))};
 animate.update.call(routePanel,{value:{junctionMode:{value:4},routeDestination:{value:null},stopOnRouteArrival:{value:false},routeCostSpace:{value:0},onRouteArrived:{value:[]},enableTrafficCapacity:{value:true},trafficPriority:{value:0},rerouteAroundTraffic:{value:false}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,false);
@@ -58,6 +58,16 @@ animate.update.call(routePanel,{value:{enableHeadway:{value:false},
     headwayWorldGap:{value:2},headwayBrakeDistance:{value:4}}});
 assert.equal(routePanel.$.r_headwayWorldGap.hidden,true);
 assert.equal(routePanel.$.r_headwayBrakeDistance.hidden,true);
+animate.update.call(routePanel,{value:{enableLanePlacement:{value:false},
+    laneCount:{value:2},laneWidth:{value:3.5},
+    enableProximityAvoidance:{value:false},proximityRadius:{value:.5},proximitySafetyGap:{value:.2}}});
+for(const k of ['laneCount','laneWidth','proximityRadius','proximitySafetyGap'])
+    assert.equal(routePanel.$['r_'+k].hidden,true,k+' hidden when opt-out');
+animate.update.call(routePanel,{value:{enableLanePlacement:{value:true},
+    laneCount:{value:2},laneWidth:{value:3.5},
+    enableProximityAvoidance:{value:true},proximityRadius:{value:.5},proximitySafetyGap:{value:.2}}});
+for(const k of ['laneCount','laneWidth','proximityRadius','proximitySafetyGap'])
+    assert.equal(routePanel.$['r_'+k].hidden,false,k+' visible when opt-in');
 animate.update.call(routePanel,{value:{junctionMode:{value:0},routeDestination:{value:null},stopOnRouteArrival:{value:false},onRouteArrived:{value:[]}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,true);
 assert.equal(routePanel.$.r_stopOnRouteArrival.hidden,true);

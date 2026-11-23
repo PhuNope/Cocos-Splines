@@ -10,6 +10,13 @@ try {
     constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
     clone(){return new Vec3(this.x,this.y,this.z);}
     static add(out,a,b){out.x=a.x+b.x;out.y=a.y+b.y;out.z=a.z+b.z;return out;}
+    static transformQuat(out,a,q){
+      const tx=2*(q.y*a.z-q.z*a.y),ty=2*(q.z*a.x-q.x*a.z),tz=2*(q.x*a.y-q.y*a.x);
+      out.x=a.x+q.w*tx+(q.y*tz-q.z*ty);
+      out.y=a.y+q.w*ty+(q.z*tx-q.x*tz);
+      out.z=a.z+q.w*tz+(q.x*ty-q.y*tx);
+      return out;
+    }
   }
   class Quat {
     constructor(x=0,y=0,z=0,w=1){this.x=x;this.y=y;this.z=z;this.w=w;}
@@ -516,6 +523,81 @@ try {
     assert(l3.currentProgress<.6,'Same lane ID must still obey headway gap');
     l1.onDisable();l2.onDisable();l3.onDisable();
     assert.equal(splineHeadwayRegistry.size,0);
+    // Phase 3.6b2b2b2b1: actual lane CENTER positions, in spline-frame Right
+    // (not world +X), with default opt-out preserving old centerline placement.
+    const {splineProximityRegistry}=require(path.join(out,'Core','SplineProximity.js'));
+    splineProximityRegistry.clear();
+    const physicalRoad={...road,node:new Node('physical-lane-road'),
+      evaluateRotation:()=>new Quat(0,Math.SQRT1_2,0,Math.SQRT1_2)};
+    physicalRoad.node.worldMatrix=road.node.worldMatrix;
+    const left=headFollower(.5),right=headFollower(.5);
+    left.enableHeadway=false;right.enableHeadway=false;
+    left.enableLanePlacement=right.enableLanePlacement=true;
+    left.laneCount=right.laneCount=2;
+    left.laneWidth=right.laneWidth=3.5;
+    left.headwayLaneId=0;right.headwayLaneId=1;
+    left.setCurrentSpline(physicalRoad,.5);
+    right.setCurrentSpline(physicalRoad,.5);
+    near(left.target.worldPosition.x,5);
+    near(right.target.worldPosition.x,5);
+    near(Math.abs(right.target.worldPosition.z-left.target.worldPosition.z),3.5);
+    assert(left.laneLayoutValid);
+    right.headwayLaneId=31;
+    assert.equal(right.laneLayoutValid,false,
+      'Out-of-range lane settings cannot silently shift follower geometry');
+    right.onDisable();left.onDisable();
+    // Swept sphere over actual world path clamps before a registered obstacle.
+    const collisionLeader=headFollower(.55);
+    collisionLeader.enableHeadway=false;
+    collisionLeader.enableProximityAvoidance=true;
+    collisionLeader.proximityRadius=.5;
+    collisionLeader.setCurrentSpline(road,.55);
+    const collisionMover=headFollower(.2);
+    collisionMover.enableHeadway=false;
+    collisionMover.enableProximityAvoidance=true;
+    collisionMover.proximityRadius=.5;
+    collisionMover.proximitySafetyGap=0;
+    collisionMover.setCurrentSpline(road,.2);
+    assert.equal(splineProximityRegistry.size,2);
+    collisionMover.update(3);
+    near(collisionMover.currentProgress,.45,.001);
+    collisionMover.update(.1);
+    assert(collisionMover.isProximityBlocked);
+    assert.equal(collisionMover.node.events.filter(e=>e.name==='spline-proximity-blocked').length,1);
+    collisionMover.update(.1);
+    assert.equal(collisionMover.node.events.filter(e=>e.name==='spline-proximity-blocked').length,1);
+    collisionLeader.pause();collisionMover.update(.2);
+    near(collisionMover.currentProgress,.45,.001);
+    collisionLeader.onDisable();collisionMover.update(.2);
+    assert(collisionMover.currentProgress>.45);
+    assert(!collisionMover.isProximityBlocked);
+    assert.equal(collisionMover.node.events.filter(e=>e.name==='spline-proximity-cleared').length,1);
+    collisionMover.onDestroy();assert.equal(splineProximityRegistry.size,0);
+    // Cross-spline follower at the same 3D intersection is a real blocker;
+    // elevated bridge (Y=3) is not, even with identical XZ projection.
+    const junctionBlocker=headFollower(.5);
+    junctionBlocker.enableHeadway=false;junctionBlocker.enableProximityAvoidance=true;
+    junctionBlocker.setCurrentSpline(road,.5);
+    const crossingRoad={...road,node:new Node('crossing-road'),
+      evaluateWorldPosition:p=>new Vec3(5,0,(p-.5)*10)};
+    crossingRoad.node.worldMatrix=road.node.worldMatrix;
+    const crossing=headFollower(.1);
+    crossing.enableHeadway=false;crossing.enableProximityAvoidance=true;
+    crossing.spline=crossingRoad;crossing.setCurrentSpline(crossingRoad,.1);
+    crossing.update(3);
+    assert(crossing.currentProgress<.5,
+      'Proximity sweep prevents crossing a blocked intersection in one large dt');
+    crossing.onDisable();
+    const bridgeRoad={...crossingRoad,node:new Node('bridge-proximity'),
+      evaluateWorldPosition:p=>new Vec3(5,3,(p-.5)*10)};
+    bridgeRoad.node.worldMatrix=road.node.worldMatrix;
+    const bridge=headFollower(.1);
+    bridge.enableHeadway=false;bridge.enableProximityAvoidance=true;
+    bridge.spline=bridgeRoad;bridge.setCurrentSpline(bridgeRoad,.1);
+    bridge.update(3);
+    assert(bridge.currentProgress>.5,'Elevated path clears 3D obstacle');
+    bridge.onDisable();junctionBlocker.onDisable();
+    assert.equal(splineProximityRegistry.size,0);
     // Headway is runtime-only: Scene Editor preview cannot register.
     env.EDITOR_NOT_IN_PREVIEW=true;
     const preview=headFollower(.4);

@@ -9,6 +9,8 @@ import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,findUnavaila
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
 import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
+import {laneLateralOffset} from '../Core/SplineLaneLayout';
+import {splineProximityRegistry} from '../Core/SplineProximity';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -103,6 +105,18 @@ export class SplineAnimate extends Component {
     enableHeadway=false;
     @property({min:0,max:31,step:1,tooltip:'Logical lane ID (0..31) for opt-in headway. Only same SplineContainer AND same Lane ID interact. Default 0 preserves previous behavior; this does not move the follower to a physical lane.'})
     headwayLaneId=0;
+    @property({tooltip:'Opt-in physical lane placement: move the follower on spline-frame Right by the center of its Headway Lane ID. Requires Lane Count and Lane Width. Off preserves old positions.'})
+    enableLanePlacement=false;
+    @property({min:1,max:32,step:1,tooltip:'Total parallel lane centers, 1..32. Headway Lane ID must be smaller than Lane Count for physical placement.'})
+    laneCount=2;
+    @property({min:.05,tooltip:'World spacing between neighboring lane centers. Follower offsets use the same spline-frame Right as Spline Offset X.'})
+    laneWidth=3.5;
+    @property({tooltip:'Opt-in swept-sphere proximity avoidance against other opted-in followers, including those on different splines/lanes. Uses last-known world positions, not dynamic rigid bodies.'})
+    enableProximityAvoidance=false;
+    @property({min:.01,tooltip:'Approximate follower sphere radius in WORLD units. Actual Collider bounds are not read.'})
+    proximityRadius=.5;
+    @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
+    proximitySafetyGap=.2;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
@@ -131,6 +145,7 @@ export class SplineAnimate extends Component {
     private _requestedExit=-1;
     private _arrivalDelivered:{spline:SplineContainer;progress:number}|null=null;
     private _headwayBlocked=false;
+    private _proximityBlocked=false;
     private _trafficWait:{junction:SplineJunction;entryIndex:number;exitIndex:number;
         link:SplineJunctionLink;source:SplineContainer;progress:number;direction:Direction}|null=null;
     private elapsed=0;
@@ -156,6 +171,19 @@ export class SplineAnimate extends Component {
      * same-spline follower occupies the configured world-arc clearance.
      */
     public get isHeadwayBlocked():boolean{return this._headwayBlocked;}
+    public get isProximityBlocked():boolean{return this._proximityBlocked;}
+    /** Invalid runtime lane settings intentionally fall back to zero shift. */
+    public get laneLayoutValid():boolean {
+        if(!this.enableLanePlacement)return true;
+        try{this.physicalLaneOffset();return true;}catch{return false;}
+    }
+    private physicalLaneOffset():number {
+        return laneLateralOffset({enabled:this.enableLanePlacement,
+            laneId:this.headwayLaneId,laneCount:this.laneCount,laneWidth:this.laneWidth});
+    }
+    private safeLaneOffset():number {
+        try{return this.physicalLaneOffset();}catch{return 0;}
+    }
     public get isWaitingForTraffic():boolean{return this._trafficWait!==null;}
     /** 1-based position in this follower's destination-link FIFO; 0 otherwise. */
     public get trafficQueuePosition():number{
@@ -189,9 +217,10 @@ export class SplineAnimate extends Component {
     private pathWorldPosition(spline:SplineContainer,progress:number):Vec3 {
         const position=spline.evaluateWorldPosition(progress);
         const modifier=this.modifiers?.sample(progress);
-        if(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z||modifier){
+        const laneX=this.safeLaneOffset();
+        if(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z||modifier||laneX){
             const frame=Quat.multiply(new Quat(),spline.node.worldRotation,spline.evaluateRotation(progress));
-            const offset=new Vec3(this.splineOffset.x+(modifier?.offset.x||0),
+            const offset=new Vec3(this.splineOffset.x+laneX+(modifier?.offset.x||0),
                 this.splineOffset.y+(modifier?.offset.y||0),this.splineOffset.z+(modifier?.offset.z||0));
             Vec3.add(position,position,Vec3.transformQuat(offset,offset,frame));
         }
@@ -202,13 +231,14 @@ export class SplineAnimate extends Component {
     private offsetArc(spline:SplineContainer|null):OffsetArcLUT|null {
         if(!this.constantSpeedWithOffset||!spline||spline.count<2)return null;
         const o=this.splineOffset;
-        const hasOffset=!!(o.x||o.y||o.z)||!!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
+        const laneX=this.safeLaneOffset();
+        const hasOffset=!!laneX||!!(o.x||o.y||o.z)||!!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
         if(!hasOffset)return null;
         const world=spline.node.worldMatrix;
         const key=JSON.stringify([spline.getRevision(),spline.length,
             world?.m00,world?.m01,world?.m02,world?.m04,world?.m05,world?.m06,
             world?.m08,world?.m09,world?.m10,world?.m12,world?.m13,world?.m14,
-            o.x,o.y,o.z,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
+            o.x,o.y,o.z,laneX,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
         if(this._offsetArcCache?.spline===spline&&this._offsetArcCache.key===key)return this._offsetArcCache.lut;
         const steps=Math.min(2048,Math.max(256,Math.floor((spline.segmentCount||1)*64)));
         const lut=buildOffsetArcLUT(p=>this.pathWorldPosition(spline,p),steps);
@@ -285,18 +315,18 @@ export class SplineAnimate extends Component {
         this._raw=this.coordinateRaw(this.source(),this.startPositionMode,this.startProgress,this.startDistance);
         this.elapsed=this._raw*this.getDuration();
         this.playing=this.playOnStart;
-        this.apply(this._raw);this.syncHeadway();
+        this.apply(this._raw);this.syncSpatialTraffic();
     }
-    onDisable():void { this.clearHeadway();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
-    onDestroy():void { this.clearHeadway();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
+    onDisable():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
+    onDestroy():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
     public pause():void {this.playing=false;}
     public restart():void {
         this.clearTraffic();
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
-        this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);this.syncHeadway();
+        this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);this.syncSpatialTraffic();
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncHeadway();}
+    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncSpatialTraffic();}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -340,25 +370,34 @@ export class SplineAnimate extends Component {
         this._routeArrivedCallbacks.emit(payload);
         this.node.emit('spline-route-arrived',payload);
     }
-    /** Keep paused followers registered: their target still occupies a position.
-     * No registration or headway gameplay event is created in Editor preview.
-     */
-    private syncHeadway():void{
+    /** Paused opted-in followers remain physical obstacles. Runtime-only. */
+    private syncSpatialTraffic():void{
         if(EDITOR_NOT_IN_PREVIEW)return;
         const spline=this.source();
-        if(!this.enableHeadway||!this.enabled||!spline||
-           spline.node?.isValid===false||spline.count<2){
+        const active=!!this.enabled&&!!spline&&spline.node?.isValid!==false&&spline.count>=2;
+        if(!active||!this.enableHeadway){
             splineHeadwayRegistry.remove(this);
             this._headwayBlocked=false;
-            return;
+        }else{
+            const lane=Number.isInteger(this.headwayLaneId)&&this.headwayLaneId>=0&&
+                this.headwayLaneId<=31?this.headwayLaneId:0;
+            splineHeadwayRegistry.set(this,spline!,clamp01(this.currentProgress),this._travelDirection,lane);
         }
-        const lane=Number.isInteger(this.headwayLaneId)&&this.headwayLaneId>=0&&this.headwayLaneId<=31?
-            this.headwayLaneId:0;
-        splineHeadwayRegistry.set(this,spline,clamp01(this.currentProgress),this._travelDirection,lane);
+        if(!active||!this.enableProximityAvoidance||
+           !Number.isFinite(this.proximityRadius)||this.proximityRadius<=0||
+           this.proximityRadius>100){
+            splineProximityRegistry.remove(this);
+            this._proximityBlocked=false;
+        }else{
+            const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
+            splineProximityRegistry.set(this,position,this.proximityRadius);
+        }
     }
-    private clearHeadway():void{
+    private clearSpatialTraffic():void{
         splineHeadwayRegistry.remove(this);
+        splineProximityRegistry.remove(this);
         this._headwayBlocked=false;
+        this._proximityBlocked=false;
     }
     private headwayStatus(blocked:boolean,spline:SplineContainer,leader:object|null,
         nearestWorldGap:number|null):void{
@@ -367,6 +406,15 @@ export class SplineAnimate extends Component {
         this.node.emit(blocked?'spline-headway-blocked':'spline-headway-cleared',{
             follower:this,spline,leader,nearestWorldGap,
             requiredWorldGap:this.headwayWorldGap,
+        });
+    }
+    private proximityStatus(blocked:boolean,spline:SplineContainer,obstacle:object|null,
+        nearestWorldDistance:number|null):void{
+        if(blocked===this._proximityBlocked)return;
+        this._proximityBlocked=blocked;
+        this.node.emit(blocked?'spline-proximity-blocked':'spline-proximity-cleared',{
+            follower:this,spline,obstacle,nearestWorldDistance,
+            proximityRadius:this.proximityRadius,safetyGap:this.proximitySafetyGap,
         });
     }
     private cancelTrafficWait():void{
@@ -441,7 +489,7 @@ export class SplineAnimate extends Component {
         const exitDir:Direction=newDir===JunctionExitDirection.Forward?1:newDir===JunctionExitDirection.Backward?-1:dir;
         this._activeSpline=nextSpline;
         this.resetJunctionBlend();
-        const hasSplineOffset=!!(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z)||
+        const hasSplineOffset=!!this.safeLaneOffset()||!!(this.splineOffset.x||this.splineOffset.y||this.splineOffset.z)||
             !!this.modifiers?.keys?.some(k=>k.offset.x||k.offset.y||k.offset.z);
         if(hasSplineOffset&&this.junctionOffsetBlendDistance>0&&
             Math.hypot(difference.x,difference.y,difference.z)>1e-6){
@@ -451,7 +499,7 @@ export class SplineAnimate extends Component {
         this._travelDirection=exitDir;
         this._raw=this.rawAtProgress(nextProgress,nextSpline);
         this.elapsed=this._raw*this.getDuration();
-        this.syncHeadway();
+        this.syncSpatialTraffic();
         junction.switched(this,entryIndex,destination.index,dir);
     }
     /** Retry a blocked link only while the original entry is still valid.
@@ -514,7 +562,7 @@ export class SplineAnimate extends Component {
         this.clearTraffic();
         this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
-        this.elapsed=this._raw*this.getDuration();this.apply(this._raw);this.syncHeadway();
+        this.elapsed=this._raw*this.getDuration();this.apply(this._raw);this.syncSpatialTraffic();
     }
     /** Switch spline at an absolute distance, not at a normalized progress. */
     public setCurrentSplineAtDistance(spline:SplineContainer,distance:number,direction:Direction=1):void {
@@ -545,7 +593,7 @@ export class SplineAnimate extends Component {
             const spline=this.source();
             if(spline)this.deliverEvents(spline,previous,next,dir);
         }
-        this.apply(this._raw);this.syncHeadway();
+        this.apply(this._raw);this.syncSpatialTraffic();
     }
     private previewKey(spline:SplineContainer|null):string {
         const m=spline?.node.worldMatrix;
@@ -553,7 +601,8 @@ export class SplineAnimate extends Component {
             m?.m08,m?.m09,m?.m10,m?.m12,m?.m13,m?.m14,this.target?.uuid,
             this.previewProgress,this.previewPositionMode,this.previewDistance,this.alignToSpline,this.orient2D,this.orient2DAngleOffset,this.upMode,this.upReference?.uuid,
             this.upReference?.worldRotation,this.forwardAxis,this.rotationOffset,this.worldOffset,this.splineOffset,
-            this.constantSpeedWithOffset,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
+            this.constantSpeedWithOffset,this.enableLanePlacement,this.headwayLaneId,
+            this.laneCount,this.laneWidth,this.modifiers?.node?.uuid,this.modifiers?.getRevision()]);
     }
     update(dt:number):void {
         if(EDITOR_NOT_IN_PREVIEW){
@@ -563,7 +612,7 @@ export class SplineAnimate extends Component {
             if(this._previewKey!==key)this.previewAt(this.coordinateRaw(s,this.previewPositionMode,this.previewProgress,this.previewDistance));
             return;
         }
-        this.syncHeadway();
+        this.syncSpatialTraffic();
         const spline=this.source();
         if(!this.playing||!spline||spline.count<2||!Number.isFinite(dt)||dt<=0)return;
         const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
@@ -695,6 +744,28 @@ export class SplineAnimate extends Component {
             }else if(this._headwayBlocked){
                 this.headwayStatus(false,spline,null,null);
             }
+            let proximityLimited=false;
+            if(this.enableProximityAvoidance&&Number.isFinite(this.proximityRadius)&&
+               this.proximityRadius>0&&this.proximityRadius<=100&&
+               Number.isFinite(this.proximitySafetyGap)&&this.proximitySafetyGap>=0&&
+               this.proximitySafetyGap<=100){
+                const movement=to-from;
+                const report=splineProximityRegistry.limit(this,
+                    ratio=>this.blendedWorldPosition(spline,from+movement*ratio),
+                    this.proximityRadius,this.proximitySafetyGap);
+                proximityLimited=report.limited;
+                this.proximityStatus(report.stopped,spline,report.obstacle,
+                    report.nearestWorldDistance);
+                if(proximityLimited){
+                    const safeProgress=from+movement*report.fraction;
+                    next=this.rawAtProgress(safeProgress,spline);
+                    step=Math.min(step,Math.abs(next-this._raw));
+                    to=this.progressAtRaw(next,spline);
+                    if(step<=1e-10){this.apply(this._raw);break;}
+                }
+            }else if(this._proximityBlocked){
+                this.proximityStatus(false,spline,null,null);
+            }
             const goal=this.pendingRouteArrival(spline);
             let arriving=false;
             if(goal!==null&&crosses(from,to,goal,dir)){
@@ -779,7 +850,7 @@ export class SplineAnimate extends Component {
                         source:spline,progress:hit.progress,direction:dir};
                     this._raw=rawAtMarker;
                     this.elapsed=this._raw*duration;
-                    this.syncHeadway();this.apply(this._raw);
+                    this.syncSpatialTraffic();this.apply(this._raw);
                     this.node.emit('spline-traffic-blocked',{
                         follower:this,junction,entryIndex:e.entry,
                         exitIndex:destination.index,progress:hit.progress,
@@ -796,9 +867,9 @@ export class SplineAnimate extends Component {
                 break;
             }
             if(jumped)continue;
-            remaining=headwayLimited?0:Math.max(0,remaining-step*duration);
+            remaining=headwayLimited||proximityLimited?0:Math.max(0,remaining-step*duration);
             this._raw=next;this.elapsed=this._raw*this.getDuration();
-            this.syncHeadway();
+            this.syncSpatialTraffic();
             const reachedEnd=toBoundary-step<=1e-8;
             if(reachedEnd)this.reachedBoundary(dir);
             if(arriving&&goal!==null){
@@ -813,7 +884,7 @@ export class SplineAnimate extends Component {
                 else {this.resetJunctionBlend();this._raw=dir===1?0:1;}
             }
         }
-        this.apply(this._raw);this.syncHeadway();
+        this.apply(this._raw);this.syncSpatialTraffic();
     }
     private captureTargetLocalUp():void {
         const target=this.target||this.node;
