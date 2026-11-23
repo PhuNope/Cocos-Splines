@@ -35,7 +35,7 @@ try {
   Module._load=function(request,parent,isMain){if(request==='cc')return cc;if(request==='cc/env')return env;return original.call(this,request,parent,isMain);};
   try{
     // Module import of SplineContainer is safe with mocks; its geometry methods are never called here.
-    const {SplineAnimate,AnimateMethod,LoopMode,JunctionMode}=require(path.join(out,'Components','SplineAnimate.js'));
+    const {SplineAnimate,AnimateMethod,LoopMode,JunctionMode,RouteCostSpace}=require(path.join(out,'Components','SplineAnimate.js'));
     const target=new Node('target');
     const sourceNode=new Node('path');
     sourceNode.worldMatrix={m12:0,m13:0,m14:0};
@@ -145,6 +145,14 @@ try {
     shortest.routeDestination=b;shortest.routeDestinationProgress=.85;
     const previewRoute=shortest.planRouteTo(b,.85);
     assert(previewRoute&&previewRoute.switchCount===1,'Route planner finds one junction switch');
+    assert.equal(shortest.routeCostSpace,RouteCostSpace.Local,
+      'Existing scenes keep legacy LOCAL routing by default');
+    shortest.routeCostSpace=RouteCostSpace.World;
+    const worldPreview=shortest.planRouteTo(b,.85);
+    assert(worldPreview&&worldPreview.switchCount===1);
+    assert(Math.abs(worldPreview.distance-previewRoute.distance)<1e-4,
+      'World and local costs match without spline scale');
+    shortest.routeCostSpace=RouteCostSpace.Local;
     shortest.update(2.5);
     assert.equal(shortest.currentSpline,b,'ShortestRoute picks reachable destination');
     assert.equal(shortest.junctionMode,JunctionMode.ShortestRoute);

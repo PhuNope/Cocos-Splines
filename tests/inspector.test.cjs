@@ -7,7 +7,7 @@ assert.equal(pkg.panels,undefined,'No standalone panel');
 assert(!Object.keys(pkg.contributions.messages).includes('open-panel'));
 const animate=require(root+'/dist/contributions/inspector/Animate.js');
 const container=require(root+'/dist/contributions/inspector/Container.js');
-for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','stopOnRouteArrival','onRouteArrived','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
+for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }
 for(const f of ['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','gizmoSteps','gizmoColor'])assert(container.template.includes('spl-field-'+f));
@@ -24,15 +24,17 @@ const panel={$:selectors,_previewState:'false|undefined'};
 const dump={value:{duration:{value:3,type:'Number'},spline:{value:null,type:'cc.Object'},previewInEditor:{value:false},previewProgress:{value:0.2}}};
 animate.update.call(panel,dump);
 assert(rendered.includes(dump.value.duration));assert(rendered.includes(dump.value.spline));
-assert.equal(animate.template.match(/<ui-prop /g)?.length,36);
+assert.equal(animate.template.match(/<ui-prop /g)?.length,37);
 const routePanel={$:Object.fromEntries(Object.keys(animate.$).map(k=>[k,{hidden:false,render(){}}]))};
-animate.update.call(routePanel,{value:{junctionMode:{value:4},routeDestination:{value:null},stopOnRouteArrival:{value:false},onRouteArrived:{value:[]}}});
+animate.update.call(routePanel,{value:{junctionMode:{value:4},routeDestination:{value:null},stopOnRouteArrival:{value:false},routeCostSpace:{value:0},onRouteArrived:{value:[]}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,false);
 assert.equal(routePanel.$.r_stopOnRouteArrival.hidden,false);
+assert.equal(routePanel.$.r_routeCostSpace.hidden,false);
 assert.equal(routePanel.$.r_onRouteArrived.hidden,false);
 animate.update.call(routePanel,{value:{junctionMode:{value:0},routeDestination:{value:null},stopOnRouteArrival:{value:false},onRouteArrived:{value:[]}}});
 assert.equal(routePanel.$.r_routeDestination.hidden,true);
 assert.equal(routePanel.$.r_stopOnRouteArrival.hidden,true);
+assert.equal(routePanel.$.r_routeCostSpace.hidden,true);
 assert.equal(routePanel.$.r_onRouteArrived.hidden,true);
 
 for(const [type,names] of [['Road',['spline','width','shoulderWidth','curbHeight','thickness','roadMaterial','uvDirection','uvWidthTiles','uvReverseAcross','uvReverseLength','uvOffsetU','uvOffsetV']],['Trigger',['progress','direction','workOnce','onCross']],['Junction',['connections','onReach','onSwitch']]]){

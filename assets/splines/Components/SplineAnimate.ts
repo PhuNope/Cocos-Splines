@@ -24,7 +24,8 @@ export enum Easing { Linear=0, EaseInOut=1, EaseIn=2, EaseOut=3, SmootherStep=4 
 export enum SplineUpMode { Spline=0, World=1, TargetLocal=2 }
 export enum ForwardAxis { PositiveZ=0, NegativeZ=1, PositiveX=2, NegativeX=3, PositiveY=4, NegativeY=5 }
 export enum JunctionMode { Off=0, FirstOther=1, RoundRobin=2, Manual=3, ShortestRoute=4 }
-Enum(AnimateMethod);Enum(LoopMode);Enum(Easing);Enum(SplineUpMode);Enum(ForwardAxis);Enum(JunctionMode);Enum(SplinePositionMode);
+export enum RouteCostSpace { Local=0, World=1 }
+Enum(AnimateMethod);Enum(LoopMode);Enum(Easing);Enum(SplineUpMode);Enum(ForwardAxis);Enum(JunctionMode);Enum(RouteCostSpace);Enum(SplinePositionMode);
 /**
  * Unity-style spline follower.  All editable settings are native Cocos @property
  * fields, so Inspector changes serialize and respect scene/prefab overrides.
@@ -82,6 +83,8 @@ export class SplineAnimate extends Component {
     routeTransferPenalty=0.01;
     @property({min:0,tooltip:'Maximum world gap allowed between link positions when >0. Set 0 to disable gap validation (teleports may occur).'})
     routeMaxWorldGap=0;
+    @property({type:Enum(RouteCostSpace),tooltip:'Local (default): use spline-local arc units. World: use sampled world arc length, including non-uniform parent scale; transfer penalty is in the selected unit.'})
+    routeCostSpace:RouteCostSpace=RouteCostSpace.Local;
     @property({tooltip:'Opt-in: stop precisely at Route Destination Progress when reached. Off preserves legacy ShortestRoute movement, but On Arrived still fires.'})
     stopOnRouteArrival=false;
     @property({type:[EventHandler],tooltip:'Fires once when Shortest Route reaches the configured SplineContainer + normalized distance, even if auto-stop is off.'})
@@ -260,6 +263,7 @@ export class SplineAnimate extends Component {
         const current=this.source();
         return current?planSplineRoute(current,this.currentProgress,destination,progress,{
             startDirection:this._travelDirection,transferPenalty:this.routeTransferPenalty,
+            costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
             ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
         }):null;
     }
@@ -500,6 +504,7 @@ export class SplineAnimate extends Component {
                             const exit=nextShortestJunctionExit(junction,e.entry,spline,
                                 hit.progress,dir,this.routeDestination,this.routeDestinationProgress,{
                                     transferPenalty:this.routeTransferPenalty,
+                                    costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
                                     ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
                                 });
                             if(exit!==null)destination=junction.pick(e.entry,exit);

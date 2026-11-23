@@ -60,7 +60,7 @@ try{
      return {node,enabled:true,count:2,length,closed:false,reversed:false,
        dimension:0,rev:'r1',getRevision(){return this.rev;},
        evaluateWorldPosition(p){evaluations++;
-         return {x:p*this.length+node.worldMatrix.m12,y:0,z:0};}};
+         return {x:p*this.length*node.worldMatrix.m00+node.worldMatrix.m12,y:0,z:0};}};
    };
    const A=makeSpline('A',10,0),B=makeSpline('B',20,5);
    const connection=(spline,progress,exitDirection=0)=>({spline,
@@ -125,6 +125,26 @@ try{
    SplineJunction.active.delete(J);
    assert.equal(query(),null,'OnDisable registration removes available routes');
    SplineJunction.active.add(J);
+   // World cost is an independent snapshot. A nonuniform world transform
+   // changes route distance even when local arc length stays the same.
+   B.node.worldMatrix.m00=3;
+   const localCost=query(.1,.8,{costSpace:'local'});
+   const worldBefore=getSplineNetworkCacheStats();
+   const worldCost=query(.1,.8,{costSpace:'world'});
+   assert(worldCost&&localCost&&worldCost.distance>localCost.distance,
+     'Nonuniform world scale affects world-distance cost');
+   const sampled=evaluations;
+   const worldAgain=query(.1,.8,{costSpace:'world'});
+   assert.equal(worldAgain.distance,worldCost.distance);
+   assert.equal(evaluations,sampled,
+     'Cached world arc sampling not repeated on identical route query');
+   assert(getSplineNetworkCacheStats().routeHits>worldBefore.routeHits);
+   B.node.worldMatrix.m00=4;
+   const changedWorld=query(.1,.8,{costSpace:'world'});
+   assert(changedWorld.distance>worldCost.distance,
+     'Changing world scale invalidates sampled World arc and Dijkstra');
+   assert(evaluations>sampled);
+   B.node.worldMatrix.m00=3;
    invalidateSplineNetworkCache();
    assert.equal(getSplineNetworkCacheStats().snapshots,0);
    assert(query(),'Manual invalidation rebuilds valid network');

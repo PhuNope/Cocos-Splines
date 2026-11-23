@@ -1,11 +1,17 @@
+import {worldArcDistanceAt,type WorldArcSample} from './SplineWorldArcLength';
+
 /** Deterministic, direction-aware shortest path over SplineJunction links.
  *
  * Pure route planner; never mutates Nodes, Components, serialized links, or
- * follower state. Cost is distance in each spline's LOCAL arc units plus a
- * configurable transfer penalty. Not world-space traffic/mesh routing.
+ * follower state. Default cost uses LOCAL arc units; opt-in world cost
+ * integrates each spline's world-space arc sampling and handles scale.
  */
 export type NetworkDirection=1|-1;
-export interface NetworkSpline {id:string;length:number;closed?:boolean}
+export interface NetworkSpline {
+ id:string;length:number;closed?:boolean;
+ /** Monotonic world arc samples (0..1 local progress); required for costSpace=world. */
+ worldArc?:readonly WorldArcSample[];
+}
 export interface NetworkLink {
     splineId:string; progress:number;
     /** Serialized SplineJunctionLink index; do not renumber filtered links. */
@@ -18,6 +24,8 @@ export interface NetworkJunction {id:string;links:readonly NetworkLink[]}
 export interface NetworkAnchor {splineId:string;progress:number}
 export interface NetworkRouteOptions {
     startDirection?:NetworkDirection;
+    /** Default local preserves existing projects. World uses sampled true world arc. */
+    costSpace?:'local'|'world';
     transferPenalty?:number;
     /** If set, reject transfers with no world coordinates or an excessive gap. */
     maxWorldGap?:number;
@@ -91,14 +99,33 @@ export function findNetworkRoute(
     const penalty=options.transferPenalty??0;
     const maxGap=options.maxWorldGap;
     if(!finite(penalty)||penalty<0||penalty>1e9||
+       (options.costSpace!==undefined&&options.costSpace!=='local'&&options.costSpace!=='world')||
        (maxGap!==undefined&&(!finite(maxGap)||maxGap<0))||
        (options.startDirection!==undefined&&options.startDirection!==1&&options.startDirection!==-1))
         throw Error('Invalid Network route options.');
+    const worldMode=options.costSpace==='world';
     const bySpline=new Map<string,NetworkSpline>();
     for(const s of splines){
         if(!s||!s.id||typeof s.id!=='string'||s.id.length>256||
            !finite(s.length)||s.length<=EPS||typeof s.closed!=='boolean'&&s.closed!==undefined||
            bySpline.has(s.id))throw Error('Invalid or duplicate Network spline.');
+        if(worldMode){
+            const arc=s.worldArc;
+            if(!Array.isArray(arc)||arc.length<2||arc.length>4097||
+               Math.abs(arc[0].progress)>1e-9||
+               Math.abs(arc[0].distance)>1e-9||
+               Math.abs(arc[arc.length-1].progress-1)>1e-9||
+               arc[arc.length-1].distance<=EPS)
+                throw Error('Invalid world arc samples for '+s.id+'.');
+            for(let i=0;i<arc.length;i++){
+                const p=arc[i];
+                if(!p||!finite(p.progress)||!finite(p.distance)||
+                   p.progress<0||p.progress>1||p.distance<0||
+                   (i>0&&(p.progress<=arc[i-1].progress||
+                       p.distance+EPS<arc[i-1].distance)))
+                    throw Error('Invalid world arc samples for '+s.id+'.');
+            }
+        }
         bySpline.set(s.id,s);
     }
     checkAnchor(start,bySpline);checkAnchor(goal,bySpline);
@@ -159,8 +186,15 @@ export function findNetworkRoute(
     for(const s of sortedSplines){
         const positions=[...points.get(s.id)!.values()].sort((a,b)=>a-b);
         for(let i=0;i<positions.length-1;i++){
-            const a=positions[i],b=positions[i+1],distance=(b-a)*s.length;
-            if(distance<=0)continue;
+            const a=positions[i],b=positions[i+1];
+            const segmentDistance=worldMode?
+                worldArcDistanceAt(s.worldArc!,b)-worldArcDistanceAt(s.worldArc!,a):
+                (b-a)*s.length;
+            if(segmentDistance<0||!finite(segmentDistance))
+                throw Error('Invalid Network arc segment cost.');
+            // Even coincident world points can be distinct progress waypoints;
+            // keep zero-length edges so junction connectivity is preserved.
+            const distance=segmentDistance;
             edge(get(s.id,a,1),get(s.id,b,1),{
                 kind:'travel',splineId:s.id,fromProgress:a,toProgress:b,
                 direction:1,distance},distance);

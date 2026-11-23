@@ -109,3 +109,30 @@ Gọi `followRouteTo`, `restart`, `seek` hay `setCurrentSpline` sẽ re-arm cho 
 - Không cache riêng `SplineAnimate` để tránh lưu graph cũ sau khi đổi Scene. Registry global và các object Node có giới hạn số lượng phần tử trong LRU.
 
 Native Cocos Creator 3.8.8: thử 2 follower chung route, gọi `getSplineNetworkCacheStats()` trước/sau crossing; di chuyển spline parent Node, sửa Knot, đổi Junction connections, bật/tắt Junction, xác nhận route được dựng lại và `On Route Arrived` không phát sai. CI mock chưa thay thế kiểm thử native Editor/Prefab.
+
+## Phase 3.5 — World-distance Routing (opt-in)
+
+Bổ sung `costSpace: 'local' | 'world'` trong `planSplineRoute`, `nextShortestJunctionExit` và `SplineAnimate → Junction routing → Route Cost Space`. **Local (0)** vẫn là mặc định, giữ đúng logic và đơn vị chi phí của scene cũ. **World (1)** dùng chiều dài cung đo theo tọa độ thế giới để chọn đường ngắn nhất, kể cả khi các spline bị scale, rotate hoặc có parent transform không đồng đều.
+
+Cách tính: mỗi spline lấy mẫu các vị trí World theo **normalized LOCAL arc progress** trong khoảng 0..1, số mẫu `min(4096, max(64, segmentCount × min(samplesPerCurve, 64)))`. Tích lũy khoảng cách 3D giữa các mẫu, sau đó nội suy tổng quãng đường World ở các mốc Junction, điểm đầu và điểm đích. Độ dài dùng **polyline approximation**, không phải tích phân liên tục chính xác. Với spline nhiều curvature hoặc scale mạnh, tăng Samples Per Curve để giảm sai số; hệ thống vẫn giới hạn tối đa 4096 mẫu.
+
+- `distance` trong từng travel step, `route.distance` và `route.cost` dùng **world units** khi World được chọn; Local vẫn sử dụng đơn vị local. `transferPenalty` tính bằng cùng đơn vị với costSpace đang chọn, không cộng world gap vào chi phí (gap chỉ là bộ lọc khi bật `maxWorldGap`).
+- Chiều chạy (Forward/Backward), Closed seam, `exitDirection`, `On Route Arrived` và `Stop On Route Arrival` giữ nguyên.
+- Graph World/Local được cache bằng **các snapshot khác nhau**; mỗi snapshot dùng cùng quy tắc LRU và invalidation của Phase 3.4. Thay đổi Knot, parent world matrix, Connections hoặc costSpace sẽ tính lại chi phí tương ứng.
+- Khi World shape bị suy biến (chiều dài gần bằng 0 do scale), hoặc sampling trả về NaN/Infinity, route bị từ chối an toàn, không áp dụng nhánh sai.
+- Với rất nhiều spline và follower, lần build graph World đầu tiên có chi phí cao hơn Local do lấy mẫu; subsequent queries tái dùng snapshot nếu chưa có sửa đổi.
+- Cocos Creator 3.8.8 cần smoke test ở runtime: spline đường thẳng với Scale X=3/Scale Y=1, đường cong có parent rotation+scale, spline đóng, hai đường thay thế B/C với scale khác nhau; kiểm tra Route Cost Space=Local chọn B nhưng World chọn C, đồng thời việc thay parent transform khiến cache invalidated.
+
+Ví dụ gọi trực tiếp:
+
+```ts
+const worldRoute = planSplineRoute(roadA, .25, roadC, .8, {
+  costSpace: 'world', startDirection: 1, transferPenalty: .01,
+  maxWorldGap: .2,
+});
+console.log(worldRoute?.distance); // approximated world-space arc distance
+follower.routeCostSpace = RouteCostSpace.World;
+follower.followRouteTo(roadC, .8, true);
+```
+
+`RouteCostSpace` được export từ `SplineAnimate.ts`. Tính năng này **không** thay đổi logic di chuyển/constant speed của follower: chỉ thay trọng số lựa chọn nhánh.

@@ -10,6 +10,7 @@ import { findNetworkRoute, type NetworkJunction, type NetworkRoute,
     type NetworkRouteOptions, type NetworkSpline, type NetworkLink,
     type NetworkDirection } from './SplineNetworkGraph';
 import { SplineNetworkMemo, type NetworkCacheStats } from './SplineNetworkCache';
+import { buildWorldArcLength } from './SplineWorldArcLength';
 
 export interface SplineRoute extends NetworkRoute {
     readonly splines:ReadonlyMap<string,SplineContainer>;
@@ -79,7 +80,7 @@ function snapshotSignature(start:SplineContainer,goal:SplineContainer,
     return JSON.stringify([splinesData,linksData]);
 }
 function compileNetwork(startSpline:SplineContainer,targetSpline:SplineContainer,
-    registry:readonly SplineJunction[]):NetworkSnapshot{
+    registry:readonly SplineJunction[],costSpace:'local'|'world'):NetworkSnapshot{
     const splineMap=new Map<string,SplineContainer>();
     const junctionMap=new Map<string,SplineJunction>();
     const add=(spline:SplineContainer|null):void=>{
@@ -113,8 +114,14 @@ function compileNetwork(startSpline:SplineContainer,targetSpline:SplineContainer
         if(links.length<2)continue;
         graphJunctions.push({id,links});junctionMap.set(id,junction);
     }
-    const graphSplines:NetworkSpline[]=[...splineMap.entries()].map(([id,s])=>
-        ({id,length:s.length,closed:s.closed}));
+    const graphSplines:NetworkSpline[]=[...splineMap.entries()].map(([id,s])=>{
+        if(costSpace!=='world')return {id,length:s.length,closed:s.closed};
+        const segments=Number.isFinite(s.segmentCount)?s.segmentCount:
+            Math.max(1,s.count-(s.closed?0:1));
+        const arc=buildWorldArcLength(p=>s.evaluateWorldPosition(p),
+            segments,Number.isFinite(s.samplesPerCurve)?s.samplesPerCurve:32);
+        return {id,length:s.length,closed:s.closed,worldArc:arc};
+    });
     return {splines:splineMap,junctions:junctionMap,graphSplines,graphJunctions};
 }
 function computeRoute(snapshot:NetworkSnapshot,
@@ -131,21 +138,26 @@ function computeRoute(snapshot:NetworkSnapshot,
 export function invalidateSplineNetworkCache():void{memo.clear();}
 export function getSplineNetworkCacheStats():NetworkCacheStats{return memo.stats;}
 
-/** Distance uses spline-LOCAL arc units. Transform signatures still invalidate
- * world-gap validation after scaling or reparenting a spline.
+/** Local distance is the default; costSpace=world integrates sampled world
+ * positions and respects scale/rotation. Transform signature invalidates both.
  */
 export function planSplineRoute(startSpline:SplineContainer,startProgress:number,
     targetSpline:SplineContainer,targetProgress:number,
     options:SplineRouteOptions={}):SplineRoute|null{
     const registry=options.junctions??[...SplineJunction.active];
     const startId=splineId(startSpline),endId=splineId(targetSpline);
-    const signature=snapshotSignature(startSpline,targetSpline,registry);
+    const costSpace=options.costSpace??'local';
+    if(costSpace!=='local'&&costSpace!=='world')
+        throw Error('Invalid Network route cost space.');
+    const rawSignature=snapshotSignature(startSpline,targetSpline,registry);
+    // World/local snapshots are separate: world requires sampling, local does not.
+    const signature=rawSignature===null?null:costSpace+':'+rawSignature;
     // Never memoize invalid inputs: delegate exact validation to graph planner.
     const queryKey=JSON.stringify([startId,startProgress,endId,targetProgress,
         options.startDirection??null,options.transferPenalty??0,
-        options.maxWorldGap??null]);
-    const graph=signature===null?compileNetwork(startSpline,targetSpline,registry):
-        memo.snapshot(signature,()=>compileNetwork(startSpline,targetSpline,registry));
+        options.maxWorldGap??null,costSpace]);
+    const graph=signature===null?compileNetwork(startSpline,targetSpline,registry,costSpace):
+        memo.snapshot(signature,()=>compileNetwork(startSpline,targetSpline,registry,costSpace));
     const route=signature===null?
         computeRoute(graph,startId,startProgress,endId,targetProgress,options):
         memo.route(signature,queryKey,()=>
