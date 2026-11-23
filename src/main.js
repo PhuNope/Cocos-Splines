@@ -363,6 +363,71 @@ const methods={
             return {ok:true,uuid:id,message:'Trigger đã tạo. Chỉnh Progress / Direction / On Cross trong Inspector.'};
         }catch(e){return alertError('create-trigger',e);}
     },
+    /** Read-only continuity diagnostics. Link indices are serialized indices,
+     * not the ordinal of nonempty links. No Scene mutation or snapshot.
+     */
+    async checkJunctionConnections(positionTolerance=.1,angleTolerance=15){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select a SplineJunction in Hierarchy.');
+            const result=await invokeScene('queryJunctionConnections',uuid,positionTolerance,angleTolerance);
+            if(!result?.ok)throw Error(result?.error||'Cannot inspect Junction.');
+            const worst=result.pairs.slice().sort((a,b)=>b.gap-a.gap)[0];
+            const details=worst?' Worst link pair '+worst.from+'→'+worst.to+
+                ': gap '+worst.gap.toFixed(4)+
+                ', axis angle '+(worst.axisAngleDeg===null?'undefined':worst.axisAngleDeg.toFixed(1)+'°')+'.':'';
+            return {ok:true,...result,message:'Junction: '+result.validLinks+' valid links, '+
+                result.pairCount+' pairs. '+result.positionFailures+' position gaps > '+
+                positionTolerance+', '+result.tangentFailures+' tangent-axis mismatches > '+
+                angleTolerance+'°. '+details+' No changes made.'};
+        }catch(e){return alertError('check-junction-connections',e);}
+    },
+    /** Moves only a selected open spline endpoint to another Junction link.
+     * No tangent or arbitrary child component is touched. Guards are checked
+     * both before and after the silent Node.position write.
+     */
+    async snapJunctionEndpoint(anchorIndex,targetIndex){
+        if(knotEditBusy)return alertError('snap-junction-endpoint',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select a SplineJunction.');
+            const plan=await invokeScene('queryJunctionSnapPlan',uuid,anchorIndex,targetIndex);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan endpoint snap.');
+            const validPoint=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            if(plan.junctionUuid!==uuid||!plan.guard||!plan.targetKnotUuid||
+                !plan.targetSplineUuid||!validPoint(plan.before)||!validPoint(plan.after)||
+                plan.anchorIndex!==anchorIndex||plan.targetIndex!==targetIndex)
+                throw Error('Invalid connector snap plan returned from Scene.');
+            if(!plan.changed)return {ok:true,changed:false,message:'Target endpoint already aligned. No snapshot.'};
+            const check=async()=>{
+                const valid=await invokeScene('queryJunctionSnapValid',
+                    plan.junctionUuid,plan.guard,plan.targetKnotUuid);
+                if(!valid?.ok)throw Error(valid?.error||'Connector Scene changed while editing.');
+            };
+            await check();
+            await commitKnotEdits([{uuid:plan.targetKnotUuid,
+                before:plan.before,after:plan.after,positionChanged:true}],{
+                read:async ids=>{
+                    await check();
+                    return invokeScene('queryKnotBatchState',plan.targetSplineUuid,ids);
+                },
+                writePosition:async (id,p)=>{
+                    await check();
+                    await writeKnotPosition(id,p);
+                },
+                writeRotation:writeKnotRotation,snapshot,
+            });
+            try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+            catch(error){console.warn('[Cocos Splines] Connector snap preview refresh failed:',error);}
+            return {ok:true,changed:true,targetKnotUuid:plan.targetKnotUuid,
+                message:'Snapped Junction link '+targetIndex+' endpoint to link '+anchorIndex+
+                    ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
+                    ' One Scene snapshot; tangent angles unchanged.'};
+        }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
     async createJunction(){
         try{
             await ensureClasses();

@@ -46,7 +46,8 @@ Multi-select, Move/Rotate knots, kéo tangent trực tiếp, insert/split/join, 
 Deterministic sampling/cache, nearest point, spline data, noise layers, connector graph, JSON/SVG round-trip. **Exit:** numerical and serialization regression tests.
 
 - [x] Phase 3.1 — Network graph + direction-aware shortest routes across existing Junction links, seam support, optional world-gap validation, route preview API and SplineAnimate ShortestRoute (new enum 4; modes 0–3 unchanged).
-- [ ] Phase 3.2 — Endpoint snapping / explicit connector operations, route cache + revision invalidation, world-distance cost, traffic capacity and automated arrival event.
+- [x] Phase 3.2a — Editor Check Connectors (world gap + tangent axis-angle), safe position-only snap of an open spline endpoint to a link, Scene lease/revision preflight, serialized transaction + rollback and regression tests.
+- [ ] Phase 3.2b — Geometry tangent C1/G1 alignment and explicit connector graph operations, route cache with revisions, world-distance routing, capacity and arrival events.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

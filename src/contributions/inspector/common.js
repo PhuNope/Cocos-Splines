@@ -22,7 +22,8 @@ const style=`
 .spl-btn{background:rgba(52,102,131,.22);border:1px solid #4c7182;border-radius:5px;padding:5px 8px;font-size:11px;color:inherit;cursor:pointer}
 .spl-btn:hover{background:rgba(73,141,172,.27)}.spl-btn:disabled{opacity:.4;cursor:default}
 .spl-danger{border-color:#a05f63}.spl-error{color:#f9a9a5;white-space:pre-wrap;font-size:11px}
-.spl-status{font-size:11px;min-height:14px;color:#8ad6bb}
+.spl-status{font-size:11px;min-height:14px;color:#8ad6bb;white-space:pre-wrap}
+.spl-index-input{width:57px;max-width:57px;background:transparent;border:1px solid var(--color-border-normal,#364551);color:inherit;border-radius:4px;padding:3px}
 `;
 const configs={
   modifiers:{title:'Spline Modifiers',note:'Keyframes theo normalized ARC progress. Empty Keys = no change. Speed/Offset/Roll ảnh hưởng Animate (nếu gán Modifiers); Width ảnh hưởng Road; Scale/Offset ảnh hưởng Object Controller.',groups:[{title:'Keyed spline modifiers',fields:['spline','interpolation','keys']},{title:'Scene gizmos (selected)',fields:['showGizmos','gizmoSamples','showOffsetGizmos','showWidthGizmos','gizmoBaseWidth','showKeyGizmos','showFrameGizmos']}]},
@@ -34,7 +35,7 @@ const configs={
   extrude:{title:'Spline Extrude',note:'Spline để trống nếu SplineExtrude cùng Node với SplineContainer.',groups:[{title:'Source & geometry',fields:['spline','radius','endRadius','rangeMode','startProgress','endProgress','startDistance','endDistance','sides','segmentsPerCurve','capEnds','flipNormals','uvTiling']},{title:'Material & update',fields:['material','rebuildOnChange','showMeshGizmos','gizmoEdgeLimit']}]},
   road:{title:'Spline Road',note:'Road là node con của SplineContainer (MeshRenderer riêng, không xung đột Extrude). Chỉnh Width/Shoulder/Curbs, vật liệu và UV ngay trong Inspector. Kéo các Knot ở Scene để uốn đường. Nút Rebuild cập nhật kể cả khi Editor không chạy main loop.',groups:[{title:'Source & Road Surface',fields:['spline','modifiers','width','endWidth','rangeMode','startProgress','endProgress','startDistance','endDistance','samplesPerCurve']},{title:'Sharp corners',fields:['cornerMode','cornerTrimSafety']},{title:'Shoulders & Curbs',fields:['shoulderWidth','shoulderDrop','curbWidth','curbHeight']},{title:'Volume & UV',fields:['thickness','capEnds','uvDirection','uvMetersPerRepeat','uvWidthTiles','uvReverseAcross','uvReverseLength','uvOffsetU','uvOffsetV']},{title:'Material & live update',fields:['roadMaterial','asphaltColor','rebuildOnChange','showMeshGizmos','gizmoEdgeLimit']}]},
   trigger:{title:'Spline Trigger',note:'Spline để trống sẽ tìm Container ở parent. Chọn Position Mode: Normalized Distance (legacy), Distance (units) hoặc Spline t (Bezier). Khi follower đi ngang marker, phát Cocos EventHandler + node.emit(\'spline-trigger\', payload).',groups:[{title:'Marker',fields:['spline','positionMode','progress','distance','direction','workOnce','oncePerFollower']},{title:'Events',fields:['onCross']}]},
-  junction:{title:'Spline Junction',note:'Thêm ít nhất 2 Connections. Gán mỗi link SplineContainer + Position Mode; nhập Progress 0..1 hoặc Distance theo chiều dài spline. SplineAnimate chọn Junction Mode: First Other / Round Robin / Manual. Exit Direction ở từng link đích: Preserve giữ chiều đến, Forward tăng Progress về 1, Backward giảm Progress về 0. Event payload cung cấp follower để gọi requestJunctionExit(index).',groups:[{title:'Routes',fields:['connections']},{title:'Events',fields:['onReach','onSwitch']}]},
+  junction:{title:'Spline Junction',note:'Connector Check đo gap/hướng tangent theo World. Snap Endpoint chỉ dịch chuyển một Knot đầu/cuối của spline mở, không tự xoay tangent hoặc chỉnh Junction links. Thêm ít nhất 2 Connections. Gán mỗi link SplineContainer + Position Mode; nhập Progress 0..1 hoặc Distance theo chiều dài spline. SplineAnimate chọn Junction Mode: First Other / Round Robin / Manual. Exit Direction ở từng link đích: Preserve giữ chiều đến, Forward tăng Progress về 1, Backward giảm Progress về 0. Event payload cung cấp follower để gọi requestJunctionExit(index).',groups:[{title:'Routes',fields:['connections']},{title:'Events',fields:['onReach','onSwitch']}]},
   instantiate:{title:'Spline Instantiate',note:'Spawn / Respawn tạo prefab ngay trong Scene Hierarchy; Spawn On Start không tạo trùng nếu các instance đã được lưu trong Scene.',groups:[{title:'Source',fields:['spline','prefab','parentNode']},{title:'Distribution',fields:['count','method','spacing','rangeMode','startProgress','endProgress','startDistance','endDistance','includeEndPoint','alignToSpline','positionOffset','rotationOffset','randomOffset','seed','scaleMultiplier','spawnOnStart','rebuildOnChange']}]},
   path2d:{title:'Spline 2D Path',note:'Sử dụng dưới Canvas/RenderRoot2D + UITransform, thuộc tính Dimension của spline phải là XY2D. Đường được vẽ bằng Graphics; không cần MeshRenderer.',groups:[{title:'Spline & appearance',fields:['spline','lineWidth','strokeColor','stepsPerCurve','rebuildOnChange']}]},
   deform:{title:'Spline Mesh Deform',note:'Gán một imported Mesh có chiều dài theo trục X/Y/Z và Allow Data Access. Mesh phải đủ segments dọc trục uốn, chỉ hỗ trợ 1 submesh non-skinned. Hệ trục X/Y đã tự sửa chiều mặt (winding). Nếu mesh nguồn vẫn đảo mặt, bật Flip Faces (đảo cả index và normal). UV KeepOriginal giữ nguyên atlas cho từng tile (khuyên dùng cho FBX ray/tà vẹt). Repeat Layout = SourceLength tự tính số đoạn theo kích thước mesh và cắt phần cuối, không ép giãn. UV Distance/ContinuousRepeat có thể làm sai màu UV atlas; texture Wrap Repeat chỉ hợp với UV được thiết kế để tile. Plugin xuất smooth normals và tangents để dùng được builtin-standard/normal map. Axis X/Y đã tự sửa mặt: nếu lật Flip Faces ON có thể làm vật thể tối/mất mặt trước.',groups:[{title:'Source mesh',fields:['spline','sourceMesh','material']},{title:'Deform axis & distribution',fields:['axis','mode','repeatLayout','repeatCount','tileLength','flipFaces','widthScale','heightScale','rangeMode','startProgress','endProgress','startDistance','endDistance']},{title:'UV & rebuild',fields:['uvMode','uvTilesPerUnit','rebuildOnChange','showMeshGizmos','gizmoEdgeLimit']}]},
@@ -44,7 +45,7 @@ const configs={
   animate:{title:'Spline Animate' ,note:'Kéo Node chứa SplineContainer vào trường Spline. Target để trống sẽ di chuyển chính Node gắn SplineAnimate. Nếu Animate đặt trên chính Container, hãy gán Target là Node khác. Bật Preview in Editor để xem vị trí mà không cần Play. Start/Preview hỗ trợ Normalized Distance, Distance và Spline t.',groups:[
     {title:'Spline source',fields:['spline','target','modifiers','worldOffset','splineOffset','constantSpeedWithOffset']},
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
-    {title:'Junction routing & follower events',fields:['junctionMode','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
+    {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
 };
@@ -62,8 +63,20 @@ function makeInspector(type){
         groups+=`<details class="spl-section" open><summary>${escapeHtml(g.title)}</summary>${items}</details>`;
     });
     if(type==='junction'){
-        groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-add-junction-mesh">＋ Add XZ Road Patch</button></div>`;
+        groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
+          <p class="spl-note">Check geometry in world units. Snap only moves an open spline endpoint Knot to the anchor link; tangents are not rotated. Links at interior positions cannot be snapped.</p>
+          <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
+          <div class="spl-btns">
+            <label>Anchor link # <input type="number" class="spl-index-input spl-connector-anchor" min="0" max="63" step="1" value="0"></label>
+            <label>Target link # <input type="number" class="spl-index-input spl-connector-target" min="0" max="63" step="1" value="1"></label>
+            <button type="button" class="spl-btn spl-snap-connector">Snap Target Endpoint</button>
+          </div>
+        </details><div class="spl-btns"><button type="button" class="spl-btn spl-add-junction-mesh">＋ Add XZ Road Patch</button></div>`;
         selectors.addJunctionMesh='.spl-add-junction-mesh';
+        selectors.checkConnections='.spl-check-connections';
+        selectors.connectorAnchor='.spl-connector-anchor';
+        selectors.connectorTarget='.spl-connector-target';
+        selectors.snapConnector='.spl-snap-connector';
     }
     if(type==='road'){
         groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-rebuild-road">↻ Rebuild Road</button></div>`;
@@ -133,6 +146,8 @@ function makeInspector(type){
             if(['startDistance','endDistance'].includes(field))return Number(v('rangeMode'))===1;
         }
         if(type==='animate'){
+            if(['routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap'].includes(field))
+                return Number(v('junctionMode'))===4;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;
             if(field==='previewProgress')return Number(v('previewPositionMode'))!==1;
@@ -212,7 +227,12 @@ function makeInspector(type){
                 this.$.action.addEventListener('click',()=>void callEditor(this,name));
                 if(this.$.unapply)this.$.unapply.addEventListener('click',()=>void callEditor(this,type==='bender'?'restore-bender':'restore-morph'));
             }
-            if(type==='junction')this.$.addJunctionMesh.addEventListener('click',()=>void callEditor(this,'create-junction-mesh'));
+            if(type==='junction'){
+                this.$.addJunctionMesh.addEventListener('click',()=>void callEditor(this,'create-junction-mesh'));
+                this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
+                this.$.snapConnector.addEventListener('click',()=>void callEditor(this,
+                    'snap-junction-endpoint',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
+            }
             if(type==='road')this.$.rebuildRoad.addEventListener('click',()=>void callEditor(this,'rebuild-road'));
             if(type==='deform'||type==='path2d')this.$.rebuildGeometry.addEventListener('click',()=>void callEditor(this,type==='deform'?'rebuild-mesh-deform':'rebuild-2d-path'));
             if(type==='animate'){
