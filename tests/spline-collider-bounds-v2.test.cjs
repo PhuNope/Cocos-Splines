@@ -15,7 +15,7 @@ try{
  near(report.radius,Math.hypot(1,.5,.25)+2);
  assert(report.valid,'Collider center offset must inflate the target-centered sphere');
  report=colliderProximityRadius({center:p(0),halfExtents:p(2,1,.5)},p(0),.5);
- near(report.radius,Math.hypot(2,1,.5),'World AABB half-extents include nonuniform scale');
+ near(report.radius,Math.hypot(2,1,.5)); // nonuniform World extents
  for(const invalid of [
    null,undefined,{center:p(NaN),halfExtents:p(1)},
    {center:p(0),halfExtents:p(-1,1,1)},
