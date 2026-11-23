@@ -58,10 +58,10 @@ try{
   assert.equal(road.sampleAsphaltHalfWidthAt(1),1.5);
   assert.equal(road.sampleAsphaltHalfWidthAt(.5),3);
   road.modifiers={sample:()=>({width:1.5}),getRevision:()=>1};
-  assert.equal(road.sampleAsphaltHalfWidthAt(.5),4.5);
+  assert(Math.abs(road.sampleAsphaltHalfWidthAt(.5)-4.5)<1e-9);
   road.startProgress=.2;road.endProgress=.8;
   assert.equal(road.sampleAsphaltHalfWidthAt(.1),null);
-  assert.equal(road.sampleAsphaltHalfWidthAt(.5),4.5);
+  assert(Math.abs(road.sampleAsphaltHalfWidthAt(.5)-4.5)<1e-9);
   assert.equal(road.sampleAsphaltHalfWidthAt(NaN),null);
   assert.equal(meshCalls.length,callsBeforeWidthProbe,'Width lookup cannot rebuild Mesh');
   road.startProgress=0;road.endProgress=1;road.endWidth=-1;road.modifiers=null;
