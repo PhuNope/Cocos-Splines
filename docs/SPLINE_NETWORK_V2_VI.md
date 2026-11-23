@@ -58,3 +58,18 @@ Trong Inspector của **Spline Junction** đã có mục **Connector validation 
 Các chỉ số của Junction link là **index gốc trong mảng Connections**, bao gồm nếu có ô trống trước chúng, không phải số thứ tự filtered entries. `Check Connectors` không thay đổi Scene. Nút Snap yêu cầu nút Spline Junction đang được chọn trong Hierarchy.
 
 **Chưa hoàn thành:** tự động Align Tangent / C1 continuity, snap ở marker nằm giữa đường, snap Knot thuộc spline đóng, gộp connector graph, route cache, auto-stop khi follower đến đích và Creator 3.8.8 native Undo/Prefab smoke test.
+
+## Phase 3.2b1 — Align Tangent G1 / C1 at endpoints (preview)
+
+Trong Inspector `Spline Junction → Connector validation / endpoint snap`: chọn Anchor link # / Target link #, **Snap Target Endpoint** trước, sau đó chọn Tangent **G1** hoặc **C1**, chọn hướng `Same` hoặc `Opposed`, nhấn **Align Tangent**.
+
+- Anchor và target phải là **hai spline mở khác nhau**, kết nối đúng ở `progress = 0` hoặc `1`, cách nhau tối đa **0.1 world units**. Nếu xa hơn, Snap Position trước.
+- Chỉ **Knot đích** được phép sửa, và Knot này **phải đang ở TangentMode.Broken**. Nếu đang AutoSmooth/Linear/Mirrored/Continuous, phải chuyển sang Broken một cách chủ động trong Inspector; plugin không âm thầm đổi mode hoặc ghi đè nhánh tangent còn lại.
+- G1: căn vector đạo hàm theo world direction của anchor, giữ nguyên **world-space magnitude** của handle target (độ dài tiếp tuyến gốc). Target 0-length không hỗ trợ G1.
+- C1: căn cùng trục và sao chép **world-space cubic control vector length** của endpoint anchor (tương đương độ lớn đạo hàm `dP/du = 3 × handle` theo tham số từng đoạn Bezier, **không** tương đương matching velocity theo normalized arc distance khi độ dài đoạn khác nhau).
+- `Same` căn hướng tăng progress của spline đích trùng với hướng tăng progress spline nguồn; `Opposed` đảo hướng (hữu ích khi switch đảo chiều). Hướng `Reversed` của hai spline được xử lý khi xác định Tangent In/Out gốc.
+- Nếu target có `TangentInHandle`/`TangentOutHandle` đúng loại, thao tác sửa **position của child handle node đó**; không ghi vào vector field bị handle override. Với Knot không có handle node, ghi chính trường serialized tangent. Rotation của Knot, parent transform và nonuniform scale được xét khi đổi vector World → local.
+- XY2D/XZ2D không căn một hướng nằm ngoài mặt phẳng target. Không dịch chuyển Knot position và không sửa tangent đầu kia. Scene guard giữ nguyên source, orientation, Knot hierarchy, handles khác và scene identity.
+- Editor dùng `record:false`, read-back xác nhận giá trị, **một Scene snapshot** khi thao tác thành công, rollback target field nếu write/snapshot lỗi; nếu đã chuyển Scene, không viết rollback sang Scene mới.
+
+**Giới hạn:** không hàn hình học hoặc road mesh, không dùng cubic refit để giữ curvature bên trong một đoạn sau khi sửa tangent, chưa áp dụng tangent align cho interior link hoặc closed spline. G1/C1 mô tả tính liên tục tại **hai vị trí endpoint đã trùng nhau**, không bảo đảm toàn bộ Junction mesh trơn. Kiểm tra Undo/Redo, Prefab override và save/reopen vẫn phải thực hiện trực tiếp trong Cocos Creator 3.8.8.

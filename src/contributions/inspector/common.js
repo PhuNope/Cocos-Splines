@@ -64,12 +64,17 @@ function makeInspector(type){
     });
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
-          <p class="spl-note">Check geometry in world units. Snap only moves an open spline endpoint Knot to the anchor link; tangents are not rotated. Links at interior positions cannot be snapped.</p>
+          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Align Tangent (G1/C1) changes just its Broken-mode tangent/handle; Snap first, then align. Interior links and closed splines are not edited.</p>
           <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
           <div class="spl-btns">
             <label>Anchor link # <input type="number" class="spl-index-input spl-connector-anchor" min="0" max="63" step="1" value="0"></label>
             <label>Target link # <input type="number" class="spl-index-input spl-connector-target" min="0" max="63" step="1" value="1"></label>
             <button type="button" class="spl-btn spl-snap-connector">Snap Target Endpoint</button>
+          </div>
+          <div class="spl-btns">
+            <label>Tangent <select class="spl-index-input spl-tangent-mode" style="max-width:120px;width:120px"><option value="g1">G1 · direction</option><option value="c1">C1 · magnitude</option></select></label>
+            <label>Forward <select class="spl-index-input spl-tangent-direction" style="max-width:125px;width:125px"><option value="same">Same</option><option value="opposed">Opposed</option></select></label>
+            <button type="button" class="spl-btn spl-align-connector">Align Tangent</button>
           </div>
         </details><div class="spl-btns"><button type="button" class="spl-btn spl-add-junction-mesh">＋ Add XZ Road Patch</button></div>`;
         selectors.addJunctionMesh='.spl-add-junction-mesh';
@@ -77,6 +82,9 @@ function makeInspector(type){
         selectors.connectorAnchor='.spl-connector-anchor';
         selectors.connectorTarget='.spl-connector-target';
         selectors.snapConnector='.spl-snap-connector';
+        selectors.alignConnector='.spl-align-connector';
+        selectors.tangentMode='.spl-tangent-mode';
+        selectors.tangentDirection='.spl-tangent-direction';
     }
     if(type==='road'){
         groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-rebuild-road">↻ Rebuild Road</button></div>`;
@@ -232,6 +240,10 @@ function makeInspector(type){
                 this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
                 this.$.snapConnector.addEventListener('click',()=>void callEditor(this,
                     'snap-junction-endpoint',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
+                this.$.alignConnector.addEventListener('click',()=>void callEditor(this,
+                    'align-junction-tangent',Number(this.$.connectorAnchor.value),
+                    Number(this.$.connectorTarget.value),this.$.tangentMode.value,
+                    this.$.tangentDirection.value));
             }
             if(type==='road')this.$.rebuildRoad.addEventListener('click',()=>void callEditor(this,'rebuild-road'));
             if(type==='deform'||type==='path2d')this.$.rebuildGeometry.addEventListener('click',()=>void callEditor(this,type==='deform'?'rebuild-mesh-deform':'rebuild-2d-path'));

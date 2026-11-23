@@ -2,6 +2,7 @@
 const NAME='cocos-splines';
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
+const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
@@ -426,6 +427,52 @@ const methods={
                     ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
                     ' One Scene snapshot; tangent angles unchanged.'};
         }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Adjust exactly one Broken-mode endpoint tangent to connect two
+     * existing world-coincident Junction links. G1 keeps target handle length,
+     * C1 matches anchor handle magnitude under their world transforms.
+     */
+    async alignJunctionTangent(anchorIndex,targetIndex,mode='g1',orientation='same'){
+        if(knotEditBusy)return alertError('align-junction-tangent',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select an enabled SplineJunction.');
+            const plan=await invokeScene('queryJunctionTangentPlan',
+                uuid,anchorIndex,targetIndex,mode,orientation);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan endpoint tangent alignment.');
+            const finite=v=>v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
+            if(plan.junctionUuid!==uuid||!plan.guard||!plan.targetKnotUuid||
+                !plan.targetSplineUuid||!plan.writeUuid||!plan.writePath||
+                plan.anchorIndex!==anchorIndex||plan.targetIndex!==targetIndex||
+                plan.mode!==mode||plan.orientation!==orientation||
+                !finite(plan.before)||!finite(plan.after))
+                throw Error('Invalid G1/C1 plan returned by Scene.');
+            const read=()=>invokeScene('queryJunctionTangentState',
+                plan.junctionUuid,plan.guard,plan.targetKnotUuid,plan.side);
+            const write=async value=>{
+                const check=await read();
+                if(!check?.ok)throw Error(check?.error||'Scene changed during tangent write.');
+                const result=await Editor.Message.request('scene','set-property',{
+                    uuid:plan.writeUuid,path:plan.writePath,
+                    dump:{type:'cc.Vec3',value},record:false,
+                });
+                if(result===false||(result&&result.ok===false))
+                    throw Error('Scene rejected G1/C1 tangent write.');
+            };
+            const result=await commitJunctionTangent(plan,{read,write,snapshot});
+            if(!result.changed)return {ok:true,changed:false,
+                message:'Junction tangent is already aligned. No snapshot.'};
+            try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+            catch(error){console.warn('[Cocos Splines] Junction tangent refresh failed:',error);}
+            return {ok:true,changed:true,targetKnotUuid:plan.targetKnotUuid,
+                message:'Aligned link '+targetIndex+' to '+anchorIndex+
+                    ' ('+mode.toUpperCase()+', '+orientation+
+                    ', world derivative control length '+plan.targetWorldLength.toFixed(4)+
+                    '). One Scene snapshot; positions and source spline unchanged.'};
+        }catch(e){return alertError('align-junction-tangent',e);}
         finally{knotEditBusy=false;}
     },
     async createJunction(){

@@ -4,6 +4,7 @@
  * All Cocos calls go through an injected adapter; geometry remains pure.
  */
 const {worldTangent,analyzeConnections,planEndpointSnap}=require('./SplineConnectionMath');
+const {worldVector,endpointSide,planJunctionTangent}=require('./SplineJunctionTangentMath');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
  function junctionAt(uuid){
    const node=resolve(uuid);
@@ -31,7 +32,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
    }
    return entries;
  }
- function fingerprint(junction,targetKnotUuid){
+ function fingerprint(junction,targetKnotUuid,ignore='position'){
    const scene=sceneId();
    if(typeof scene!=='string'||!scene)throw Error('Scene is no longer active.');
    const entries=samples(junction);
@@ -42,12 +43,15 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
        if(!n||n.parent!==spline.node||n.isValid===false)
          throw Error('Invalid Knot hierarchy in Junction.');
        const p=n.position,q=n.rotation;
-       return [n.uuid,n.parent.uuid,n.uuid===targetKnotUuid?null:[p.x,p.y,p.z],
+       const selected=n.uuid===targetKnotUuid;
+       return [n.uuid,n.parent.uuid,selected&&ignore==='position'?null:[p.x,p.y,p.z],
          [q.x,q.y,q.z,q.w],k.mode,k.tension,k.tangentsInKnotSpace,
-         [k.tangentIn.x,k.tangentIn.y,k.tangentIn.z],
-         [k.tangentOut.x,k.tangentOut.y,k.tangentOut.z],
-         ...[k.tangentInHandle,k.tangentOutHandle].map(h=>h?[
-            h.uuid,h.parent?.uuid||null,h.position?.x,h.position?.y,h.position?.z]:null)];
+         selected&&ignore==='in'?null:[k.tangentIn.x,k.tangentIn.y,k.tangentIn.z],
+         selected&&ignore==='out'?null:[k.tangentOut.x,k.tangentOut.y,k.tangentOut.z],
+         ...[k.tangentInHandle,k.tangentOutHandle].map((h,i)=>h?[
+            h.uuid,h.parent?.uuid||null,
+            ...(selected&&ignore===(i===0?'in':'out')?[null]:[
+                h.position?.x,h.position?.y,h.position?.z])]:null)];
      });
      return [e.index,spline.node.uuid,spline.node.parent?.uuid||null,
        spline.enabled,spline.closed,spline.reversed,spline.dimension,
@@ -106,6 +110,96 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
      return {ok:true};
    }catch(e){return {ok:false,error:String(e?.message||e)};}
  }
- return {queryJunctionConnections,queryJunctionSnapPlan,queryJunctionSnapValid};
+ 
+ function readTangentField(knot,side){
+   const n=knot.node;
+   if(!n||n.isValid===false||!n.parent)
+      throw Error('Target Knot missing from Scene.');
+   if(knot.mode!==4)throw Error('G1/C1 requires a Broken target Knot (mode 4).');
+   const handle=side==='in'?knot.tangentInHandle:knot.tangentOutHandle;
+   if(handle&&(handle.isValid===false||handle.parent!==n))
+      throw Error('Tangent handle must be a valid direct child of target Knot.');
+   const source=handle?handle.position:side==='in'?knot.tangentIn:knot.tangentOut;
+   const value={x:source?.x,y:source?.y,z:source?.z};
+   if(!['x','y','z'].every(a=>Number.isFinite(value[a])))
+      throw Error('Target tangent contains nonfinite values.');
+   const idx=n.components.findIndex(c=>classOf(c)==='Splines.SplineKnot');
+   if(idx<0)throw Error('Target Knot component missing.');
+   return {value,uuid:handle?handle.uuid:n.uuid,
+      path:handle?'position':'__comps__.'+idx+'.tangent'+(side==='in'?'In':'Out'),
+      source:'cc.Vec3',handle:!!handle};
+ }
+ function naturalEndpointControl(entry){
+   const spline=entry.spline;
+   if(spline.closed||Math.min(entry.progress,1-entry.progress)>1e-8)
+      throw Error('G1/C1 requires an endpoint link on an open spline.');
+   if(typeof spline.getNaturalResolvedKnots!=='function')
+      throw Error('SplineContainer scripts must support resolved tangent math.');
+   const sorted=spline.knots;
+   const index=entry.progress<.5?0:sorted.length-1;
+   const knot=sorted[index],natural=spline.getNaturalResolvedKnots();
+   const rawIndex=spline.reversed?sorted.length-1-index:index;
+   const side=endpointSide(entry.progress,spline.reversed).side;
+   const raw=natural[rawIndex]?.[side==='in'?'tangentIn':'tangentOut'];
+   if(!raw||!['x','y','z'].every(a=>Number.isFinite(raw[a])))
+      throw Error('Cannot resolve source endpoint tangent.');
+   return {knot,side,worldLength:Math.hypot(...Object.values(worldVector(raw,entry.worldMatrix)))};
+ }
+ function queryJunctionTangentPlan(uuid,anchorIndex,targetIndex,mode='g1',orientation='same'){
+   try{
+     const junction=junctionAt(uuid);
+     if(!junction||!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
+        anchorIndex===targetIndex||anchorIndex<0||targetIndex<0||
+        !['g1','c1'].includes(mode)||!['same','opposed'].includes(orientation))
+       throw Error('Select two different valid Junction links and G1/C1 mode.');
+     const entries=samples(junction);
+     const anchor=entries.find(e=>e.index===anchorIndex);
+     const target=entries.find(e=>e.index===targetIndex);
+     if(!anchor||!target||anchor.spline===target.spline)
+       throw Error('Anchor/target must be endpoints on distinct active splines.');
+     const gap=Math.hypot(anchor.position.x-target.position.x,
+       anchor.position.y-target.position.y,anchor.position.z-target.position.z);
+     if(gap>.1)
+       throw Error('Connector endpoints must be within 0.1 world units; Snap Target Endpoint first.');
+     const src=naturalEndpointControl(anchor),dst=naturalEndpointControl(target);
+     const knot=dst.knot;
+     if(knot.mode!==4)
+       throw Error('G1/C1 requires target Knot mode = Broken; change it explicitly in Inspector.');
+     const stored=readTangentField(knot,dst.side);
+     const aligned=planJunctionTangent({
+       anchorForward:anchor.tangent,anchorWorldLength:src.worldLength,
+       targetWorldLength:dst.worldLength,matrix:target.worldMatrix,
+       knotRotation:{x:knot.node.rotation.x,y:knot.node.rotation.y,
+         z:knot.node.rotation.z,w:knot.node.rotation.w},
+       handle:stored.handle,tangentsInKnotSpace:!!knot.tangentsInKnotSpace,
+       progress:target.progress,reversed:!!target.spline.reversed,
+       dimension:target.spline.dimension,mode,orientation,before:stored.value,
+     });
+     const guard=fingerprint(junction,knot.node.uuid,dst.side);
+     return {ok:true,guard,junctionUuid:junction.node.uuid,
+       targetSplineUuid:target.spline.node.uuid,targetKnotUuid:knot.node.uuid,
+       writeUuid:stored.uuid,writePath:stored.path,
+       anchorIndex,targetIndex,side:dst.side,mode,orientation,gap,
+       before:stored.value,after:aligned.after,changed:aligned.changed,
+       sourceWorldLength:src.worldLength,targetWorldLength:aligned.targetWorldLength};
+   }catch(e){return {ok:false,error:String(e?.message||e)};}
+ }
+ function queryJunctionTangentState(uuid,guard,targetKnotUuid,side){
+   try{
+     const junction=junctionAt(uuid);
+     if(!junction||!['in','out'].includes(side)||
+        typeof guard!=='string'||!guard||typeof targetKnotUuid!=='string'||
+        fingerprint(junction,targetKnotUuid,side)!==guard)
+       throw Error('Junction/Scene geometry changed during G1/C1 alignment.');
+     const node=resolve(targetKnotUuid);
+     if(!node||node.isValid===false)throw Error('Target Knot no longer exists.');
+     const knot=node.components.find(c=>classOf(c)==='Splines.SplineKnot');
+     if(!knot)throw Error('Missing target SplineKnot component.');
+     const current=readTangentField(knot,side);
+     return {ok:true,value:current.value,uuid:current.uuid,path:current.path};
+   }catch(e){return {ok:false,error:String(e?.message||e)};}
+ }
+ return {queryJunctionConnections,queryJunctionSnapPlan,queryJunctionSnapValid,
+    queryJunctionTangentPlan,queryJunctionTangentState};
 }
 module.exports={createJunctionScene};
