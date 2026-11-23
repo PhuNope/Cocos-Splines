@@ -461,7 +461,7 @@ const methods={
         knotEditBusy=true;
         let created=null,sourceUuid=null,revision=null;
         try{
-            if(mode!=='count'&&mode!=='spacing')throw Error('Choose Count or Spacing for resample.');
+            if(!['count','spacing','simplify'].includes(mode))throw Error('Choose Count, Spacing or Simplify.');
             if(space!=='local'&&space!=='world')throw Error('Resample metric must be Local or World.');
             if(!Number.isFinite(target)||!Number.isFinite(tolerance))
                 throw Error('Resample target/tolerance must be finite numbers.');
@@ -491,7 +491,7 @@ const methods={
             };
             await assertOriginal();
             created=await makeNode(plan.parentUuid,
-                String(plan.sourceName||'Spline').slice(0,72)+' (Resampled)');
+                String(plan.sourceName||'Spline').slice(0,72)+(mode==='simplify'?' (Simplified)':' (Resampled)'));
             await component(created,'Splines.SplineContainer');
             await setNodeSerialized(created,'position','cc.Vec3',plan.rootTransform.position);
             await setNodeSerialized(created,'rotation','cc.Quat',plan.rootTransform.rotation);
@@ -517,7 +517,7 @@ const methods={
             selectOnly(created);
             return {ok:true,root:created,count:plan.count,
                 estimatedMaxError:plan.estimatedMaxError,
-                message:'Created a separate resampled spline with '+plan.count+
+                message:'Created a separate '+(mode==='simplify'?'simplified':'resampled')+' spline with '+plan.count+
                     ' Knots; estimated '+space+' deviation '+
                     plan.estimatedMaxError.toFixed(5)+'. Original preserved.'};
         }catch(error){

@@ -1,0 +1,41 @@
+'use strict';
+const assert=require('node:assert/strict');
+const cp=require('node:child_process'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'spline-simplify-'));
+try{
+ cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),'--noEmit','false','--outDir',tmp]);
+ const {simplifySpline}=require(path.join(tmp,'Core/SplineSimplifyMath.js'));
+ const M=require(path.join(tmp,'Core/SplineMath.js'));
+ const v=(x=0,y=0,z=0)=>({x,y,z});
+ const line=x=>({position:v(x),tangentIn:v(),tangentOut:v(),mode:1});
+ const straight=[line(0),line(1),line(2),line(3),line(4),line(5)];
+ const input=JSON.stringify(straight);
+ let s=simplifySpline(straight,false,{tolerance:.001});
+ assert.equal(s.count,2,'straight line collapses to endpoints');
+ assert(s.estimatedMaxError<=.001);
+ assert.equal(s.knots[0].position.x,0);
+ assert.equal(s.knots.at(-1).position.x,5);
+ assert.equal(JSON.stringify(straight),input,'source remains unmodified');
+ assert.equal(s.knots[0].mode,4);
+ const corner=[line(0),line(3),{...line(3),position:v(3,4)},{...line(6),position:v(6,4)}];
+ s=simplifySpline(corner,false,{tolerance:.0001});
+ assert(s.count>=3,'sharp corner must not collapse to a single cubic');
+ const closed=[line(0),line(2),{...line(2),position:v(2,2)},
+  {...line(0),position:v(0,2)}];
+ s=simplifySpline(closed,true,{tolerance:.2});
+ assert(s.count>=3&&s.count<=4);
+ assert(s.closed);assert.deepEqual(s.knots[0].position,v(0));
+ const world=p=>({x:p.x*2,y:p.y*3,z:p.z});
+ s=simplifySpline(straight,false,{tolerance:.001,space:'world'},world);
+ assert.equal(s.count,2);
+ assert(Math.abs(s.sourceLength-10)<.001);
+ const xy=[line(0),{...line(1),position:v(1,1,0)},{...line(2),position:v(2,2,0)},line(3)];
+ s=simplifySpline(xy,false,{tolerance:.2});
+ assert(s.knots.every(k=>k.position.z===0&&k.tangentOut.z===0&&k.tangentIn.z===0));
+ assert.throws(()=>simplifySpline(straight,false,{tolerance:0}),/tolerance/);
+ assert.throws(()=>simplifySpline(straight,false,{tolerance:.01,space:'bad'}),/metric/);
+ assert.throws(()=>simplifySpline([line(0),line(0)],false,{tolerance:.01}),/zero-length/);
+ assert.throws(()=>simplifySpline([line(0),{...line(1),position:v(NaN)}],false,{tolerance:.01}),/finite/);
+ assert.throws(()=>simplifySpline(straight,false,{tolerance:.01},()=>v(Infinity)),/metric|invalid|non-finite/i);
+ console.log('SIMPLIFY MATH PASS: open/closed, anchor, bounds, no mutation, World/2D.');
+}finally{fs.rmSync(tmp,{recursive:true,force:true});}

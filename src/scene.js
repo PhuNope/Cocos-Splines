@@ -278,8 +278,9 @@ function queryResamplePlan(rootUuid,options){
        !options||typeof options!=='object')
         return {ok:false,error:'Invalid SplineContainer or resample options.'};
     try{
-        if(typeof spline.createResamplePlan!=='function')
-            throw Error('Resample runtime method unavailable; import scripts and retry.');
+        const simplifying=options.mode==='simplify';
+        if(typeof (simplifying?spline.createSimplifyPlan:spline.createResamplePlan)!=='function')
+            throw Error('Spline topology planner unavailable; import scripts and retry.');
         const space=options.space||'local';
         if(space!=='local'&&space!=='world')throw Error('Invalid resample space.');
         const revision=resampleFingerprint(root,spline);
@@ -291,7 +292,7 @@ function queryResamplePlan(rootUuid,options){
             matrix[12]=matrix[13]=matrix[14]=0;
             metric=require('./SplineKnotEditMath').transformFrame(matrix).toWorld;
         }
-        const result=spline.createResamplePlan(options,metric);
+        const result=simplifying?spline.createSimplifyPlan(options,metric):spline.createResamplePlan(options,metric);
         if(resampleFingerprint(root,spline)!==revision)
             throw Error('Source spline changed while planning resample.');
         const tr={

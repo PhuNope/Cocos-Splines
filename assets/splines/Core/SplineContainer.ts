@@ -2,6 +2,7 @@ import { _decorator, Component, Vec3, Quat, Enum, Color } from 'cc';
 import { SplineKnot, TangentMode } from './SplineKnot';
 import * as M from './SplineMath';
 import {resampleSpline, ResampleOptions, ResampleResult} from './SplineResampleMath';
+import {simplifySpline, SimplifyOptions} from './SplineSimplifyMath';
 import { registerGizmos } from 'db://cocos-gizmos/RegisterGizmos';
 import { SplineContainerGizmos } from '../Editor/SplineContainerGizmos';
 import { closestParameter } from './SplineProjectionMath';
@@ -82,6 +83,11 @@ export class SplineContainer extends Component {
      * Source Knot nodes / Prefab instance data are never modified. */
     public createResamplePlan(options:ResampleOptions,metric?:(point:M.V3)=>M.V3):ResampleResult {
         return resampleSpline(this.collect(),this.closed,
+            {...options,samplesPerCurve:this.samplesPerCurve},metric);
+    }
+    /** Preserve source and generate a simplified sibling using the Editor's existing copy transaction. */
+    public createSimplifyPlan(options:SimplifyOptions,metric?:(point:M.V3)=>M.V3):ResampleResult {
+        return simplifySpline(this.collect(),this.closed,
             {...options,samplesPerCurve:this.samplesPerCurve},metric);
     }
     public get length():number{return this.ensure().total;}

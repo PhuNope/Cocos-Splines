@@ -41,15 +41,15 @@ const template=`<div class="spl-inspector spl-container-inspector">
     </div>
   </details>
   <details class="spl-section"><summary>Resample Spline · new copy</summary>
-     <p class="spl-note">Fits a new cubic spline at even arc intervals. Your original spline/Prefab is never replaced. Approximation error is measured at dense samples and must be within tolerance. Individual Knot rotations and other attached components are not copied.</p>
+     <p class="spl-note">Resample fits cubics at even arc intervals; Simplify greedily removes redundant Knots and refits adjacent spans within tolerance. Your original spline/Prefab is never replaced. Approximation error is measured at dense samples and must be within tolerance. Individual Knot rotations and other attached components are not copied.</p>
      <div class="spl-btns spl-batch-inputs">
-       <label>Mode <select class="spl-resample-mode" aria-label="Resample mode"><option value="count">Knot count</option><option value="spacing">Max spacing</option></select></label>
+       <label>Mode <select class="spl-resample-mode" aria-label="Resample mode"><option value="count">Knot count</option><option value="spacing">Max spacing</option><option value="simplify">Simplify (remove redundant Knots)</option></select></label>
        <label>Target <input type="number" class="spl-resample-target" aria-label="Resample target" min="2" max="128" step="1" value="12"></label>
        <label>Max error <input type="number" class="spl-resample-tolerance" aria-label="Maximum resample deviation" min="0.0001" max="10000" step="0.05" value="0.25"></label>
        <label>Arc metric <select class="spl-resample-space" aria-label="Resample distance metric"><option value="local">Local</option><option value="world">World</option></select></label>
        <button type="button" class="spl-btn spl-resample-create">Create resampled copy</button>
      </div>
-     <p class="spl-note">2–128 Knots for an open curve; 3–128 for closed. Spacing mode derives the count from total length. The original stays untouched, including its tangent handles and Prefab overrides.</p>
+     <p class="spl-note">2–128 Knots for an open curve; 3–128 for closed. Spacing derives count from length; Simplify ignores Target and retains original endpoints/closed anchor. The original stays untouched, including its tangent handles and Prefab overrides.</p>
    </details>
    <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
@@ -267,6 +267,8 @@ module.exports={
         });
         this.$.resampleMode.addEventListener('change',()=>{
             const count=this.$.resampleMode.value==='count';
+            const simplify=this.$.resampleMode.value==='simplify';
+            this.$.resampleTarget.disabled=simplify;
             this.$.resampleTarget.min=count?'2':'0.0001';
             this.$.resampleTarget.max=count?'128':'1000000';
             this.$.resampleTarget.step=count?'1':'0.25';
@@ -277,7 +279,7 @@ module.exports={
             const mode=this.$.resampleMode.value;
             const target=Number(this.$.resampleTarget.value);
             const tolerance=Number(this.$.resampleTolerance.value);
-            if(!Number.isFinite(target)||target<=0||(mode==='count'&&!Number.isInteger(target)))
+            if(mode!=='simplify'&&(!Number.isFinite(target)||target<=0||(mode==='count'&&!Number.isInteger(target))))
                 return show(this,'Enter a positive target (integer Knot count).',true);
             if(!Number.isFinite(tolerance)||tolerance<0.0001||tolerance>10000)
                 return show(this,'Maximum deviation must be 0.0001–10000.',true);

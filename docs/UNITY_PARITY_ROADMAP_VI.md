@@ -196,4 +196,5 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Editor creates a separate sibling spline with copied root transform and spline settings; source topology/Prefab untouched, best-effort failure cleanup and source revision checks.
 - [x] Pure math and Editor-message integration tests.
 - [ ] Certified continuous geometric error bound, native Undo/Redo for structural edits, orientation/child-component copying, destructive source replacement.
-- [ ] Phase 2.20: Simplify spline by removing redundant Knot geometry within tolerance.
+- [x] Phase 2.20: Simplify spline greedy (open/closed, local/world metric), giữ endpoint/closed anchor, new sibling copy; sampled tolerance (not certified continuous bound).
+- [ ] Phase 2.20 acceptance: Cocos Creator 3.8.8 Undo/Redo, Prefab overrides, Scene save/reopen; performance on 128 Knot closed splines.
