@@ -4,7 +4,7 @@ import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
 import { SplineTrigger } from './SplineTrigger';
 import { SplineJunction, JunctionExitDirection, type SplineJunctionLink } from './SplineJunction';
-import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,
+import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,findUnavailableTrafficExits,
     type SplineRoute,type SplineRouteDiagnosis} from '../Core/SplineNetwork';
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
 import { SplineModifiers } from './SplineModifiers';
@@ -93,6 +93,8 @@ export class SplineAnimate extends Component {
     onRouteArrived:EventHandler[]=[];
     @property({tooltip:'Opt-in: enforce destination-link Max Followers on Junction switches. A full exit holds this follower at the Junction until another follower releases a slot. Off by default.'})
     enableTrafficCapacity=false;
+    @property({tooltip:'Opt-in with Enable Traffic Capacity: Shortest Route tries a different reachable Junction exit when the preferred exit is full. Default waits in FIFO queue.'})
+    rerouteAroundTraffic=false;
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 1 in the forward direction.'})
     onEndReached:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 0 in the backward direction.'})
@@ -138,6 +140,12 @@ export class SplineAnimate extends Component {
     public get currentT():number{return this.source()?.tAtProgress(this.currentProgress)||0;}
     public get isPlaying():boolean{return this.playing;}
     public get isWaitingForTraffic():boolean{return this._trafficWait!==null;}
+    /** 1-based position in this follower's destination-link FIFO; 0 otherwise. */
+    public get trafficQueuePosition():number{
+        const wait=this._trafficWait;
+        return wait?Math.max(0,splineTrafficGate.queuePosition(
+            this,wait.junction,wait.exitIndex)+1):0;
+    }
     /** Managed slot held on the last admitted Junction exit, if any. */
     public get trafficReservation():{junction:SplineJunction;exitIndex:number}|null{
         const slot=splineTrafficGate.reservation(this);
@@ -271,7 +279,7 @@ export class SplineAnimate extends Component {
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this._trafficWait=null;}
+    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -292,6 +300,7 @@ export class SplineAnimate extends Component {
     }
     /** Activate runtime shortest-route junction choice without changing existing modes by default. */
     public followRouteTo(destination:SplineContainer,progress=1,stopOnArrival=this.stopOnRouteArrival):void{
+        this.cancelTrafficWait();
         this.routeDestination=destination;
         this.routeDestinationProgress=clamp01(progress);
         this.stopOnRouteArrival=stopOnArrival;
@@ -314,8 +323,12 @@ export class SplineAnimate extends Component {
         this._routeArrivedCallbacks.emit(payload);
         this.node.emit('spline-route-arrived',payload);
     }
-    private clearTraffic():void{
+    private cancelTrafficWait():void{
         this._trafficWait=null;
+        splineTrafficGate.cancelWait(this);
+    }
+    private clearTraffic():void{
+        this.cancelTrafficWait();
         splineTrafficGate.release(this);
     }
     private admitTraffic(junction:SplineJunction,exit:{index:number;link:SplineJunctionLink}):boolean{
@@ -326,6 +339,37 @@ export class SplineAnimate extends Component {
         const cap=exit.link.maxFollowers;
         if(!Number.isInteger(cap)||cap<0||cap>4096)return false;
         return splineTrafficGate.move(this,junction,exit.index,cap);
+    }
+    /** A temporary per-query exclusion, not a mutation of Junction graph.
+     * Do not queue on the original exit until alternate routing is exhausted.
+     */
+    private alternateTrafficExit(junction:SplineJunction,entryIndex:number,
+        spline:SplineContainer,progress:number,dir:Direction,
+        current:{index:number;link:SplineJunctionLink}):
+        {index:number;link:SplineJunctionLink}|null{
+        if(!this.enableTrafficCapacity||!this.rerouteAroundTraffic||
+           this.junctionMode!==JunctionMode.ShortestRoute||!this.routeDestination)return null;
+        const cap=current.link.maxFollowers;
+        if(!Number.isInteger(cap)||cap<=0||cap>4096||
+           splineTrafficGate.canEnter(this,junction,current.index,cap))return null;
+        const excluded=findUnavailableTrafficExits(this);
+        if(!excluded.some(x=>x.junctionId===junction.node.uuid&&x.exitIndex===current.index))
+            excluded.push({junctionId:junction.node.uuid,exitIndex:current.index});
+        const other=nextShortestJunctionExit(junction,entryIndex,spline,progress,
+            dir,this.routeDestination,this.routeDestinationProgress,{
+                transferPenalty:this.routeTransferPenalty,
+                costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
+                ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{}),
+                excludedExits:excluded,
+            });
+        if(other===null||other===current.index)return null;
+        const candidate=junction.pick(entryIndex,other);
+        if(!candidate?.link.spline||candidate.link.spline.enabled===false||
+           candidate.link.spline.node?.isValid===false)return null;
+        const otherCap=candidate.link.maxFollowers;
+        if(!Number.isInteger(otherCap)||otherCap<0||otherCap>4096||
+           !splineTrafficGate.canEnter(this,junction,candidate.index,otherCap))return null;
+        return candidate;
     }
     /** Only invoked when the destination exit has an acquired slot (or traffic
      * admission was explicitly disabled). No Reach event is emitted here.
@@ -366,11 +410,11 @@ export class SplineAnimate extends Component {
            this._travelDirection!==wait.direction||
            wait.junction.connections[wait.entryIndex]?.spline!==wait.source||
            Math.abs(wait.junction.connections[wait.entryIndex].getProgress()-wait.progress)>1e-6){
-            this._trafficWait=null;return false;
+            this.cancelTrafficWait();return false;
         }
         let exitIndex=wait.exitIndex;
         if(this.junctionMode===JunctionMode.ShortestRoute){
-            if(!this.routeDestination){this._trafficWait=null;return false;}
+            if(!this.routeDestination){this.cancelTrafficWait();return false;}
             const resolved=nextShortestJunctionExit(wait.junction,wait.entryIndex,
                 wait.source,wait.progress,wait.direction,
                 this.routeDestination,this.routeDestinationProgress,{
@@ -378,17 +422,29 @@ export class SplineAnimate extends Component {
                     costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
                     ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
                 });
-            if(resolved===null){this._trafficWait=null;return false;}
+            if(resolved===null){this.cancelTrafficWait();return false;}
             exitIndex=resolved;
         }
         const link=wait.junction.connections[exitIndex];
         if(!link?.spline||link.spline.enabled===false||link.spline.node?.isValid===false||
             (this.junctionMode!==JunctionMode.ShortestRoute&&link!==wait.link)){
-            this._trafficWait=null;return false;
+            this.cancelTrafficWait();return false;
         }
-        const destination={index:exitIndex,link};
-        if(!this.admitTraffic(wait.junction,destination))return true; // still waiting
-        this._trafficWait=null;
+        let destination={index:exitIndex,link};
+        const alternate=this.alternateTrafficExit(wait.junction,wait.entryIndex,
+            wait.source,wait.progress,wait.direction,destination);
+        if(alternate)destination=alternate;
+        if(!this.admitTraffic(wait.junction,destination)){
+            // A newly chosen exit may replace the old FIFO queue.
+            wait.exitIndex=destination.index;
+            wait.link=destination.link;
+            return true;
+        }
+        this.cancelTrafficWait();
+        if(alternate)this.node.emit('spline-traffic-rerouted',{
+            follower:this,junction:wait.junction,entryIndex:wait.entryIndex,
+            exitIndex:destination.index,progress:wait.progress,
+        });
         this.commitJunctionSwitch(wait.junction,wait.entryIndex,destination,
             wait.direction,wait.source,wait.progress);
         return false;
@@ -626,6 +682,15 @@ export class SplineAnimate extends Component {
                         break; // On Reach still fires, routing never occurs.
                 }
                 if(!destination?.link.spline)continue;
+                const alternate=this.alternateTrafficExit(junction,e.entry,
+                    spline,hit.progress,dir,destination);
+                if(alternate){
+                    destination=alternate;
+                    this.node.emit('spline-traffic-rerouted',{
+                        follower:this,junction,entryIndex:e.entry,
+                        exitIndex:destination.index,progress:hit.progress,
+                    });
+                }
                 const rawAtMarker=this.rawAtProgress(hit.progress,spline);
                 const elapsed=Math.min(remaining,Math.max(0,Math.abs(rawAtMarker-this._raw)*duration));
                 remaining=Math.max(0,remaining-elapsed);
@@ -642,6 +707,7 @@ export class SplineAnimate extends Component {
                         follower:this,junction,entryIndex:e.entry,
                         exitIndex:destination.index,progress:hit.progress,
                         capacity:destination.link.maxFollowers,
+                        queuePosition:this.trafficQueuePosition,
                     });
                     remaining=0;
                 }else{

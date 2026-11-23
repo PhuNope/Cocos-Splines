@@ -29,6 +29,8 @@ export interface NetworkRouteOptions {
     transferPenalty?:number;
     /** If set, reject transfers with no world coordinates or an excessive gap. */
     maxWorldGap?:number;
+    /** Per-query temporarily closed destination exits, not persisted in graph. */
+    excludedExits?:readonly {junctionId:string;exitIndex:number}[];
 }
 export interface NetworkTravel {
     kind:'travel';splineId:string;fromProgress:number;toProgress:number;
@@ -103,6 +105,17 @@ export function findNetworkRoute(
        (maxGap!==undefined&&(!finite(maxGap)||maxGap<0))||
        (options.startDirection!==undefined&&options.startDirection!==1&&options.startDirection!==-1))
         throw Error('Invalid Network route options.');
+    const excluded=new Set<string>();
+    const excludedList=options.excludedExits??[];
+    if(!Array.isArray(excludedList)||excludedList.length>2048)
+        throw Error('Invalid Network excluded exits.');
+    for(const exit of excludedList){
+        if(!exit||typeof exit.junctionId!=='string'||!exit.junctionId||
+           exit.junctionId.length>256||!Number.isInteger(exit.exitIndex)||
+           exit.exitIndex<0)
+            throw Error('Invalid Network excluded exit.');
+        excluded.add(JSON.stringify([exit.junctionId,exit.exitIndex]));
+    }
     const worldMode=options.costSpace==='world';
     const bySpline=new Map<string,NetworkSpline>();
     for(const s of splines){
@@ -213,7 +226,8 @@ export function findNetworkRoute(
     }
     for(const j of orderedJunctions){
         for(const entry of j.links)for(const exit of j.links){
-            if(entry.linkIndex===exit.linkIndex)continue;
+            if(entry.linkIndex===exit.linkIndex||
+               excluded.has(JSON.stringify([j.id,exit.linkIndex])))continue;
             if(maxGap!==undefined){
                 const a=entry.world,b=exit.world;
                 if(!a||!b||![a.x,a.y,a.z,b.x,b.y,b.z].every(finite)||

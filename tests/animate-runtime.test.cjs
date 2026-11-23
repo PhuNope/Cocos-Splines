@@ -263,7 +263,8 @@ try {
     assert(legacyArrival.isPlaying);
     assert.equal(legacyArrival.node.events.filter(e=>e.name==='spline-route-arrived').length,0);
     // Phase 3.6 — opt-in exit occupancy with deterministic stall/resume.
-    const {getSplineTrafficOccupancy,inspectSplineRoute}=require(path.join(out,'Core','SplineNetwork.js'));
+    const {getSplineTrafficOccupancy,getSplineTrafficQueueLength,inspectSplineRoute}=require(path.join(out,'Core','SplineNetwork.js'));
+    const {SplineJunctionLink:TrafficLink}=require(path.join(out,'Components','SplineJunction.js'));
     const {splineTrafficGate}=require(path.join(out,'Core','SplineTrafficGate.js'));
     splineTrafficGate.clear();
     exit.maxFollowers=1; // capacity applies only to followers that opted in
@@ -289,6 +290,7 @@ try {
       'Capacity saturation does not mark graph unreachable');
     assert.equal(diagnostics.saturatedExits,1);
     assert.equal(diagnostics.linkCount,2);
+    assert.equal(diagnostics.waitingFollowers,1);
     const invalid=inspectSplineRoute(a,-.5,b,.85);
     assert.equal(invalid.status,'invalid');
     const disconnected=inspectSplineRoute(a,.1,b,.85,{junctions:[]});
@@ -297,18 +299,32 @@ try {
     assert.equal(waiter.node.events.filter(e=>e.name==='spline-traffic-blocked').length,1,
       'Wait retry does not spam On Blocked');
     assert.equal(waiter.currentSpline,a);
+    const later=makeFollower(JunctionMode.ShortestRoute);
+    later.enableTrafficCapacity=true;later.followRouteTo(b,.85,false);
+    later.update(2.5);
+    assert.equal(waiter.trafficQueuePosition,1);
+    assert.equal(later.trafficQueuePosition,2);
+    assert.equal(getSplineTrafficQueueLength(junction,1),2);
     holder.onDisable();
     assert.equal(getSplineTrafficOccupancy(junction,1),0);
+    later.update(.2); // Later update first must NOT cut ahead in FIFO.
+    assert.equal(later.currentSpline,a);
+    assert(later.isWaitingForTraffic);
     waiter.update(.2);
     assert.equal(waiter.currentSpline,b,'Waiter resumes after capacity is released');
     assert(!waiter.isWaitingForTraffic);
     assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    assert.equal(getSplineTrafficQueueLength(junction,1),1);
     const legacyTraffic=makeFollower(JunctionMode.FirstOther);
     legacyTraffic.update(2.5);
     assert.equal(legacyTraffic.currentSpline,b,
       'Legacy follower bypasses traffic gate without opt-in');
     assert.equal(getSplineTrafficOccupancy(junction,1),1);
     waiter.setCurrentSpline(a,0);
+    later.update(.2);
+    assert.equal(later.currentSpline,b,'Second waiter receives released slot');
+    assert(!later.isWaitingForTraffic);
+    later.onDisable();
     assert.equal(getSplineTrafficOccupancy(junction,1),0,
       'Manual teleport releases reserved traffic slot');
     const unrestricted=makeFollower(JunctionMode.ShortestRoute);
@@ -335,6 +351,42 @@ try {
     abandoned.onDestroy();unrestricted.onDestroy();waiter.onDestroy();
     assert.equal(getSplineTrafficOccupancy(junction,1),0);
     exit.maxFollowers=0;
+    splineTrafficGate.clear();
+    // Occupancy-aware alternative: two exits from the same Junction to B,
+    // the closer exit is full but a farther one is still reachable.
+    const alternative=new TrafficLink();
+    alternative.spline=b;alternative.progress=0;alternative.maxFollowers=1;
+    junction.connections=[entry,exit,alternative];exit.maxFollowers=1;
+    const primary=makeFollower(JunctionMode.ShortestRoute);
+    primary.enableTrafficCapacity=true;primary.followRouteTo(b,.85,false);
+    primary.update(2.5);
+    assert.equal(primary.currentSpline,b);
+    near(primary.currentProgress,.225); // .1 + (.5 / duration 4)
+    assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    const alternateFollower=makeFollower(JunctionMode.ShortestRoute);
+    alternateFollower.enableTrafficCapacity=true;
+    alternateFollower.rerouteAroundTraffic=true;
+    alternateFollower.followRouteTo(b,.85,false);
+    alternateFollower.update(2.5);
+    assert.equal(alternateFollower.currentSpline,b);
+    assert.equal(getSplineTrafficOccupancy(junction,2),1);
+    assert.equal(alternateFollower.node.events.filter(e=>e.name==='spline-traffic-rerouted').length,1);
+    assert.equal(alternateFollower.node.events.filter(e=>e.name==='spline-traffic-blocked').length,0);
+    const congested=makeFollower(JunctionMode.ShortestRoute);
+    congested.enableTrafficCapacity=true;congested.rerouteAroundTraffic=true;
+    congested.followRouteTo(b,.85,false);congested.update(2.5);
+    assert(congested.isWaitingForTraffic,'No alternate -> FIFO on shortest exit');
+    assert.equal(congested.trafficQueuePosition,1);
+    primary.onDisable();
+    congested.update(.2);
+    assert.equal(congested.currentSpline,b,
+      'Recalculate at retry and admit oldest queued follower');
+    assert(!congested.isWaitingForTraffic);
+    alternateFollower.onDisable();congested.onDisable();primary.onDestroy();
+    assert.equal(getSplineTrafficOccupancy(junction,1),0);
+    assert.equal(getSplineTrafficOccupancy(junction,2),0);
+    exit.maxFollowers=0;
+    junction.connections=[entry,exit];
     splineTrafficGate.clear();
     junction.onReach=originalReach;
     const calls=triggerCalls.length;

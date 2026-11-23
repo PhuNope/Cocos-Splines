@@ -66,5 +66,19 @@ try{
  assert.throws(()=>findNetworkRoute([spline('A',1),spline('A',2)],[],anchor('A',0),anchor('A',1)),/duplicate/);
  assert.throws(()=>findNetworkRoute(S,[{id:'bad',links:[link('A',.5,0),link('B',.5,0)]}],anchor('A',0),anchor('C',1)),/link/);
  assert.throws(()=>findNetworkRoute(S,J,anchor('A',0),anchor('C',1),{transferPenalty:-1}),/options/);
+ // Saturation filters operate on destination exits without deleting links,
+ // retaining valid transfer routes and deterministic alternate selection.
+ const filtered=findNetworkRoute(S,J,anchor('A',.2),anchor('C',.95),{
+   startDirection:1,excludedExits:[{junctionId:'J1',exitIndex:2}],
+ });
+ assert(filtered);
+ assert.equal(filtered.steps.find(x=>x.kind==='switch').exitIndex,1);
+ assert(filtered.switchCount>=2);
+ const fullyBlocked=findNetworkRoute(only,right,anchor('X',.1),anchor('Y',.9),{
+   startDirection:1,excludedExits:[{junctionId:'J',exitIndex:3}],
+ });
+ assert.equal(fullyBlocked,null);
+ assert.throws(()=>findNetworkRoute(S,J,anchor('A',0),anchor('C',1),
+   {excludedExits:[{junctionId:'J1',exitIndex:-1}]}),/excluded exit/);
  console.log('NETWORK GRAPH PASS: shortest paths, direction, closed seam, deterministic ties, gap filtering and validation.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

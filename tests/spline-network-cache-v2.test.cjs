@@ -107,6 +107,15 @@ try{
    const lengthChange=query();
    assert(lengthChange&&lengthChange.distance>two.distance,
      'Changed arc length updates network path cost');
+   // Temporary traffic closures must NOT poison the cached base route.
+   const blocked=query(.1,.8,{excludedExits:[{junctionId:'J',exitIndex:1}]});
+   assert.equal(blocked,null);
+   const unblocked=query(.1,.8);
+   assert(unblocked,'Standard route remains reachable after a blocked query');
+   const hitsBefore=getSplineNetworkCacheStats().routeHits;
+   assert.equal(query(.1,.8,{excludedExits:[{junctionId:'J',exitIndex:1}]}),null);
+   assert(getSplineNetworkCacheStats().routeHits>hitsBefore,
+     'Excluded-exit query is memoized independently of normal route');
    const cached=getSplineNetworkCacheStats().routeHits;
    assert.equal(nextShortestJunctionExit(J,0,A,.5,1,B,.8,
       {transferPenalty:.01}),1);

@@ -37,5 +37,43 @@ try{
  gate.move(a,j2,0,2);
  gate.clear();assert.equal(gate.size,0);
  assert.equal(gate.count(j1,0),0);
+ // First blocked follower gets the first available slot, not the fastest
+ // update tick; releasing/moving owners preserves queue order.
+ const one={},two={},three={},four={},junction={};
+ assert(gate.move(one,junction,4,1));
+ assert.equal(gate.move(two,junction,4,1),false);
+ assert.equal(gate.move(three,junction,4,1),false);
+ assert.equal(gate.move(two,junction,4,1),false,'idempotent queue join');
+ assert.equal(gate.waiting(junction,4),2);
+ assert.equal(gate.queuePosition(two,junction,4),0);
+ assert.equal(gate.queuePosition(three,junction,4),1);
+ gate.release(one);
+ assert.equal(gate.move(four,junction,4,1),false,'newcomer cannot cut FIFO');
+ assert.equal(gate.queuePosition(four,junction,4),2);
+ assert.equal(gate.move(three,junction,4,1),false,'later waiter cannot cut FIFO');
+ assert(gate.move(two,junction,4,1));
+ assert.equal(gate.queuePosition(three,junction,4),0);
+ gate.release(two);
+ assert(gate.move(three,junction,4,1));
+ gate.release(three);
+ gate.release(four);
+ assert.equal(gate.waiting(junction,4),0);
+ // Switching a queued destination removes old entry.
+ assert(gate.move(one,junction,4,1));
+ assert.equal(gate.move(two,junction,4,1),false);
+ assert.equal(gate.move(two,junction,6,1),true);
+ assert.equal(gate.waiting(junction,4),0);
+ gate.releaseJunction(junction);
+ assert.equal(gate.waitingCount,0);assert.equal(gate.size,0);
+ // With an occupied OLD slot, failure at new exit must not free it.
+ assert(gate.move(one,j1,1,1));
+ assert(gate.move(two,j2,1,1));
+ assert.equal(gate.move(one,j2,1,1),false);
+ assert.equal(gate.count(j1,1),1);
+ assert.equal(gate.waiting(j2,1),1);
+ gate.releaseJunction(j2);
+ assert.equal(gate.waiting(j2,1),0);
+ assert.equal(gate.count(j1,1),1);
+ gate.clear();
  console.log('SPLINE TRAFFIC GATE PASS: opt-in capacity, atomic admission, independent links, release and unlimited fallback.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

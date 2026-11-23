@@ -154,9 +154,12 @@ export function planSplineRoute(startSpline:SplineContainer,startProgress:number
     // World/local snapshots are separate: world requires sampling, local does not.
     const signature=rawSignature===null?null:costSpace+':'+rawSignature;
     // Never memoize invalid inputs: delegate exact validation to graph planner.
+    // Route filters are per-query; the shared graph snapshot remains unchanged.
+    const excluded=(options.excludedExits??[]).map(x=>[x.junctionId,x.exitIndex] as const)
+        .sort((a,b)=>a[0].localeCompare(b[0])||a[1]-b[1]);
     const queryKey=JSON.stringify([startId,startProgress,endId,targetProgress,
         options.startDirection??null,options.transferPenalty??0,
-        options.maxWorldGap??null,costSpace]);
+        options.maxWorldGap??null,costSpace,excluded]);
     const graph=signature===null?compileNetwork(startSpline,targetSpline,registry,costSpace):
         memo.snapshot(signature,()=>compileNetwork(startSpline,targetSpline,registry,costSpace));
     const route=signature===null?
@@ -177,11 +180,12 @@ export interface SplineRouteDiagnosis {
     junctionCount:number;
     linkCount:number;
     saturatedExits:number;
+    waitingFollowers:number;
 }
 export function inspectSplineRoute(startSpline:SplineContainer,startProgress:number,
     targetSpline:SplineContainer,targetProgress:number,
     options:SplineRouteOptions={}):SplineRouteDiagnosis{
-    let junctionCount=0,linkCount=0,saturatedExits=0;
+    let junctionCount=0,linkCount=0,saturatedExits=0,waitingFollowers=0;
     try{
         const junctions=options.junctions??[...SplineJunction.active];
         const active=junctions.filter(j=>j&&j.enabled&&j.node?.isValid!==false);
@@ -191,6 +195,7 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
             linkCount+=entries.length;
             for(const entry of entries){
                 const limit=entry.link.maxFollowers;
+                waitingFollowers+=splineTrafficGate.waiting(junction,entry.index);
                 if(Number.isInteger(limit)&&limit>0&&
                    splineTrafficGate.count(junction,entry.index)>=limit)saturatedExits++;
             }
@@ -199,11 +204,33 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
         return {status:route?'reachable':'unreachable',
             message:route?'Route available.':
                 'No direction-compatible path exists with current Junction links and filters.',
-            route,junctionCount,linkCount,saturatedExits};
+            route,junctionCount,linkCount,saturatedExits,waitingFollowers};
     }catch(error){
         return {status:'invalid',message:String(error instanceof Error?error.message:error),
-            route:null,junctionCount,linkCount,saturatedExits};
+            route:null,junctionCount,linkCount,saturatedExits,waitingFollowers};
     }
+}
+
+/** FIFO queue length on the serialized Junction link index. */
+export function getSplineTrafficQueueLength(junction:SplineJunction,exitIndex:number):number{
+    return splineTrafficGate.waiting(junction,exitIndex);
+}
+/** Read live congestion without mutating global graph or reserving a slot.
+ * An actual switch still must acquire a slot atomically.
+ */
+export function findUnavailableTrafficExits(owner:object):Array<{junctionId:string;exitIndex:number}>{
+    const excluded:Array<{junctionId:string;exitIndex:number}>=[];
+    for(const junction of SplineJunction.active){
+        if(!junction.enabled||junction.node?.isValid===false||!junction.node?.uuid)continue;
+        for(const entry of junction.entries()){
+            const capacity=entry.link.maxFollowers;
+            if(!Number.isInteger(capacity)||capacity<=0)continue;
+            if(!splineTrafficGate.canEnter(owner,junction,entry.index,capacity))
+                excluded.push({junctionId:junction.node.uuid,exitIndex:entry.index});
+        }
+    }
+    excluded.sort((a,b)=>a.junctionId.localeCompare(b.junctionId)||a.exitIndex-b.exitIndex);
+    return excluded;
 }
 
 /** Current managed admission count on a serialized Junction link index. */
