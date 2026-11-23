@@ -132,6 +132,22 @@ export class SplineTrafficGate{
         const slot=this.owners.get(owner);
         return slot?{...slot}:null;
     }
+    /** Aggregated read-only snapshot; does not expose owner identity. */
+    public getTelemetry():{occupied:number;waiting:number;activeJunctions:number;
+        occupiedExits:number;queuedExits:number}{
+        let occupiedExits=0,queuedExits=0;
+        const junctions=new Set<object>();
+        for(const [junction,exits] of this.occupancy){
+            junctions.add(junction);
+            occupiedExits+=exits.size;
+        }
+        for(const [junction,exits] of this.queues){
+            junctions.add(junction);
+            queuedExits+=exits.size;
+        }
+        return {occupied:this.owners.size,waiting:this.queued.size,
+            activeJunctions:junctions.size,occupiedExits,queuedExits};
+    }
     public get size():number{return this.owners.size;}
     public get waitingCount():number{return this.queued.size;}
     public clear():void{

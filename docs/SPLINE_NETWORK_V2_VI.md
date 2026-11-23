@@ -281,3 +281,30 @@ Smoke tests trên Creator 3.8.8: hai spline cắt chữ X ở cùng độ cao �
 `follower.isProximityBlocked` chỉ true khi không thể đi thêm vì khoảng trống an toàn đã hết. Node event `spline-proximity-blocked` và `spline-proximity-cleared` phát **khi trạng thái thay đổi**, payload `{follower,spline,obstacle,nearestWorldDistance,proximityRadius,safetyGap}`. Follower vẫn `isPlaying=true` khi đứng chờ, tự di chuyển tiếp khi vật cản đi ra hoặc bị disable/destroy. Seek/switch/restart cập nhật vị trí đăng ký ngay; disable/destroy giải phóng. Không đăng ký collision trong Editor preview, không thay đổi `Collider`, không tạo physics objects hoặc scene snapshots.
 
 **Giới hạn rõ ràng:** Đây là proximity **xấp xỉ tĩnh trên vị trí đã cập nhật** + hình cầu, không phải rigid-body, continuous collider collision detection theo mesh thực, broadphase spatial index hay hệ thống dự đoán vị trí/velocity nhiều xe. Các follower chưa bật Proximity không được tính làm vật cản. Trong cùng frame, kết quả có thể phụ thuộc thứ tự update vì vị trí snapshot thay đổi tuần tự. Đối tượng vừa teleport chồng lấp có thể dừng đến khi không còn chồng lấp; không có thuật toán tự tách. Đường rất cong hoặc chuyển động khác thường có thể vượt giữa các đoạn lấy mẫu 16 segments. Khi thử trên Creator 3.8.8, kiểm tra ít nhất hai follower ở một giao cắt X, follower tạm dừng trên giao lộ, hai lane song song có thể vượt nhau, cầu vượt chênh Y, đổi Prefab/offset và chuyển Junction.
+
+## Phase 3.6b2b2b2b2a — 3D Spatial Hash Broadphase & Runtime Traffic Telemetry
+
+Khi `SplineAnimate.Enable Proximity Avoidance = true`, các follower đăng ký sphere World vào `SplineProximityRegistry`. **Spatial broadphase** dùng sparse 3D hash grid với kích thước ô mặc định **8 world units**. Vị trí tâm mỗi sphere chỉ nằm trong một ô, nên cập nhật khi follower di chuyển giữa các ô có chi phí thấp và không nhân số bản ghi theo bán kính sphere. Trước khi sweep, follower lấy mẫu một lần đường đi của bước `deltaTime` (mặc định 16 segments), tính AABB bao toàn bộ polyline và nới AABB theo **bán kính follower + safety gap + bán kính lớn nhất của mọi sphere đang đăng ký**. Các center cells giao AABB được lấy làm ứng viên. Chỉ **các ứng viên** mới chạy narrowphase intersection đoạn–sphere.
+
+Nếu số ô bị truy vấn vượt 4096 (hoặc tọa độ không đủ an toàn cho spatial indexing), hệ thống **fallback sang toàn bộ registry** — giữ tính đúng đắn, không bỏ qua va chạm chỉ vì vùng quét quá dài. Nếu sphere thay đổi vị trí, kích thước hoặc bị disable/destroy, index và max radius tự cập nhật; `clear()` dọn toàn bộ index và telemetry. Vì bán kính lớn nhất nằm trong AABB padding, hệ thống tránh false-negative do sphere tâm ngoài đường chạy nhưng vùng chiếm chỗ vẫn giao với quỹ đạo. Phép quét hình học chính vẫn là **swept-sphere xấp xỉ**, không phải Physics Collider solver.
+
+**Inspector:** `Proximity Sweep Samples` trong nhóm `3D proximity sweep (opt-in)`, từ **2–64**, mặc định **16**. Lấy mẫu nhiều hơn giúp bắt góc cong gắt tốt hơn nhưng tăng phép thử và phép lấy vị trí World. Cấu hình tương thích: nếu `Enable Proximity Avoidance` tắt thì không đăng ký follower và không chạy broadphase.
+
+**Runtime telemetry (read-only, không quét toàn Scene):**
+
+```ts
+import {getSplineTrafficTelemetry} from './Core/SplineTrafficTelemetry';
+const snapshot=getSplineTrafficTelemetry();
+console.log(snapshot.junction); // occupied, waiting, activeJunctions, occupiedExits, queuedExits
+console.log(snapshot.headwayFollowers);
+console.log(snapshot.proximity); // occupants, spatialCells, queries, fallbackQueries,
+                                // lastCandidates, lastSegmentTests,
+                                // lastSamplePoints, lastVisitedCells,
+                                // lastFallback, totalCandidates, totalSegmentTests
+```
+
+`splineProximityRegistry.getTelemetry()` cũng trả snapshot dạng object độc lập (không có identity hoặc tọa độ người sở hữu), `splineTrafficGate.getTelemetry()` trả thống kê queue/slot. Các chỉ số `last*` là truy vấn gần nhất của runtime hiện tại, `total*` được tích lũy từ lần clear gần nhất. Chúng không được serialize và không tạo lịch sử dài; phù hợp để hiển thị debug UI tự xây trong gameplay. Hệ thống không tự chụp Scene hoặc lưu/đưa dữ liệu lên mạng.
+
+**Test:** đối chiếu swept-sphere optimized với solver full-scan; 250 sphere ngoài vùng quét chỉ cho 1 ứng viên; cập nhật cell khi mover đi xa; sphere bán kính 100; đường cong chữ U có endpoint gần nhau; vùng quét quá lớn kích hoạt fallback; số lần sample đường đi cố định `samples+1` thay vì `N*(samples+1)`; so sánh số slot/queue/headway/proximity qua telemetry.
+
+**Giới hạn:** chưa dùng Cocos Physics Collider shape, mesh boolean, broadphase cho Headway (headway cùng spline/lane vẫn dùng registry), mô phỏng tương lai của vật cản đang chạy hay server authority. Chi phí query phụ thuộc vào vùng World bao polyline được lấy mẫu, mật độ sphere và số cell; các vùng lớn fallback full scan. Kết quả theo snapshot vị trí cập nhật gần nhất nên có thể khác nhau theo thứ tự cập nhật các follower cùng frame. Cần thử trực tiếp với nhiều follower, scale và prefab trong Creator 3.8.8.

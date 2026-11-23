@@ -117,6 +117,8 @@ export class SplineAnimate extends Component {
     proximityRadius=.5;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
     proximitySafetyGap=.2;
+    @property({min:2,max:64,step:1,tooltip:'Samples per proximity movement sweep (2..64). Default 16. Higher values improve detection on sharp bends at extra CPU cost; shared spatial broadphase limits candidates.'})
+    proximitySweepSamples=16;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
@@ -748,11 +750,13 @@ export class SplineAnimate extends Component {
             if(this.enableProximityAvoidance&&Number.isFinite(this.proximityRadius)&&
                this.proximityRadius>0&&this.proximityRadius<=100&&
                Number.isFinite(this.proximitySafetyGap)&&this.proximitySafetyGap>=0&&
-               this.proximitySafetyGap<=100){
+               this.proximitySafetyGap<=100&&
+               Number.isInteger(this.proximitySweepSamples)&&
+               this.proximitySweepSamples>=2&&this.proximitySweepSamples<=64){
                 const movement=to-from;
                 const report=splineProximityRegistry.limit(this,
                     ratio=>this.blendedWorldPosition(spline,from+movement*ratio),
-                    this.proximityRadius,this.proximitySafetyGap);
+                    this.proximityRadius,this.proximitySafetyGap,this.proximitySweepSamples);
                 proximityLimited=report.limited;
                 this.proximityStatus(report.stopped,spline,report.obstacle,
                     report.nearestWorldDistance);
