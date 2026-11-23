@@ -3,10 +3,15 @@ const assert=require('node:assert/strict'),Module=require('node:module');
 const source={uuid:'original',parentUuid:'scene',name:'Source Spline',position:{x:1,y:2,z:3},
  rotation:{x:0,y:0,z:0,w:1},scale:{x:2,y:3,z:4}};
 const v=(x,y=0,z=0)=>({x,y,z});
+const appearance={showGizmos:false,showGizmosAlways:true,
+ showTangentGizmos:false,gizmoSteps:24,
+ gizmoColor:{r:8,g:120,b:230,a:255}};
 const makePlan=(o)=>({
  ok:true,revision:'source-rev-1',rootUuid:'original',parentUuid:'scene',
  sourceName:'Source Spline',dimension:1,closed:false,samplesPerCurve:32,
  rootTransform:{position:{...source.position},rotation:{...source.rotation},scale:{...source.scale}},
+ containerAppearance:{...appearance,gizmoColor:{...appearance.gizmoColor}},
+ ...(o.mode==='simplify'?{omittedData:{extraRootComponents:1,extraKnotComponents:2,extraKnotChildren:1}}:{}),
  count:3,sourceLength:4,actualSpacing:2,estimatedMaxError:0.01,
   ...(o.mode==='simplify'?{sourceIndices:[0,2,4],retainedKnots:[0,2,4].map(i=>({
     name:'Retained '+i,rotation:{x:0,y:0,z:Math.sin(i/10),w:Math.cos(i/10)},
@@ -108,6 +113,13 @@ const reset=()=>{
  assert(writes.some(w=>w.uuid===root&&w.path==='__comps__.0.closed'&&w.value===false));
  assert(writes.some(w=>w.uuid===root&&w.path==='__comps__.0.reversed'&&w.value===false));
  assert(writes.some(w=>w.uuid===root&&w.path==='__comps__.0.dimension'&&w.value===1));
+ for(const [key,value] of Object.entries(appearance)){
+   const write=writes.find(w=>w.uuid===root&&w.path==='__comps__.0.'+key);
+   assert(write,'Missing safe Container appearance field '+key);
+   assert.deepEqual(write.value,value);
+   assert.equal(write.type,key==='gizmoColor'?'cc.Color':
+     key==='gizmoSteps'?'Integer':'Boolean');
+ }
  const knots=created.slice(1).map(k=>k.uuid);
  assert.equal(writes.filter(w=>knots.includes(w.uuid)&&w.path.endsWith('tangentOut')).length,3);
  assert.equal(writes.filter(w=>knots.includes(w.uuid)&&w.path.endsWith('tangentIn')).length,3);
@@ -153,6 +165,7 @@ const reset=()=>{
  assert(writes.some(w=>w.uuid===retained[1].uuid&&w.path.endsWith('tangentsInKnotSpace')&&w.value===true));
  assert(writes.some(w=>w.uuid===retained[0].uuid&&w.path.endsWith('editTangentHandles')&&w.value===true));
  assert.equal(nodes.get('original'),JSON.stringify(source));
+ assert.match(result.message,/Skipped 1 other Container components, 2 retained Knot components and 1 non-handle child nodes/);
  reset();failure='handle-link';
  const beforeRejected=removed.length,beforeRejectedSnapshots=snapshotCount;
  result=await methods.resampleSelectedSpline('simplify',0,.05,'local');
@@ -220,7 +233,8 @@ const reset=()=>{
   tension:.42,tangentsInKnotSpace:false,editTangentHandles:false}];
  rootNode.children=knotNodes;
  const comp={kind:'Splines.SplineContainer',node:rootNode,enabled:true,
-  dimension:0,closed:false,samplesPerCurve:32,
+  dimension:0,closed:false,reversed:false,samplesPerCurve:32,
+  ...appearance,gizmoColor:{...appearance.gizmoColor},
   get knots(){return rootNode.children.map(k=>k.components[0]);},
   getRevision:()=>revision,
   createResamplePlan:(opts,metric)=>makePlan(opts),
@@ -238,6 +252,11 @@ const reset=()=>{
   let plan=sceneMethods.queryResamplePlan('root-src',{mode:'count',target:3,tolerance:.1,space:'world'});
   assert(plan.ok,plan.error);
   assert(sceneMethods.queryResampleValid('root-src',plan.revision).ok);
+  assert.deepEqual(plan.containerAppearance,appearance);
+  comp.showGizmos=true;
+  assert(!sceneMethods.queryResampleValid('root-src',plan.revision).ok,
+    'Changing appearance must invalidate pending copy');
+  comp.showGizmos=false;
   const attached={uuid:'original-handle',isValid:true,parent:knotNodes[1],position:v(2,3)};
   knotNodes[1].components[0].tangentOutHandle=attached;
   let simplify=sceneMethods.queryResamplePlan('root-src',
@@ -245,6 +264,18 @@ const reset=()=>{
   assert(simplify.ok,simplify.error);
   assert.equal(simplify.retainedKnots[1].name,'Keep 1');
   assert.equal(simplify.retainedKnots[1].handleOut,true);
+  assert.deepEqual(simplify.containerAppearance,appearance);
+  comp.reversed=true;
+  const reversed=sceneMethods.queryResamplePlan('root-src',{mode:'simplify',
+    target:0,tolerance:.1,space:'local'});
+  assert(reversed.ok,reversed.error);
+  assert.equal(reversed.retainedKnots[1].handleIn,true,
+    'Reversed spline must move original Out handle to new In');
+  assert.equal(reversed.retainedKnots[1].handleOut,false);
+  comp.reversed=false;
+  assert(!sceneMethods.queryResampleValid('root-src',reversed.revision).ok,
+    'Reversed flag invalidates copy after returning to normal');
+
   assert.equal(simplify.retainedKnots[1].tension,.42);
   assert(!JSON.stringify(simplify.retainedKnots).includes('original-handle'),
     'Never leak old Scene Node identifiers to new planner payload');
@@ -257,6 +288,15 @@ const reset=()=>{
   assert(!sceneMethods.queryResamplePlan('root-src',{mode:'simplify',tolerance:.1}).ok,
     'Foreign handle references must fail before generating nodes');
   attached.parent=knotNodes[1];
+  const oldColor=comp.gizmoColor.r;
+  comp.gizmoColor.r=NaN;
+  assert(!sceneMethods.queryResamplePlan('root-src',{mode:'simplify',tolerance:.1}).ok,
+    'Invalid Color fails before creating Editor nodes');
+  comp.gizmoColor.r=oldColor;
+  rootNode.name='renamed';
+  assert(!sceneMethods.queryResampleValid('root-src',plan.revision).ok,
+    'Root name is part of structural copy fingerprint');
+  rootNode.name='Test Spline';
   rootNode.scale.x=3;
   assert(!sceneMethods.queryResampleValid('root-src',plan.revision).ok);
   rootNode.scale.x=2;

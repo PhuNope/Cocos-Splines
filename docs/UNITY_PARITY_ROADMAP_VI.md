@@ -199,5 +199,6 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Phase 2.20: Simplify spline greedy (open/closed, local/world metric), giữ endpoint/closed anchor, new sibling copy; sampled tolerance (not certified continuous bound).
 - [x] Phase 2.21: retained Simplify Knot names and local rotations via source-index mapping. New Broken tangents stay spline-local; source Prefab handles and arbitrary child components are not cloned.
 - [x] Phase 2.22: safe Simplify Knot copying: preserve tension/tangent-space/edit flag, rebuild independent handle nodes and cc.Node references, convert fitted tangents into knot-local coordinates where required, and guard stale source metadata.
+- [x] Phase 2.23: whitelist-only Container appearance cloning (Gizmos visibility/color/density), source metadata in topology fingerprint, and per-copy counts of omitted extra components/children. No generic component cloning or source references.
 - [ ] Native 3.8.8 acceptance: verify recreated handle refs persist through save/reopen, Prefab overrides and Undo/Redo. Extra components and unrelated child nodes are not copied.
 - [ ] Phase 2.20 acceptance: Cocos Creator 3.8.8 Undo/Redo, Prefab overrides, Scene save/reopen; performance on 128 Knot closed splines.

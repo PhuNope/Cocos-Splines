@@ -62,6 +62,10 @@ Trong `SplineRoad` → **Sharp Corners**, đặt `Corner Mode = Join And Trim` �
 
 Trong `SplineJunctionMesh` chọn **UV Mode = Road Matched**, đặt **UV Blend Start = 0.55**, gán **cùng một Material** cho tất cả `SplineRoad` và Junction Mesh. Texture cần **Wrap U/V = Repeat**. Mesh patch lấy đúng vị trí và UV0 ở biên asphalt Road đã dựng, hỗ trợ UV Length Along U/V, đảo chiều, offset, Width Tiles và Width Modifiers. Tâm giao lộ dùng nội suy UV, nên các vạch kẻ làn phức tạp vẫn có thể bị méo ở khu vực này. `World Projected` là mặc định cũ. Xem `docs/pages/junction-mesh.html`.
 
+## Phase 2.23 — Simplify metadata copy (preview)
+
+Bản sao Simplified giữ cấu hình hiển thị Gizmos của SplineContainer (hiện đường cong, tangents, màu và mật độ đường vẽ), ngoài tên/rotation/tension của các Knot còn lại. Chỉ các trường dữ liệu đơn giản trong allowlist mới được serialize; **không** clone các component tùy ý, không chuyển node references từ Prefab nguồn. Kết quả báo số component và node con không được sao chép để tránh bỏ sót dữ liệu. Vẫn phải test Undo/Redo và Prefab overrides trên Cocos Creator 3.8.8 thật.
+
 ## Phase 2.11 — Group Move theo local của SplineContainer
 
 Group Move của Knot trong XY2D và XZ2D giờ vẽ và kéo trục theo **transform local thực sự của SplineContainer**, kể cả khi Container bị xoay hoặc có scale không đều. XY2D có trục X/Y và ô XY; XZ2D có trục X/Z và ô XZ. Trục local bị khóa của từng Knot được giữ nguyên.

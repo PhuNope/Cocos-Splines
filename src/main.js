@@ -3,6 +3,7 @@ const NAME='cocos-splines';
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
+const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -496,6 +497,12 @@ const methods={
                 const check=await invokeScene('queryResampleValid',sourceUuid,revision);
                 if(!check?.ok)throw Error(check?.error||'Original spline changed during resample.');
             };
+            // Reject malformed metadata BEFORE any Scene Node is allocated.
+            const appearance=appearanceWrites(plan.containerAppearance||{});
+            const skipped=mode==='simplify'?plan.omittedData:null;
+            if(skipped&&(['extraRootComponents','extraKnotComponents','extraKnotChildren'].some(
+                key=>!Number.isInteger(skipped[key])||skipped[key]<0||skipped[key]>100000)))
+                throw Error('Invalid source omission report.');
             await assertOriginal();
             created=await makeNode(plan.parentUuid,
                 String(plan.sourceName||'Spline').slice(0,72)+(mode==='simplify'?' (Simplified)':' (Resampled)'));
@@ -509,6 +516,8 @@ const methods={
             await property(created,0,'reversed',false,'Boolean',false);
             await property(created,0,'dimension',plan.dimension,'Enum',false);
             await property(created,0,'samplesPerCurve',plan.samplesPerCurve,'Integer',false);
+            for(const setting of appearance)
+                await property(created,0,setting.key,setting.value,setting.type,false);
             for(let i=0;i<plan.knots.length;i++){
                 if(i%8===0)await assertOriginal();
                 const k=plan.knots[i];
@@ -548,7 +557,10 @@ const methods={
                 message:'Created a separate '+(mode==='simplify'?'simplified':'resampled')+' spline with '+plan.count+
                     ' Knots; estimated '+space+' deviation '+
                     plan.estimatedMaxError.toFixed(5)+'. Original preserved.'+
-                    (mode==='simplify'?' Fresh tangent handles; non-handle child nodes and extra components are not copied.':'')};
+                    (mode==='simplify'?(' Fresh tangent handles. Skipped '+
+                        (skipped?.extraRootComponents||0)+' other Container components, '+
+                        (skipped?.extraKnotComponents||0)+' retained Knot components and '+
+                        (skipped?.extraKnotChildren||0)+' non-handle child nodes.'):'')};
         }catch(error){
             let cleanupWarning='';
             if(created&&sourceUuid&&revision){

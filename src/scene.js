@@ -320,11 +320,14 @@ function queryResamplePlan(rootUuid,options){
                 const tension=sourceKnot.tension;
                 if(!Number.isFinite(tension)||tension<0||tension>1000)
                     throw Error('Invalid source Knot tension.');
+                // A source Reversed spline swaps in/out in evaluator space;
+                // remap handle presence into the new natural-order hierarchy.
                 return {name:String(node.name||'Knot').slice(0,72),
                     rotation:{x:q.x,y:q.y,z:q.z,w:q.w},
                     tension,tangentsInKnotSpace:!!sourceKnot.tangentsInKnotSpace,
                     editTangentHandles:!!sourceKnot.editTangentHandles,
-                    handleIn:!!handleIn,handleOut:!!handleOut};
+                    handleIn:!!(spline.reversed?handleOut:handleIn),
+                    handleOut:!!(spline.reversed?handleIn:handleOut)};
             });
             if(retainedKnots.some(k=>Object.values(k.rotation).some(v=>!Number.isFinite(v))))
                 throw Error('Invalid retained Knot rotation.');
