@@ -60,6 +60,7 @@ function planJunctionTangent({anchorForward,anchorWorldLength,targetWorldLength,
         // then retain only the authored serialized hidden-axis component.
         result[hidden]=before[hidden];
     }
+    for(const axis of ['x','y','z'])if(Object.is(result[axis],-0))result[axis]=0;
     const changed=['x','y','z'].some(k=>Math.abs(result[k]-before[k])>1e-6);
     return {side,sign,before:{...before},after:result,changed,
         targetWorldLength:length,mode,orientation};
