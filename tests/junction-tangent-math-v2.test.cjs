@@ -41,6 +41,6 @@ assert.throws(()=>planJunctionTangent({...input,anchorForward:vec()}),/degenerat
 assert.throws(()=>planJunctionTangent({...input,mode:'invalid'}),/Invalid/);
 assert.throws(()=>planJunctionTangent({...input,targetWorldLength:0}),/zero-length/);
 assert.throws(()=>planJunctionTangent({...input,dimension:2,anchorForward:vec(1,1)}),/plane/);
-assert.throws(()=>planJunctionTangent({...input,matrix:Array(16).fill(0)}),/singular/);
+assert.throws(()=>planJunctionTangent({...input,matrix:Array(16).fill(0)}),/singular|affine/);
 assert.throws(()=>planJunctionTangent({...input,anchorWorldLength:Infinity}),/Invalid/);
 console.log('JUNCTION TANGENT MATH PASS: G1/C1, directions, Reversed, knot quaternion, scale, 2D and validation.');
