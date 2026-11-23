@@ -9,7 +9,10 @@ const makePlan=(o)=>({
  rootTransform:{position:{...source.position},rotation:{...source.rotation},scale:{...source.scale}},
  count:3,sourceLength:4,actualSpacing:2,estimatedMaxError:0.01,
   ...(o.mode==='simplify'?{sourceIndices:[0,2,4],retainedKnots:[0,2,4].map(i=>({
-    name:'Retained '+i,rotation:{x:0,y:0,z:Math.sin(i/10),w:Math.cos(i/10)}}))}:{}),
+    name:'Retained '+i,rotation:{x:0,y:0,z:Math.sin(i/10),w:Math.cos(i/10)},
+    tension:1/3+i/15,tangentsInKnotSpace:i===2,
+    editTangentHandles:i===0,handleIn:i===0,handleOut:i!==4,
+  }))}:{}),
  knots:[0,1,2].map(i=>({position:v(i*2,0,0),tangentIn:v(-.66,0,0),
   tangentOut:v(.66,0,0),mode:4})),
 });
@@ -61,6 +64,9 @@ const request=async(channel,method,arg)=>{
   const node=nodes.get(arg.uuid);assert(node,'Unknown node '+arg.uuid);
   if(node.uuid==='original')throw Error('Resample must never mutate source');
   writes.push({uuid:arg.uuid,path:arg.path,type:arg.dump.type,value:arg.dump.value});
+  if(failure==='handle-link'&&arg.path.endsWith('tangentInHandle')){
+    failure=null;return false;
+  }
   if(failure==='write'&&arg.path.endsWith('tangentOut')){
    failure=null;
    return false;
@@ -123,14 +129,36 @@ const reset=()=>{
  const beforeSimplify=created.length,beforeSimplifySnapshots=snapshotCount;
  result=await methods.resampleSelectedSpline('simplify',0,.05,'local');
  assert(result.ok,result.error);
- assert.equal(created.length,beforeSimplify+4);
- assert.equal(snapshotCount,beforeSimplifySnapshots+1);
+ const added=created.slice(beforeSimplify),newRoot=added[0].uuid;
+ const retained=added.filter(item=>item.parent===newRoot);
+ const handles=added.filter(item=>retained.some(k=>k.uuid===item.parent));
+ assert.equal(added.length,7,'root + three Knots + three independent handles');
+ assert.equal(retained.length,3);
+ assert.equal(handles.length,3);
+ assert.equal(snapshotCount,beforeSimplifySnapshots+1,'one snapshot including handles');
  for(let i=0;i<3;i++){
-   const entry=created[beforeSimplify+1+i],knotId=entry.uuid;
-   assert.equal(entry.name,'Retained '+i*2);
-   assert(Math.abs(nodes.get(knotId).rotation.z-Math.sin(i*2/10))<1e-7);
-   assert.equal(writes.filter(w=>w.uuid===knotId&&w.path==='rotation').length,1);
+   const entry=retained[i],id=entry.uuid,sourceIndex=i*2;
+   assert.equal(entry.name,'Retained '+sourceIndex);
+   assert(Math.abs(nodes.get(id).rotation.z-Math.sin(sourceIndex/10))<1e-7);
+   assert.equal(writes.filter(w=>w.uuid===id&&w.path==='rotation').length,1);
+   const t=writes.find(w=>w.uuid===id&&w.path.endsWith('.tension'));
+   assert(t&&Math.abs(t.value-(1/3+sourceIndex/15))<1e-7);
  }
+ assert.equal(handles.filter(h=>h.parent===retained[0].uuid).length,2);
+ assert.equal(handles.filter(h=>h.parent===retained[1].uuid).length,1);
+ assert.equal(handles.filter(h=>h.parent===retained[2].uuid).length,0);
+ const handleLinks=writes.filter(w=>w.path.endsWith('tangentInHandle')||w.path.endsWith('tangentOutHandle')).slice(-3);
+ assert.equal(handleLinks.length,3);
+ assert(handleLinks.every(link=>handles.some(h=>h.uuid===link.value)&&!['a','b','original'].includes(link.value)));
+ assert(writes.some(w=>w.uuid===retained[1].uuid&&w.path.endsWith('tangentsInKnotSpace')&&w.value===true));
+ assert(writes.some(w=>w.uuid===retained[0].uuid&&w.path.endsWith('editTangentHandles')&&w.value===true));
+ assert.equal(nodes.get('original'),JSON.stringify(source));
+ reset();failure='handle-link';
+ const beforeRejected=removed.length,beforeRejectedSnapshots=snapshotCount;
+ result=await methods.resampleSelectedSpline('simplify',0,.05,'local');
+ assert(!result.ok);
+ assert.equal(removed.length,beforeRejected+1,'failed Node ref must clean generated sibling');
+ assert.equal(snapshotCount,beforeRejectedSnapshots,'failed handle ref must not snapshot');
  assert.equal(nodes.get('original'),JSON.stringify(source));
  reset();
  const previousCreated=created.length;
@@ -185,15 +213,19 @@ const reset=()=>{
  };
  scene.children=[rootNode];
  let revision='v1';
- const knotNodes=[0,1,2].map(i=>({uuid:'k'+i,parent:rootNode,
-  children:[],components:[],position:v(i),isValid:true}));
- for(const n of knotNodes)n.components=[{kind:'Splines.SplineKnot',node:n,enabled:true}];
+ const knotNodes=[0,1,2].map(i=>({uuid:'k'+i,name:'Keep '+i,parent:rootNode,
+  children:[],components:[],position:v(i),isValid:true,
+  rotation:{x:0,y:0,z:0,w:1}}));
+ for(const n of knotNodes)n.components=[{kind:'Splines.SplineKnot',node:n,enabled:true,
+  tension:.42,tangentsInKnotSpace:false,editTangentHandles:false}];
  rootNode.children=knotNodes;
  const comp={kind:'Splines.SplineContainer',node:rootNode,enabled:true,
   dimension:0,closed:false,samplesPerCurve:32,
   get knots(){return rootNode.children.map(k=>k.components[0]);},
   getRevision:()=>revision,
   createResamplePlan:(opts,metric)=>makePlan(opts),
+  createSimplifyPlan:(opts,metric)=>({...makePlan({...opts,mode:'simplify'}),
+    sourceIndices:[0,1,2]}),
  };
  rootNode.components=[comp];
  const originalLoad=Module._load;
@@ -206,6 +238,25 @@ const reset=()=>{
   let plan=sceneMethods.queryResamplePlan('root-src',{mode:'count',target:3,tolerance:.1,space:'world'});
   assert(plan.ok,plan.error);
   assert(sceneMethods.queryResampleValid('root-src',plan.revision).ok);
+  const attached={uuid:'original-handle',isValid:true,parent:knotNodes[1],position:v(2,3)};
+  knotNodes[1].components[0].tangentOutHandle=attached;
+  let simplify=sceneMethods.queryResamplePlan('root-src',
+    {mode:'simplify',target:0,tolerance:.1,space:'local'});
+  assert(simplify.ok,simplify.error);
+  assert.equal(simplify.retainedKnots[1].name,'Keep 1');
+  assert.equal(simplify.retainedKnots[1].handleOut,true);
+  assert.equal(simplify.retainedKnots[1].tension,.42);
+  assert(!JSON.stringify(simplify.retainedKnots).includes('original-handle'),
+    'Never leak old Scene Node identifiers to new planner payload');
+  assert(sceneMethods.queryResampleValid('root-src',simplify.revision).ok);
+  attached.position.x++;
+  assert(!sceneMethods.queryResampleValid('root-src',simplify.revision).ok,
+    'Handle movement invalidates pending Simplify copy');
+  attached.position.x--;
+  attached.parent=rootNode;
+  assert(!sceneMethods.queryResamplePlan('root-src',{mode:'simplify',tolerance:.1}).ok,
+    'Foreign handle references must fail before generating nodes');
+  attached.parent=knotNodes[1];
   rootNode.scale.x=3;
   assert(!sceneMethods.queryResampleValid('root-src',plan.revision).ok);
   rootNode.scale.x=2;
@@ -220,5 +271,5 @@ const reset=()=>{
   assert(!sceneMethods.queryResamplePlan('missing',{mode:'count'}).ok);
  }finally{Module._load=originalLoad;}
 
- console.log('RESAMPLE EDITOR PASS: new sibling, local transforms, serialized controls, one snapshot, cleanup, Scene fingerprint and original preservation.');
+ console.log('RESAMPLE EDITOR PASS: independent tangent handles and Knot metadata, one snapshot, cleanup, stale metadata/Scene guards, source immutability.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

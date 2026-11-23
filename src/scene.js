@@ -267,7 +267,14 @@ function resampleFingerprint(root,spline) {
         root.uuid,root.parent?.uuid||null,
         point(root.position),point(root.rotation),point(root.scale),
         frame.matrix,
-        spline.getRevision(),spline.knots.map(k=>k.node.uuid),
+        spline.getRevision(),spline.knots.map(k=>[
+            k.node.uuid,k.node.name,point(k.node.rotation||{x:0,y:0,z:0,w:1}),
+            k.tension,k.tangentsInKnotSpace,k.editTangentHandles,
+            ...[k.tangentInHandle,k.tangentOutHandle].map(h=>h?[
+                h.uuid,h.isValid!==false,h.parent?.uuid||null,
+                h.position?point(h.position):null,
+            ]:null),
+        ]),
     ]);
 }
 /** A read-only plan, independent of any editor scene mutations. */
@@ -300,11 +307,24 @@ function queryResamplePlan(rootUuid,options){
                new Set(result.sourceIndices).size!==result.count||
                result.sourceIndices.some(i=>!Number.isInteger(i)||i<0||i>=ordered.length))
                 throw Error('Invalid Simplify source index mapping.');
-            // Only copy visual orientation/name, never child component references.
+            // Copy known Knot fields and handle PRESENCE only; no original
+            // Scene Node identifiers are included in the returned plan.
             retainedKnots=result.sourceIndices.map(i=>{
-                const node=ordered[i].node,q=node.rotation;
+                const sourceKnot=ordered[i],node=sourceKnot.node,q=node.rotation;
+                const handleIn=sourceKnot.tangentInHandle;
+                const handleOut=sourceKnot.tangentOutHandle;
+                for(const handle of [handleIn,handleOut]){
+                    if(handle&&(handle.isValid===false||handle.parent!==node))
+                        throw Error('Simplify requires valid direct-child tangent handles.');
+                }
+                const tension=sourceKnot.tension;
+                if(!Number.isFinite(tension)||tension<0||tension>1000)
+                    throw Error('Invalid source Knot tension.');
                 return {name:String(node.name||'Knot').slice(0,72),
-                    rotation:{x:q.x,y:q.y,z:q.z,w:q.w}};
+                    rotation:{x:q.x,y:q.y,z:q.z,w:q.w},
+                    tension,tangentsInKnotSpace:!!sourceKnot.tangentsInKnotSpace,
+                    editTangentHandles:!!sourceKnot.editTangentHandles,
+                    handleIn:!!handleIn,handleOut:!!handleOut};
             });
             if(retainedKnots.some(k=>Object.values(k.rotation).some(v=>!Number.isFinite(v))))
                 throw Error('Invalid retained Knot rotation.');

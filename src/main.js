@@ -2,6 +2,7 @@
 const NAME='cocos-splines';
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
+const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -54,7 +55,7 @@ async function setKnotValue(uuid,key,value,fallbackType,record=false){
     const result=await Editor.Message.request('scene','set-property',{
         uuid,path:`__comps__.${idx}.${key}`,dump:{type:prop?.type||fallbackType,value},record,
     });
-    if(result===false)throw new Error(`Cannot set ${key}`);
+    if(result===false||(result&&result.ok===false))throw new Error(`Cannot set ${key}`);
 }
 function vec(x){
     if(!Array.isArray(x)||x.length!==3||!x.every(v=>typeof v==='number'&&Number.isFinite(v)))throw new Error('Vec3 phải là [x,y,z] hữu hạn.');
@@ -487,7 +488,9 @@ const methods={
                  (mode==='simplify'&&(!Array.isArray(plan.retainedKnots)||
                      plan.retainedKnots.length!==plan.count||
                      plan.retainedKnots.some(k=>typeof k?.name!=='string'||
-                         k.name.length>72||!finiteQuat(k.rotation)))))
+                         k.name.length>72||!validCopyQuat(k.rotation)||
+                         !['handleIn','handleOut','tangentsInKnotSpace','editTangentHandles'].every(field=>typeof k[field]==='boolean')||
+                         !Number.isFinite(k.tension)||k.tension<0||k.tension>1000))))
                 throw Error('Invalid or stale resample result from Scene.');
             const assertOriginal=async()=>{
                 const check=await invokeScene('queryResampleValid',sourceUuid,revision);
@@ -510,15 +513,32 @@ const methods={
                 if(i%8===0)await assertOriginal();
                 const k=plan.knots[i];
                 const originalKnot=mode==='simplify'?plan.retainedKnots[i]:null;
-                 const id=await makeNode(created,originalKnot?.name||'Knot '+String(i).padStart(3,'0'));
-                 // Knot rotation controls up-vector; new Broken tangents remain
-                 // in Container-local space, avoiding unintended curve rotation.
-                 if(originalKnot)await setNodeSerialized(id,'rotation','cc.Quat',originalKnot.rotation);
+                // Build a fresh Knot from immutable geometry. No source
+                // component/Node identifiers enter the new sibling.
+                const copied=originalKnot?planCopiedKnot(k,originalKnot):null;
+                const id=await makeNode(created,originalKnot?.name||'Knot '+String(i).padStart(3,'0'));
+                if(originalKnot)await setNodeSerialized(id,'rotation','cc.Quat',originalKnot.rotation);
                 await component(id,'Splines.SplineKnot');
                 await position(id,[k.position.x,k.position.y,k.position.z]);
                 await setKnotValue(id,'mode',4,'Enum');
-                await setKnotValue(id,'tangentIn',k.tangentIn,'cc.Vec3');
-                await setKnotValue(id,'tangentOut',k.tangentOut,'cc.Vec3');
+                await setKnotValue(id,'tangentIn',copied?.tangentIn||k.tangentIn,'cc.Vec3');
+                await setKnotValue(id,'tangentOut',copied?.tangentOut||k.tangentOut,'cc.Vec3');
+                if(copied){
+                    await setKnotValue(id,'tension',copied.tension,'Float');
+                    if(copied.tangentsInKnotSpace)
+                        await setKnotValue(id,'tangentsInKnotSpace',true,'Boolean');
+                    // Recreate only standard tangent handles as independent
+                    // child nodes; source Prefab Node references are never used.
+                    for(const [which,enabled] of [['In',copied.handleIn],['Out',copied.handleOut]]){
+                        if(!enabled)continue;
+                        const tangent=which==='In'?copied.tangentIn:copied.tangentOut;
+                        const handle=await makeNode(id,'Tangent '+which);
+                        await position(handle,[tangent.x,tangent.y,tangent.z]);
+                        await setKnotValue(id,'tangent'+which+'Handle',handle,'cc.Node');
+                    }
+                    if(copied.editTangentHandles)
+                        await setKnotValue(id,'editTangentHandles',true,'Boolean');
+                }
             }
             await assertOriginal();
             await snapshot();
@@ -527,7 +547,8 @@ const methods={
                 estimatedMaxError:plan.estimatedMaxError,
                 message:'Created a separate '+(mode==='simplify'?'simplified':'resampled')+' spline with '+plan.count+
                     ' Knots; estimated '+space+' deviation '+
-                    plan.estimatedMaxError.toFixed(5)+'. Original preserved.'};
+                    plan.estimatedMaxError.toFixed(5)+'. Original preserved.'+
+                    (mode==='simplify'?' Fresh tangent handles; non-handle child nodes and extra components are not copied.':'')};
         }catch(error){
             let cleanupWarning='';
             if(created&&sourceUuid&&revision){
