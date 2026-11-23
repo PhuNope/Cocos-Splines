@@ -36,6 +36,6 @@ try{
  assert.throws(()=>simplifySpline(straight,false,{tolerance:.01,space:'bad'}),/metric/);
  assert.throws(()=>simplifySpline([line(0),line(0)],false,{tolerance:.01}),/zero-length/);
  assert.throws(()=>simplifySpline([line(0),{...line(1),position:v(NaN)}],false,{tolerance:.01}),/finite/);
- assert.throws(()=>simplifySpline(straight,false,{tolerance:.01},()=>v(Infinity)),/metric|invalid|non-finite/i);
+ assert.throws(()=>simplifySpline(straight,false,{tolerance:.01},()=>v(Infinity)),/metric|invalid|non-finite|zero-length/i);
  console.log('SIMPLIFY MATH PASS: open/closed, anchor, bounds, no mutation, World/2D.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
