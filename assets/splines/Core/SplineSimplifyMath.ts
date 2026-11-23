@@ -5,6 +5,10 @@
  */
 import * as M from './SplineMath';
 import {ResampleResult} from './SplineResampleMath';
+export interface SimplifyResult extends ResampleResult {
+ /** Original evaluator-order indices for retained Knots. */
+ sourceIndices:number[];
+}
 export interface SimplifyOptions {
  tolerance:number;
  samplesPerCurve?:number;
@@ -16,7 +20,7 @@ const add=(a:M.V3,b:M.V3)=>vec(a.x+b.x,a.y+b.y,a.z+b.z);
 const sub=(a:M.V3,b:M.V3)=>vec(a.x-b.x,a.y-b.y,a.z-b.z);
 const finite=(p:M.V3)=>!!p&&[p.x,p.y,p.z].every(Number.isFinite);
 export function simplifySpline(source:readonly M.KnotData[],closed:boolean,
- options:SimplifyOptions,metric:(p:M.V3)=>M.V3=p=>p):ResampleResult {
+ options:SimplifyOptions,metric:(p:M.V3)=>M.V3=p=>p):SimplifyResult {
  if(!Array.isArray(source)||source.length<2||source.length>128||
     (closed&&source.length<3)||source.some(k=>!k||!finite(k.position)||
       !finite(k.tangentIn)||!finite(k.tangentOut)||!Number.isFinite(k.mode)))
@@ -105,7 +109,7 @@ export function simplifySpline(source:readonly M.KnotData[],closed:boolean,
      tangentOut:next?sub(next.p1,next.p0):vec(0,0,0),
      mode:4,tension:1/3};
  });
- return {knots,count:knots.length,closed,sourceLength:length,
+ return {knots,sourceIndices:ids,count:knots.length,closed,sourceLength:length,
    actualSpacing:length/spans.length,
    estimatedMaxError:Math.max(0,...spans.map(s=>s.error)),
    testSamples:spans.length*65};

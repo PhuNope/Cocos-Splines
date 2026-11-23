@@ -8,6 +8,8 @@ const makePlan=(o)=>({
  sourceName:'Source Spline',dimension:1,closed:false,samplesPerCurve:32,
  rootTransform:{position:{...source.position},rotation:{...source.rotation},scale:{...source.scale}},
  count:3,sourceLength:4,actualSpacing:2,estimatedMaxError:0.01,
+  ...(o.mode==='simplify'?{sourceIndices:[0,2,4],retainedKnots:[0,2,4].map(i=>({
+    name:'Retained '+i,rotation:{x:0,y:0,z:Math.sin(i/10),w:Math.cos(i/10)}}))}:{}),
  knots:[0,1,2].map(i=>({position:v(i*2,0,0),tangentIn:v(-.66,0,0),
   tangentOut:v(.66,0,0),mode:4})),
 });
@@ -117,6 +119,19 @@ const reset=()=>{
  assert.equal(snapshotCount,snapBefore+1);
  assert.equal(created.length,countBefore+4);
 
+ reset();
+ const beforeSimplify=created.length,beforeSimplifySnapshots=snapshotCount;
+ result=await methods.resampleSelectedSpline('simplify',0,.05,'local');
+ assert(result.ok,result.error);
+ assert.equal(created.length,beforeSimplify+4);
+ assert.equal(snapshotCount,beforeSimplifySnapshots+1);
+ for(let i=0;i<3;i++){
+   const entry=created[beforeSimplify+1+i],knotId=entry.uuid;
+   assert.equal(entry.name,'Retained '+i*2);
+   assert(Math.abs(nodes.get(knotId).rotation.z-Math.sin(i*2/10))<1e-7);
+   assert.equal(writes.filter(w=>w.uuid===knotId&&w.path==='rotation').length,1);
+ }
+ assert.equal(nodes.get('original'),JSON.stringify(source));
  reset();
  const previousCreated=created.length;
  planError='Resample deviation exceeds tolerance';

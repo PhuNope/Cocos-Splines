@@ -215,7 +215,7 @@ function arcRevision(root,spline,space){
     if(space!=='local'&&space!=='world')throw Error('Arc metric must be local or world.');
     const frame=space==='world'?queryKnotEditFrame(root.uuid):null;
     if(frame&&!frame.ok)throw Error(frame.error);
-    return JSON.stringify([spline.getRevision(),spline.knots.map(k=>k.node.uuid),frame?.matrix||null]);
+    return JSON.stringify([spline.getRevision(),spline.knots.map(k=>[k.node.uuid,k.node.name]),frame?.matrix||null]);
 }
 function queryArcDistribution(rootUuid,ids,space='local'){
     const root=resolve(rootUuid);
@@ -293,6 +293,22 @@ function queryResamplePlan(rootUuid,options){
             metric=require('./SplineKnotEditMath').transformFrame(matrix).toWorld;
         }
         const result=simplifying?spline.createSimplifyPlan(options,metric):spline.createResamplePlan(options,metric);
+        let retainedKnots;
+        if(simplifying){
+            const ordered=spline.knots;
+            if(!Array.isArray(result.sourceIndices)||result.sourceIndices.length!==result.count||
+               new Set(result.sourceIndices).size!==result.count||
+               result.sourceIndices.some(i=>!Number.isInteger(i)||i<0||i>=ordered.length))
+                throw Error('Invalid Simplify source index mapping.');
+            // Only copy visual orientation/name, never child component references.
+            retainedKnots=result.sourceIndices.map(i=>{
+                const node=ordered[i].node,q=node.rotation;
+                return {name:String(node.name||'Knot').slice(0,72),
+                    rotation:{x:q.x,y:q.y,z:q.z,w:q.w}};
+            });
+            if(retainedKnots.some(k=>Object.values(k.rotation).some(v=>!Number.isFinite(v))))
+                throw Error('Invalid retained Knot rotation.');
+        }
         if(resampleFingerprint(root,spline)!==revision)
             throw Error('Source spline changed while planning resample.');
         const tr={
@@ -306,7 +322,7 @@ function queryResamplePlan(rootUuid,options){
             rootUuid:root.uuid,sourceName:root.name,
             dimension:spline.dimension,
             closed:spline.closed,samplesPerCurve:spline.samplesPerCurve,
-            rootTransform:tr};
+            rootTransform:tr, ...(simplifying?{retainedKnots}:{})};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
 function queryResampleValid(rootUuid,revision){

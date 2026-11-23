@@ -17,6 +17,7 @@ try{
  assert.equal(s.knots.at(-1).position.x,5);
  assert.equal(JSON.stringify(straight),input,'source remains unmodified');
  assert.equal(s.knots[0].mode,4);
+ assert.deepEqual(s.sourceIndices,[0,5], 'source endpoints mapped');
  const corner=[line(0),line(3),{...line(3),position:v(3,4)},{...line(6),position:v(6,4)}];
  s=simplifySpline(corner,false,{tolerance:.0001});
  assert(s.count>=3,'sharp corner must not collapse to a single cubic');
@@ -25,6 +26,8 @@ try{
  s=simplifySpline(closed,true,{tolerance:.2});
  assert(s.count>=3&&s.count<=4);
  assert(s.closed);assert.deepEqual(s.knots[0].position,v(0));
+ assert.equal(s.sourceIndices[0],0,'closed anchor retained');
+ assert.equal(new Set(s.sourceIndices).size,s.count);
  const world=p=>({x:p.x*2,y:p.y*3,z:p.z});
  s=simplifySpline(straight,false,{tolerance:.001,space:'world'},world);
  assert.equal(s.count,2);

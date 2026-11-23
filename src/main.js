@@ -483,7 +483,11 @@ const methods={
                 !finiteVec(plan.rootTransform?.scale)||
                 !finiteQuat(plan.rootTransform?.rotation)||
                 plan.knots.some(k=>!finiteVec(k.position)||!finiteVec(k.tangentIn)||
-                    !finiteVec(k.tangentOut)||k.mode!==4))
+                    !finiteVec(k.tangentOut)||k.mode!==4)||
+                 (mode==='simplify'&&(!Array.isArray(plan.retainedKnots)||
+                     plan.retainedKnots.length!==plan.count||
+                     plan.retainedKnots.some(k=>typeof k?.name!=='string'||
+                         k.name.length>72||!finiteQuat(k.rotation)))))
                 throw Error('Invalid or stale resample result from Scene.');
             const assertOriginal=async()=>{
                 const check=await invokeScene('queryResampleValid',sourceUuid,revision);
@@ -505,7 +509,11 @@ const methods={
             for(let i=0;i<plan.knots.length;i++){
                 if(i%8===0)await assertOriginal();
                 const k=plan.knots[i];
-                const id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                const originalKnot=mode==='simplify'?plan.retainedKnots[i]:null;
+                 const id=await makeNode(created,originalKnot?.name||'Knot '+String(i).padStart(3,'0'));
+                 // Knot rotation controls up-vector; new Broken tangents remain
+                 // in Container-local space, avoiding unintended curve rotation.
+                 if(originalKnot)await setNodeSerialized(id,'rotation','cc.Quat',originalKnot.rotation);
                 await component(id,'Splines.SplineKnot');
                 await position(id,[k.position.x,k.position.y,k.position.z]);
                 await setKnotValue(id,'mode',4,'Enum');
