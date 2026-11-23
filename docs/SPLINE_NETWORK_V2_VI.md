@@ -95,3 +95,17 @@ Cũng có `onRouteArrived` (`EventHandler[]`) và Node event `spline-route-arriv
 Gọi `followRouteTo`, `restart`, `seek` hay `setCurrentSpline` sẽ re-arm cho một lượt đến đích mới. Chỉnh đích/progress qua Inspector cũng sẽ phát lại khi đi tới đích mới. `play()` sau khi dừng **không tự re-arm** cùng đích để tránh duplicate. Chế độ Off/Manual/FirstOther/RoundRobin và Scene Editor preview không phát On Arrived.
 
 **Giới hạn:** Tính năng này chỉ xử lý khi follower **thực sự đi tới mốc** theo hướng di chuyển trên spline đích; nếu đích nằm phía sau mà không có route reverse hợp lệ, không teleport hay tự quay đầu. Không có global route distance caching, traffic reservation hoặc báo route-unreachable tự động. Kiểm chứng Cocos Creator 3.8.8 trong runtime thật vẫn cần bổ sung.
+
+## Phase 3.4 — Bounded Route Cache & automatic invalidation
+
+`planSplineRoute()` / `nextShortestJunctionExit()` vẫn giữ nguyên signature và kết quả. Graph được compile một lần khi network topology không đổi và sử dụng chung giữa các follower; cùng điểm đầu/đích, chiều di chuyển và các tùy chọn thì kết quả Dijkstra được cache. Khi follower đi tới một Junction khác hoặc đổi progress, phần graph có thể được tái sử dụng, còn shortest-path được tính cho truy vấn mới.
+
+**Khóa thay đổi:** tham chiếu đối tượng component/Node, Scene Node UUID, danh sách active+enabled Junctions, thứ tự/nguồn các Connections, `positionMode`, `progress`, `distance`, `exitDirection`, SplineContainer `enabled/count/closed/reversed/dimension/length`, `getRevision()` (Knot geometry/handles) và `node.worldMatrix` (kể cả parent transform và nonuniform scale). Đổi link/mesh/transform hoặc bật/tắt Junction sẽ tạo snapshot mới ở lần truy vấn tiếp theo. Nếu spline adapter không có geometry revision hoặc worldMatrix, cache tự bỏ qua (fail-safe, không giữ hình học cũ).
+
+- Cache bounded LRU: tối đa **4 graph snapshots**, mỗi snapshot có tối đa **64 route queries** (gồm kết quả không có tuyến, `null`). Không dùng timer, không cần vòng Editor update.
+- Kết quả route được clone thành object/steps mới, Maps của SplineContainer/Junction cũng được clone khi trả ra, nên UI/gameplay sửa route preview không làm bẩn dữ liệu cache.
+- `invalidateSplineNetworkCache()` có thể được gọi từ gameplay/tooling khi thay đổi network bằng cơ chế không tác động tới `getRevision()` hoặc muốn giải phóng cache. `getSplineNetworkCacheStats()` trả về `{snapshots,paths,graphBuilds,graphHits,routeComputes,routeHits}` để so sánh hiệu năng.
+- **Chưa chuyển sang world-distance routing**: chi phí route vẫn là local arc length; worldMatrix dùng để vô hiệu hóa điểm nối và kiểm tra `maxWorldGap`.
+- Không cache riêng `SplineAnimate` để tránh lưu graph cũ sau khi đổi Scene. Registry global và các object Node có giới hạn số lượng phần tử trong LRU.
+
+Native Cocos Creator 3.8.8: thử 2 follower chung route, gọi `getSplineNetworkCacheStats()` trước/sau crossing; di chuyển spline parent Node, sửa Knot, đổi Junction connections, bật/tắt Junction, xác nhận route được dựng lại và `On Route Arrived` không phát sai. CI mock chưa thay thế kiểm thử native Editor/Prefab.
