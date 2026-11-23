@@ -67,6 +67,24 @@ try {
  mock.revision='two';
  const revised=headwayWorldArc(mock);
  assert(samples>afterTransform);assert.notStrictEqual(revised,scaled);
- assert.equal(gate.get(follower).progress,.03);
+ // Two logical lanes on the SAME SplineContainer must be independent.
+ gate.clear();
+ const laneLeader={},laneFollower={};
+ gate.set(laneLeader,track,.6,1,1);
+ gate.set(laneFollower,track,.2,1,2);
+ let laneReport=gate.limit(laneFollower,track,.2,.9,1,arc,false,1,0,2);
+ assert.equal(laneReport.limited,false,'Another lane cannot block centerline headway');
+ laneReport=gate.limit(laneFollower,track,.2,.9,1,arc,false,1,0,1);
+ assert.equal(laneReport.limited,true,'Same lane restricts progress');
+ near(laneReport.progress,.5);
+ gate.set(laneLeader,track,.6,1,2); // Dynamic lane switch is immediately visible
+ laneReport=gate.limit(laneFollower,track,.2,.9,1,arc,false,1,0,2);
+ assert.equal(laneReport.limited,true);
+ assert.equal(gate.get(laneLeader).laneId,2);
+ gate.remove(laneLeader);
+ assert.equal(gate.limit(laneFollower,track,.2,.9,1,arc,false,1,0,2).limited,false);
+ assert.throws(()=>gate.set({},track,.5,1,32),/Invalid/);
+ assert.throws(()=>gate.limit({},track,0,1,1,arc,false,1,0,-1),/Invalid/);
+ assert.equal(gate.get(laneFollower).progress,.2);
  console.log('SPLINE HEADWAY PASS: world arc clearances, soft braking, forward/backward, closed seams, pause/registration, transform and revision cache.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

@@ -40,7 +40,8 @@ const configs={
     groups:[{title:'Target Junction',fields:['junction']},
       {title:'Automatic phases',fields:['phases','allRedSeconds']},
       {title:'Adaptive queue demand (opt-in)',fields:['adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds']},
-      {title:'Explicit forbidden Green pairs',fields:['conflicts']}]},
+      {title:'Explicit forbidden Green pairs',fields:['conflicts']},
+      {title:'Read-only 3D conflict probe',fields:['conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin']}]},
   junction:{title:'Spline Junction',note:'Connector Check đo gap/hướng tangent theo World. Snap Endpoint chỉ dịch chuyển một Knot đầu/cuối của spline mở, không tự xoay tangent hoặc chỉnh Junction links. Thêm ít nhất 2 Connections. Gán mỗi link SplineContainer + Position Mode; nhập Progress 0..1 hoặc Distance theo chiều dài spline. SplineAnimate chọn Junction Mode: First Other / Round Robin / Manual. Exit Direction ở từng link đích: Preserve giữ chiều đến, Forward tăng Progress về 1, Backward giảm Progress về 0. Event payload cung cấp follower để gọi requestJunctionExit(index).',groups:[{title:'Routes',fields:['connections']},{title:'Events',fields:['onReach','onSwitch']}]},
   instantiate:{title:'Spline Instantiate',note:'Spawn / Respawn tạo prefab ngay trong Scene Hierarchy; Spawn On Start không tạo trùng nếu các instance đã được lưu trong Scene.',groups:[{title:'Source',fields:['spline','prefab','parentNode']},{title:'Distribution',fields:['count','method','spacing','rangeMode','startProgress','endProgress','startDistance','endDistance','includeEndPoint','alignToSpline','positionOffset','rotationOffset','randomOffset','seed','scaleMultiplier','spawnOnStart','rebuildOnChange']}]},
   path2d:{title:'Spline 2D Path',note:'Sử dụng dưới Canvas/RenderRoot2D + UITransform, thuộc tính Dimension của spline phải là XY2D. Đường được vẽ bằng Graphics; không cần MeshRenderer.',groups:[{title:'Spline & appearance',fields:['spline','lineWidth','strokeColor','stepsPerCurve','rebuildOnChange']}]},
@@ -51,7 +52,7 @@ const configs={
   animate:{title:'Spline Animate' ,note:'Kéo Node chứa SplineContainer vào trường Spline. Target để trống sẽ di chuyển chính Node gắn SplineAnimate. Nếu Animate đặt trên chính Container, hãy gán Target là Node khác. Bật Preview in Editor để xem vị trí mà không cần Play. Start/Preview hỗ trợ Normalized Distance, Distance và Spline t.',groups:[
     {title:'Spline source',fields:['spline','target','modifiers','worldOffset','splineOffset','constantSpeedWithOffset']},
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
-    {title:'Follower headway (opt-in)',fields:['enableHeadway','headwayWorldGap','headwayBrakeDistance']},
+    {title:'Follower headway (opt-in)',fields:['enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance']},
     {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
@@ -69,6 +70,10 @@ function makeInspector(type){
         }).join('');
         groups+=`<details class="spl-section" open><summary>${escapeHtml(g.title)}</summary>${items}</details>`;
     });
+    if(type==='trafficController'){
+        groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-check-traffic-conflicts">Check 3D Conflict Candidates</button></div>`;
+        selectors.checkTrafficConflicts='.spl-check-traffic-conflicts';
+    }
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
           <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Align Tangent (G1/C1) changes just its Broken-mode tangent/handle; Snap first, then align. Interior links and closed splines are not edited.</p>
@@ -245,6 +250,10 @@ function makeInspector(type){
                 const name=type==='junctionMesh'?'rebuild-junction-patch':type==='bender'?'apply-bender':'apply-morph';
                 this.$.action.addEventListener('click',()=>void callEditor(this,name));
                 if(this.$.unapply)this.$.unapply.addEventListener('click',()=>void callEditor(this,type==='bender'?'restore-bender':'restore-morph'));
+            }
+            if(type==='trafficController'){
+                this.$.checkTrafficConflicts.addEventListener('click',()=>
+                    void callEditor(this,'check-traffic-conflicts'));
             }
             if(type==='junction'){
                 this.$.addJunctionMesh.addEventListener('click',()=>void callEditor(this,'create-junction-mesh'));

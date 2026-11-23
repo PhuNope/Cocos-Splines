@@ -546,5 +546,15 @@ const junctionScene=require('./SplineJunctionScene').createJunctionScene({
     resolve,classOf,queryKnotEditFrame,
     sceneId:()=>require('cc').director.getScene()?.uuid,
 });
-exports.methods={...junctionScene,spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+/** Read-only editor diagnostic. Never writes Junction, Phases or Scene state. */
+function queryTrafficConflicts(uuid){
+    const node=resolve(uuid);
+    if(!node)return {ok:false,error:'Select the Node containing a SplineTrafficController.'};
+    const comp=node.components.find(c=>classOf(c)==='Splines.SplineTrafficController');
+    if(!comp||typeof comp.diagnoseConflicts!=='function')
+        return {ok:false,error:'Node does not have SplineTrafficController.'};
+    try{return {ok:true,...comp.diagnoseConflicts()};}
+    catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
+}
+exports.methods={...junctionScene,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

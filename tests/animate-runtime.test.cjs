@@ -505,6 +505,17 @@ try {
     assert.equal(splineHeadwayRegistry.size,1);
     toggled.onDestroy();
     assert.equal(splineHeadwayRegistry.size,0);
+    // Logical lanes on the same spline: unlike physical lane geometry,
+    // this partitions only headway bookkeeping.
+    const l1=headFollower(.6),l2=headFollower(.2);
+    l1.headwayLaneId=3;l2.headwayLaneId=4;
+    l1.update(.001);l2.update(2.4);
+    assert(l2.currentProgress>.6,'Different lane IDs must not block each other');
+    assert.equal(splineHeadwayRegistry.get(l1).laneId,3);
+    const l3=headFollower(.2);l3.headwayLaneId=3;l3.update(2.4);
+    assert(l3.currentProgress<.6,'Same lane ID must still obey headway gap');
+    l1.onDisable();l2.onDisable();l3.onDisable();
+    assert.equal(splineHeadwayRegistry.size,0);
     // Headway is runtime-only: Scene Editor preview cannot register.
     env.EDITOR_NOT_IN_PREVIEW=true;
     const preview=headFollower(.4);

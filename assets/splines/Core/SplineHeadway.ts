@@ -1,11 +1,13 @@
 /** Pure, opt-in same-spline world-arc headway planner.
  * Not a collision system: compares arc distances on the shared spline
- * centerline, with no lane occupancy, vehicle bounds, or crossing geometry.
+ * centerline, optionally partitioned into explicit lane IDs. No vehicle bounds or crossing geometry.
  */
 import {worldArcDistanceAt,type WorldArcSample} from './SplineWorldArcLength';
 export type TravelDirection=1|-1;
 export interface HeadwayPosition {
     track:object;progress:number;direction:TravelDirection;
+    /** Logical lane partition; not derived from geometry. Defaults to lane 0. */
+    laneId?:number;
 }
 export interface HeadwayPlan {
     progress:number;limited:boolean;stopped:boolean;
@@ -33,13 +35,14 @@ function fromWorldDistance(arc:readonly WorldArcSample[],distance:number):number
 export function planHeadway(
     own:object,track:object,from:number,to:number,direction:TravelDirection,
     vehicles:ReadonlyMap<object,HeadwayPosition>,arc:readonly WorldArcSample[],
-    closed:boolean,minGap:number,brakeRange=0,
+    closed:boolean,minGap:number,brakeRange=0,laneId=0,
 ):HeadwayPlan{
     if(!own||!track||!Array.isArray(arc)||arc.length<2||!finite(from)||
        !finite(to)||from<0||from>1||to<0||to>1||
        ![1,-1].includes(direction)||direction*(to-from)<-1e-9||
        typeof closed!=='boolean'||!finite(minGap)||minGap<0||
-       !finite(brakeRange)||brakeRange<0)
+       !finite(brakeRange)||brakeRange<0||
+       !Number.isInteger(laneId)||laneId<0||laneId>31)
         throw Error('Invalid spline headway query.');
     const total=arc[arc.length-1].distance;
     if(!finite(total)||total<=1e-9)
@@ -48,7 +51,7 @@ export function planHeadway(
     const requested=Math.abs(finish-start);
     let gap=Infinity,leader:object|null=null;
     for(const [id,state] of vehicles){
-        if(id===own||state.track!==track||!finite(state.progress)||
+        if(id===own||state.track!==track||(state.laneId??0)!==laneId||!finite(state.progress)||
            state.progress<0||state.progress>1)continue;
         const where=worldArcDistanceAt(arc,state.progress);
         let candidate=direction===1?where-start:start-where;
@@ -80,11 +83,12 @@ export function planHeadway(
  */
 export class SplineHeadwayRegistry {
     private readonly positions=new Map<object,HeadwayPosition>();
-    public set(owner:object,track:object,progress:number,direction:TravelDirection):void{
+    public set(owner:object,track:object,progress:number,direction:TravelDirection,laneId=0):void{
         if(!owner||!track||!finite(progress)||progress<0||progress>1||
-           (direction!==1&&direction!==-1))
+           (direction!==1&&direction!==-1)||!Number.isInteger(laneId)||
+           laneId<0||laneId>31)
             throw Error('Invalid spline headway position.');
-        this.positions.set(owner,{track,progress,direction});
+        this.positions.set(owner,{track,progress,direction,laneId});
     }
     public remove(owner:object):void{this.positions.delete(owner);}
     public get(owner:object):HeadwayPosition|null{
@@ -93,9 +97,9 @@ export class SplineHeadwayRegistry {
     public get size():number{return this.positions.size;}
     public limit(owner:object,track:object,from:number,to:number,
         direction:TravelDirection,arc:readonly WorldArcSample[],
-        closed:boolean,minGap:number,brakeRange=0):HeadwayPlan{
+        closed:boolean,minGap:number,brakeRange=0,laneId=0):HeadwayPlan{
         return planHeadway(owner,track,from,to,direction,this.positions,arc,
-            closed,minGap,brakeRange);
+            closed,minGap,brakeRange,laneId);
     }
     public clear():void{this.positions.clear();}
 }

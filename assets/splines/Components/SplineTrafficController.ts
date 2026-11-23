@@ -7,6 +7,8 @@ import {compileTrafficCycle,sampleTrafficCycle,
 import {SplineAdaptiveTraffic,validateAdaptiveTraffic}
     from '../Core/SplineAdaptiveTraffic';
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
+import {probeJunctionTrafficConflicts,type TrafficProbeReport}
+    from '../Core/SplineTrafficConflictDiagnostics';
 const {ccclass,property,menu}= _decorator;
 
 /** Each phase opens only the listed serialized Junction link indices.
@@ -54,6 +56,12 @@ export class SplineTrafficController extends Component {
     maxGreenSeconds=15;
     @property({min:.05,tooltip:'Adaptive only. Waiting demand age that triggers urgent phase selection after the current minimum Green. Approximate fairness policy, not a hard individual vehicle wait guarantee.'})
     maxDemandWaitSeconds=30;
+    @property({min:.01,tooltip:'Read-only geometry diagnostic: flag sampled 3D centerlines this close in WORLD units. Not a physical collision guarantee.'})
+    conflictProbeTolerance=.75;
+    @property({min:1,tooltip:'Read-only geometry diagnostic: sample this many WORLD units downstream from each Junction exit.'})
+    conflictProbeLookahead=20;
+    @property({min:0,tooltip:'Read-only geometry diagnostic: ignore the common junction origin for this distance (WORLD units).'})
+    conflictProbeIgnoreOrigin=1;
 
     private _owned:SplineJunction|null=null;
     private _original=new Map<SplineJunctionLink,JunctionTrafficSignal>();
@@ -83,6 +91,18 @@ export class SplineTrafficController extends Component {
      */
     public get phaseDemandAges():readonly number[]{
         return this._adaptive?.waitingAges??[];
+    }
+    /** Explicit, read-only probe. Does not modify conflicts, phases or lights.
+     * Can run in Scene Editor without enabling the gameplay signal scheduler.
+     */
+    public diagnoseConflicts():TrafficProbeReport{
+        const junction=this.junction||this.getComponent(SplineJunction);
+        if(!junction)throw Error('Assign a SplineJunction to diagnose.');
+        return probeJunctionTrafficConflicts(junction,this.phases,this.conflicts,{
+            tolerance:this.conflictProbeTolerance,
+            lookaheadWorldDistance:this.conflictProbeLookahead,
+            ignoreJunctionWorldDistance:this.conflictProbeIgnoreOrigin,
+        });
     }
 
     onEnable():void {

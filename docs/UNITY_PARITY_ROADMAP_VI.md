@@ -57,7 +57,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b1 — Manual per-exit Green/Red signal (including unlimited exits), opted-in 0..10 priority admission with FIFO within tier, signal-aware reroute, diagnostics and runtime regression.
 - [x] Phase 3.6b2b2a — Opt-in SplineTrafficController with deterministic Green/Yellow/All-Red phase scheduling, explicit conflict-pair validation, manual-state restoration, single-controller lease, runtime lifecycle and mock regression tests.
 - [x] Phase 3.6b2b2b1 — Adaptive queue-demand SplineTrafficController with minimum/maximum Green, time-aged demand priority, explicit fixed-mode fallback, bounded dt, Yellow/All-Red safety and regression tests.
-- [ ] Phase 3.6b2b2b2 — Physically derived conflict detection, lane-level proximity/collision, traffic telemetry and authoritative multiplayer traffic.
+- [x] Phase 3.6b2b2b2a — Read-only bounded sampled 3D exit proximity diagnostics (candidate/missing/same-Green/uncertain, Editor Inspector action) and opt-in logical headway Lane ID (0–31) with regression tests.
+- [ ] Phase 3.6b2b2b2b — Physical mesh/lane-width conflict regions, lane-level 3D collision avoidance, traffic telemetry and server-authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 

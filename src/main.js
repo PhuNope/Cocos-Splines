@@ -364,6 +364,29 @@ const methods={
             return {ok:true,uuid:id,message:'Trigger đã tạo. Chỉnh Progress / Direction / On Cross trong Inspector.'};
         }catch(e){return alertError('create-trigger',e);}
     },
+    /** Read-only geometric conflict warnings from the selected Traffic Controller.
+     * Preserves serialized Conflict Pairs/Phases, no snapshot or Scene edit.
+     */
+    async checkTrafficConflicts(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select SplineTrafficController Node in Hierarchy.');
+            const result=await invokeScene('queryTrafficConflicts',uuid);
+            if(!result?.ok)throw Error(result?.error||'Cannot inspect traffic exits.');
+            const pairs=Array.isArray(result.candidates)?result.candidates:[];
+            const missing=Array.isArray(result.missingPairs)?result.missingPairs:[];
+            const skipped=Array.isArray(result.skipped)?result.skipped:[];
+            const unsafe=Array.isArray(result.unsafePhases)?result.unsafePhases:[];
+            const preview=missing.slice(0,4).map(x=>
+                x.firstExit+'↔'+x.secondExit+' ('+x.distance.toFixed(3)+' world units)').join(', ');
+            return {ok:true,...result,message:'Traffic conflict probe: '+
+                pairs.length+' possible pairs, '+missing.length+' missing declared conflicts; '+
+                unsafe.length+' phases contain possible simultaneous-Green pairs. '+
+                skipped.length+' exits skipped. '+
+                (preview?'Candidates: '+preview+'. ':'')+
+                'Warnings only; check in Scene before editing Conflict Pairs.'};
+        }catch(error){return alertError('check-traffic-conflicts',error);}
+    },
     /** Read-only continuity diagnostics. Link indices are serialized indices,
      * not the ordinal of nonempty links. No Scene mutation or snapshot.
      */

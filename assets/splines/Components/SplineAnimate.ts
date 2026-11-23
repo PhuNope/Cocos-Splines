@@ -101,6 +101,8 @@ export class SplineAnimate extends Component {
     trafficPriority=0;
     @property({tooltip:'Opt-in centerline headway: prevent moving within Headway World Gap of another registered follower on the same spline. No 3D collision, no cross-spline detection.'})
     enableHeadway=false;
+    @property({min:0,max:31,step:1,tooltip:'Logical lane ID (0..31) for opt-in headway. Only same SplineContainer AND same Lane ID interact. Default 0 preserves previous behavior; this does not move the follower to a physical lane.'})
+    headwayLaneId=0;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
@@ -350,7 +352,9 @@ export class SplineAnimate extends Component {
             this._headwayBlocked=false;
             return;
         }
-        splineHeadwayRegistry.set(this,spline,clamp01(this.currentProgress),this._travelDirection);
+        const lane=Number.isInteger(this.headwayLaneId)&&this.headwayLaneId>=0&&this.headwayLaneId<=31?
+            this.headwayLaneId:0;
+        splineHeadwayRegistry.set(this,spline,clamp01(this.currentProgress),this._travelDirection,lane);
     }
     private clearHeadway():void{
         splineHeadwayRegistry.remove(this);
@@ -677,7 +681,9 @@ export class SplineAnimate extends Component {
                this.headwayBrakeDistance>=0){
                 const report=splineHeadwayRegistry.limit(this,spline,from,to,dir,
                     headwayWorldArc(spline),!!spline.closed,
-                    this.headwayWorldGap,this.headwayBrakeDistance);
+                    this.headwayWorldGap,this.headwayBrakeDistance,
+                    Number.isInteger(this.headwayLaneId)&&this.headwayLaneId>=0&&this.headwayLaneId<=31?
+                        this.headwayLaneId:0);
                 headwayLimited=report.limited;
                 this.headwayStatus(report.stopped,spline,report.leader,report.nearestWorldGap);
                 if(headwayLimited){
