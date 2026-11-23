@@ -208,3 +208,35 @@ ambulance.trafficPriority = 10;
 **Tương thích:** `Traffic Signal = Green`, `Traffic Priority = 0`, `Enable Traffic Capacity = false` theo mặc định. Scene cũ không chịu Red/priority trừ khi chủ động opt-in traffic. Red không thu hồi slot của xe đã đi qua; chỉ giới hạn lượt admission **tiếp theo**.
 
 **Giới hạn:** Đây là tín hiệu **điều khiển bằng tay/script**, chưa có chu kỳ đèn tự động, yellow clearance, conflict matrix giữa các exit, right-of-way theo hướng tiếp cận, fairness chống starvation khi liên tục xuất hiện xe ưu tiên cao, vật lý 3D hay multiplayer authoritative. Cần smoke test trong Creator 3.8.8 với Prefab overrides, Undo, editor save/reopen và event listener khi script đổi trạng thái.
+
+## Phase 3.6b2b2a — Automatic Traffic Light Controller (preview)
+
+Có **Add Component → Splines → Spline Traffic Controller** (class `Splines.SplineTrafficController`). Thêm vào cùng Node của `SplineJunction` hoặc kéo Junction vào trường `Junction`. Controller **không tự thêm vào Scene cũ** và hoàn toàn không thay đổi các Junction đang sử dụng điều khiển thủ công. Chỉ các follower bật `Enable Traffic Capacity` mới tuân thủ đèn.
+
+Mỗi `Phase` có `Green Exits` (mảng **chỉ số gốc** trong `SplineJunction.connections`), `Green Seconds` và `Yellow Seconds`. Chỉ các exit thuộc phase được Green/Yellow; các exit còn lại đều Red. Sau Green, exit đó chuyển Yellow (không cấp lượt admission mới), kế tiếp **tất cả exit Red** trong `All Red Seconds` (mặc định 1 giây), rồi mới bật Green của phase tiếp theo. Khi bật controller, lần đầu **All-Red** trong cùng khoảng thời gian clearance trước Phase 0. Không có Green chồng lấn khi chuyển pha, kể cả tick lớn hoặc event từ gameplay.
+
+`Conflicts` là danh sách cặp `First Exit` / `Second Exit` không được Green đồng thời. Bộ lập lịch **bác bỏ cấu hình** khi hai exit thuộc cùng cặp conflict cùng xuất hiện trong một `Green Exits`, hoặc có chỉ số trùng, ngoài phạm vi, thời lượng không hợp lệ hay thời lượng All-Red dưới 0.05 s. Không tự suy ra cặp xung đột bằng hình học: **người tạo Scene phải liệt kê các cặp thực sự giao nhau**. Trong trường hợp không hợp lệ, controller giữ tất cả link ở Red và phát `spline-traffic-cycle-invalid` khi lỗi mới xuất hiện; tự phục hồi từ All-Red khi cấu hình được sửa.
+
+`SplineJunctionLink.trafficSignal` nhận **Green=0**, **Red=1**, **Yellow=2**. Yellow giữ nguyên lịch pha quan sát được, nhưng admission và reroute xem như không mở đường. `inspectSplineRoute().yellowExits` cung cấp số exit đang Yellow; `redExits` vẫn đếm các exit Red.
+
+### Runtime API và events
+
+```ts
+import {SplineTrafficController} from './Components/SplineTrafficController';
+const controller = trafficNode.getComponent(SplineTrafficController)!;
+controller.pauseCycle();     // mọi exit Red cho tới khi resume
+controller.resumeCycle();    // restart từ All-Red clearance
+controller.restartCycle();   // reset clock/phase về All-Red
+console.log(controller.stage,controller.phaseIndex,controller.remainingSeconds);
+console.log(controller.validationError,controller.isCycling);
+```
+
+Node gắn controller phát `spline-traffic-cycle-stage` với payload `{controller,junction,stage,phaseIndex,remainingSeconds}` khi đổi pha; `spline-traffic-cycle-invalid` khi mới phát hiện cấu hình lỗi. Junction vẫn phát `spline-traffic-signal-changed` cho từng exit thay đổi màu. Chạy trong Play/runtime; **Editor preview không chạy đồng hồ pha**.
+
+Controller có quyền điều khiển các exit đang quản lý: nếu gameplay script tự đổi màu manual trong khi controller đang chạy, ở tick sau nó sẽ được đặt về màu của phase hiện tại. Tắt/xóa controller sẽ **khôi phục trạng thái thủ công trước khi controller chạy**, ghi nhớ theo danh tính `SplineJunctionLink` chứ không phải chỉ số mảng. Hai controller cùng tham chiếu một Junction không được phép cùng điều khiển: controller đến sau từ chối ghi cho đến khi controller đầu nhả quyền.
+
+### Test gợi ý
+
+Tạo Junction có 3 Connections. Phase 0: `Green Exits = [0]`, Green=2s, Yellow=1s; Phase 1: `Green Exits = [1,2]`, Green=2s, Yellow=1s; All-Red=1s; Conflicts=`(0,1)`. Khi Play: 0–1s toàn Red, 1–3s exit 0 Green, 3–4s exit 0 Yellow, 4–5s toàn Red, 5–7s exits 1 và 2 Green, 7–8s Yellow, 8–9s toàn Red, 9s quay về Phase 0. Đổi `Phase 0 Green Exits = [0,1]` khi Play: cấu hình bị chặn và tất cả Red.
+
+**Giới hạn:** Chưa có tự động lựa chọn pha theo lưu lượng, minimum yellow clearance theo tốc độ xe, controller vật lý vùng giao cắt hoặc tính toán conflict từ road mesh. Đây là **tín hiệu điều tiết admission**: nó không ngăn một xe đã được cấp slot tiếp tục chạy, không preempt slot, không phối hợp traffic lights giữa các Junction. CI dùng mock Cocos; cần thử thêm trong Creator 3.8.8 với serialization của nested Phase/Conflict arrays, Prefab override, Undo/Redo và hot reload.

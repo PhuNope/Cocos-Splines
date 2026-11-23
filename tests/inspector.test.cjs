@@ -7,6 +7,12 @@ assert.equal(pkg.panels,undefined,'No standalone panel');
 assert(!Object.keys(pkg.contributions.messages).includes('open-panel'));
 const animate=require(root+'/dist/contributions/inspector/Animate.js');
 const container=require(root+'/dist/contributions/inspector/Container.js');
+const traffic=require(root+'/dist/contributions/inspector/TrafficController.js');
+for(const field of ['junction','phases','allRedSeconds','conflicts'])
+ assert(traffic.template.includes('spl-field-'+field),'Traffic Controller Inspector missing '+field);
+assert(pkg.contributions.inspector.section.node['Splines.SplineTrafficController']===
+  './dist/contributions/inspector/TrafficController.js');
+assert.equal(traffic.template.match(/<ui-prop /g)?.length,4);
 for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayWorldGap','headwayBrakeDistance','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }

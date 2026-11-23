@@ -10,7 +10,7 @@ const {ccclass,property,menu}= _decorator;
 
 export enum JunctionExitDirection { Preserve=0, Forward=1, Backward=2 }
 /** Manual, per-exit signal; Green is default for existing scenes. */
-export enum JunctionTrafficSignal { Green=0, Red=1 }
+export enum JunctionTrafficSignal { Green=0, Red=1, Yellow=2 }
 Enum(JunctionExitDirection);Enum(JunctionTrafficSignal);Enum(SplinePositionMode);
 
 /** One logical connection into or out of a junction. These do NOT move the knots;
@@ -28,7 +28,7 @@ export class SplineJunctionLink {
      */
     @property({min:0,step:1,tooltip:'Traffic capacity for this destination link. 0 = unlimited. Enforced only for SplineAnimate followers with Enable Traffic Capacity.'})
     maxFollowers=0;
-    @property({type:Enum(JunctionTrafficSignal),tooltip:'Green (default): allow opted-in follower admission. Red: block/queue opted-in followers even with Max Followers = 0. Runtime: junction.setTrafficSignal(index, state).'})
+    @property({type:Enum(JunctionTrafficSignal),tooltip:'Green (default): admit opted-in followers. Yellow and Red: block/queue new admission, even with Max Followers = 0. Controller or manual junction.setTrafficSignal(index, state).'})
     trafficSignal:JunctionTrafficSignal=JunctionTrafficSignal.Green;
     public getProgress():number{return this.spline?toNormalizedDistance(this.spline,this.positionMode,this.progress,this.distance):0;}
     @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination. Preserve: keep incoming travel direction; Forward: increase destination progress (0 toward 1); Backward: decrease destination progress (1 toward 0). It does not choose a branch.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
@@ -73,7 +73,8 @@ export class SplineJunction extends Component {
      */
     public setTrafficSignal(exitIndex:number,state:JunctionTrafficSignal):boolean{
         if(!Number.isInteger(exitIndex)||exitIndex<0||exitIndex>=this.connections.length||
-           (state!==JunctionTrafficSignal.Green&&state!==JunctionTrafficSignal.Red))
+           (state!==JunctionTrafficSignal.Green&&state!==JunctionTrafficSignal.Red&&
+            state!==JunctionTrafficSignal.Yellow))
             return false;
         const link=this.connections[exitIndex];
         if(!link||link.trafficSignal===state)return false;
@@ -87,7 +88,8 @@ export class SplineJunction extends Component {
     public getTrafficSignal(exitIndex:number):JunctionTrafficSignal|null{
         const link=this.connections[exitIndex];
         return link&&(link.trafficSignal===JunctionTrafficSignal.Green||
-            link.trafficSignal===JunctionTrafficSignal.Red)?link.trafficSignal:null;
+            link.trafficSignal===JunctionTrafficSignal.Red||
+            link.trafficSignal===JunctionTrafficSignal.Yellow)?link.trafficSignal:null;
     }
     onDisable():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);}
     onDestroy():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);this._reachCallbacks.clear();this._switchCallbacks.clear();}

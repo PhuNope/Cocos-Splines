@@ -55,7 +55,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b1 — FIFO per-exit admission queues, queue visibility + diagnostics, opt-in congestion-aware alternate path planning, independent route memo keys and runtime regression tests.
 - [x] Phase 3.6b2a — Opt-in centerline world-arc headway and soft braking on shared spline, closed seam/reverse/nonuniform-scale support, blocked/cleared events, lifecycle cleanup and regression tests.
 - [x] Phase 3.6b2b1 — Manual per-exit Green/Red signal (including unlimited exits), opted-in 0..10 priority admission with FIFO within tier, signal-aware reroute, diagnostics and runtime regression.
-- [ ] Phase 3.6b2b2 — Automatic signal phasing/clearance, conflict matrix/yield priority, true 3D collision/multi-lane headway and server-authoritative traffic.
+- [x] Phase 3.6b2b2a — Opt-in SplineTrafficController with deterministic Green/Yellow/All-Red phase scheduling, explicit conflict-pair validation, manual-state restoration, single-controller lease, runtime lifecycle and mock regression tests.
+- [ ] Phase 3.6b2b2b — Demand-responsive signal selection, physically derived conflict detection, lane-level proximity/collision and authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 

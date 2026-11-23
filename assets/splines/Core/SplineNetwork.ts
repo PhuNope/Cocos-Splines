@@ -182,11 +182,12 @@ export interface SplineRouteDiagnosis {
     saturatedExits:number;
     waitingFollowers:number;
     redExits:number;
+    yellowExits:number;
 }
 export function inspectSplineRoute(startSpline:SplineContainer,startProgress:number,
     targetSpline:SplineContainer,targetProgress:number,
     options:SplineRouteOptions={}):SplineRouteDiagnosis{
-    let junctionCount=0,linkCount=0,saturatedExits=0,waitingFollowers=0,redExits=0;
+    let junctionCount=0,linkCount=0,saturatedExits=0,waitingFollowers=0,redExits=0,yellowExits=0;
     try{
         const junctions=options.junctions??[...SplineJunction.active];
         const active=junctions.filter(j=>j&&j.enabled&&j.node?.isValid!==false);
@@ -197,6 +198,7 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
             for(const entry of entries){
                 const limit=entry.link.maxFollowers;
                 if(entry.link.trafficSignal===JunctionTrafficSignal.Red)redExits++;
+                if(entry.link.trafficSignal===JunctionTrafficSignal.Yellow)yellowExits++;
                 waitingFollowers+=splineTrafficGate.waiting(junction,entry.index);
                 if(Number.isInteger(limit)&&limit>0&&
                    splineTrafficGate.count(junction,entry.index)>=limit)saturatedExits++;
@@ -206,10 +208,10 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
         return {status:route?'reachable':'unreachable',
             message:route?'Route available.':
                 'No direction-compatible path exists with current Junction links and filters.',
-            route,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits};
+            route,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits,yellowExits};
     }catch(error){
         return {status:'invalid',message:String(error instanceof Error?error.message:error),
-            route:null,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits};
+            route:null,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits,yellowExits};
     }
 }
 
