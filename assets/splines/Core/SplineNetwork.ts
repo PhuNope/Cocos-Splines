@@ -37,8 +37,8 @@ function splineId(spline:SplineContainer):string{
     const node=spline?.node;
     return node?.isValid===false?'':(node?.uuid||'');
 }
-const MATRIX_FIELDS=['m00','m01','m02','m03','m04','m05','m06','m07',
-    'm08','m09','m10','m11','m12','m13','m14','m15'] as const;
+const MATRIX_FIELDS=['m00','m01','m02','m04','m05','m06',
+    'm08','m09','m10','m12','m13','m14'] as const;
 function transformSignature(node:SplineContainer['node']):unknown[]{
     const m=node?.worldMatrix;
     return m?MATRIX_FIELDS.map(key=>m[key]??null):[];
