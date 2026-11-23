@@ -45,6 +45,10 @@ Multi-select, Move/Rotate knots, kéo tangent trực tiếp, insert/split/join, 
 
 Deterministic sampling/cache, nearest point, spline data, noise layers, connector graph, JSON/SVG round-trip. **Exit:** numerical and serialization regression tests.
 
+- [x] Phase 3.1 — Network graph + direction-aware shortest routes across existing Junction links, seam support, optional world-gap validation, route preview API and SplineAnimate ShortestRoute (new enum 4; modes 0–3 unchanged).
+- [ ] Phase 3.2 — Endpoint snapping / explicit connector operations, route cache + revision invalidation, world-distance cost, traffic capacity and automated arrival event.
+- [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.

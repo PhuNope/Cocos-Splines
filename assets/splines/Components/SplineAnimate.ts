@@ -4,6 +4,7 @@ import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
 import { SplineTrigger } from './SplineTrigger';
 import { SplineJunction, JunctionExitDirection } from './SplineJunction';
+import {nextShortestJunctionExit,planSplineRoute,type SplineRoute} from '../Core/SplineNetwork';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -16,7 +17,7 @@ export enum LoopMode { Once=0, Loop=1, PingPong=2 }
 export enum Easing { Linear=0, EaseInOut=1, EaseIn=2, EaseOut=3, SmootherStep=4 }
 export enum SplineUpMode { Spline=0, World=1, TargetLocal=2 }
 export enum ForwardAxis { PositiveZ=0, NegativeZ=1, PositiveX=2, NegativeX=3, PositiveY=4, NegativeY=5 }
-export enum JunctionMode { Off=0, FirstOther=1, RoundRobin=2, Manual=3 }
+export enum JunctionMode { Off=0, FirstOther=1, RoundRobin=2, Manual=3, ShortestRoute=4 }
 Enum(AnimateMethod);Enum(LoopMode);Enum(Easing);Enum(SplineUpMode);Enum(ForwardAxis);Enum(JunctionMode);Enum(SplinePositionMode);
 /**
  * Unity-style spline follower.  All editable settings are native Cocos @property
@@ -65,8 +66,16 @@ export class SplineAnimate extends Component {
     @property({range:[0,1,0.001],slide:true,tooltip:'Normalized Distance (legacy raw) or geometric t.'}) previewProgress=0;
     @property({min:0,tooltip:'Preview this absolute spline-local distance; no gameplay events.'}) previewDistance=0;
 
-    @property({type:Enum(JunctionMode),tooltip:'Off: never auto-switch (On Reach still fires); First Other: first alternative; Round Robin: rotate outputs; Manual: requestJunctionExit from On Reach.'})
+    @property({type:Enum(JunctionMode),tooltip:'Off: no switch; First Other / Round Robin: basic routing; Manual: requestJunctionExit; Shortest Route: choose next exit on the least-distance network route.'})
     junctionMode:JunctionMode=JunctionMode.Off;
+    @property({type:SplineContainer,tooltip:'Destination for Shortest Route. Leave unset to keep switching disabled in this mode.'})
+    routeDestination:SplineContainer|null=null;
+    @property({range:[0,1,0.001],slide:true,tooltip:'Destination normalized ARC distance (not geometric Bezier t).'})
+    routeDestinationProgress=1;
+    @property({min:0,tooltip:'Optional cost per Junction switch in spline-local units. Favors fewer switches when paths are otherwise equally long.'})
+    routeTransferPenalty=0.01;
+    @property({min:0,tooltip:'Maximum world gap allowed between link positions when >0. Set 0 to disable gap validation (teleports may occur).'})
+    routeMaxWorldGap=0;
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 1 in the forward direction.'})
     onEndReached:EventHandler[]=[];
     @property({type:[EventHandler],tooltip:'Fires when this follower reaches progress 0 in the backward direction.'})
@@ -222,6 +231,20 @@ export class SplineAnimate extends Component {
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);
     }
     public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;}
+    /** Read-only route preview for tools/gameplay. Does not move the follower. */
+    public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
+        const current=this.source();
+        return current?planSplineRoute(current,this.currentProgress,destination,progress,{
+            startDirection:this._travelDirection,transferPenalty:this.routeTransferPenalty,
+            ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
+        }):null;
+    }
+    /** Activate runtime shortest-route junction choice without changing existing modes by default. */
+    public followRouteTo(destination:SplineContainer,progress=1):void{
+        this.routeDestination=destination;
+        this.routeDestinationProgress=clamp01(progress);
+        this.junctionMode=JunctionMode.ShortestRoute;
+    }
     /** Select exit link in a Junction.onReach callback. Only honored for that crossing. */
     public requestJunctionExit(index:number):void {
         this._requestedExit=Number.isInteger(index)&&index>=0?index:-1;
@@ -394,6 +417,16 @@ export class SplineAnimate extends Component {
                         break;
                     case JunctionMode.RoundRobin:
                         destination=junction.pick(e.entry,'roundRobin');
+                        break;
+                    case JunctionMode.ShortestRoute:
+                        if(this.routeDestination){
+                            const exit=nextShortestJunctionExit(junction,e.entry,spline,
+                                hit.progress,dir,this.routeDestination,this.routeDestinationProgress,{
+                                    transferPenalty:this.routeTransferPenalty,
+                                    ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
+                                });
+                            if(exit!==null)destination=junction.pick(e.entry,exit);
+                        }
                         break;
                     case JunctionMode.Off:
                     default:

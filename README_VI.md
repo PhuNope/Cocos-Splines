@@ -19,6 +19,10 @@ Plugin spline cho **Cocos Creator >= 3.8.2**, chỉnh trực tiếp trong Inspec
 
 Sử dụng `junctionOffsetBlendDistance` (mặc định **1 unit**) để giữ vị trí thế giới ở thời điểm nối rồi chuyển mượt sang offset spline mới trong khoảng quãng đường đã chọn. Đặt `0` để tắt chuyển tiếp. Tùy chọn `constantSpeedWithOffset = true` giúp bù vận tốc theo chiều dài quỹ đạo thực. Các kết nối Junction nên được đặt cùng world position.
 
+### Spline Network — Shortest Route (v2 preview)
+
+SplineAnimate nay có Junction Mode = Shortest Route, Route Destination, Route Destination Progress và giới hạn Max World Gap. Route planner có xét hướng di chuyển, đi qua nhiều Junction, hỗ trợ spline đóng và không sửa scene/mesh. Xem [hướng dẫn Network](docs/SPLINE_NETWORK_V2_VI.md). Đây là bước đầu network routing, chưa hỗ trợ stop-at-destination và traffic reservation.
+
 ## Bộ tài liệu HTML
 
 Mở [`docs/index.html`](docs/index.html) để xem hướng dẫn Inspector, các trang API và ví dụ TypeScript. Tài liệu có phần chi tiết về Animate, Junction, Morph, Mesh Deform và các công cụ khác.

@@ -139,6 +139,28 @@ try {
     const round=makeFollower(JunctionMode.RoundRobin);
     round.update(2.5);
     assert.equal(round.currentSpline,b,'Round Robin ignores manual exit override');
+    // ShortestRoute chooses the junction exit leading toward the requested spline.
+    junction.onReach=[]; // no manual callback required
+    const shortest=makeFollower(JunctionMode.ShortestRoute);
+    shortest.routeDestination=b;shortest.routeDestinationProgress=.85;
+    const previewRoute=shortest.planRouteTo(b,.85);
+    assert(previewRoute&&previewRoute.switchCount===1,'Route planner finds one junction switch');
+    shortest.update(2.5);
+    assert.equal(shortest.currentSpline,b,'ShortestRoute picks reachable destination');
+    assert.equal(shortest.junctionMode,JunctionMode.ShortestRoute);
+    const noDestination=makeFollower(JunctionMode.ShortestRoute);
+    noDestination.update(2.5);
+    assert.equal(noDestination.currentSpline,a,'ShortestRoute without target is inert');
+    const guarded=makeFollower(JunctionMode.ShortestRoute);
+    guarded.routeDestination=b;guarded.routeDestinationProgress=.85;
+    guarded.routeMaxWorldGap=.5; // junction is 96 world units apart
+    guarded.update(2.5);
+    assert.equal(guarded.currentSpline,a,'World gap guard prevents teleport');
+    const direct=makeFollower(JunctionMode.ShortestRoute);
+    direct.followRouteTo(a,.9);
+    assert.equal(direct.junctionMode,JunctionMode.ShortestRoute);
+    direct.update(2.5);
+    assert.equal(direct.currentSpline,a,'Shortest path on current spline needs no switch');
     junction.onReach=originalReach;
     const calls=triggerCalls.length;
     trigger.workOnce=true;trigger.resetTrigger();trigger.fire(follower,1);trigger.fire(follower,1);
