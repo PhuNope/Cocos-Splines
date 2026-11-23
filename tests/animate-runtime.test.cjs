@@ -388,6 +388,67 @@ try {
     exit.maxFollowers=0;
     junction.connections=[entry,exit];
     splineTrafficGate.clear();
+    // Phase 3.6b2b — manual red/green and priority tiers at a shared exit.
+    const {JunctionTrafficSignal}=require(path.join(out,'Components','SplineJunction.js'));
+    exit.maxFollowers=1;
+    assert.equal(exit.trafficSignal,JunctionTrafficSignal.Green,
+      'Existing links default to Green');
+    assert(junction.setTrafficSignal(1,JunctionTrafficSignal.Red));
+    assert.equal(junction.getTrafficSignal(1),JunctionTrafficSignal.Red);
+    assert(!junction.setTrafficSignal(1,JunctionTrafficSignal.Red),
+      'No duplicate signal change event');
+    assert(!junction.setTrafficSignal(300,JunctionTrafficSignal.Green));
+    assert.equal(junction.node.events.filter(x=>x.name==='spline-traffic-signal-changed').length,1);
+    const low=makeFollower(JunctionMode.ShortestRoute);
+    low.enableTrafficCapacity=true;low.trafficPriority=0;
+    low.followRouteTo(b,.85,false);low.update(2.5);
+    assert(low.isWaitingForTraffic);near(low.currentProgress,.5);
+    assert.equal(low.node.events.at(-1).payload.trafficSignal,JunctionTrafficSignal.Red);
+    const high=makeFollower(JunctionMode.ShortestRoute);
+    high.enableTrafficCapacity=true;high.trafficPriority=9;
+    high.followRouteTo(b,.85,false);high.update(2.5);
+    assert(high.isWaitingForTraffic);
+    assert.equal(high.trafficQueuePosition,1);
+    assert.equal(low.trafficQueuePosition,2);
+    assert.equal(getSplineTrafficQueueLength(junction,1),2);
+    assert.equal(low.inspectRouteTo(b,.85).redExits,1);
+    assert(junction.setTrafficSignal(1,JunctionTrafficSignal.Green));
+    low.update(.2);
+    assert(low.isWaitingForTraffic,'Low-priority cannot jump queue after Green');
+    high.update(.2);
+    assert.equal(high.currentSpline,b,'High priority crosses first');
+    assert.equal(getSplineTrafficOccupancy(junction,1),1);
+    assert.equal(low.trafficQueuePosition,1);
+    high.onDisable();low.update(.2);
+    assert.equal(low.currentSpline,b,'FIFO follower crosses after priority release');
+    low.onDisable();
+    assert.equal(getSplineTrafficOccupancy(junction,1),0);
+    assert.equal(getSplineTrafficQueueLength(junction,1),0);
+    // Red also reroutes around an unlimited exit; traffic on alternate
+    // still goes through atomic admission, never mutates the graph.
+    exit.maxFollowers=0;
+    const greenAlternative=new TrafficLink();
+    greenAlternative.spline=b;greenAlternative.progress=0;
+    greenAlternative.maxFollowers=0;
+    junction.connections=[entry,exit,greenAlternative];
+    junction.setTrafficSignal(1,JunctionTrafficSignal.Red);
+    const signalReroute=makeFollower(JunctionMode.ShortestRoute);
+    signalReroute.enableTrafficCapacity=true;
+    signalReroute.rerouteAroundTraffic=true;
+    signalReroute.followRouteTo(b,.85,false);
+    signalReroute.update(2.5);
+    assert.equal(signalReroute.currentSpline,b,
+      'Red primary exit reroutes over Green alternate');
+    assert.equal(signalReroute.node.events.filter(x=>x.name==='spline-traffic-rerouted').length,1);
+    const optOut=makeFollower(JunctionMode.FirstOther);
+    optOut.update(2.5);
+    assert.equal(optOut.currentSpline,b,
+      'Legacy non-opt-in follower is unaffected by manual signal');
+    signalReroute.onDestroy();optOut.onDestroy();
+    junction.connections=[entry,exit];
+    junction.setTrafficSignal(1,JunctionTrafficSignal.Green);
+    exit.maxFollowers=0;
+    splineTrafficGate.clear();
     // Phase 3.6b2 — opt-in world-arc headway works with gameplay traversal,
     // including paused obstacles, reverse direction, runtime toggling, cleanup.
     const {splineHeadwayRegistry}=require(path.join(out,'Core','SplineHeadway.js'));

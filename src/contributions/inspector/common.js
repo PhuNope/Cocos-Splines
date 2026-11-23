@@ -46,7 +46,7 @@ const configs={
     {title:'Spline source',fields:['spline','target','modifiers','worldOffset','splineOffset','constantSpeedWithOffset']},
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
     {title:'Follower headway (opt-in)',fields:['enableHeadway','headwayWorldGap','headwayBrakeDistance']},
-    {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
+    {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
 };
@@ -158,6 +158,7 @@ function makeInspector(type){
             if(['routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived'].includes(field))
                 return Number(v('junctionMode'))===4;
             if(field==='rerouteAroundTraffic')return Number(v('junctionMode'))===4&&v('enableTrafficCapacity')===true;
+            if(field==='trafficPriority')return v('enableTrafficCapacity')===true;
             if(['headwayWorldGap','headwayBrakeDistance'].includes(field))return v('enableHeadway')===true;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;

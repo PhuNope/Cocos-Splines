@@ -9,7 +9,9 @@ import type { Direction } from '../Core/SplineTraversal';
 const {ccclass,property,menu}= _decorator;
 
 export enum JunctionExitDirection { Preserve=0, Forward=1, Backward=2 }
-Enum(JunctionExitDirection);Enum(SplinePositionMode);
+/** Manual, per-exit signal; Green is default for existing scenes. */
+export enum JunctionTrafficSignal { Green=0, Red=1 }
+Enum(JunctionExitDirection);Enum(JunctionTrafficSignal);Enum(SplinePositionMode);
 
 /** One logical connection into or out of a junction. These do NOT move the knots;
  * align knot positions manually when a physically continuous fork is required.
@@ -26,6 +28,8 @@ export class SplineJunctionLink {
      */
     @property({min:0,step:1,tooltip:'Traffic capacity for this destination link. 0 = unlimited. Enforced only for SplineAnimate followers with Enable Traffic Capacity.'})
     maxFollowers=0;
+    @property({type:Enum(JunctionTrafficSignal),tooltip:'Green (default): allow opted-in follower admission. Red: block/queue opted-in followers even with Max Followers = 0. Runtime: junction.setTrafficSignal(index, state).'})
+    trafficSignal:JunctionTrafficSignal=JunctionTrafficSignal.Green;
     public getProgress():number{return this.spline?toNormalizedDistance(this.spline,this.positionMode,this.progress,this.distance):0;}
     @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination. Preserve: keep incoming travel direction; Forward: increase destination progress (0 toward 1); Backward: decrease destination progress (1 toward 0). It does not choose a branch.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
 }
@@ -64,6 +68,27 @@ export class SplineJunction extends Component {
     public addOnSwitchEvent(cb:SplineEventCallback<JunctionEvent>,target?:object|null):void{this.AddOnSwitchEvent(cb,target);}
     public removeOnSwitchEvent(cb:SplineEventCallback<JunctionEvent>,target?:object|null):void{this.RemoveOnSwitchEvent(cb,target);}
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW)SplineJunction.active.add(this);}
+    /** Safe manual signal control. Does not modify a follower or force a
+     * crossing; waiting followers observe Green at the next update.
+     */
+    public setTrafficSignal(exitIndex:number,state:JunctionTrafficSignal):boolean{
+        if(!Number.isInteger(exitIndex)||exitIndex<0||exitIndex>=this.connections.length||
+           (state!==JunctionTrafficSignal.Green&&state!==JunctionTrafficSignal.Red))
+            return false;
+        const link=this.connections[exitIndex];
+        if(!link||link.trafficSignal===state)return false;
+        const previous=link.trafficSignal;
+        link.trafficSignal=state;
+        this.node.emit('spline-traffic-signal-changed',{
+            junction:this,exitIndex,previous,state,
+        });
+        return true;
+    }
+    public getTrafficSignal(exitIndex:number):JunctionTrafficSignal|null{
+        const link=this.connections[exitIndex];
+        return link&&(link.trafficSignal===JunctionTrafficSignal.Green||
+            link.trafficSignal===JunctionTrafficSignal.Red)?link.trafficSignal:null;
+    }
     onDisable():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);}
     onDestroy():void{SplineJunction.active.delete(this);splineTrafficGate.releaseJunction(this);this._reachCallbacks.clear();this._switchCallbacks.clear();}
     public onDrawGizmosSelected():void{

@@ -5,7 +5,7 @@
  * No Scene search, Node mutation or editor-global dependencies.
  */
 import { SplineContainer } from './SplineContainer';
-import { SplineJunction } from '../Components/SplineJunction';
+import { SplineJunction, JunctionTrafficSignal } from '../Components/SplineJunction';
 import { findNetworkRoute, type NetworkJunction, type NetworkRoute,
     type NetworkRouteOptions, type NetworkSpline, type NetworkLink,
     type NetworkDirection } from './SplineNetworkGraph';
@@ -181,11 +181,12 @@ export interface SplineRouteDiagnosis {
     linkCount:number;
     saturatedExits:number;
     waitingFollowers:number;
+    redExits:number;
 }
 export function inspectSplineRoute(startSpline:SplineContainer,startProgress:number,
     targetSpline:SplineContainer,targetProgress:number,
     options:SplineRouteOptions={}):SplineRouteDiagnosis{
-    let junctionCount=0,linkCount=0,saturatedExits=0,waitingFollowers=0;
+    let junctionCount=0,linkCount=0,saturatedExits=0,waitingFollowers=0,redExits=0;
     try{
         const junctions=options.junctions??[...SplineJunction.active];
         const active=junctions.filter(j=>j&&j.enabled&&j.node?.isValid!==false);
@@ -195,6 +196,7 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
             linkCount+=entries.length;
             for(const entry of entries){
                 const limit=entry.link.maxFollowers;
+                if(entry.link.trafficSignal===JunctionTrafficSignal.Red)redExits++;
                 waitingFollowers+=splineTrafficGate.waiting(junction,entry.index);
                 if(Number.isInteger(limit)&&limit>0&&
                    splineTrafficGate.count(junction,entry.index)>=limit)saturatedExits++;
@@ -204,10 +206,10 @@ export function inspectSplineRoute(startSpline:SplineContainer,startProgress:num
         return {status:route?'reachable':'unreachable',
             message:route?'Route available.':
                 'No direction-compatible path exists with current Junction links and filters.',
-            route,junctionCount,linkCount,saturatedExits,waitingFollowers};
+            route,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits};
     }catch(error){
         return {status:'invalid',message:String(error instanceof Error?error.message:error),
-            route:null,junctionCount,linkCount,saturatedExits,waitingFollowers};
+            route:null,junctionCount,linkCount,saturatedExits,waitingFollowers,redExits};
     }
 }
 
@@ -218,14 +220,15 @@ export function getSplineTrafficQueueLength(junction:SplineJunction,exitIndex:nu
 /** Read live congestion without mutating global graph or reserving a slot.
  * An actual switch still must acquire a slot atomically.
  */
-export function findUnavailableTrafficExits(owner:object):Array<{junctionId:string;exitIndex:number}>{
+export function findUnavailableTrafficExits(owner:object,priority=0):Array<{junctionId:string;exitIndex:number}>{
     const excluded:Array<{junctionId:string;exitIndex:number}>=[];
     for(const junction of SplineJunction.active){
         if(!junction.enabled||junction.node?.isValid===false||!junction.node?.uuid)continue;
         for(const entry of junction.entries()){
             const capacity=entry.link.maxFollowers;
-            if(!Number.isInteger(capacity)||capacity<=0)continue;
-            if(!splineTrafficGate.canEnter(owner,junction,entry.index,capacity))
+            if(!Number.isInteger(capacity)||capacity<0||capacity>4096||
+               !splineTrafficGate.canEnter(owner,junction,entry.index,capacity,
+                   entry.link.trafficSignal===JunctionTrafficSignal.Green,priority))
                 excluded.push({junctionId:junction.node.uuid,exitIndex:entry.index});
         }
     }

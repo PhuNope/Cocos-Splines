@@ -75,5 +75,44 @@ try{
  assert.equal(gate.waiting(j2,1),0);
  assert.equal(gate.count(j1,1),1);
  gate.clear();
+
+ // Red blocks even unlimited exits. Green releases by priority, with FIFO
+ // preserved for equal-priority traffic; existing occupancy is never preempted.
+ const redGate={},normal={},emergency={},samePriority={},entrant={};
+ assert.equal(gate.move(normal,redGate,2,0,false,0),false);
+ assert.equal(gate.move(emergency,redGate,2,0,false,10),false);
+ assert.equal(gate.move(samePriority,redGate,2,0,false,10),false);
+ assert.equal(gate.waiting(redGate,2),3);
+ assert.equal(gate.queuePosition(emergency,redGate,2),0);
+ assert.equal(gate.queuePosition(samePriority,redGate,2),1);
+ assert.equal(gate.queuePosition(normal,redGate,2),2);
+ assert.equal(gate.move(normal,redGate,2,0,true,0),false,
+     'Lower-priority follower cannot overtake queued emergency');
+ assert.equal(gate.move(samePriority,redGate,2,0,true,10),false,
+     'Equal-priority follower remains FIFO');
+ assert(gate.move(emergency,redGate,2,0,true,10));
+ assert.equal(gate.reservation(emergency),null,
+     'Unlimited Green admission does not retain a capacity slot');
+ assert.equal(gate.queuePosition(samePriority,redGate,2),0);
+ assert(gate.move(samePriority,redGate,2,0,true,10));
+ assert(gate.move(normal,redGate,2,0,true,0));
+ assert.equal(gate.waiting(redGate,2),0);
+ // Priority change on retry reorders while keeping a single queue entry.
+ assert(gate.move(entrant,redGate,2,1,true,0));
+ assert(!gate.move(normal,redGate,2,1,false,0));
+ assert(!gate.move(emergency,redGate,2,1,false,0));
+ assert.equal(gate.queuePosition(normal,redGate,2),0);
+ assert(!gate.move(emergency,redGate,2,1,false,9));
+ assert.equal(gate.queuePosition(emergency,redGate,2),0);
+ assert.equal(gate.waiting(redGate,2),2);
+ gate.release(entrant);
+ assert.equal(gate.move(normal,redGate,2,1,true,0),false);
+ assert(gate.move(emergency,redGate,2,1,true,9));
+ gate.release(emergency);
+ assert(gate.move(normal,redGate,2,1,true,0));
+ gate.releaseJunction(redGate);
+ assert.equal(gate.size,0);assert.equal(gate.waitingCount,0);
+ assert.throws(()=>gate.move({},redGate,0,1,true,11),/priority/);
+ assert.throws(()=>gate.canEnter({},redGate,0,1,'green',0),/signal/);
  console.log('SPLINE TRAFFIC GATE PASS: opt-in capacity, atomic admission, independent links, release and unlimited fallback.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

@@ -15,23 +15,31 @@ export class SplineTrafficGate{
     private readonly occupancy=new Map<object,Map<number,Set<object>>>();
     private readonly queues=new Map<object,Map<number,object[]>>();
     private readonly queued=new Map<object,SplineTrafficSlot>();
-    public canEnter(owner:object,junction:object,exitIndex:number,capacity:number):boolean{
+    private readonly priorities=new Map<object,number>();
+    public canEnter(owner:object,junction:object,exitIndex:number,capacity:number,
+        green=true,priority=0):boolean{
         validSlot(owner,junction,exitIndex,capacity);
-        if(capacity===0)return true;
+        if(typeof green!=='boolean'||!Number.isInteger(priority)||priority<0||priority>10)
+            throw Error('Invalid Junction signal or traffic priority.');
+        if(!green)return false;
         const current=this.owners.get(owner);
         if(current?.junction===junction&&current.exitIndex===exitIndex)return true;
         const owners=this.occupancy.get(junction)?.get(exitIndex);
-        if((owners?.size??0)>=capacity)return false;
+        if(capacity>0&&(owners?.size??0)>=capacity)return false;
         const line=this.queues.get(junction)?.get(exitIndex);
-        return !line?.length||line[0]===owner;
+        if(!line?.length||line[0]===owner)return true;
+        // A newly arrived higher-priority request may overtake a lower-priority
+        // waiting request. Equal priority keeps strict FIFO.
+        return priority>(this.priorities.get(line[0])??0);
     }
     /** Failed move joins the FIFO once; a successful move cancels any previous
      * queue and atomically releases the previously occupied slot.
      */
-    public move(owner:object,junction:object,exitIndex:number,capacity:number):boolean{
+    public move(owner:object,junction:object,exitIndex:number,capacity:number,
+        green=true,priority=0):boolean{
         validSlot(owner,junction,exitIndex,capacity);
-        if(!this.canEnter(owner,junction,exitIndex,capacity)){
-            if(capacity>0)this.enqueue(owner,junction,exitIndex);
+        if(!this.canEnter(owner,junction,exitIndex,capacity,green,priority)){
+            this.enqueue(owner,junction,exitIndex,priority);
             return false;
         }
         this.cancelWait(owner);
@@ -50,22 +58,29 @@ export class SplineTrafficGate{
     /** Move a waiting follower to a different link without losing an existing
      * granted slot. Never enqueue twice and never leave stale queue entries.
      */
-    public enqueue(owner:object,junction:object,exitIndex:number):void{
+    public enqueue(owner:object,junction:object,exitIndex:number,priority=0):void{
         validSlot(owner,junction,exitIndex,1);
+        if(!Number.isInteger(priority)||priority<0||priority>10)
+            throw Error('Invalid Junction traffic priority.');
         const previous=this.queued.get(owner);
-        if(previous?.junction===junction&&previous.exitIndex===exitIndex)return;
+        if(previous?.junction===junction&&previous.exitIndex===exitIndex&&
+           this.priorities.get(owner)===priority)return;
         this.cancelWait(owner);
         let byExit=this.queues.get(junction);
         if(!byExit){byExit=new Map();this.queues.set(junction,byExit);}
         let queue=byExit.get(exitIndex);
         if(!queue){queue=[];byExit.set(exitIndex,queue);}
-        queue.push(owner);
+        // Priority order is descending, FIFO within each priority tier.
+        const at=queue.findIndex(other=>(this.priorities.get(other)??0)<priority);
+        if(at<0)queue.push(owner);else queue.splice(at,0,owner);
         this.queued.set(owner,{junction,exitIndex});
+        this.priorities.set(owner,priority);
     }
     public cancelWait(owner:object):void{
         const wait=this.queued.get(owner);
         if(!wait)return;
         this.queued.delete(owner);
+        this.priorities.delete(owner);
         const byExit=this.queues.get(wait.junction);
         const queue=byExit?.get(wait.exitIndex);
         if(queue){
@@ -99,7 +114,7 @@ export class SplineTrafficGate{
         const waiting=this.queues.get(junction);
         if(waiting){
             for(const line of waiting.values())
-                for(const owner of line)this.queued.delete(owner);
+                for(const owner of line){this.queued.delete(owner);this.priorities.delete(owner);}
             this.queues.delete(junction);
         }
     }
@@ -120,7 +135,7 @@ export class SplineTrafficGate{
     public get size():number{return this.owners.size;}
     public get waitingCount():number{return this.queued.size;}
     public clear():void{
-        this.owners.clear();this.occupancy.clear();this.queues.clear();this.queued.clear();
+        this.owners.clear();this.occupancy.clear();this.queues.clear();this.queued.clear();this.priorities.clear();
     }
 }
 /** Playback only. No Editor preview reservations. */

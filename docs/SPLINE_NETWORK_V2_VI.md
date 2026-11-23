@@ -183,3 +183,28 @@ follower.node.on('spline-headway-blocked', (e) => console.log(e.leader));
 ```
 
 **Giới hạn quan trọng:** Đây là headway 1 chiều dọc centerline của **cùng SplineContainer**, không phải collision detection 3D: không xét chiều dài/width vehicle, các đối tượng không có SplineAnimate opt-in, các spline khác nhau, offset/lane geometry, nút giao cắt vật lý, đoạn spline tự giao, vật thể đi ngược trên lane khác hay đường link teleport. Follower xuất hiện ban đầu quá gần nhau không được tách vật lý; chỉ ngăn di chuyển *tiến thêm*. Với scene có nhiều lane dùng chung centerline, tính năng có thể hạn chế xe thuộc lane khác nhau. Cần phối hợp traffic reservation hiện có để xử lý chuyển nhánh và kiểm tra trực tiếp trong Creator 3.8.8 trước khi dùng ở production. Các hạng mục traffic lights, priority, server authority và collision 3D vẫn chưa được triển khai.
+
+## Phase 3.6b2b1 — Manual Traffic Signals & Priority Queue
+
+**SplineJunction → Connections → Traffic Signal** có hai trạng thái:
+
+- `Green = 0` (mặc định): Cho phép admission, nhưng vẫn phải thỏa `Max Followers` và hàng chờ ưu tiên. `Red = 1`: chặn tất cả follower có `Enable Traffic Capacity = true` xin vào **exit đó**, kể cả khi `Max Followers = 0`. Follower giữ nguyên tại marker, xếp hàng và retry khi Green.
+- Từ script có thể điều khiển bằng `junction.setTrafficSignal(exitIndex, JunctionTrafficSignal.Red)` và đọc lại bằng `junction.getTrafficSignal(exitIndex)`. Phương thức `setTrafficSignal` trả boolean: false với index/state không hợp lệ hoặc khi state không đổi; thay đổi thành công phát Node event `spline-traffic-signal-changed` với `{junction,exitIndex,previous,state}`. Chỉ cập nhật property serialized của link; người dùng có thể tự xây controller đèn thời gian từ gameplay script.
+- Trên `SplineAnimate` bật **Enable Traffic Capacity**, đặt **Traffic Priority 0..10** (mặc định 0). Hàng chờ của mỗi Junction exit xét mức ưu tiên cao trước; **cùng mức ưu tiên vẫn FIFO**. Khi priority đổi trong lúc đang đợi, follower được sắp xếp lại khi retry; không cướp slot đã cấp cho follower khác. Chờ Green không tự pause playback, nên `isPlaying` vẫn true.
+- **Reroute Around Traffic** áp dụng cho cả exit đang Red và exit Green đã đầy/hàng đợi ưu tiên cao. Nếu có đường thay thế hợp lệ và không bị chặn, follower có thể chuyển sang exit đó thay vì xếp hàng. Tuyến loại trừ được cache riêng theo tập `excludedExits`; không sửa Network Graph hoặc link serialized.
+- `inspectSplineRoute(...).redExits` đếm số exit Red trong các Junction hoạt động. `getSplineTrafficQueueLength` và `trafficQueuePosition` vẫn dùng như Phase 3.6b1. Payload `spline-traffic-blocked` có thêm `trafficSignal` và `trafficPriority`.
+
+Ví dụ runtime:
+
+```ts
+import { JunctionTrafficSignal } from './Components/SplineJunction';
+junction.setTrafficSignal(1, JunctionTrafficSignal.Red);
+// sau khi đường thông:
+junction.setTrafficSignal(1, JunctionTrafficSignal.Green);
+ambulance.enableTrafficCapacity = true;
+ambulance.trafficPriority = 10;
+```
+
+**Tương thích:** `Traffic Signal = Green`, `Traffic Priority = 0`, `Enable Traffic Capacity = false` theo mặc định. Scene cũ không chịu Red/priority trừ khi chủ động opt-in traffic. Red không thu hồi slot của xe đã đi qua; chỉ giới hạn lượt admission **tiếp theo**.
+
+**Giới hạn:** Đây là tín hiệu **điều khiển bằng tay/script**, chưa có chu kỳ đèn tự động, yellow clearance, conflict matrix giữa các exit, right-of-way theo hướng tiếp cận, fairness chống starvation khi liên tục xuất hiện xe ưu tiên cao, vật lý 3D hay multiplayer authoritative. Cần smoke test trong Creator 3.8.8 với Prefab overrides, Undo, editor save/reopen và event listener khi script đổi trạng thái.

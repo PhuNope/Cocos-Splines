@@ -377,7 +377,9 @@ export class SplineAnimate extends Component {
             return true;
         }
         const cap=exit.link.maxFollowers;
-        if(!Number.isInteger(cap)||cap<0||cap>4096)return false;
+        if(!Number.isInteger(cap)||cap<0||cap>4096||
+           !Number.isInteger(this.trafficPriority)||this.trafficPriority<0||
+           this.trafficPriority>10)return false;
         return splineTrafficGate.move(this,junction,exit.index,cap);
     }
     /** A temporary per-query exclusion, not a mutation of Junction graph.
@@ -388,7 +390,9 @@ export class SplineAnimate extends Component {
         current:{index:number;link:SplineJunctionLink}):
         {index:number;link:SplineJunctionLink}|null{
         if(!this.enableTrafficCapacity||!this.rerouteAroundTraffic||
-           this.junctionMode!==JunctionMode.ShortestRoute||!this.routeDestination)return null;
+           this.junctionMode!==JunctionMode.ShortestRoute||!this.routeDestination||
+           !Number.isInteger(this.trafficPriority)||this.trafficPriority<0||
+           this.trafficPriority>10)return null;
         const cap=current.link.maxFollowers;
         if(!Number.isInteger(cap)||cap<=0||cap>4096||
            splineTrafficGate.canEnter(this,junction,current.index,cap))return null;
