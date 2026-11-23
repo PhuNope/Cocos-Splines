@@ -1,4 +1,5 @@
 import { _decorator, Component } from 'cc';
+import type {SplineRoad} from './SplineRoad';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import {SplineJunction,JunctionTrafficSignal,type SplineJunctionLink}
     from './SplineJunction';
@@ -64,6 +65,10 @@ export class SplineTrafficController extends Component {
     conflictProbeIgnoreOrigin=1;
     @property({tooltip:'Read-only diagnostics only: use explicitly supplied per-exit World asphalt HALF widths. Off retains centerline-only behavior.'})
     conflictUseRoadWidths=false;
+    @property({tooltip:'Read-only probe only. Automatically sample nominal asphalt width from explicit SplineRoad components assigned by Junction Connection index. Requires Conflict Use Road Widths. Manual half-width array is ignored when enabled.'})
+    conflictAutoRoadWidths=false;
+    @property({type:[Component],tooltip:'Assign SplineRoad components by serialized Junction Connection index. Must match corresponding spline and cover each outgoing path; generic Component references avoid coupling Traffic Controller to Gizmos/mesh runtime.'})
+    conflictRoadSources:Component[]=[];
     @property({type:[Number],tooltip:'Half widths in WORLD units by serialized Junction Connections index; provide one nonnegative value per Connection. 0 uses centerline on that exit. This does not change the road Mesh.'})
     conflictRoadHalfWidths:number[]=[];
     @property({min:.01,tooltip:'World height separation for road-width diagnostic. Roads above this vertical gap are not flagged just because asphalt footprints overlap in XZ.'})
@@ -109,7 +114,9 @@ export class SplineTrafficController extends Component {
             lookaheadWorldDistance:this.conflictProbeLookahead,
             ignoreJunctionWorldDistance:this.conflictProbeIgnoreOrigin,
             ...(this.conflictUseRoadWidths?{
-                roadHalfWidths:this.conflictRoadHalfWidths,
+                ...(this.conflictAutoRoadWidths?
+                    {roadSources:this.conflictRoadSources as SplineRoad[]}:
+                    {roadHalfWidths:this.conflictRoadHalfWidths}),
                 verticalTolerance:this.conflictVerticalTolerance,
             }:{}),
         });

@@ -12,6 +12,7 @@ import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
 import {colliderProximityRadius} from '../Core/SplineColliderBounds';
+import {aabbFromCenterHalfExtents,type ProximityAabb} from '../Core/SplineProximityShapes';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -185,7 +186,7 @@ export class SplineAnimate extends Component {
             this.proximityBounds().valid;
     }
     public get proximityEffectiveRadius():number{return this.proximityBounds().radius;}
-    private proximityBounds():{radius:number;valid:boolean}{
+    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb}{
         const fallback=Number.isFinite(this.proximityRadius)&&this.proximityRadius>0&&
             this.proximityRadius<=100?this.proximityRadius:.5;
         if(!this.proximityUseColliderBounds)return {radius:fallback,valid:false};
@@ -197,7 +198,10 @@ export class SplineAnimate extends Component {
                 return {radius:fallback,valid:false};
             const bounds=collider.worldBounds;
             const report=colliderProximityRadius(bounds,target?.worldPosition,fallback);
-            return {radius:report.radius,valid:report.valid};
+            const aabb=report.valid?aabbFromCenterHalfExtents(
+                bounds.center,bounds.halfExtents):null;
+            return {radius:report.radius,valid:report.valid,
+                ...(aabb?{bounds:aabb}:{})};
         }catch{
             // A disabled physics world / stale shape never breaks playback.
             return {radius:fallback,valid:false};
@@ -421,7 +425,8 @@ export class SplineAnimate extends Component {
             this._proximityBlocked=false;
         }else{
             const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
-            splineProximityRegistry.set(this,position,this.proximityEffectiveRadius);
+            const collider=this.proximityBounds();
+            splineProximityRegistry.set(this,position,collider.radius,collider.bounds);
         }
     }
     private clearSpatialTraffic():void{

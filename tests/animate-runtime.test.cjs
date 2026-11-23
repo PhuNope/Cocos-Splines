@@ -586,12 +586,16 @@ try {
     near(boundsFollower.proximityEffectiveRadius,expectedBodyRadius);
     boundsFollower.pause();boundsFollower.update(.001);
     near(splineProximityRegistry.get(boundsFollower).radius,expectedBodyRadius);
+    assert.equal(splineProximityRegistry.get(boundsFollower).bounds.min.x,2.5,
+      'Valid Cocos 3D Collider bounds register as a real AABB obstacle');
     bodyCollider.worldBounds={center:new Vec3(Infinity,0,0),
       halfExtents:new Vec3(1,.5,.25)};
     assert.equal(boundsFollower.proximityBoundsValid,false);
     near(boundsFollower.proximityEffectiveRadius,.25);
     boundsFollower.update(.001);
     near(splineProximityRegistry.get(boundsFollower).radius,.25);
+    assert.equal(splineProximityRegistry.get(boundsFollower).bounds,undefined,
+      'Invalid Collider automatically restores legacy spherical narrowphase');
     boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
     // Cross-spline follower at the same 3D intersection is a real blocker;
     // elevated bridge (Y=3) is not, even with identical XZ projection.

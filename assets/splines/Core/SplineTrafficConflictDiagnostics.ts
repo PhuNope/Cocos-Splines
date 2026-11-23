@@ -2,6 +2,7 @@
  * Reports possible 3D centerline conflicts; never auto-mutates Conflict Pairs.
  */
 import type {SplineJunction} from '../Components/SplineJunction';
+import type {SplineRoad} from '../Components/SplineRoad';
 import {JunctionExitDirection} from '../Components/SplineJunction';
 import {headwayWorldArc} from './SplineHeadwayWorldArc';
 import {worldArcDistanceAt,type WorldArcSample} from './SplineWorldArcLength';
@@ -14,6 +15,8 @@ export interface TrafficProbeSettings {
     ignoreJunctionWorldDistance:number;
     /** Optional per-exit WORLD road half-width; empty => centerline-only. */
     roadHalfWidths?:readonly number[];
+    /** Optional Cocos Road components by original Junction Connection index. */
+    roadSources?:readonly (SplineRoad|null)[];
     /** Vertical threshold independent of asphalt width. */
     verticalTolerance?:number;
 }
@@ -65,6 +68,10 @@ export function probeJunctionTrafficConflicts(
        !finite(settings.ignoreJunctionWorldDistance)||
        settings.ignoreJunctionWorldDistance<0||
        settings.ignoreJunctionWorldDistance>=settings.lookaheadWorldDistance||
+       (settings.roadSources!==undefined&&(
+           settings.roadHalfWidths!==undefined||
+           !Array.isArray(settings.roadSources)||
+           settings.roadSources.length!==junction.connections.length))||
        (settings.roadHalfWidths!==undefined&&(
            !Array.isArray(settings.roadHalfWidths)||
            settings.roadHalfWidths.length!==junction.connections.length||
@@ -92,19 +99,37 @@ export function probeJunctionTrafficConflicts(
             const uncertain=dirs.length>1;
             if(uncertain)ambiguousExits.push(i);
             let added=0;
+            const road=settings.roadSources?.[i];
+            if(settings.roadSources){
+                if(!road||road.enabled===false||road.node?.isValid===false||
+                   road.getSpline()!==spline)
+                    throw Error('Road source missing/disabled or does not match this Connection spline.');
+            }
             for(const dir of dirs){
                 const available=closed?Math.min(settings.lookaheadWorldDistance,total*.45):
                     dir===1?Math.min(settings.lookaheadWorldDistance,total-from):
                         Math.min(settings.lookaheadWorldDistance,from);
                 if(available<=settings.ignoreJunctionWorldDistance+1e-5)continue;
                 const points:ConflictPoint3[]=[];
+                let autoHalfWidth=0;
                 for(let step=0;step<=16;step++){
                     const walked=settings.ignoreJunctionWorldDistance+
                         (available-settings.ignoreJunctionWorldDistance)*step/16;
-                    points.push(pointAtDistance(spline,arc,from+dir*walked,closed));
+                    const distance=from+dir*walked;
+                    points.push(pointAtDistance(spline,arc,distance,closed));
+                    if(road){
+                        const worldTotal=arc[arc.length-1].distance;
+                        const d=closed?((distance%worldTotal)+worldTotal)%worldTotal:
+                            Math.max(0,Math.min(worldTotal,distance));
+                        const atProgress=progressAtWorldArc(arc,d);
+                        const width=road.sampleAsphaltHalfWidthAt(atProgress);
+                        if(width===null||!finite(width)||width<=0||width>100)
+                            throw Error('Road width unavailable along this exit trajectory.');
+                        autoHalfWidth=Math.max(autoHalfWidth,width);
+                    }
                 }
                 paths.push({exitIndex:i,points,uncertainDirection:uncertain,
-                    halfWidth:settings.roadHalfWidths?.[i]??0});
+                    halfWidth:road?autoHalfWidth:(settings.roadHalfWidths?.[i]??0)});
                 added++;
             }
             if(added)validExits++;
@@ -117,5 +142,5 @@ export function probeJunctionTrafficConflicts(
         settings.verticalTolerance??settings.tolerance);
     return {...report,ok:true,validExits,sampledTrajectories:paths.length,
         skipped,ambiguousExits,
-        warning:'Approximate sampled World trajectory proximity. Explicit road half-widths are optional; vertical clearance is checked separately. No Mesh/Collider collision is solved; verify every candidate and declare conflicts manually.'};
+        warning:'Approximate sampled World trajectory proximity. Explicit or sampled Road half-widths are optional; vertical clearance is checked separately. No Mesh/Collider collision is solved; verify every candidate and declare conflicts manually.'};
 }

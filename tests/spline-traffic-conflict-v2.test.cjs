@@ -106,6 +106,26 @@ try{
    const ctrl=new SplineTrafficController();ctrl.node=new Node('controller');
    ctrl.junction=j;
    const phase=new SplineTrafficPhase();phase.greenExits=[0,1,2];ctrl.phases=[phase];
+   // Auto-width lookups from one road per original Junction Connection.
+   // This reads taper/modifiers via a public Road method, without touching Mesh.
+   const halfWidthSamples=[];
+   ctrl.conflictUseRoadWidths=true;ctrl.conflictAutoRoadWidths=true;
+   ctrl.conflictRoadSources=lines.map((line,index)=>({
+     enabled:true,node:{isValid:true},getSpline:()=>line,
+     sampleAsphaltHalfWidthAt:t=>{halfWidthSamples.push([index,t]);
+       return index===0?1.1:index===1?.8:.2;},
+   }));
+   let auto=ctrl.diagnoseConflicts();
+   assert(auto.candidates[0].roadWidthsApplied);
+   assert(halfWidthSamples.length>=17,'Each Road sampled along downstream trajectory');
+   assert(halfWidthSamples.some(([id,t])=>id===0&&t>.25));
+   ctrl.conflictRoadSources[1]={...ctrl.conflictRoadSources[1],getSpline:()=>null};
+   auto=ctrl.diagnoseConflicts();
+   assert(auto.skipped.some(x=>x.exitIndex===1&&/Road source/.test(x.reason)));
+   ctrl.conflictRoadSources=[ctrl.conflictRoadSources[0]];
+   assert.throws(()=>ctrl.diagnoseConflicts(),/settings/);
+   ctrl.conflictAutoRoadWidths=false;ctrl.conflictUseRoadWidths=false;
+   ctrl.conflictRoadSources=[];
    let diag=ctrl.diagnoseConflicts();
    assert.equal(diag.ok,true);assert.equal(diag.validExits,3);
    assert.deepEqual(diag.missingPairs.map(x=>[x.firstExit,x.secondExit]),[[0,1]]);

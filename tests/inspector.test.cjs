@@ -8,11 +8,11 @@ assert(!Object.keys(pkg.contributions.messages).includes('open-panel'));
 const animate=require(root+'/dist/contributions/inspector/Animate.js');
 const container=require(root+'/dist/contributions/inspector/Container.js');
 const traffic=require(root+'/dist/contributions/inspector/TrafficController.js');
-for(const field of ['junction','phases','allRedSeconds','adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds','conflicts','conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin','conflictUseRoadWidths','conflictRoadHalfWidths','conflictVerticalTolerance'])
+for(const field of ['junction','phases','allRedSeconds','adaptiveTraffic','minGreenSeconds','maxGreenSeconds','maxDemandWaitSeconds','conflicts','conflictProbeTolerance','conflictProbeLookahead','conflictProbeIgnoreOrigin','conflictUseRoadWidths','conflictAutoRoadWidths','conflictRoadSources','conflictRoadHalfWidths','conflictVerticalTolerance'])
  assert(traffic.template.includes('spl-field-'+field),'Traffic Controller Inspector missing '+field);
 assert(pkg.contributions.inspector.section.node['Splines.SplineTrafficController']===
   './dist/contributions/inspector/TrafficController.js');
-assert.equal(traffic.template.match(/<ui-prop /g)?.length,14);
+assert.equal(traffic.template.match(/<ui-prop /g)?.length,16);
 assert(traffic.template.includes('spl-check-traffic-conflicts'));
 assert.equal(traffic.$.checkTrafficConflicts,'.spl-check-traffic-conflicts');
 const signalRows=Object.fromEntries(Object.keys(traffic.$).map(k=>[k,{hidden:false,render(){}}]));
@@ -32,6 +32,16 @@ traffic.update.call({$:signalRows},{value:{conflictUseRoadWidths:{value:true},
   conflictRoadHalfWidths:{value:[1,1]},conflictVerticalTolerance:{value:.75}}});
 assert.equal(signalRows.r_conflictRoadHalfWidths.hidden,false);
 assert.equal(signalRows.r_conflictVerticalTolerance.hidden,false);
+traffic.update.call({$:signalRows},{value:{conflictUseRoadWidths:{value:true},
+  conflictAutoRoadWidths:{value:true},conflictRoadHalfWidths:{value:[1,1]},
+  conflictRoadSources:{value:[]},conflictVerticalTolerance:{value:.75}}});
+assert.equal(signalRows.r_conflictRoadSources.hidden,false);
+assert.equal(signalRows.r_conflictRoadHalfWidths.hidden,true);
+traffic.update.call({$:signalRows},{value:{conflictUseRoadWidths:{value:true},
+  conflictAutoRoadWidths:{value:false},conflictRoadHalfWidths:{value:[1,1]},
+  conflictRoadSources:{value:[]},conflictVerticalTolerance:{value:.75}}});
+assert.equal(signalRows.r_conflictRoadSources.hidden,true);
+assert.equal(signalRows.r_conflictRoadHalfWidths.hidden,false);
 for(const f of ['spline','target','modifiers','method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startProgress','startPositionMode','startDistance','worldOffset','splineOffset','constantSpeedWithOffset','junctionOffsetBlendDistance','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','enableHeadway','headwayLaneId','headwayWorldGap','headwayBrakeDistance','enableLanePlacement','laneCount','laneWidth','enableProximityAvoidance','proximityRadius','proximityUseColliderBounds','proximityCollider','proximitySafetyGap','proximitySweepSamples','previewInEditor','previewProgress','previewPositionMode','previewDistance','junctionMode','onBeginningReached','onEndReached']){
  assert(animate.template.includes('spl-field-'+f),`Missing stable animate ui-prop: ${f}`);
 }

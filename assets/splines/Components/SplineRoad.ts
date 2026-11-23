@@ -148,6 +148,26 @@ export class SplineRoad extends Component {
         return {outer:toEdge(outerIndex),inner:toEdge(innerIndex)};
     }
 
+    /** Nominal top asphalt half-width in WORLD units, sampled from the same
+     * taper/range/modifier inputs used in buildRoadGeometry. Pure read:
+     * no Mesh rebuild, editor snapshot or new material. Road corner mitering,
+     * shoulders and curbs are not part of this nominal asphalt width.
+     */
+    public sampleAsphaltHalfWidthAt(progress:number):number|null{
+        const source=this.getSpline();
+        if(!source||this.enabled===false||this.node?.isValid===false||
+           source.count<2||!Number.isFinite(progress)||progress<0||progress>1)
+            return null;
+        const [begin,end]=toNormalizedRange(source,this.rangeMode,this.startProgress,
+            this.endProgress,this.startDistance,this.endDistance);
+        if(!Number.isFinite(begin)||!Number.isFinite(end)||end-begin<1e-5||
+           progress<begin-1e-6||progress>end+1e-6)return null;
+        const normalized=Math.max(0,Math.min(1,(progress-begin)/(end-begin)));
+        const base=this.width+(this.endWidth>0?this.endWidth-this.width:0)*normalized;
+        const multiplier=this.modifiers?.sample(progress)?.width??1;
+        if(!Number.isFinite(base)||!Number.isFinite(multiplier))return null;
+        return Math.max(.05,base*Math.max(.01,multiplier))*.5;
+    }
     public getSpline():SplineContainer|null{
         if(this.spline)return this.spline;
         let n:import('cc').Node|null=this.node;

@@ -5,6 +5,7 @@
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
+import {sweptSphereAabbEntry,validProximityAabb,type ProximityAabb} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
 export interface ProximityTelemetry {
     occupants:number;spatialCells:number;queries:number;fallbackQueries:number;
@@ -12,7 +13,11 @@ export interface ProximityTelemetry {
     lastVisitedCells:number;lastFallback:boolean;totalCandidates:number;
     totalSegmentTests:number;
 }
-export interface ProximityOccupant {position:ProximityPoint;radius:number}
+export interface ProximityOccupant {
+    position:ProximityPoint;radius:number;
+    /** Opt-in actual world AABB of a Cocos 3D Collider; absent = sphere. */
+    bounds?:ProximityAabb;
+}
 export interface ProximityPlan {
     fraction:number;
     limited:boolean;
@@ -71,7 +76,9 @@ export function planSplineProximity(
         for(let j=1;j<=samples;j++){
             const point=sampled[j];
             if(metrics)metrics.segmentTests++;
-            const entry=segmentEntry(previous,point,other.position,threshold);
+            const entry=other.bounds?
+                sweptSphereAabbEntry(previous,point,other.bounds,radius+safetyGap):
+                segmentEntry(previous,point,other.position,threshold);
             if(entry!==null){
                 const hit=(j-1+entry)/samples;
                 if(hit<first){
@@ -120,11 +127,13 @@ export class SplineProximityRegistry {
             lastFallback:this._lastFallback,totalCandidates:this._totalCandidates,
             totalSegmentTests:this._totalSegmentTests};
     }
-    public set(owner:object,position:ProximityPoint,radius:number):void{
-        if(!owner||!validPoint(position)||!finite(radius)||radius<=0||radius>100)
+    public set(owner:object,position:ProximityPoint,radius:number,bounds?:ProximityAabb):void{
+        if(!owner||!validPoint(position)||!finite(radius)||radius<=0||radius>100||
+           (bounds!==undefined&&!validProximityAabb(bounds)))
             throw Error('Invalid spline proximity occupant.');
         const previous=this.occupants.get(owner);
-        this.occupants.set(owner,{position:{x:position.x,y:position.y,z:position.z},radius});
+        this.occupants.set(owner,{position:{x:position.x,y:position.y,z:position.z},radius,
+            ...(bounds?{bounds:{min:{...bounds.min},max:{...bounds.max}}}:{})});
         this.index.set(owner,position);
         if(radius>this._maxRadius)this._maxRadius=radius;
         else if(previous&&previous.radius>=this._maxRadius&&radius<previous.radius)
@@ -139,7 +148,8 @@ export class SplineProximityRegistry {
     }
     public get(owner:object):ProximityOccupant|null{
         const value=this.occupants.get(owner);
-        return value?{radius:value.radius,position:{...value.position}}:null;
+        return value?{radius:value.radius,position:{...value.position},
+            ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,

@@ -51,6 +51,21 @@ try{
   const previous=renderer.mesh;road.width=9;road.update();
   assert(previous.destroyed,'previous mesh is reclaimed when width changed');
   assert.notEqual(renderer.mesh,previous);assert.equal(meshCalls.length,2);
+  // Read-only nominal asphalt width, taper, modifiers and road range.
+  const callsBeforeWidthProbe=meshCalls.length;
+  assert.equal(road.sampleAsphaltHalfWidthAt(0),4.5);
+  road.endWidth=3;
+  assert.equal(road.sampleAsphaltHalfWidthAt(1),1.5);
+  assert.equal(road.sampleAsphaltHalfWidthAt(.5),3);
+  road.modifiers={sample:()=>({width:1.5}),getRevision:()=>1};
+  assert.equal(road.sampleAsphaltHalfWidthAt(.5),4.5);
+  road.startProgress=.2;road.endProgress=.8;
+  assert.equal(road.sampleAsphaltHalfWidthAt(.1),null);
+  assert.equal(road.sampleAsphaltHalfWidthAt(.5),4.5);
+  assert.equal(road.sampleAsphaltHalfWidthAt(NaN),null);
+  assert.equal(meshCalls.length,callsBeforeWidthProbe,'Width lookup cannot rebuild Mesh');
+  road.startProgress=0;road.endProgress=1;road.endWidth=-1;road.modifiers=null;
+
   road.roadMaterial=new Material();road.update();assert.equal(renderer.shared,road.roadMaterial,'custom material assigned');
   const {SplinePositionMode}=require(path.join(out,'Core','SplinePosition.js'));
   // Inspector UV controls rebuild the mesh with a new orientation without changing geometry.
