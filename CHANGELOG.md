@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.8b Advanced Population Rules (V2 Preview)
+
+- Added opt-in density masks keyed by normalized arc, seed-stable candidate thinning, open/closed exclusion intervals and World-center minimum spacing after final modifiers/noise/jitter.
+- Dense/partial mask operations keep original candidate indexes and prefab variant/random channels, so thinning never causes jitter reshuffles. Closed density masks interpolate periodically; wrapped exclusion intervals apply across seam.
+- Pure `SplinePopulationMath` validates rules, dimensions and 2048 planned candidate positions before clearing previous object population. Spacing uses a 3D spatial hash; excludes center overlap only, not collider geometry.
+- Added Inspector properties, revision-aware runtime regeneration, standalone pure/component regression suite and setup/acceptance guide. Disabled by default; no Knot/mesh/source changes.
+- Native Creator 3.8.8 regression, Prefab/Undo and GitHub Actions artifact verification pending; no tag/release.
+
 # Unreleased — Phase 3.8a Deterministic Noise Layers (V2 Preview)
 
 - Added opt-in serialized SplineNoise layers (frequency, octaves, persistence, phase, individual seed, amplitude and open-end fade), with stable hash interpolation, normalized octave weights and exact closed-loop 0/1 seam.
