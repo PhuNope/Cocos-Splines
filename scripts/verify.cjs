@@ -18,6 +18,8 @@ checkRel('assets/splines/Core/SplinePopulationSurfaceMath.ts');
 checkRel('assets/splines/Core/SplinePopulationSurfaceMath.ts.meta');
 checkRel('assets/splines/Core/SplinePopulationPreciseMath.ts');
 checkRel('assets/splines/Core/SplinePopulationPreciseMath.ts.meta');
+checkRel('assets/splines/Core/SplinePrefabFootprintMath.ts');
+checkRel('assets/splines/Core/SplinePrefabFootprintMath.ts.meta');
 checkRel('assets/splines/Core/SplineMeshColliderAdapter.ts');
 checkRel('assets/splines/Core/SplineProximityMesh.ts');
 checkRel('assets/splines/Components/SplineNoise.ts');
