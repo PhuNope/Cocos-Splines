@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.7b Versioned JSON Geometry Round-trip (V2 Preview)
+
+- New strictly versioned `cocos-splines/geometry` v1 text serializer/parser with bounded validation, local 3D/XY2D/XZ2D, closed/reversed, samplesPerCurve, root local transform and resolved cubic geometry.
+- Editor export uses an isolated read-only Scene method, preserving effective evaluated Bézier controls; import creates a NEW sibling spline with Broken tangents, no source/Prefab edits, and one snapshot on success.
+- Original Unity JSON importer is unchanged. Authoring-level Knot modes, rotations, nested tangent handle Nodes and asset/component references are intentionally not serialized in the geometry schema.
+- Regression suite covers closed spline cubic control points, 2D hidden-axis rejection, malformed JSON/schema/transform, Editor set-property contracts, snapshot failure cleanup and non-mutating export. Native Creator 3.8.8 smoke testing still required; no tag or release.
+
 # Unreleased — Phase 3.7a SVG Path Interoperability (V2 Preview)
 
 - Added strict editor-independent SVG Path converter (`src/SplineSvgConverter.js`). Imports M/L/H/V/C/S/Q/T/Z commands (absolute and relative), converting straight lines and quadratic curves to exact cubic Bézier handles; rejects arc commands, multiple subpaths and transforms rather than misinterpreting geometry.
