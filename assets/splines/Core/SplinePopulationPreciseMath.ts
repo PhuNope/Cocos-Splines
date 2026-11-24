@@ -7,11 +7,13 @@ import type {PopulationCandidate,PopulationVector} from './SplinePopulationMath'
 import type {PopulationWorldAabb} from './SplinePopulationPlacementMath';
 import {validProximityObb,validProximityCapsule,
     type ProximityObb,type ProximityCapsule} from './SplineProximityShapes';
+import {sphereMeshContact,type ProximityTriangleMesh} from './SplineProximityMesh';
 
 export type PopulationObstacleShape =
     {kind:'aabb';bounds:PopulationWorldAabb} |
     {kind:'obb';box:ProximityObb} |
-    {kind:'capsule';capsule:ProximityCapsule};
+    {kind:'capsule';capsule:ProximityCapsule} |
+    {kind:'mesh';mesh:ProximityTriangleMesh};
 
 const finite=(n:number):boolean=>typeof n==='number'&&Number.isFinite(n);
 const point=(p:PopulationVector):boolean=>!!p&&
@@ -54,6 +56,10 @@ function validateObstacle(shape:PopulationObstacleShape):void{
         if(!validProximityCapsule(shape.capsule)||!point(shape.capsule.a)||
            !point(shape.capsule.b))
             throw Error('Population Capsule has invalid World geometry.');
+    }else if(shape.kind==='mesh'){
+        if(!shape.mesh?.root||!Number.isInteger(shape.mesh.triangleCount)||
+           shape.mesh.triangleCount<1||shape.mesh.triangleCount>16384)
+            throw Error('Population Mesh BVH has invalid geometry.');
     }else throw Error('Unsupported population obstacle shape.');
 }
 /** Clearance is additional space around a candidate footprint sphere.
@@ -82,6 +88,7 @@ export function filterPopulationShapeCandidates(
     return candidates.filter(c=>!obstacles.some(obstacle=>{
         if(obstacle.kind==='aabb')return squaredToAabb(c.position,obstacle.bounds)<=r2;
         if(obstacle.kind==='obb')return squaredToObb(c.position,obstacle.box)<=r2;
+        if(obstacle.kind==='mesh')return sphereMeshContact(c.position,obstacle.mesh,r);
         const capsule=obstacle.capsule;
         const radius=capsule.radius+r;
         return squaredToCapsule(c.position,capsule)<=radius*radius;
