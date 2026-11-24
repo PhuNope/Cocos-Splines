@@ -1,4 +1,4 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, PhysicsSystem, geometry } from 'cc';
+import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, CapsuleCollider, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -6,6 +6,8 @@ import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
 import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
 import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
+import {colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
+import {filterPopulationShapeCandidates,type PopulationObstacleShape} from '../Core/SplinePopulationPreciseMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 const {ccclass,property,menu}=_decorator;
 
@@ -67,6 +69,10 @@ export class SplineObjectController extends Component {
     obstacleColliders:Collider[]=[];
     @property({min:0,max:10000,tooltip:'World-unit radius around each candidate center kept clear of assigned Collider World AABBs.'})
     obstacleClearance=0;
+    @property({tooltip:'Opt-in: use validated BoxCollider OBB / CapsuleCollider geometry for population clearance. Unsupported transforms and other Collider types fall back to conservative World AABB. Requires Avoid Obstacle Colliders.'})
+    usePreciseObstacleShapes=false;
+    @property({min:0,max:100,tooltip:'Manual conservative prefab footprint SPHERE radius in World units, in addition to Obstacle Clearance. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes. Does not read prefab mesh dimensions.'})
+    placementFootprintRadius=0;
     @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces. No source geometry changes.'})
     conformToSurface=false;
     @property({type:[Collider],tooltip:'1–64 explicit target 3D Colliders including TerrainCollider. Other raycast hits are ignored.'})
@@ -151,6 +157,35 @@ export class SplineObjectController extends Component {
             });
         });
     }
+    /** Snapshot all active obstacle shapes once, prior to population clear().
+     * Reuses the same strict adapters as SplineAnimate; a rejected OBB/Capsule
+     * does NOT fall through to an optimistic approximation: use World AABB. */
+    private obstacleShapes():PopulationObstacleShape[]{
+        if(!Array.isArray(this.obstacleColliders)||this.obstacleColliders.length>64)
+            throw Error('Population obstacle list must have no more than 64 Collider references.');
+        const shapes:PopulationObstacleShape[]=[];
+        for(const collider of this.obstacleColliders){
+            if(!collider)throw Error('Population obstacle list contains a missing Collider reference.');
+            if(collider.enabled===false||collider.node?.activeInHierarchy===false)continue;
+            const bounds=collider.worldBounds;
+            if(!bounds?.center||!bounds?.halfExtents)
+                throw Error('Assigned Collider has no readable World AABB bounds.');
+            const fallback:PopulationObstacleShape={kind:'aabb',bounds:{
+                center:{x:bounds.center.x,y:bounds.center.y,z:bounds.center.z},
+                halfExtents:{x:bounds.halfExtents.x,y:bounds.halfExtents.y,z:bounds.halfExtents.z},
+            }};
+            const matrix=collider.node?.worldMatrix;
+            if(matrix&&typeof BoxCollider==='function'&&collider instanceof BoxCollider){
+                const obb=colliderWorldObb(collider.center,collider.size,matrix,bounds);
+                shapes.push(obb?{kind:'obb',box:obb}:fallback);
+            }else if(matrix&&typeof CapsuleCollider==='function'&&collider instanceof CapsuleCollider){
+                const capsule=colliderWorldCapsule(collider.center,collider.radius,
+                    collider.cylinderHeight,collider.direction,matrix,bounds);
+                shapes.push(capsule?{kind:'capsule',capsule}:fallback);
+            }else shapes.push(fallback);
+        }
+        return shapes;
+    }
     private signature():string{
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),
@@ -168,6 +203,19 @@ export class SplineObjectController extends Component {
                     const bounds=c.worldBounds;
                     return [c.node?.uuid,true,bounds?.center,bounds?.halfExtents];
                 }),
+            ]:null,this.avoidObstacleColliders?[
+                this.usePreciseObstacleShapes,
+                this.usePreciseObstacleShapes?[
+                    this.placementFootprintRadius,
+                    this.obstacleColliders.map(c=>{
+                        if(!c)return null;
+                        return [c.node?.worldMatrix,
+                            typeof BoxCollider==='function'&&c instanceof BoxCollider?
+                                [c.center,c.size]:null,
+                            typeof CapsuleCollider==='function'&&c instanceof CapsuleCollider?
+                                [c.center,c.radius,c.cylinderHeight,c.direction]:null];
+                    }),
+                ]:null,
             ]:null,this.conformToSurface,this.conformToSurface?[
                 this.surfaceRayHeight,this.surfaceRayDepth,this.surfaceOffset,
                 this.minSurfaceNormalY,this.skipMissingSurface,this.alignToSurfaceNormal,
@@ -251,7 +299,10 @@ export class SplineObjectController extends Component {
                 surfacePlan.set(hit.index,hit);
             // Exclude occupied obstacle centers BEFORE pairwise spacing.
             const viable=this.avoidObstacleColliders?
-                filterObstacleCandidates(projected,this.obstacleBounds(),this.obstacleClearance):
+                (this.usePreciseObstacleShapes?
+                    filterPopulationShapeCandidates(projected,this.obstacleShapes(),
+                        this.obstacleClearance,this.placementFootprintRadius):
+                    filterObstacleCandidates(projected,this.obstacleBounds(),this.obstacleClearance)):
                 projected;
             accepted=new Set(planPopulation(viable,policy));
         }
