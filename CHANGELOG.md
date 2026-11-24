@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.8c2a Surface / Terrain Conform (V2 Preview)
+
+- Added opt-in Physics 3D downward raycasts against explicit active target Collider/TerrainCollider components for prefab population. Closest valid target hit, slope threshold, normal offset and drop/keep missing-hit policy; unlisted hits cannot be used.
+- Optional local-Up alignment to the hit normal with the spline's World forward projected onto the tangent plane, preserving deterministic jitter and variant seed selection.
+- Surface projection is validated and planned before cleanup/instantiation; the resulting World centers are passed to Collider avoidance, Density, Exclusions and World Spacing, then reused exactly at spawn.
+- Added Inspector settings, pure math, TypeScript Physics stubs, regression coverage and Vietnamese Creator acceptance notes. This is not accurate Mesh BVH/OBB collision detection.
+- Native Cocos Creator 3.8.8 Physics, Terrain, Prefab and Undo/Redo smoke tests remain pending. No tag/release.
+
 # Unreleased — Phase 3.8c1 Collider-aware Population and Weighted Variants (V2 Preview)
 
 - Added explicit Collider World-AABB center clearance for prefab population: opt-in list of up to 64 active colliders, conservative sphere-to-AABB overlap and world-unit clearance, tested on final spline-frame placement after noise/jitter.
