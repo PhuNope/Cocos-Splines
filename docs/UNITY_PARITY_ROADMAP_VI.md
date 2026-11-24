@@ -178,6 +178,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Creator 3.8.8 prefab Mesh.minPosition/maxPosition, nested transform, save/reopen/Undo/Redo smoke test.
 - [ ] Next: explicit cross-controller occupancy and per-instance bounds for animated/skinned or arbitrary shape geometry.
 
+### Phase 3.8c2b2b2 — Explicit Shared Occupancy (v2 preview)
+
+- [x] `SplineSharedOccupancyMath` pure 3D spatial hash: bounded 2.048 candidate/32.768 occupant, finite center/radius/clearance validation, inclusive sphere contact, stable original candidate indexes.
+- [x] Opt-in ObjectController `avoidPeerPopulation`, 16 explicit `occupancyPeerNodes`, strict monotonic `occupancyPriority`, published `sharedOccupancyRadius` and consumer `peerOccupancyClearance`; no automatic Scene scans or peer respawns.
+- [x] Read-only snapshot of direct children in peer serialized `spawnedRoot`; strict same Scene/active/duplicate/self/priority checks, before any existing own population is cleared.
+- [x] Pipeline order Surface Conform → Collider Avoidance → Shared Occupancy → Density/World Spacing; per-candidate Auto Prefab Footprint is reused on the follower when already active.
+- [x] Peer node position/radius/priority changes invalidate follower Rebuild On Change signature only while opted in; Inspector conditional controls, mock runtime and pure regressions.
+- [ ] Native Cocos Creator 3.8.8 multi-controller Play/Undo/Prefab/save-reopen acceptance and large-scene performance profiling.
+- [ ] Later: explicit batch scheduling, serializing exact per-instance footprint radii, preview rejected placements in Gizmos and Phase 4 graph nodes.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
