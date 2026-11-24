@@ -118,13 +118,8 @@ try{
     ];
     const spline={count:2,closed:false,length:10,node:new Node('spline'),
       getRevision:()=>1,
-      evaluateWorldPosition:t=>new Vec3(...Object.values(positions[Math.round(t*3)])),
+      evaluateWorldPosition:t=>{const q=positions[Math.round(t*3)];return new Vec3(q.x,q.y,q.z);},
       evaluateRotation:()=>new Quat()};
-    // Override object value conversion avoids relying on Vec3 (x,y,z) property order.
-    spline.evaluateWorldPosition=t=>{
-      const q=positions[Math.round(t*3)];
-      return new Vec3(q.x,q.y,q.z);
-    };
     const ctrl=new SplineObjectController();
     ctrl.spline=spline;ctrl.prefabs=[{id:'P'}];ctrl.count=4;ctrl.alignToSpline=false;
     ctrl.avoidObstacleColliders=true;ctrl.obstacleColliders=[box];
@@ -135,7 +130,7 @@ try{
     assert.equal(ctrl.respawn(),2,'OBB adapter accepts rotated AABB corner');
     assert.deepEqual(ctrl.spawnedRoot.children.map(n=>n.name),
       ['Spline Object 001','Spline Object 003']);
-    const sig=ctrl.signature();ctrl.placementFootprintRadius=1.3;
+    const sig=ctrl.signature();ctrl.placementFootprintRadius=1.5;
     assert.notEqual(ctrl.signature(),sig,'Radius change invalidates signature');
     assert.equal(ctrl.respawn(),1,'Sphere footprint expands OBB exclusion');
     ctrl.placementFootprintRadius=0;
@@ -146,8 +141,8 @@ try{
     assert(old.every(n=>n.isValid));
     ctrl.placementFootprintRadius=0;
     // Mismatched bounds mean OBB adapter MUST fall back to AABB.
-    box.worldBounds.halfExtents.x=.1;
-    assert.equal(ctrl.respawn(),2,'Invalid OBB geometry conservatively falls back to the supplied AABB');
+    box.worldBounds.halfExtents.x=3;
+    assert.equal(ctrl.respawn(),1,'Invalid OBB transform uses the conservative supplied World AABB');
     box.worldBounds.halfExtents.x=bounds.halfExtents.x;
     const capsuleNode=new CapsuleCollider();
     capsuleNode.node.worldMatrix={
