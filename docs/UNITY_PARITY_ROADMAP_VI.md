@@ -188,6 +188,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Cocos Creator 3.8.8 multi-controller Play/Undo/Prefab/save-reopen acceptance and large-scene performance profiling.
 - [ ] Later: explicit batch scheduling, serializing exact per-instance footprint radii, preview rejected placements in Gizmos and Phase 4 graph nodes.
 
+### Phase 3.8d — Placement Debug Gizmos (v2 preview)
+
+- [x] One authoritative non-destructive placement preflight shared by Respawn and preview, with exact Noise/Modifier/Surface, Collider, Peer, Density/Exclusion/World Spacing behavior.
+- [x] Optional rejection callback in `planPopulation`; immutable `SplinePlacementDiagnostics` attributes the *first* failed stage for every original candidate index. Strict candidate-subset validation prevents misleading visual results.
+- [x] Cocos-Gizmos v3 `@registerGizmos(SplinePlacementGizmos)` drawer isolated in Editor folder, selected-only and disabled by default. Color legend covers accepted, surface, collider, peer, exclusion, density, spacing.
+- [x] Bounded, reason-aware marker sample (up to 256 drawn from at most 2048 fully planned candidate positions), optional footprint spheres, revision cache and single-warning handling of invalid preview.
+- [x] Inspector controls, pure/controller/Gizmos mock regression and Vietnamese setup/acceptance docs.
+- [ ] Native Cocos Creator 3.8.8 Editor gizmos/Physics/Undo/Redo/performance smoke tests and visual legend/index labels.
+- [ ] Next: gizmo debug counts/Inspector diagnostics and Phase 4 Procedural Geometry Graph.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
