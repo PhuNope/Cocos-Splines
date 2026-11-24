@@ -30,9 +30,9 @@ const configs={
   noise:{title:'Spline Noise Layers',note:'Deterministic multi-octave offset field, sample(progress) returns spline-frame Right/Up/Forward displacement. Add 1–16 layers; amplitude zero or no layer = no change. Integer cycles tile exactly on closed splines. Noise does NOT deform Knot positions or Road meshes. Assign this component to Object Controller → Noise to opt in.',groups:[{title:'Source & seed',fields:['spline','seed']},{title:'Noise layers',fields:['layers']}]},
   modifiers:{title:'Spline Modifiers',note:'Keyframes theo normalized ARC progress. Empty Keys = no change. Speed/Offset/Roll ảnh hưởng Animate (nếu gán Modifiers); Width ảnh hưởng Road; Scale/Offset ảnh hưởng Object Controller.',groups:[{title:'Keyed spline modifiers',fields:['spline','interpolation','keys']},{title:'Scene gizmos (selected)',fields:['showGizmos','gizmoSamples','showOffsetGizmos','showWidthGizmos','gizmoBaseWidth','showKeyGizmos','showFrameGizmos']}]},
   geometryGraph:{title:'Procedural Geometry Graph · V1',
-    note:'Phase 4.1 typed DAG: one Spline source → optional Offset/Width nodes → Ribbon → Output. Edit JSON then click Rebuild Graph; only validated registered node types execute. Geometry output is transient and local to this MeshRenderer, reusing canonical Road tessellation. No source Knot/Prefab/Mesh mutation. 3–32 nodes, max 1025 frames. A drag-and-drop node canvas and multi-output graphs are future slices.',
+    note:'Phase 4.2a adds an interactive typed Graph canvas below the properties. Drag node headers, click an output then input socket to reconnect, edit parameters on a selected card, insert Offset/Width and remove transforms. All graph/layout commits use native ui-prop dumps so Save/Undo/Prefab overrides remain Editor-owned. Runtime geometry still runs the V1 typed DAG and canonical Road tessellator; layouts cannot invalidate mesh caches. Multi-output graphs/assets are future slices.',
     groups:[
-        {title:'Spline & typed graph JSON',fields:['spline','graphJson','samplesPerCurve']},
+        {title:'Spline & typed graph JSON',fields:['spline','graphJson','graphLayoutJson','samplesPerCurve']},
         {title:'Material & live update',fields:['material','rebuildOnChange']},
         {title:'Selected-only geometry wireframe',fields:['showMeshGizmos','gizmoEdgeLimit']},
     ]},
@@ -316,6 +316,7 @@ function makeInspector(type){
             if(field==='tileLength')return Number(v('mode'))===1&&Number(v('repeatLayout'))===1;
             if(field==='uvTilesPerUnit')return Number(v('uvMode'))===2;
         }
+        if(type==='geometryGraph'&&field==='graphLayoutJson')return false;
         if(type==='objectController'){
             if(field==='count')return Number(v('method'))===0;
             if(field==='spacing')return Number(v('method'))===1;
