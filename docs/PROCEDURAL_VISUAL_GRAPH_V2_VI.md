@@ -29,7 +29,7 @@ Vị trí kéo trong canvas chỉ được **commit một lần khi thả pointe
 
 ## Giới hạn Phase 4.2a
 
-- **Chưa có asset Graph độc lập** (ví dụ file `.graph`) hoặc share graph liên component. Graph vẫn lưu trong thuộc tính `graphJson` của component; `Install Examples` có `BasicRibbonGraph.json` để copy/nhập thủ công.
+- Phase 4.2b đã hỗ trợ **JsonAsset native dùng chung**. Để chỉnh graph, dùng **Copy Asset to Local** hoặc Import JSON thay vì sửa file chung qua canvas. Xem [Shared Graph Assets guide](PROCEDURAL_GEOMETRY_GRAPH_ASSETS_V2_VI.md). Custom importer cho `.graph`, đa input/output và chỉnh trực tiếp asset chung còn nằm ở các phase tiếp theo.
 - V1 chỉ hỗ trợ **một nguồn Spline**, **một Ribbon**, **một Output** và chuỗi transform một input duy nhất. Nối dây tạo thêm branch output/multi-input hoặc bỏ rơi node sẽ bị từ chối. Multi-output/branching và output type mới thuộc Phase 4.2b/4.3.
 - Không có Undo riêng trong canvas: tất cả sử dụng native Inspector change-dump. Nhiều thao tác liên tiếp thành các Editor property commits riêng; không đảm bảo một transaction hợp nhất cho nhiều chỉnh sửa.
 - Canvas có kích thước cố định 860×410 px, scroll trong Inspector hẹp; node layout bị giới hạn trong stage. Hiển thị tối đa 32 node, ID an toàn, dữ liệu layout bounded, không inject code từ JSON vào HTML.
