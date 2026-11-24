@@ -1,10 +1,11 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum } from 'cc';
+import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
 import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
+import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
 const {ccclass,property,menu}=_decorator;
 
 /** Serializable density control point along normalized arc progress. */
@@ -30,6 +31,10 @@ export class SplinePopulationExclusion implements PopulationExclusion {
 export class SplineObjectController extends Component {
     @property({type:SplineContainer}) spline:SplineContainer|null=null;
     @property({type:[Prefab],tooltip:'Prefab variations. Selection is deterministic for the seed.'}) prefabs:Prefab[]=[];
+    @property({tooltip:'Opt-in weighted selection of Prefabs. Disabled uses the legacy uniform seeded variant RNG.'})
+    usePrefabWeights=false;
+    @property({type:[Number],tooltip:'Weights aligned by index to Prefabs. Exactly one value per slot, zero disables a variant; max 128.'})
+    prefabWeights:number[]=[];
     @property({type:Node,tooltip:'Generated children parent; defaults to this Node.'}) parentNode:Node|null=null;
     @property({type:SplineModifiers}) modifiers:SplineModifiers|null=null;
     @property({type:SplineNoise,tooltip:'Optional seeded layered offset in spline-frame Right/Up/Forward coordinates. No Knot changes.'})
@@ -55,6 +60,12 @@ export class SplineObjectController extends Component {
     exclusions:SplinePopulationExclusion[]=[];
     @property({min:0,max:10000,tooltip:'Optional minimum WORLD distance between final placed prefab centers, after all jitter/noise (0 disables). Not collider overlap.'})
     minWorldSpacing=0;
+    @property({tooltip:'Opt-in explicit Collider avoidance using conservative World AABB bounds. No physics simulation / auto-scene discovery.'})
+    avoidObstacleColliders=false;
+    @property({type:[Collider],tooltip:'Only these assigned active Colliders are considered (max 64). Not a Physics overlap query.'})
+    obstacleColliders:Collider[]=[];
+    @property({min:0,max:10000,tooltip:'World-unit radius around each candidate center kept clear of assigned Collider World AABBs.'})
+    obstacleClearance=0;
     @property alignToSpline=true;
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
@@ -68,14 +79,39 @@ export class SplineObjectController extends Component {
         v=Math.imul(v^(v>>>16),0x7feb352d);v=Math.imul(v^(v>>>15),0x846ca68b);
         return ((v^(v>>>16))>>>0)/4294967296;
     }
+    /** Snapshot explicit Collider.worldBounds without touching the physics scene or generated Nodes. */
+    private obstacleBounds():PopulationWorldAabb[]{
+        if(!Array.isArray(this.obstacleColliders)||this.obstacleColliders.length>64)
+            throw Error('Population obstacle list must have no more than 64 Collider references.');
+        const boxes:PopulationWorldAabb[]=[];
+        for(const collider of this.obstacleColliders){
+            if(!collider)throw Error('Population obstacle list contains a missing Collider reference.');
+            if(collider.enabled===false||collider.node?.activeInHierarchy===false)continue;
+            const bounds=collider.worldBounds;
+            if(!bounds||!bounds.center||!bounds.halfExtents)
+                throw Error('Assigned Collider has no readable World AABB bounds.');
+            boxes.push({center:{x:bounds.center.x,y:bounds.center.y,z:bounds.center.z},
+                halfExtents:{x:bounds.halfExtents.x,y:bounds.halfExtents.y,z:bounds.halfExtents.z}});
+        }
+        return boxes;
+    }
     private signature():string{
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
-        return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),this.parentNode?.uuid,
+        return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),
+            this.usePrefabWeights,this.usePrefabWeights?this.prefabWeights:null,this.parentNode?.uuid,
             this.modifiers?.getRevision(),this.noise?.node.uuid,this.noise?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
             this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,
             this.enablePopulationRules,this.enablePopulationRules?[
                 this.density,this.densityKeys.map(k=>[k.progress,k.density]),
                 this.exclusions.map(x=>[x.startProgress,x.endProgress]),this.minWorldSpacing,
+            ]:null,this.avoidObstacleColliders,this.avoidObstacleColliders?[
+                this.obstacleClearance,
+                this.obstacleColliders.map(c=>{
+                    if(!c)return null;
+                    if(c.enabled===false||c.node?.activeInHierarchy===false)return [c.node?.uuid,false];
+                    const bounds=c.worldBounds;
+                    return [c.node?.uuid,true,bounds?.center,bounds?.halfExtents];
+                }),
             ]:null,this.alignToSpline,this.includeEndPoint]);
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
@@ -94,6 +130,15 @@ export class SplineObjectController extends Component {
         if(!spline||spline.count<2||!variants.length){
             this.clear();this._signature=this.signature();return 0;
         }
+        // The opt-in weighted picker uses the SAME deterministic prefab RNG channel 0.
+        // Validate before clear(); source null slots never consume a positive weight.
+        let weights:number[]|null=null;
+        if(this.usePrefabWeights){
+            validatePrefabWeights(this.prefabWeights,this.prefabs.length);
+            weights=this.prefabs.map((p,i)=>p?this.prefabWeights[i]:null)
+                .filter((v):v is number=>v!==null);
+            validatePrefabWeights(weights,variants.length);
+        }
         const start=Math.max(0,Math.min(1,this.startProgress)),end=Math.max(0,Math.min(1,this.endProgress));
         if(end<start){this.clear();this._signature=this.signature();return 0;}
         const range=end-start;
@@ -107,11 +152,14 @@ export class SplineObjectController extends Component {
         // Nodes. Strict policy errors cannot destroy a valid existing population.
         // The legacy (opt-out) path below is otherwise unchanged.
         let accepted:Set<number>|null=null;
-        if(this.enablePopulationRules){
-            const policy:PopulationPolicy={
+        if(this.enablePopulationRules||this.avoidObstacleColliders){
+            const policy:PopulationPolicy=this.enablePopulationRules?{
                 seed:this.seed,closed:spline.closed===true,density:this.density,
                 densityKeys:this.densityKeys,exclusions:this.exclusions,
                 minWorldSpacing:this.minWorldSpacing,
+            }:{
+                seed:this.seed,closed:spline.closed===true,density:1,
+                densityKeys:[],exclusions:[],minWorldSpacing:0,
             };
             const candidates:PopulationCandidate[]=[];
             for(let i=0;i<total;i++){
@@ -130,7 +178,12 @@ export class SplineObjectController extends Component {
                 const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);
                 candidates.push({index:i,progress,position:{x:pos.x,y:pos.y,z:pos.z}});
             }
-            accepted=new Set(planPopulation(candidates,policy));
+            // Exclude occupied obstacle centers BEFORE pairwise spacing.
+            // Otherwise a rejected candidate could reserve space against a valid one.
+            const viable=this.avoidObstacleColliders?
+                filterObstacleCandidates(candidates,this.obstacleBounds(),this.obstacleClearance):
+                candidates;
+            accepted=new Set(planPopulation(viable,policy));
         }
         this.clear();
         for(let i=0;i<total;i++){
@@ -141,7 +194,10 @@ export class SplineObjectController extends Component {
             const progress=start+(spline.length>1e-8?d/spline.length:0);
             const modifier=this.modifiers?.sample(progress);
             const noise=this.noise?.sample(progress);
-            const template=variants[Math.min(variants.length-1,Math.floor(this.rand(i,0)*variants.length))];
+            const variantIndex=weights?
+                selectWeightedPrefab(weights,this.rand(i,0)):
+                Math.min(variants.length-1,Math.floor(this.rand(i,0)*variants.length));
+            const template=variants[variantIndex];
             const node=instantiate(template);node.name=`Spline Object ${String(i).padStart(3,'0')}`;
             node.setParent(this.ensureSpawnRoot('Spline Objects'));
             const frame=new Quat();Quat.multiply(frame,spline.node.worldRotation,spline.evaluateRotation(progress));
