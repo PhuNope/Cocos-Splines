@@ -331,6 +331,18 @@ const methods={
         }catch(e){return alertError('create-tangent-handles',e);}
     },
 
+    async createNoiseLayers(){try{
+        await ensureClasses();
+        const info=await selectedSpline();
+        if(!info?.found)throw Error('Select a SplineContainer.');
+        const dump=await Editor.Message.request('scene','query-node',info.rootUuid);
+        if(!Array.isArray(dump?.__comps__))throw Error('Cannot verify existing Spline Noise components.');
+        if(dump.__comps__.some(c=>c.type==='Splines.SplineNoise'))
+            return {ok:true,changed:false,message:'Spline Noise Layers already exists on this Container.'};
+        await component(info.rootUuid,'Splines.SplineNoise');
+        await snapshot();selectOnly(info.rootUuid);
+        return {ok:true,changed:true,message:'Noise Layers attached to Container. Add Layers in Inspector, then assign Noise to an Object Controller.'};
+    }catch(e){return alertError('create-noise-layers',e);}},
     async createModifiers(){try{
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
         await component(info.rootUuid,'Splines.SplineModifiers');await snapshot();selectOnly(info.rootUuid);
