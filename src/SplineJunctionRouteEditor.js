@@ -37,10 +37,12 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
       !finite(k.tangentIn)||!finite(k.tangentOut)))
    throw Error('Invalid multi-Junction route Join plan.');
  if(routeMode==='partial'){
-   for(const step of plan.chain){
+   for(let i=0;i<plan.chain.length;i++){
+     const step=plan.chain[i];
+     const linkProgress=i===0?step.toProgress:step.fromProgress;
      if(!Number.isFinite(step.fromProgress)||
         !Number.isFinite(step.toProgress)||
-        step.progress!==step.fromProgress||
+        step.progress!==linkProgress||
         step.fromProgress<0||step.fromProgress>1||
         step.toProgress<0||step.toProgress>1||
         Math.abs(step.fromProgress-step.toProgress)<1e-5)
