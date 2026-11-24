@@ -105,8 +105,9 @@ function parseSvg(input,scale=1){
     }
     if(!start||segments.length<1)throw Error('SVG path requires at least one drawable segment.');
     // Closed splines have one Knot per segment. Open splines have one extra end Knot.
-    const toLocal=p=>({x:p.x*scale,y:-p.y*scale,z:0});
-    const vector=(a,b)=>({x:(b.x-a.x)*scale,y:-(b.y-a.y)*scale,z:0});
+    const safe=n=>{if(!finite(n))throw Error('Scaled SVG geometry exceeds ±1e7 local units.');return n;};
+    const toLocal=p=>({x:safe(p.x*scale),y:safe(-p.y*scale),z:0});
+    const vector=(a,b)=>({x:safe((b.x-a.x)*scale),y:safe(-(b.y-a.y)*scale),z:0});
     const knots=[{position:toLocal(start),tangentIn:{x:0,y:0,z:0},
         tangentOut:{x:0,y:0,z:0},mode:4,tension:1/3}];
     for(let j=0;j<segments.length;j++){
