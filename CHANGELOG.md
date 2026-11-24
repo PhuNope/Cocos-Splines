@@ -1,3 +1,11 @@
+# Unreleased — Phase 4.2a Visual Geometry Graph Inspector (V2 Preview)
+
+- Added a scrollable, interactive node canvas directly inside the Geometry Graph Inspector. Cards can be dragged, selected and keyboard-nudged; typed path/mesh sockets support validated reconnection/reordering; Offset/Width nodes can be inserted or removed, and node parameters are editable.
+- Added a bounded, standalone JS Visual Graph model with strict v1 DAG validation, numeric contracts, no unknown properties/cycles/orphans, safe HTML escaping and deterministic layout.
+- Graph edits commit only through the native Cocos Creator Inspector `ui-prop` `change-dump` protocol. New serialized `graphLayoutJson` stores presentation-only positions separately from executable `graphJson`; dragging commits once on pointer release, not on every frame, and does not invalidate geometry/frame caches.
+- Added offline model/runtime schema parity and Inspector interaction regressions, Visual Graph usage/Editor acceptance guide. Native Cocos Creator 3.8.8 Undo/Redo/Prefab smoke tests are pending.
+- Independent graph assets, multi-input socket branching and profile generators remain future phases; no tag/release.
+
 # Unreleased — Phase 4.1 Typed Procedural Geometry Graph (V2 Preview)
 
 - Added **SplineGeometryGraphRenderer** with versioned JSON DAG (`spline`, `offset`, `width`, `ribbon`, `output`) and strict typed path/mesh ports; graphs reject cycles, invalid links, orphan nodes, unsafe settings and unregistered operations.
