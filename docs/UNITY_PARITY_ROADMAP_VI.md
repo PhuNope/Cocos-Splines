@@ -146,6 +146,15 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Cocos Creator 3.8.8 Physics Scene TerrainCollider/Prefab/Undo/Redo acceptance.
 - [ ] Follow-ups: exact OBB/Capsule/Mesh overlap, Collider2D/terrain-native projection and performance batching/visual preview.
 
+### Phase 3.8c2b1 — Precise OBB/Capsule Placement (v2 preview)
+
+- [x] Pure `SplinePopulationPreciseMath` sphere-footprint vs validated World OBB / Capsule / AABB, finite/bounded inputs, correct rounded Capsule end tests and inclusive contact.
+- [x] `SplineObjectController.usePreciseObstacleShapes` and `placementFootprintRadius` opt in only when Avoid Obstacle Colliders is enabled; no changes to legacy AABB path when off.
+- [x] Reuse strict BoxCollider and CapsuleCollider native World adapter functions from SplineAnimate, with conservative World AABB fallback for transform/bounds mismatches and unsupported Mesh/Terrain colliders.
+- [x] Rebuild signature considers shape transforms/radius while active; preflight before clear, original candidate indexes and density/spacing order preserved.
+- [x] Inspector controls, automated pure/adapter/regression tests, doc and native Editor 3.8.8 acceptance checklist.
+- [ ] Native Cocos Creator 3.8.8 acceptance; accurate MeshCollider BVH, prefab geometry bounds and multi-controller occupancy remain future work.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
