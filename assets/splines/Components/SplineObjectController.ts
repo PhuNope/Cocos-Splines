@@ -146,7 +146,8 @@ export class SplineObjectController extends Component {
                 const index=targets.indexOf(hit.collider);
                 const p=hit.hitPoint,n=hit.hitNormal;
                 return {targetIndex:index,distance:hit.distance,
-                    point:{x:p?.x,y:p?.y,z:p?.z},normal:{x:n?.x,y:n?.y,z:n?.z}};
+                    point:{x:p?.x??NaN,y:p?.y??NaN,z:p?.z??NaN},
+                    normal:{x:n?.x??NaN,y:n?.y??NaN,z:n?.z??NaN}};
             });
         });
     }
