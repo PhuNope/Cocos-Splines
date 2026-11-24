@@ -58,6 +58,22 @@ declare module 'cc' {
     export class Collider extends Component {
         worldBounds:Readonly<{center:Vec3;halfExtents:Vec3}>;
     }
+    export namespace geometry {
+        class Ray {
+            constructor(ox:number,oy:number,oz:number,dx:number,dy:number,dz:number);
+        }
+    }
+    export const PhysicsSystem:{
+        instance:{
+            raycast(ray:geometry.Ray,mask:number,distance:number,queryTrigger:boolean):boolean;
+            raycastResults:Array<{
+                collider:Collider;
+                distance:number;
+                hitPoint:Vec3;
+                hitNormal:Vec3;
+            }>;
+        };
+    };
     export class BoxCollider extends Collider {center:Vec3;size:Vec3;}
     export class CapsuleCollider extends Collider {center:Vec3;radius:number;cylinderHeight:number;direction:number;}
     export class MeshCollider extends Collider {mesh:Mesh|null;center:Vec3;convex:boolean;}
