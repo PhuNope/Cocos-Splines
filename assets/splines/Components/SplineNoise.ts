@@ -1,4 +1,4 @@
-import { _decorator, Component, Vec3, Enum } from 'cc';
+import { _decorator, Component, Vec3 } from 'cc';
 import { SplineContainer } from '../Core/SplineContainer';
 import { NoiseLayerConfig, sampleNoiseLayers } from '../Core/SplineNoiseMath';
 const {ccclass,property,menu,executeInEditMode}=_decorator;
@@ -45,7 +45,7 @@ export class SplineNoise extends Component {
         return new Vec3(v.x,v.y,v.z);
     }
     public getRevision():string {
-        return JSON.stringify([this.enabled,this.seed,this.spline?.uuid,
+        return JSON.stringify([this.enabled,this.seed,this.spline?.node.uuid,
             this.getSpline()?.closed,this.layers.map(layer=>[
                 layer.enabled,layer.frequency,layer.octaves,layer.persistence,
                 layer.phase,layer.seed,layer.amplitude.x,layer.amplitude.y,
