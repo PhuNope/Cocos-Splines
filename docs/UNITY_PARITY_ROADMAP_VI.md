@@ -96,6 +96,15 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Limits: 200 KB text, 256 segments; reject SVG transform/arc/geometry collections instead of silently distorting; pure and mocked Editor regression tests.
 - [ ] Native Cocos Creator 3.8.8 XY2D spline geometry, prefab and native Undo acceptance; future SVG multiple-path import, arc conversion, transform flattening and JSON export.
 
+### Phase 3.7b — Versioned Cocos JSON Geometry Round-trip (preview)
+
+- [x] Strict `cocos-splines/geometry` v1 schema, bounded 200 KB/256 Knots, finite values, quaternion and planar validation; no arbitrary component/UUID/reference deserialization.
+- [x] Read-only Scene export of natural-order **resolved Bézier** controls, closed/reversed, dimension, samplesPerCurve and local Node position/rotation/scale.
+- [x] Non-destructive sibling import with explicit `Broken` tangent serialization, single snapshot and best-effort failure cleanup. Same-parent local transform reproduces World placement; different parent may change World placement.
+- [x] Separate Inspector controls from legacy Unity JSON import, tests for cubic shape preservation / 3D/XY2D/XZ2D / invalid input / Scene IPC and error paths.
+- [ ] Preserve richer authoring metadata (Knot rotations, tangent handles, non-geometry components) only with a separate opt-in schema and Prefab-aware migration.
+- [ ] Native Creator Editor 3.8.8 Undo/Redo, Prefab/save-reopen acceptance and full CI verification remain pending.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
