@@ -367,6 +367,11 @@
         "methods": [
           "resampleSelectedSpline"
         ]
+      },
+      "convert-junction-tangent-mode": {
+        "methods": [
+          "convertJunctionTargetToBroken"
+        ]
       }
     },
     "inspector": {
