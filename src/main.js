@@ -528,9 +528,10 @@ const methods={
             const args=[junctionUuid,anchorIndex,goal,seamMode,routeMode,
                 startSide,goalSide];
             // Legacy IPC shape retained for the default minimum-switch mode.
-            if(routeCostMode!=='switches'||junctionPenalty!==10||
-                routePolicy!=='ignore')
+            if(routePolicy!=='ignore')
                 args.push(routeCostMode,junctionPenalty,routePolicy);
+            else if(routeCostMode!=='switches'||junctionPenalty!==10)
+                args.push(routeCostMode,junctionPenalty);
             const plan=await invokeScene('queryMultiJunctionJoinPlan',...args);
             if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
             validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode,
