@@ -97,7 +97,7 @@ try{
   class Component{constructor(){this.node=new Node();this.enabled=true;}}
   const created=[],cc={_decorator:{ccclass:()=>cl=>cl,property:()=>{},
     menu:()=>cl=>cl},Component,Vec3,Quat,Node,Prefab:class{},Enum:x=>x,
-    instantiate:(prefab)=>{const obj=new Node('clone-'+prefab.id);created.push(obj);return obj;}};
+    instantiate:(prefab)=>{const obj=new Node('clone-'+prefab.id);obj.templateId=prefab.id;created.push(obj);return obj;}};
   const original=Module._load;
   Module._load=function(name,parent,isMain){
     if(name==='cc')return cc;
@@ -122,7 +122,7 @@ try{
     assert.equal(controller.enablePopulationRules,false);
     assert.equal(controller.respawn(),6);
     const legacy=created.slice(-6).map(node=>({
-      name:node.name,worldPosition:node.worldPosition,template:node.name
+      name:node.name,worldPosition:node.worldPosition,template:node.templateId
     }));
     assert.deepEqual(legacy.map(x=>x.name),[
       'Spline Object 000','Spline Object 001','Spline Object 002',
@@ -132,10 +132,15 @@ try{
     assert.equal(controller.respawn(),6,'Enabled neutral rules have no effect');
     assert.deepEqual(created.slice(-6).map(node=>node.worldPosition),
       legacy.map(x=>x.worldPosition));
+    assert.deepEqual(created.slice(-6).map(node=>node.templateId),
+      legacy.map(x=>x.template));
     controller.minWorldSpacing=2.1;controller.respawn();
     assert.deepEqual(created.slice(-3).map(node=>node.name),
       ['Spline Object 000','Spline Object 002','Spline Object 004'],
       'World spacing preserves original candidate index and RNG channel');
+    assert.deepEqual(created.slice(-3).map(node=>node.templateId),
+      [legacy[0].template,legacy[2].template,legacy[4].template],
+      'Thinning must not reshuffle deterministic prefab variant selection');
     controller.minWorldSpacing=0;controller.exclusions=[{startProgress:.2,endProgress:.8}];
     assert.equal(controller.respawn(),3,'Exclude progress 0.2–0.8');
     assert.deepEqual(created.slice(-3).map(n=>n.name),
