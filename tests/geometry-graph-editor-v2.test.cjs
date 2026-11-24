@@ -35,10 +35,13 @@ async function run(){
   shouldFail=false;
   let selected='graph-node';
   const calls=[];
+  let ext;
   globalThis.Editor={
    Selection:{getSelected:()=>selected?[selected]:[]},
    Message:{request:async (...args)=>{
     calls.push(args);
+    if(args[0]==='cocos-splines'&&args[1]==='rebuild-geometry-graph')
+     return ext.methods.rebuildGeometryGraph();
     if(args[0]==='scene'&&args[1]==='execute-scene-script'){
      const request=args[2];
      assert.equal(request.name,'cocos-splines');
@@ -47,7 +50,7 @@ async function run(){
     throw Error('Graph rebuild must never snapshot/create/destroy Scene nodes.');
    }},
   };
-  const ext=require(root+'/dist/main.js');
+  ext=require(root+'/dist/main.js');
   assert.equal((await ext.methods.rebuildGeometryGraph()).ok,true);
   assert.equal(rebuilds,3);
   assert.equal(calls.length,1);
@@ -68,14 +71,14 @@ async function run(){
   ui.$.rebuildGraph.events.click();
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(rebuilds,4);
-  assert.equal(calls.length,2);
+  assert.equal(calls.length,3,'Inspector click uses both extension and Scene IPC');
   assert.match(ui.$.status.textContent,/Graph mesh regenerated/);
   shouldFail=true;
   ui.$.rebuildGraph.events.click();
   await new Promise(resolve=>setImmediate(resolve));
   assert.match(ui.$.status.textContent,/cycle detected/);
   assert.equal(rebuilds,5);
-  assert.equal(calls.length,3);
+  assert.equal(calls.length,5,'Second Inspector click repeats two IPC calls');
   const pkg=require(root+'/package.json');
   assert(pkg.scripts.test.includes('geometry-graph-editor-v2.test.cjs'));
   console.log('GEOMETRY GRAPH EDITOR V2 PASS: read-only Scene lookup, selected-only rebuild, failure handling, Inspector button and no snapshot.');
