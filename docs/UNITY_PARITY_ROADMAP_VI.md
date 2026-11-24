@@ -115,6 +115,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Cocos Creator 3.8.8 Inspector layer serialization, prefab save/reopen, Gizmos and Undo/Redo acceptance.
 - [ ] Next: density masks and interval-based population rules, noise preview Gizmos, optional procedural geometry consumers (none enabled by default).
 
+### Phase 3.8b — Advanced Population Density/Exclusion/World Spacing (v2 preview)
+
+- [x] Pure `SplinePopulationMath` with bounded 2048 candidate count, 64 density keys, 64 exclusion intervals, deterministic stable seed/index hash and strict finite World position validation.
+- [x] Linear density masks, circular seam interpolation on closed paths, wrap-over-seam no-spawn intervals, and uniform density × mask thinning.
+- [x] World-space center-to-center minimum spacing using spatial hash after Modifiers/Noise/Random Offset, including cross-seam and self-intersecting spline candidates. This is not Collider/OBB overlap prevention.
+- [x] Serialized opt-in `SplineObjectController` properties, Inspector fields, revision invalidation, and preflight before deleting previous spawned Nodes. Disabled-by-default legacy placement and original prefab variant RNG index are preserved.
+- [x] New deterministic mask, forbidden-range, spacing, invalid-policy, safe-respawn and compatibility regression tests registered in v2 CI.
+- [ ] Native Cocos Creator 3.8.8 Inspector/Prefab/Undo/Redo acceptance and CI pass/artifact verification pending.
+- [ ] Next: Collider-aware placement + terrain/material density masks, weighted prefab variants, typed procedural population module graph.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
