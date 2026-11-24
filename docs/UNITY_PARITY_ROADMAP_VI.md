@@ -211,6 +211,17 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 
 ### Phase 4 — Procedural geometry
 
+#### Phase 4.1 — Typed Spline Geometry Graph foundation (v2 preview)
+
+- [x] Versioned JSON graph with `spline` / `offset` / `width` / `ribbon` / `output` nodes, typed path/mesh ports, one selected output, strict schema/numeric limits (3–32 nodes).
+- [x] Compile by dependency-first traversal; reject unknown node names/types/fields, missing inputs, wrong port types, disconnected nodes and cycles before execution.
+- [x] Pure `GeometryGraphRunner` reuses source frames, caches computed node values by parameters/upstream node version and uses atomic cache swap on failure; graph parameter edits dirty only affected downstream nodes.
+- [x] Ribbon node reuses canonical `SplineRoadMath.buildRoadGeometry` (UVs, normals, thickness, end caps, winding) rather than duplicate mesh tessellation.
+- [x] `SplineGeometryGraphRenderer` uses stable World frames from `SplineWorldFrames`, converts to renderer-local, creates transient meshes with a two-phase commit, and preserves prior output if JSON/geometry/mesh allocation fails. Supports material, Rebuild On Change and selected-only wireframe through Cocos-Gizmos v3 decorator.
+- [x] Dedicated JSON Inspector / Rebuild Graph action, native Cocos Creator 3.8.8 acceptance guide and Core/component regression tests in V2 CI.
+- [ ] Native Cocos Creator 3.8.8 JSON Inspector, Material, parent scale, closed seam and Undo/Redo smoke tests.
+- [ ] Phase 4.2: interactive visual node canvas with typed sockets and graph assets; Phase 4.3: tube/extrude/deform/profile generator nodes, multi-input outputs, graph profiling.
+
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
 
 ### Phase 5 — Runtime networks & controllers
