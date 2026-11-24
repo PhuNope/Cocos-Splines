@@ -24,7 +24,7 @@ export interface MeshColliderGeometryOptions {
 }
 type V=ColliderBoundsPoint;
 const finite=(n:number)=>Number.isFinite(n);
-const valid=(p:V|null|undefined)=>!!p&&[p.x,p.y,p.z].every(finite);
+const valid=(p:V|null|undefined):p is V=>!!p&&[p.x,p.y,p.z].every(finite);
 const matrixValid=(m:ColliderBoxMatrix|null|undefined):m is ColliderBoxMatrix=>
     !!m&&[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,
         m.m12,m.m13,m.m14].every(finite);
