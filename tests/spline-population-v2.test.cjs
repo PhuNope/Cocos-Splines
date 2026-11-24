@@ -120,6 +120,11 @@ try{
     controller.spline=spline;controller.prefabs=[{id:'A'},{id:'B'}];
     controller.count=6;controller.alignToSpline=false;
     assert.equal(controller.enablePopulationRules,false);
+    const inactiveSignature=controller.signature();
+    controller.density=.25;
+    assert.equal(controller.signature(),inactiveSignature,
+      'Editing inactive policy should not trigger a legacy population respawn');
+    controller.density=1;
     assert.equal(controller.respawn(),6);
     const legacy=created.slice(-6).map(node=>({
       name:node.name,worldPosition:node.worldPosition,template:node.templateId
