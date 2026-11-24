@@ -49,7 +49,7 @@ export class SplineGeometryGraphRenderer extends Component {
     private source():SplineContainer|null{
         return this.spline||this.getComponent(SplineContainer);
     }
-    private signature():string {
+    private frameSignature():string {
         const source=this.source();
         const matrix=(m:Mat4|undefined)=>m?[
             m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,
@@ -57,9 +57,11 @@ export class SplineGeometryGraphRenderer extends Component {
         ]:null;
         return JSON.stringify([
             source?.getRevision(),matrix(source?.node.worldMatrix),
-            matrix(this.node?.worldMatrix),
-            this.graphJson,this.samplesPerCurve,this.gizmoEdgeLimit,
+            matrix(this.node?.worldMatrix),this.samplesPerCurve,
         ]);
+    }
+    private signature():string {
+        return JSON.stringify([this.frameSignature(),this.graphJson,this.gizmoEdgeLimit]);
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
@@ -132,7 +134,7 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         const signature=this.signature();
         const geometry=this._runner.evaluate(plan,{
-            frames,closed:source.closed,revision:signature+'|frames',
+            frames,closed:source.closed,revision:this.frameSignature(),
         });
         const wire=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({
