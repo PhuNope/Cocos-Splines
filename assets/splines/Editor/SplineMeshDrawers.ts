@@ -5,6 +5,7 @@ import type { SplineExtrude } from '../Components/SplineExtrude';
 import type { SplineMeshDeform } from '../Components/SplineMeshDeform';
 import type { SplineObjectBender } from '../Components/SplineObjectBender';
 import type { SplineJunctionMesh } from '../Components/SplineJunctionMesh';
+import type { SplineGeometryGraphRenderer } from '../Components/SplineGeometryGraphRenderer';
 
 /** Draw selection wireframe if the separately installed Cocos-Gizmos is present. */
 export function drawMeshGizmoLines(owner:Node, modelNode:Node, geometry:MeshGizmoLines|null, color:Color):void {
@@ -42,6 +43,12 @@ export class SplineMeshDeformGizmos extends SingleMeshDrawer<SplineMeshDeform> {
 
 export class SplineJunctionMeshGizmos extends SingleMeshDrawer<SplineJunctionMesh> {
     constructor(component:SplineJunctionMesh){super(component,new Color(190,132,255,255));}
+}
+
+export class SplineGeometryGraphGizmos extends SingleMeshDrawer<SplineGeometryGraphRenderer> {
+    constructor(component:SplineGeometryGraphRenderer){
+        super(component,new Color(150,218,245,255));
+    }
 }
 
 export class SplineObjectBenderGizmos {
