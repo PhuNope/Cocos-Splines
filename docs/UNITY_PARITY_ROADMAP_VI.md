@@ -17,7 +17,7 @@
 | SplineArchitect SnapSettings / align / snapping | Thiếu tool tích hợp editor | 2 |
 | SplineArchitect Noise/Population | Chưa có cùng mô hình noise + distribution | 3–4 |
 | SplineArchitect connectors / Curvy connections | Có Junction cơ bản; thiếu network graph operations | 3/5 |
-| Curvy JSON/SVG converters | JSON import có sẵn; SVG single-path M/L/H/V/C/S/Q/T/Z import/export XY2D/XZ2D đã thêm (preview); thiếu full multi-path/transform/arc, JSON export | 3 |
+| Curvy JSON/SVG converters | Legacy Unity JSON import + Cocos versioned geometry JSON round-trip 3D/XY2D/XZ2D (preview); SVG single-path import/export 2D. Thiếu SVG multi-path/transform/arc và full component/prefab serialization | 3 |
 | Curvy ConformPath, BuildVolumeCaps/Spots | Một phần qua geometry hiện có | 4 |
 | Curvy Generator / CG module graph | Chưa có typed module graph + dirty propagation | 4 |
 | Curvy advanced controllers | Animate/Positioner mới hỗ trợ một phần | 5 |
