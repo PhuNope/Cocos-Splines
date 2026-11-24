@@ -58,6 +58,8 @@ export class SplineObjectController extends Component {
     }
     /** Replace only the instances owned by this component. */
     public respawn():number{
+        // Reject malformed noise configs BEFORE destroying previously spawned objects.
+        if(this.noise)this.noise.sample(0);
         this.clear();
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         const variants=this.prefabs.filter((p):p is Prefab=>!!p);
