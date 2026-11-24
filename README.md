@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Weighted Prefabs and explicit Collider avoidance (v2 preview)
+
+SplineObjectController supports **Use Prefab Weights** with one nonnegative weight per prefab slot, and **Avoid Obstacle Colliders** (up to 64 explicitly assigned Collider worldBounds AABBs with World-unit clearance). Both are opt-in and preserve legacy seed/jitter/variant selection when disabled. Candidate positions are tested after Modifiers/Noise/Jitter and before Density/World Spacing; invalid bounds/weights fail preflight without clearing previous spawned objects. Collider avoidance is **conservative AABB center clearance**, not full mesh collision or terrain conform. See [setup and acceptance](docs/POPULATION_COLLIDERS_WEIGHTS_V2_VI.md).
+
 ### Advanced population density masks (v2 preview)
 
 SplineObjectController → **Advanced Population · opt-in** lets you filter deterministic Count/Distance candidates by uniform **Density**, linear **Density Keys** over normalized arc progress, **Exclusion intervals** (closed-spline wrap supported), and **Min World Spacing** among final prefab centers after modifiers/noise/jitter. Candidate indexes remain unchanged, so filtering never reshuffles prefab variants or random offsets. Validation happens before clearing previously spawned instances; invalid rules do not delete the old population. **Disabled by default**, preserving existing scenes. This is center spacing, not collider collision avoidance. See [Advanced Population guide](docs/ADVANCED_POPULATION_V2_VI.md).
