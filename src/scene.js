@@ -451,7 +451,7 @@ function queryGeometryGraphAsset(uuid){
         // Do not rely on `JSON.stringify(undefined)` when JsonAsset is missing.
         if(typeof graphJson!=='string'||graphJson.length>16384)
             throw Error('Invalid or oversized Geometry Graph content.');
-        return {ok:true,componentIndex,graphJson,assetMode:!!comp.useGraphAsset,
+        return {ok:true,componentIndex,graphJson,localGraphJson:comp.graphJson,assetMode:!!comp.useGraphAsset,
             assetName:comp.graphAsset?.name||null};
     }catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
