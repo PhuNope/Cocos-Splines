@@ -221,7 +221,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Dedicated JSON Inspector / Rebuild Graph action, native Cocos Creator 3.8.8 acceptance guide and Core/component regression tests in V2 CI.
 - [ ] Native Cocos Creator 3.8.8 JSON Inspector, Material, parent scale, closed seam and Undo/Redo smoke tests.
 - [x] Phase 4.2a: in-Inspector visual graph canvas with typed path/mesh socket reconnection, Offset/Width insertion/removal, numeric parameter editing, draggable card layout, native dump commits and isolated frame layout serialization.
-- [ ] Phase 4.2b: independent graph assets, import/export and reusable graph references; multi-input/branching and richer auto layout.
+- [x] Phase 4.2b: shared **native JsonAsset** graph references for multiple GeometryGraphRenderer instances, content-based revision invalidation, bounded non-overwriting JSON export/import and copy-to-local with rollback; shared canvas read-only.
+- [ ] Phase 4.2c: native visual editing of shared assets with explicit save intent, asset-db synchronization and UX polish; multi-input/branching and richer auto layout.
 - [ ] Phase 4.3: tube/extrude/deform/profile generator nodes, multi-output graphs and profiling.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
