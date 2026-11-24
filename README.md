@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Surface / Terrain Conform for object population (v2 preview)
+
+SplineObjectController now has optional **Surface / Terrain Conform** using Cocos Physics 3D downward raycasts against **explicit assigned Collider/TerrainCollider targets**. The nearest valid hit places a prefab center at the surface plus a normal offset, with an optional up-normal rotation while preserving projected spline forward. Missing hits can be dropped or left unprojected. Projection is performed before obstacle / World spacing filters, and preflight failures do not destroy previous objects. Disabled by default with no Physics queries. See [Surface Conform guide](docs/POPULATION_SURFACE_CONFORM_V2_VI.md). Native Creator 3.8.8 acceptance remains pending.
+
 ### Weighted Prefabs and explicit Collider avoidance (v2 preview)
 
 SplineObjectController supports **Use Prefab Weights** with one nonnegative weight per prefab slot, and **Avoid Obstacle Colliders** (up to 64 explicitly assigned Collider worldBounds AABBs with World-unit clearance). Both are opt-in and preserve legacy seed/jitter/variant selection when disabled. Candidate positions are tested after Modifiers/Noise/Jitter and before Density/World Spacing; invalid bounds/weights fail preflight without clearing previous spawned objects. Collider avoidance is **conservative AABB center clearance**, not full mesh collision or terrain conform. See [setup and acceptance](docs/POPULATION_COLLIDERS_WEIGHTS_V2_VI.md).
