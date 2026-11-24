@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Advanced population density masks (v2 preview)
+
+SplineObjectController → **Advanced Population · opt-in** lets you filter deterministic Count/Distance candidates by uniform **Density**, linear **Density Keys** over normalized arc progress, **Exclusion intervals** (closed-spline wrap supported), and **Min World Spacing** among final prefab centers after modifiers/noise/jitter. Candidate indexes remain unchanged, so filtering never reshuffles prefab variants or random offsets. Validation happens before clearing previously spawned instances; invalid rules do not delete the old population. **Disabled by default**, preserving existing scenes. This is center spacing, not collider collision avoidance. See [Advanced Population guide](docs/ADVANCED_POPULATION_V2_VI.md).
+
 ### Seeded Noise Layers for object population (v2 preview)
 
 Add **Spline Noise Layers** from the Extensions menu or SplineContainer Inspector. The opt-in `SplineNoise` Component exposes up to 16 deterministic multi-octave layers (`frequency`, `octaves`, `persistence`, `phase`, `seed`, `amplitude`, `fadeEnds`). Output is a Right/Up/Forward displacement sampled at normalized spline progress; closed loops tile continuously at the seam. Assign `SplineNoise` to **SplineObjectController → Noise** to offset generated prefab instances. With the field empty, legacy population is identical. No Knot, Road or source Mesh geometry changes. See [Noise Layers guide](docs/NOISE_LAYERS_V2_VI.md). Native Creator 3.8.8 validation remains pending.
