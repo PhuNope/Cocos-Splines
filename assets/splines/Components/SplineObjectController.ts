@@ -292,7 +292,8 @@ export class SplineObjectController extends Component {
             ]:null,this.avoidObstacleColliders?[
                 this.usePreciseObstacleShapes,
                 this.usePreciseObstacleShapes?[
-                    this.placementFootprintRadius,this.autoPrefabFootprint,this.useMeshColliderBVH,
+                    this.autoPrefabFootprint?null:this.placementFootprintRadius,
+                    this.autoPrefabFootprint,this.useMeshColliderBVH,
                     this.obstacleColliders.map(c=>{
                         if(!c)return null;
                         return [c.node?.worldMatrix,
