@@ -57,7 +57,7 @@ export class SplineGeometryGraphRenderer extends Component {
             m.m08,m.m09,m.m10,m.m12,m.m13,m.m14,
         ]:null;
         return JSON.stringify([
-            source?.getRevision(),matrix(source?.node.worldMatrix),
+            source?.node?.uuid,source?.getRevision(),matrix(source?.node.worldMatrix),
             matrix(this.node?.worldMatrix),this.samplesPerCurve,
         ]);
     }
