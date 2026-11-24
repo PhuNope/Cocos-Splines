@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### SVG path interoperability (v2 preview)
+
+SplineContainer Inspector → **SVG Path · Import / Export (2D)** accepts one SVG `<path>` or plain `d` commands M/L/H/V/C/S/Q/T/Z (absolute or relative). SVG Y-down is converted to Cocos XY2D Y-up. Import generates a **new sibling spline** and never rewrites the source; choose Units per SVG pixel. Export reads the spline’s **resolved natural cubic controls**, producing local-space SVG text for XY2D or XZ2D; no file write is performed. SVG arcs (`A`), `transform`, multiple paths and other SVG shapes are rejected explicitly. Full native Creator 3.8.8 validation is pending. See `docs/SVG_INTEROP_V2_VI.md`.
+
 ## Documentation
 
 Start at [`docs/index.html`](docs/index.html) for the multi-page guide, Inspector usage, API references and TypeScript examples.
