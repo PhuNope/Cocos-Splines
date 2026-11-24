@@ -352,7 +352,7 @@ const methods={
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
         const id=await makeNode(info.rootUuid,'Spline Object Controller');
         await component(id,'Splines.SplineObjectController');await snapshot();selectOnly(id);
-        return {ok:true,message:'Object Controller created. Assign spline, Prefabs and optional Modifiers.'};
+        return {ok:true,message:'Object Controller created. Assign spline, Prefabs, optional Modifiers and Noise Layers.'};
     }catch(e){return alertError('create-object-controller',e);}},
     async createMorph(){try{
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
