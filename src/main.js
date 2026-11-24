@@ -872,7 +872,7 @@ const methods={
     /** SVG import always creates a NEW sibling XY2D Spline. On partial failure,
      * remove only the nodes created by this operation (never touch source). */
     async importSVG(input,unitsPerPixel=1){
-        let created=null;
+        let created=null,committed=false;
         try{
             const data=parseSvg(input,unitsPerPixel);
             await ensureClasses();
@@ -892,12 +892,13 @@ const methods={
                 await setKnotValue(id,'tangentsInKnotSpace',false,'Boolean');
             }
             if(data.closed)await property(created,0,'closed',true,'Boolean',false);
-            await snapshot();
+            await snapshot();committed=true;
             selectOnly(created);
-            await invokeScene('refreshPreview',created);
+            try{await invokeScene('refreshPreview',created);}
+            catch(refreshError){console.warn('[Cocos Splines] SVG preview refresh skipped:',refreshError);}
             return {ok:true,root:created,knots:data.knots.length,closed:data.closed};
         }catch(error){
-            if(created){
+            if(created&&!committed){
                 try{await Editor.Message.request('scene','remove-node',{uuid:created,snapshot:false});}
                 catch(cleanupError){console.error('[Cocos Splines] SVG import cleanup failed:',cleanupError);}
             }
