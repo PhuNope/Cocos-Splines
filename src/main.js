@@ -7,6 +7,7 @@ const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
 const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
 const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
+const {validateMultiJunctionPlan,commitMultiJunctionRoute}=require('./SplineJunctionRouteEditor');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
@@ -494,6 +495,47 @@ const methods={
                     ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
                     ' One Scene snapshot; tangent angles unchanged.'};
         }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Join a shortest endpoint-only chain across two or more Junctions.
+     * The destination is an existing SplineContainer Node UUID. Each source
+     * spline is traversed end-to-end, once, preserving the authored cubics.
+     */
+    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid){
+        if(knotEditBusy)return alertError('join-multi-junction-route',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        try{
+            if(!Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63||
+               typeof goalSplineUuid!=='string'||!goalSplineUuid.trim()||
+               goalSplineUuid.length>128)
+                throw Error('Enter a valid anchor link and destination Spline UUID.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select an active SplineJunction.');
+            await ensureClasses();
+            const goal=goalSplineUuid.trim();
+            const plan=await invokeScene('queryMultiJunctionJoinPlan',
+                junctionUuid,anchorIndex,goal);
+            if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
+            validateMultiJunctionPlan(plan,anchorIndex,goal);
+            if(plan.junctionUuid!==junctionUuid)
+                throw Error('Multi-Junction planner returned foreign Junction.');
+            const check=async()=>{
+                const live=await invokeScene('queryMultiJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!live?.ok)throw Error(live?.error||
+                    'Multi-Junction route or Scene changed during Join.');
+            };
+            return await commitMultiJunctionRoute(plan,{
+                check,createNode:makeNode,component,
+                nodeProperty:setNodeSerialized,containerProperty:property,
+                appearanceWrites,position,setKnot:setKnotValue,snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',
+                    {uuid,snapshot:false}),
+                select:selectOnly,
+                refresh:uuid=>invokeScene('refreshPreview',uuid),
+            });
+        }catch(e){return alertError('join-multi-junction-route',e);}
         finally{knotEditBusy=false;}
     },
     /** Preserve Junction fan-out branches as separate independent splines

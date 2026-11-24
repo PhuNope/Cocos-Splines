@@ -8,8 +8,9 @@ const {worldVector,endpointSide,planJunctionTangent}=require('./SplineJunctionTa
 const {planJunctionBrokenConversion}=require('./SplineJunctionModeMath');
 const {planJunctionJoin}=require('./SplineJunctionJoinMath');
 const {planJunctionFanout}=require('./SplineJunctionFanoutMath');
+const {planEndpointJunctionChain,planMultiJunctionGeometry}=require('./SplineJunctionRouteMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
-function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
+function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRoot}){
  function junctionAt(uuid){
    const node=resolve(uuid);
    if(!node||node.isValid===false)return null;
@@ -198,6 +199,130 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
      if(!junction||typeof guard!=='string'||!guard||
         fingerprint(junction,null,'join')!==guard)
        throw Error('Junction source spline or active Scene changed during Join.');
+     return {ok:true};
+   }catch(error){return {ok:false,error:String(error?.message||error)};}
+ }
+ /** Enumerate active Junctions in the CURRENT Scene only.
+  * Does not use stale runtime active registries or edit any Node.
+  */
+ function allSceneJunctions(){
+   if(typeof sceneRoot!=='function')
+     throw Error('Multi-Junction Join requires a Scene root adapter.');
+   const root=sceneRoot();
+   if(!root||root.isValid===false||root.uuid!==sceneId())
+     throw Error('Open an active Scene before Multi-Junction Join.');
+   const stack=[root],seen=new Set(),junctions=[];
+   while(stack.length){
+     const node=stack.pop();
+     if(!node||node.isValid===false||seen.has(node))continue;
+     seen.add(node);
+     if(seen.size>20000)
+       throw Error('Scene too large for multi-Junction snapshot.');
+     if(Array.isArray(node.components)){
+       for(const component of node.components){
+         if(component?.isValid!==false&&component.enabled!==false&&
+            classOf(component)==='Splines.SplineJunction')
+           junctions.push(component);
+       }
+     }
+     if(Array.isArray(node.children))
+       for(const child of node.children)stack.push(child);
+   }
+   junctions.sort((a,b)=>a.node.uuid.localeCompare(b.node.uuid));
+   if(junctions.length>128)throw Error('More than 128 Junctions in Scene.');
+   return junctions;
+ }
+ function multiJunctionFingerprint(junctions){
+   return JSON.stringify([sceneId(),junctions.map(j=>[
+     j.node.uuid,fingerprint(j,null,'join'),
+   ])]);
+ }
+ function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid){
+   try{
+     if(typeof uuid!=='string'||!uuid||typeof goalSplineUuid!=='string'||
+        !goalSplineUuid||goalSplineUuid.length>128||
+        !Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63)
+       throw Error('Choose an anchor Junction link and destination Spline UUID.');
+     const anchorJunction=junctionAt(uuid);
+     if(!anchorJunction)throw Error('Select an active SplineJunction.');
+     const root=resolve(goalSplineUuid);
+     const destination=root?.components?.find(c=>
+       c?.isValid!==false&&classOf(c)==='Splines.SplineContainer');
+     if(!destination||destination.enabled===false||
+        destination.closed||destination.count<2)
+       throw Error('Destination UUID must reference an open SplineContainer.');
+     const junctions=allSceneJunctions();
+     if(!junctions.includes(anchorJunction))
+       throw Error('Selected anchor Junction is not in active Scene.');
+     const links=[],bySpline=new Map();
+     for(const junction of junctions){
+       for(const e of samples(junction)){
+         const splineId=e.spline.node.uuid;
+         const prior=bySpline.get(splineId);
+         if(prior&&prior!==e.spline)
+           throw Error('Duplicate SplineContainer Node UUID.');
+         bySpline.set(splineId,e.spline);
+         links.push({junctionId:junction.node.uuid,linkIndex:e.index,
+           splineId,progress:e.progress,world:e.position});
+       }
+     }
+     if(links.length>1024)
+       throw Error('More than 1024 Junction links in Scene.');
+     const chain=planEndpointJunctionChain(links,{
+       junctionId:uuid,linkIndex:anchorIndex,
+     },goalSplineUuid);
+     const descriptors=chain.path.map(entry=>{
+       const spline=bySpline.get(entry.splineId);
+       if(!spline||spline.closed||spline.enabled===false||
+          spline.node?.isValid===false)
+         throw Error('Route spline is inactive or closed.');
+       const knots=spline.knots;
+       if(knots.length<2||knots.length>128||
+          knots.some(k=>!k?.node||k.node.isValid===false||
+             k.node.parent!==spline.node)||
+          typeof spline.getNaturalResolvedKnots!=='function')
+         throw Error('Route spline requires 2–128 direct-child Knots.');
+       const frame=queryKnotEditFrame(spline.node.uuid);
+       if(!frame?.ok)throw Error(frame?.error||
+         'Route spline World matrix unavailable.');
+       return {matrix:frame.matrix,
+         knots:spline.getNaturalResolvedKnots(),
+         dimension:spline.dimension,reversed:!!spline.reversed,
+         progress:entry.progress};
+     });
+     const result=planMultiJunctionGeometry(chain.path,descriptors);
+     const first=bySpline.get(chain.path[0].splineId);
+     const node=first.node;
+     if(!node.parent||node.parent.isValid===false||
+        !node.position||!node.rotation||!node.scale)
+       throw Error('Route anchor Container has invalid parent or transform.');
+     const rootTransform={
+       position:{x:node.position.x,y:node.position.y,z:node.position.z},
+       rotation:{x:node.rotation.x,y:node.rotation.y,
+         z:node.rotation.z,w:node.rotation.w},
+       scale:{x:node.scale.x,y:node.scale.y,z:node.scale.z},
+     };
+     if(Object.values(rootTransform).some(o=>
+        Object.values(o).some(v=>!Number.isFinite(v))))
+       throw Error('Route anchor transform has nonfinite values.');
+     const samplesPerCurve=Math.max(...chain.path.map(entry=>
+       bySpline.get(entry.splineId).samplesPerCurve));
+     if(!Number.isInteger(samplesPerCurve)||samplesPerCurve<4||
+        samplesPerCurve>256)
+       throw Error('Invalid route sampling density.');
+     return {ok:true,...result,
+       junctionUuid:uuid,anchorIndex,goalSplineUuid,
+       parentUuid:node.parent.uuid,rootTransform,
+       sourceName:String(node.name||'Spline').slice(0,60),
+       samplesPerCurve,containerAppearance:captureContainerAppearance(first),
+       chain:chain.path,guard:multiJunctionFingerprint(junctions)};
+   }catch(error){return {ok:false,error:String(error?.message||error)};}
+ }
+ function queryMultiJunctionJoinValid(uuid,guard){
+   try{
+     if(!junctionAt(uuid)||typeof guard!=='string'||!guard||
+        multiJunctionFingerprint(allSceneJunctions())!==guard)
+       throw Error('Multi-Junction route source or active Scene changed.');
      return {ok:true};
    }catch(error){return {ok:false,error:String(error?.message||error)};}
  }
@@ -427,6 +552,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
     queryJunctionTangentPlan,queryJunctionTangentState,
     queryJunctionConversionPlan,queryJunctionConversionState,
     queryJunctionJoinPlan,queryJunctionJoinValid,
-    queryJunctionFanoutPlan};
+    queryJunctionFanoutPlan,
+    queryMultiJunctionJoinPlan,queryMultiJunctionJoinValid};
 }
 module.exports={createJunctionScene};

@@ -547,6 +547,7 @@ function spawnPrefabs(uuid,kind,action){
 const junctionScene=require('./SplineJunctionScene').createJunctionScene({
     resolve,classOf,queryKnotEditFrame,
     sceneId:()=>require('cc').director.getScene()?.uuid,
+    sceneRoot:()=>require('cc').director.getScene(),
 });
 /** Read-only editor diagnostic. Never writes Junction, Phases or Scene state. */
 function queryTrafficConflicts(uuid){

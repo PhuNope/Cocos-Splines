@@ -78,7 +78,7 @@ function makeInspector(type){
     }
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
-          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents, may have a visible G1 kink, and does not preserve extra Knot components. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
+          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents, may have a visible G1 kink, and does not preserve extra Knot components. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Across Junctions chooses a deterministic minimum-switch route through full open splines between a selected Anchor link and a destination Spline Node UUID (at least two distinct Junctions); requires physically snapped endpoints, ignores runtime traffic rules. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
           <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
           <div class="spl-btns">
             <label>Anchor link # <input type="number" class="spl-index-input spl-connector-anchor" min="0" max="63" step="1" value="0"></label>
@@ -91,6 +91,12 @@ function makeInspector(type){
               <input type="text" class="spl-index-input spl-fanout-targets" value="1,2" style="width:115px" placeholder="1,2,3">
             </label>
             <button type="button" class="spl-btn spl-join-fanout">Join Fan-out → New Splines</button>
+          </div>
+          <div class="spl-btns">
+            <label>Destination Spline Node UUID
+              <input type="text" class="spl-index-input spl-route-destination" style="width:170px" placeholder="Paste destination Node UUID">
+            </label>
+            <button type="button" class="spl-btn spl-join-route">Join Across Junctions → New Spline</button>
           </div>
           <div class="spl-btns">
             <label>Tangent <select class="spl-index-input spl-tangent-mode" style="max-width:120px;width:120px"><option value="g1">G1 · direction</option><option value="c1">C1 · magnitude</option></select></label>
@@ -107,6 +113,8 @@ function makeInspector(type){
         selectors.joinConnector='.spl-join-connector';
         selectors.fanoutTargets='.spl-fanout-targets';
         selectors.joinFanout='.spl-join-fanout';
+        selectors.routeDestination='.spl-route-destination';
+        selectors.joinRoute='.spl-join-route';
         selectors.alignConnector='.spl-align-connector';
         selectors.convertConnectorMode='.spl-convert-connector-mode';
         selectors.tangentMode='.spl-tangent-mode';
@@ -283,6 +291,9 @@ function makeInspector(type){
             if(type==='junction'){
                 this.$.addJunctionMesh.addEventListener('click',()=>void callEditor(this,'create-junction-mesh'));
                 this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
+                this.$.joinRoute.addEventListener('click',()=>void callEditor(this,
+                    'join-multi-junction-route',Number(this.$.connectorAnchor.value),
+                    this.$.routeDestination.value.trim()));
                 this.$.joinFanout.addEventListener('click',()=>void callEditor(this,
                     'join-junction-fanout',Number(this.$.connectorAnchor.value),
                     this.$.fanoutTargets.value));
