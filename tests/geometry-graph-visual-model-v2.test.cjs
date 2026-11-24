@@ -30,12 +30,22 @@ try{
  assert.equal(m.parseGraph(json).map.get('ribbon').capEnds,true);
  assert.equal(m.parseGraph(json).map.get('ribbon').cornerMode,1);
  const before=json;
+ const reordered=m.applyGraphEdit(json,'connect',{source:'width1',target:'offset1'});
+ assert.deepEqual(m.parseGraph(reordered).ordered.map(n=>n.type),
+   ['spline','width','offset','ribbon','output'],
+   'Typed socket relink should reorder nodes without orphaning them');
+ assert.equal(core.parseGeometryGraph(reordered).nodes.length,5);
+ assert.equal(m.parseGraph(reordered).map.get('ribbon').input,'offset1');
+ assert.equal(m.parseGraph(reordered).map.get('width1').input,'source');
+ const restored=m.applyGraphEdit(reordered,'connect',{source:'offset1',target:'width1'});
+ assert.deepEqual(m.parseGraph(restored).ordered.map(n=>n.type),
+   ['spline','offset','width','ribbon','output']);
  assert.throws(()=>m.applyGraphEdit(json,'connect',{
    source:'ribbon',target:'offset1'
  }),/type|socket/i);
  assert.throws(()=>m.applyGraphEdit(json,'connect',{
-   source:'width1',target:'offset1'
- }),/cycle/i);
+   source:'offset1',target:'offset1'
+ }),/itself/i);
  assert.throws(()=>m.applyGraphEdit(json,'connect',{
    source:'source',target:'width1'
  }),/disconnected/i);
