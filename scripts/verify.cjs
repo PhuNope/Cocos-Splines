@@ -24,6 +24,7 @@ checkRel('assets/splines/Core/SplineSharedOccupancyMath.ts');
 checkRel('assets/splines/Core/SplineSharedOccupancyMath.ts.meta');
 checkRel('assets/splines/Core/SplinePlacementDiagnostics.ts');
 checkRel('assets/splines/Core/SplinePlacementDiagnostics.ts.meta');
+assert.deepEqual(pkg.contributions.messages['query-placement-summary']?.methods,['queryPlacementSummary']);
 checkRel('assets/splines/Editor/SplinePlacementGizmos.ts');
 checkRel('assets/splines/Editor/SplinePlacementGizmos.ts.meta');
 checkRel('assets/splines/Core/SplineMeshColliderAdapter.ts');
