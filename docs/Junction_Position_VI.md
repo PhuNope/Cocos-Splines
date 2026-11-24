@@ -168,3 +168,12 @@ Trong `SplineJunction Inspector`, chọn **Join seam treatment** trước khi b�
 - Nếu một trong hai tangent có độ dài gần bằng 0, G1/C1 **báo lỗi và không tạo spline**, thay vì tạo dữ liệu không hợp lệ. Preserve vẫn hỗ trợ tangent bằng 0.
 
 Mỗi seam của Multi-Junction hoặc Fan-out dùng cùng lựa chọn; **không thay đổi bất cứ Knot/Handle nào trong spline nguồn**, không có smoothing ngầm và không tự thêm Junction logic vào output. Kiểm tra `seamMode` được truyền từ Inspector xuyên qua Scene plan tới transaction để tránh áp sai chế độ. Phần Undo/Redo, rendering, Prefab phải xác nhận trực tiếp trong Creator 3.8.8.
+
+ 
+## Partial / Mid-spline Route Slicing (V2 opt-in)
+
+Trong Inspector `SplineJunction`, tại **Join Across Junctions → New Spline**, đổi **Route traversal** từ `Full splines (default)` sang `Allow mid-spline slicing`. Chọn **Start from** là đầu `0` hoặc cuối `1` của spline anchor, và **Finish at** là đầu `0` hoặc cuối `1` của spline đích. Planner có thể nối Junction ở `progress` bất kỳ trên spline nguồn mở; một đoạn nguồn trung gian được sử dụng giữa **vị trí link vào** và **vị trí link ra** trên cùng spline, không cần tách Knot hoặc phá hủy nguồn.
+
+Tiến độ Junction được biểu diễn bằng **normalized arc distance**. Để cắt đúng đường cong, Editor dùng `SplineContainer.tAtProgress(progress)` chuyển sang **Bezier t hình học**, chuyển ngược qua `1 - t` khi `reversed=true`, sau đó cắt các cubic đã resolve bằng **de Casteljau**, không xấp xỉ linear theo arc ratio. Các đoạn bị cắt được nối vào một `(Route Joined)` mới; seam tuân thủ tùy chọn Preserve/G1/C1 (Preserve giữ nguyên các đoạn Bezier trích xuất). Nếu trường hợp có tiến độ rất sát nhau, không đủ đoạn, endpoint lệch World quá `1e-5`, quá 8 nguồn hoặc quá 128 Knot output, planner từ chối trước khi tạo Node.
+
+Một spline không được lặp lại trong cùng tuyến. Các nguồn và Junction không bị sửa. **Chế độ Full mặc định không thay đổi** và các lựa chọn Start/Finish chỉ áp dụng cho Partial mode. Đây là **BFS theo số lần chuyển**, chưa tối ưu tổng chiều dài hay luật traffic. Cần test native Cocos Creator 3.8.8 (Undo/Redo, Prefab, Scene save/reopen).

@@ -2,10 +2,17 @@
 /** Single-route Editor authoring transaction, fully isolated from source
  * Components. One snapshot after all knots are written. */
 const finite=v=>!!v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
-function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,seamMode='preserve'){
+function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
+    seamMode='preserve',routeMode='full',startSide=0,goalSide=1){
  const {validateSeamMode}=require('./SplineJunctionSeamMath');
  validateSeamMode(seamMode);
- if(!plan?.ok||plan.seamMode!==seamMode||plan.anchorIndex!==anchorIndex||
+ if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
+    ![0,1].includes(goalSide))throw Error('Invalid route mode / sides.');
+ if(!plan?.ok||plan.seamMode!==seamMode||
+    (plan.routeMode??'full')!==routeMode||
+    (routeMode==='partial'&&(plan.startSide!==startSide||
+       plan.goalSide!==goalSide))||
+    plan.anchorIndex!==anchorIndex||
     plan.goalSplineUuid!==goalSplineUuid||
     typeof plan.junctionUuid!=='string'||!plan.junctionUuid||
     typeof plan.guard!=='string'||!plan.guard||
@@ -29,6 +36,19 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,seamMode='pre
     plan.knots.some(k=>k?.mode!==4||!finite(k.position)||
       !finite(k.tangentIn)||!finite(k.tangentOut)))
    throw Error('Invalid multi-Junction route Join plan.');
+ if(routeMode==='partial'){
+   for(const step of plan.chain){
+     if(![0,1].every(side=>Number.isFinite(step.fromProgress)&&
+          Number.isFinite(step.toProgress))||
+        step.fromProgress<0||step.fromProgress>1||
+        step.toProgress<0||step.toProgress>1||
+        Math.abs(step.fromProgress-step.toProgress)<1e-5)
+       throw Error('Partial Join route segment has invalid source distance bounds.');
+   }
+   if(plan.chain[0].fromProgress!==startSide||
+      plan.chain[plan.chain.length-1].toProgress!==goalSide)
+     throw Error('Partial Join route start/end side mismatch.');
+ }
  const junctions=new Set();
  let lastAt=-1;
  for(let i=0;i<plan.seams.length;i++){
@@ -95,7 +115,8 @@ async function commitMultiJunctionRoute(plan,actions){
      seams:plan.seams,
      message:'Joined '+plan.sourceCount+' whole splines across '+
        plan.switchCount+' Junction switches into one independent '+
-       plan.count+'-Knot spline. Sources unchanged. Seam mode: '+plan.seamMode+'.'};
+       plan.count+'-Knot spline. Sources unchanged. Seam mode: '+plan.seamMode+
+       '. Traversal: '+(plan.routeMode||'full')+'.'};
  }catch(error){
    let warning='';
    if(root&&!committed){

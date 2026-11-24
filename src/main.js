@@ -502,12 +502,16 @@ const methods={
      * The destination is an existing SplineContainer Node UUID. Each source
      * spline is traversed end-to-end, once, preserving the authored cubics.
      */
-    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,seamMode='preserve'){
+    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,
+        seamMode='preserve',routeMode='full',startSide=0,goalSide=1){
         if(knotEditBusy)return alertError('join-multi-junction-route',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
         try{
             validateSeamMode(seamMode);
+            if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
+               ![0,1].includes(goalSide))
+                throw Error('Invalid partial route mode or entry/exit side.');
             if(!Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63||
                typeof goalSplineUuid!=='string'||!goalSplineUuid.trim()||
                goalSplineUuid.length>128)
@@ -517,9 +521,10 @@ const methods={
             await ensureClasses();
             const goal=goalSplineUuid.trim();
             const plan=await invokeScene('queryMultiJunctionJoinPlan',
-                junctionUuid,anchorIndex,goal,seamMode);
+                junctionUuid,anchorIndex,goal,seamMode,routeMode,startSide,goalSide);
             if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
-            validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode);
+            validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode,
+                routeMode,startSide,goalSide);
             if(plan.junctionUuid!==junctionUuid)
                 throw Error('Multi-Junction planner returned foreign Junction.');
             const check=async()=>{

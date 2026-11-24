@@ -9,7 +9,8 @@ const {planJunctionBrokenConversion}=require('./SplineJunctionModeMath');
 const {planJunctionJoin}=require('./SplineJunctionJoinMath');
 const {planJunctionFanout}=require('./SplineJunctionFanoutMath');
 const {validateSeamMode}=require('./SplineJunctionSeamMath');
-const {planEndpointJunctionChain,planMultiJunctionGeometry}=require('./SplineJunctionRouteMath');
+const {planEndpointJunctionChain,planMultiJunctionGeometry,
+  planPartialJunctionChain,planPartialJunctionGeometry}=require('./SplineJunctionRouteMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRoot}){
  function junctionAt(uuid){
@@ -240,9 +241,13 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      j.node.uuid,fingerprint(j,null,'join'),
    ])]);
  }
- function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid,seamMode='preserve'){
+ function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid,
+   seamMode='preserve',routeMode='full',startSide=0,goalSide=1){
    try{
      validateSeamMode(seamMode);
+     if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
+        ![0,1].includes(goalSide))
+       throw Error('Invalid Join route mode or partial traversal direction.');
      if(typeof uuid!=='string'||!uuid||typeof goalSplineUuid!=='string'||
         !goalSplineUuid||goalSplineUuid.length>128||
         !Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63)
@@ -272,9 +277,11 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      }
      if(links.length>1024)
        throw Error('More than 1024 Junction links in Scene.');
-     const chain=planEndpointJunctionChain(links,{
-       junctionId:uuid,linkIndex:anchorIndex,
-     },goalSplineUuid);
+     const chain=routeMode==='partial'?
+       planPartialJunctionChain(links,{junctionId:uuid,linkIndex:anchorIndex},
+         goalSplineUuid,startSide,goalSide):
+       planEndpointJunctionChain(links,{junctionId:uuid,
+         linkIndex:anchorIndex},goalSplineUuid);
      const descriptors=chain.path.map(entry=>{
        const spline=bySpline.get(entry.splineId);
        if(!spline||spline.closed||spline.enabled===false||
@@ -289,12 +296,29 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
        const frame=queryKnotEditFrame(spline.node.uuid);
        if(!frame?.ok)throw Error(frame?.error||
          'Route spline World matrix unavailable.');
-       return {matrix:frame.matrix,
+       const descriptor={matrix:frame.matrix,
          knots:spline.getNaturalResolvedKnots(),
          dimension:spline.dimension,reversed:!!spline.reversed,
          progress:entry.progress};
+       if(routeMode==='partial'){
+         if(typeof spline.tAtProgress!=='function')
+           throw Error('Partial Join requires SplineContainer.tAtProgress().');
+         const naturalT=progress=>{
+           const t=spline.tAtProgress(progress);
+           if(!Number.isFinite(t)||t<0||t>1)
+             throw Error('Spline arc distance lookup returned invalid Bezier t.');
+           return spline.reversed?1-t:t;
+         };
+         descriptor.fromProgress=entry.fromProgress;
+         descriptor.toProgress=entry.toProgress;
+         descriptor.fromT=naturalT(entry.fromProgress);
+         descriptor.toT=naturalT(entry.toProgress);
+       }
+       return descriptor;
      });
-     const result=planMultiJunctionGeometry(chain.path,descriptors,seamMode);
+     const result=routeMode==='partial'?
+       planPartialJunctionGeometry(chain.path,descriptors,seamMode):
+       planMultiJunctionGeometry(chain.path,descriptors,seamMode);
      const first=bySpline.get(chain.path[0].splineId);
      const node=first.node;
      if(!node.parent||node.parent.isValid===false||
@@ -314,7 +338,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      if(!Number.isInteger(samplesPerCurve)||samplesPerCurve<4||
         samplesPerCurve>256)
        throw Error('Invalid route sampling density.');
-     return {ok:true,...result,
+     return {ok:true,...result,routeMode,startSide,goalSide,
        junctionUuid:uuid,anchorIndex,goalSplineUuid,
        parentUuid:node.parent.uuid,rootTransform,
        sourceName:String(node.name||'Spline').slice(0,60),
