@@ -38,7 +38,7 @@ join=planJunctionJoin(backA,backB);
 assert.deepEqual(join.knots.map(k=>k.position.x),[10,5,0,-5,-10]);
 near(join.knots[0].tangentOut.x,-(-1));
 near(join.knots[2].tangentIn.x,-1); // Reversed A incoming = negative original A outgoing
-near(join.knots[2].tangentOut.x,-(-1),'Reversed B outgoing = negative old incoming');
+near(join.knots[2].tangentOut.x,-(-1)); // Reversed B outgoing = negative old incoming
 // Reversed=true changes which natural endpoint is at progress 0.
 const ra=source([knot(0),knot(5),knot(10)],m(),0,true);
 const rb=source([knot(0),knot(5),knot(10)],m(1,10),1,true);
