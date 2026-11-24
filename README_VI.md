@@ -155,3 +155,13 @@ Morph). Ví dụ minh họa được tạo lúc Play, không tự ghi vào Scene
 tự merge script mới, tránh xóa script đang được Scene/Prefab tham chiếu vì
 có thể mất liên kết component UUID. Hướng dẫn tại
 `assets/CocosSplinesExamples/README.md`.
+
+### Bộ Examples 13 tính năng (V2 preview)
+
+Bổ sung **Mesh Deform**, **Traffic Controller**, **Prefab Spawning** vào Gallery;
+ba script cấu hình riêng nằm trong `MeshDeform/`, `Traffic/` và
+`Population/`. Gallery dùng dữ liệu runtime tạm, không ghi asset .prefab
+hay thay đổi Scene nguồn. Ví dụ Mesh nhập từ project cần Allow Data Access
+và có đủ subdivision; ví dụ prefab có thể gán file .prefab thật trong Inspector.
+Đối với project đã cài Examples, installer không ghi đè các script cũ;
+merge bản mới để giữ UUID của component tham chiếu từ Scene/Prefab.

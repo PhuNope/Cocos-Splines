@@ -14,6 +14,9 @@ const FILES=Object.freeze([
  ['Road/RoadUvSetup.ts','docs/examples/RoadUvSetup.ts'],
  ['Extrude/ExtrudeTubeSetup.ts','docs/examples/ExtrudeTubeSetup.ts'],
  ['Junction/JunctionRoadPatchSetup.ts','docs/examples/JunctionRoadPatchSetup.ts'],
+ ['MeshDeform/MeshDeformSetup.ts','examples/installable/MeshDeform/MeshDeformSetup.ts'],
+ ['Traffic/TrafficSignalsSetup.ts','examples/installable/Traffic/TrafficSignalsSetup.ts'],
+ ['Population/PrefabSpawningSetup.ts','examples/installable/Population/PrefabSpawningSetup.ts'],
 ]);
 function directory(fsApi,location,create=false){
  if(create&&!fsApi.existsSync(location))fsApi.mkdirSync(location);

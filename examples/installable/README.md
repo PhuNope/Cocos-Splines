@@ -4,7 +4,7 @@ Installed from **Extension → Cocos Splines → Install Examples**.
 
 These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples **skips existing files**; it never replaces changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
 
-## Quick start: 10 runnable examples
+## Quick start: 13 runnable examples
 
 1. Make or open a **3D Scene** in Cocos Creator 3.8.x and save it.
 2. Once script compilation finishes, choose **Extension → Cocos Splines → Create Example Gallery in Scene**. The Editor creates a Node with **CocosSplinesExampleGalleryV2**; clicking again selects the same Node.
@@ -24,6 +24,9 @@ These are **project-owned scripts** (not linked to the extension package). You c
 | Triggers | Event markers at 25%, 50% and 75% of a looping follower trajectory |
 | Modifiers | Reusable speed and road-width keyframes shared by a vehicle and its road |
 | Morph | Blend two source splines into an independent output spline at 50% |
+| MeshDeform | Deform a procedurally subdivided ribbon along a curved spline (imported-mesh workflow also included) |
+| TrafficController | Two alternating signal phases, with all-red clearance at a three-way junction |
+| PrefabSpawning | Deterministic distribution of runtime prefab copies along a spline (or bind authored .prefab files) |
 
 The gallery creates nodes only in **Play mode**; the generated nodes are ephemeral and not saved in your scene. To save editable examples permanently, use the extension's menu/Inspector actions to create spline nodes in Edit Mode and reconstruct the chosen setup.
 
@@ -36,8 +39,11 @@ These scripts demonstrate serialized-component workflows where you provide refer
 - **Junction/JunctionRoadPatchSetup.ts** — bind a three-way junction and road-patch mesh (assign references, then call configure).
 - **Train/TrainSingleSpline.ts** — locomotive + spaced SplinePositioner wagons.
 - **Train/TrainRouteConsist.ts** — cars follow a multi-spline route history.
+- **MeshDeform/MeshDeformSetup.ts** — configure a readable, subdivided imported Mesh; supports Stretch/Repeat.
+- **Traffic/TrafficSignalsSetup.ts** — bind a 3-link Junction to two non-overlapping traffic phases.
+- **Population/PrefabSpawningSetup.ts** — bind actual project .prefab assets to a seeded, runtime-only spline population.
 
-Not every feature is a one-click scene. Advanced cases (Mesh Deformation, Traffic Controller, Collider backends, Noise, Prefab spawning) require assets and Editor references not included in this starter pack. Read the extension documentation for full configuration.
+The Gallery's MeshDeform and PrefabSpawning modes use **temporary runtime-only assets**. For production-like meshes and prefab distribution, assign your imported mesh and authored prefab assets with the new setup scripts. Advanced cases (Collider backends, Noise and full Traffic validation) still require Editor and backend checks. Read the extension documentation for full configuration.
 
 ## Safety and limitations
 
@@ -61,3 +67,11 @@ selects the existing Gallery. Details:
 Install Examples always **skips existing files** to preserve your edits and Cocos-generated .meta UUIDs. Consequently, a pre-existing ExampleGallery.ts will retain its older set of modes, even after installing this newer extension.
 
 For an existing project, prefer comparing the bundled new ExampleGallery.ts to your project copy and merging new enum modes/methods manually. To replace a clean, unreferenced Gallery script, back up your project first and remove only that script, then run Install Examples again. **Deleting a script referenced by saved Scenes may break component references**, so do not delete your live Gallery script without a backup and migration plan. New projects receive all ten modes immediately.
+
+### Imported asset workflows (13-mode Gallery)
+
+**Mesh Deformation**: Press Play in MeshDeform mode to see a procedural ribbon input mesh deformed along a curved spline. To test an imported rope/pipe model instead, create a SplineContainer and a Node with MeshRenderer + SplineMeshDeform, then attach `CocosSplinesMeshDeformExampleV2` and bind its three Inspector references. Enable **Allow Data Access** on the imported Mesh, and subdivide the mesh along its Z axis.
+
+**Traffic Controller**: TrafficController mode creates an incoming route, two outgoing routes, two exclusive green phases (exit 1 and 2), yellow and all-red clearance. A follower must enable **Traffic Capacity** to obey traffic signals. For your own Junction, use `CocosSplinesTrafficSignalsExampleV2` with three ordered links and an assigned controller.
+
+**Prefab Spawning**: The Gallery builds a transient runtime Prefab template and scatters up to 14 instances; it writes **no .prefab asset**. For actual asset selection, assign one or more .prefab files to `CocosSplinesPrefabSpawningExampleV2` and a SplineObjectController. The controller owns only the runtime-created instances and clears them on disable.

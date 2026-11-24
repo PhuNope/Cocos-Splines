@@ -65,7 +65,7 @@ declare module 'cc' {
     export class DirectionalLight extends Component {}
     export const primitives:{box(options?:{width?:number;height?:number;length?:number}):any};
     export class EventHandler { static emitEvents(events:EventHandler[],...args:any[]):void; }
-    export class Prefab {uuid:string}
+    export class Prefab {uuid:string;data:Node|null;}
     export function instantiate(p:Prefab):Node;
     export class Mesh {uuid:string;hash:number;data:Uint8Array;allowDataAccess:boolean;
         struct:{primitives:any[];vertexBundles?:any[]};readAttribute(i:number,attr:string):Float32Array|Uint16Array|Int16Array|Uint32Array|Int32Array|null;

@@ -15,6 +15,9 @@
     "../docs/examples/JunctionRoadPatchSetup.ts",
     "types/cc.d.ts",
     "types/gizmos.d.ts",
-    "../examples/installable/ExampleGallery.ts"
+    "../examples/installable/ExampleGallery.ts",
+    "../examples/installable/MeshDeform/MeshDeformSetup.ts",
+    "../examples/installable/Traffic/TrafficSignalsSetup.ts",
+    "../examples/installable/Population/PrefabSpawningSetup.ts"
   ]
 }

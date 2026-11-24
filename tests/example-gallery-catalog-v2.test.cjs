@@ -36,6 +36,7 @@ walk(file);
 const catalog=[
     'Follower','Road','Extrude','Junction','Proximity','Positioner',
     'Projector','Triggers','Modifiers','Morph',
+    'MeshDeform','TrafficController','PrefabSpawning',
 ];
 assert.deepEqual(enums,catalog.map((name,i)=>[name,i]),
     'The original enum serialization IDs must remain unchanged');
@@ -43,6 +44,7 @@ assert.deepEqual(cases,catalog,'Every example must have one dispatch case');
 const expectedMethods=[
     'showFollower','showRoad','showExtrude','showJunction','showProximity',
     'showPositioner','showProjector','showTriggers','showModifiers','showMorph',
+    'showMeshDeform','showTrafficController','showPrefabSpawning',
 ];
 for(const method of expectedMethods){
     assert(methods.includes(method),'Missing gallery handler '+method);
@@ -59,6 +61,16 @@ assert(EXAMPLE_FILES.some(([target,src])=>target==='CREATE_GALLERY_IN_SCENE.md'&
     src==='examples/installable/CREATE_GALLERY_IN_SCENE.md'));
 assert(readme.includes('skips existing files'));
 assert(readme.includes('Deleting a script referenced by saved Scenes'));
+for(const script of [
+    'MeshDeform/MeshDeformSetup.ts',
+    'Traffic/TrafficSignalsSetup.ts',
+    'Population/PrefabSpawningSetup.ts',
+]){
+    assert(EXAMPLE_FILES.some(([target])=>target===script),
+        'Installer missing '+script);
+    assert(fs.existsSync(path.join(root,'examples/installable',script)),
+        'Bundle missing '+script);
+}
 const dispatch=source.slice(source.indexOf('switch(this.example)'),source.indexOf('private child('));
-assert.equal((dispatch.match(/case SplineExampleKind\./g)||[]).length,10);
-console.log('EXAMPLE CATALOG PASS: ten preserved enum values, setup methods, dispatch and safe-update documentation.');
+assert.equal((dispatch.match(/case SplineExampleKind\./g)||[]).length,13);
+console.log('EXAMPLE CATALOG PASS: thirteen preserved enum values, setup methods, dispatch and safe-update documentation.');

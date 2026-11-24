@@ -1,6 +1,6 @@
 import {
     _decorator, Component, Enum, Node, Vec3, Color, MeshRenderer,
-    Camera, DirectionalLight, Material, primitives, utils,
+    Camera, DirectionalLight, Material, Prefab, primitives, utils,
 } from 'cc';
 import { SplineContainer } from 'db://cocos-splines/splines/Core/SplineContainer';
 import { SplineKnot, TangentMode } from 'db://cocos-splines/splines/Core/SplineKnot';
@@ -13,6 +13,9 @@ import { SplineProjector } from 'db://cocos-splines/splines/Components/SplinePro
 import { SplineTrigger } from 'db://cocos-splines/splines/Components/SplineTrigger';
 import { SplineModifiers, SplineModifierKey } from 'db://cocos-splines/splines/Components/SplineModifiers';
 import { SplineMorph } from 'db://cocos-splines/splines/Components/SplineMorph';
+import { SplineMeshDeform, DeformAxis, DeformMode } from 'db://cocos-splines/splines/Components/SplineMeshDeform';
+import { SplineTrafficController, SplineTrafficPhase, SplineTrafficConflict } from 'db://cocos-splines/splines/Components/SplineTrafficController';
+import { SplineObjectController } from 'db://cocos-splines/splines/Components/SplineObjectController';
 
 const {ccclass,property}= _decorator;
 /** Each mode builds an independent, temporary scene setup during Play.
@@ -22,6 +25,7 @@ const {ccclass,property}= _decorator;
 export enum SplineExampleKind {
     Follower=0, Road=1, Extrude=2, Junction=3, Proximity=4, Positioner=5,
     Projector=6, Triggers=7, Modifiers=8, Morph=9,
+    MeshDeform=10, TrafficController=11, PrefabSpawning=12,
 }
 Enum(SplineExampleKind);
 
@@ -46,6 +50,9 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             case SplineExampleKind.Triggers:this.showTriggers();break;
             case SplineExampleKind.Modifiers:this.showModifiers();break;
             case SplineExampleKind.Morph:this.showMorph();break;
+            case SplineExampleKind.MeshDeform:this.showMeshDeform();break;
+            case SplineExampleKind.TrafficController:this.showTrafficController();break;
+            case SplineExampleKind.PrefabSpawning:this.showPrefabSpawning();break;
         }
     }
     private child(parent:Node,name:string,at?:Vec3):Node {
@@ -279,6 +286,124 @@ export class CocosSplinesExampleGalleryV2 extends Component {
         morph.apply();
         this.road(output,2);
         this.follower(output,'Morph Output Follower',new Color(190,90,245));
+    }
+    /** Runtime-generated tessellated ribbon is a small, readable input mesh.
+     * For real imported model assets use MeshDeform/MeshDeformSetup.ts instead.
+     */
+    private showMeshDeform():void {
+        const spline=this.spline('11 — Deform Mesh Along Curve',[
+            new Vec3(-8,0,0),new Vec3(-3,1,-4),
+            new Vec3(3,2,4),new Vec3(8,1,0),
+        ]);
+        const positions:number[]=[],uvs:number[]=[],normals:number[]=[],indices:number[]=[];
+        const sections=16;
+        for(let i=0;i<=sections;i++){
+            const t=i/sections;
+            for(const x of [-.35,.35]){
+                positions.push(x,0,(t-.5)*3);
+                normals.push(0,1,0);
+                uvs.push(x>0?1:0,t);
+            }
+        }
+        for(let i=0;i<sections;i++){
+            const k=i*2;
+            indices.push(k,k+2,k+1,k+1,k+2,k+3);
+        }
+        const source=utils.createMesh({positions,uvs,normals,indices});
+        // Built-in procedural mesh data is runtime-owned; this opt-in flag
+        // permits readAttribute()/readIndices() in Creator 3.8.x.
+        source.allowDataAccess=true;
+        const node=this.child(spline.node,'Deformed Ribbon');
+        node.addComponent(MeshRenderer);
+        const deform=node.addComponent(SplineMeshDeform);
+        deform.spline=spline;
+        deform.sourceMesh=source;
+        deform.axis=DeformAxis.Z;
+        deform.mode=DeformMode.Stretch;
+        deform.widthScale=1.5;
+        deform.heightScale=1;
+        deform.rebuild();
+        if(!node.getComponent(MeshRenderer)?.mesh)
+            console.warn('[Cocos Splines Example] Mesh Deform preview requires readable mesh data; try the MeshDeformSetup script with an imported mesh (Allow Data Access).');
+        this.follower(spline,'Ribbon Route Vehicle',new Color(70,200,220));
+    }
+    private showTrafficController():void {
+        const incoming=this.spline('12 — Incoming Traffic',[
+            new Vec3(-9,0,0),new Vec3(-4,0,0),new Vec3(0,0,0),
+        ]);
+        const left=this.spline('12 — Traffic Exit A',[
+            new Vec3(0,0,0),new Vec3(4,0,-3),new Vec3(9,0,-4),
+        ]);
+        const right=this.spline('12 — Traffic Exit B',[
+            new Vec3(0,0,0),new Vec3(4,0,3),new Vec3(9,0,4),
+        ]);
+        for(const route of [incoming,left,right])this.road(route,1.8);
+        const node=this.child(this.node,'Traffic Junction and Signals');
+        const junction=node.addComponent(SplineJunction);
+        const link=(spline:SplineContainer,progress:number):SplineJunctionLink=>{
+            const value=new SplineJunctionLink();
+            value.spline=spline;value.progress=progress;
+            return value;
+        };
+        junction.connections=[
+            link(incoming,1),link(left,0),link(right,0),
+        ];
+        const controller=node.addComponent(SplineTrafficController);
+        controller.junction=junction;
+        const phase=(index:number):SplineTrafficPhase=>{
+            const value=new SplineTrafficPhase();
+            value.greenExits=[index];
+            value.greenSeconds=5;
+            value.yellowSeconds=1.5;
+            return value;
+        };
+        controller.phases=[phase(1),phase(2)];
+        const conflict=new SplineTrafficConflict();
+        conflict.firstExit=1;conflict.secondExit=2;
+        controller.conflicts=[conflict];
+        controller.allRedSeconds=1;
+        controller.adaptiveTraffic=false;
+        const follower=this.follower(incoming,'Traffic-aware Follower',
+            new Color(255,190,55));
+        follower.junctionMode=JunctionMode.RoundRobin;
+        follower.loopMode=LoopMode.Once;
+        follower.enableTrafficCapacity=true;
+        // Signals apply to opted-in followers; read current Stage and
+        // remainingSeconds from controller for runtime diagnostics.
+        console.log('[Cocos Splines Example] Traffic Controller: initial All Red; exits 1 and 2 alternate Green/Yellow after clearance.');
+    }
+    private showPrefabSpawning():void {
+        const spline=this.spline('13 — Prefab Spawning',[
+            new Vec3(-9,0,0),new Vec3(-5,0,-3),
+            new Vec3(4,0,3),new Vec3(9,0,0),
+        ]);
+        this.road(spline,2);
+        // A transient runtime Prefab template avoids shipping a baked UUID
+        // into another project. For authored content use PrefabSpawningSetup.ts.
+        const template=new Node('Runtime Box Prefab Template');
+        const renderer=template.addComponent(MeshRenderer);
+        renderer.mesh=utils.createMesh(primitives.box({
+            width:.6,height:1,length:.6,
+        }));
+        const material=new Material();
+        material.initialize({effectName:'builtin-unlit'});
+        material.setProperty('mainColor',new Color(65,200,125));
+        renderer.setSharedMaterial(material,0);
+        const prefab=new Prefab();
+        prefab.data=template;
+        const node=this.child(spline.node,'Prefab Scatter Controller');
+        const controller=node.addComponent(SplineObjectController);
+        controller.spline=spline;
+        controller.prefabs=[prefab];
+        controller.count=14;
+        controller.seed=2026;
+        controller.randomPosition=new Vec3(.2,.05,.2);
+        controller.randomRotation=new Vec3(0,15,0);
+        controller.randomScale=.15;
+        controller.spawnOnStart=false;
+        const count=controller.spawn();
+        if(count===0)
+            console.warn('[Cocos Splines Example] Runtime Prefab could not spawn. Use Population/PrefabSpawningSetup.ts with a real .prefab asset.');
     }
     private showPositioner():void {
         const spline=this.spline('06 — Non-animated Positioners',[

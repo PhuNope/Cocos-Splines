@@ -77,6 +77,7 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 6.1 — Extension menu **Install Examples**: optional project-local examples in assets/CocosSplinesExamples, six runtime gallery modes, reusable Train/Road/Extrude/Junction sample scripts; idempotent, no overwrite, asset-db refresh and security/regression tests. **Native Creator 3.8.8 compile/scene smoke test pending.**
 - [x] Phase 6.2 — **Create Example Gallery in Scene** menu: native Editor Scene messages for a compiled Gallery component, duplicate-safe read-only Scene lookup, Scene lease guard, single snapshot, guarded cleanup, project-local quick-start guide and offline Editor regression tests. Saving an actual .scene remains a manual Creator operation; native 3.8.8 smoke test pending.
 - [x] Phase 6.3 — Example Gallery 10-feature catalog: four additional runtime demos (Projection, Trigger callbacks, Modifier speed/width, source-to-output Morph), TypeScript static catalog coverage, installation/update safety guide. Native Creator 3.8.8 visual test pending.
+- [x] Phase 6.4 — Installable Example Gallery expanded to 13 feature modes (Mesh Deform with procedural input, two-phase Junction Traffic signals, runtime Prefab Spawning), three project-owned imported-asset setup scripts, additive no-overwrite installation, offline TypeScript/catalog tests; native Creator 3.8.8 visual/physics/prefab acceptance pending.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry
