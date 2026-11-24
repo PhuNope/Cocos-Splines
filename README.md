@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Shared Occupancy between multiple Object Controllers (v2 preview)
+
+SplineObjectController → **Shared Occupancy · opt-in** filters final candidate centers against already spawned children of explicit peer Controller Nodes. Assign strictly increasing **Occupancy Priority** (e.g. first 0, second 1), spawn lower priority first, set conservative **Shared Occupancy Radius** on both controllers, and optional **Peer Occupancy Clearance**. No peer is ever respawned or modified. The new spatial hash keeps original candidate indexes and works after Save/Reopen using spawnedRoot children, but only captures World center + manually published sphere radius (not exact mesh overlap). Read-only peer validation happens before cleanup; disabled by default. See [Shared Occupancy guide](docs/POPULATION_SHARED_OCCUPANCY_V2_VI.md).
+
 ### Automatic static prefab footprint for placement (v2 preview)
 
 SplineObjectController → **Auto Prefab Footprint** (requires Collider Avoidance + Precise Obstacle Shapes) derives an opt-in conservative sphere radius per selected prefab, from static MeshRenderer mesh bounds and supported Collider shapes across the prefab's nested Node hierarchy. Per-candidate radius accounts for prefab/parent scale, ScaleMultiplier, random scale and Modifiers. Missing/unsupported geometry fails preflight without deleting existing instances. Manual radius and legacy population remain unchanged when disabled. This is a static bounding sphere, not animated mesh geometry or multi-controller collision. See [Automatic Footprint guide](docs/POPULATION_AUTO_PREFAB_FOOTPRINT_V2_VI.md).
