@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Precise OBB/Capsule obstacle placement (v2 preview)
+
+SplineObjectController → **Collider obstacle avoidance** optionally enables **Use Precise Obstacle Shapes**. Valid BoxCollider OBB and CapsuleCollider world shapes are checked with a **manual spherical prefab footprint radius** + clearance; unsupported or mismatched Collider transforms conservatively fall back to the engine World AABB. Off by default; no changes to legacy population, Knot or source prefab. This is center-sphere placement clearance, not automatic prefab mesh collision or full Physics overlap. See [Precise Obstacle guide](docs/POPULATION_PRECISE_OBSTACLES_V2_VI.md).
+
 ### Surface / Terrain Conform for object population (v2 preview)
 
 SplineObjectController now has optional **Surface / Terrain Conform** using Cocos Physics 3D downward raycasts against **explicit assigned Collider/TerrainCollider targets**. The nearest valid hit places a prefab center at the surface plus a normal offset, with an optional up-normal rotation while preserving projected spline forward. Missing hits can be dropped or left unprojected. Projection is performed before obstacle / World spacing filters, and preflight failures do not destroy previous objects. Disabled by default with no Physics queries. See [Surface Conform guide](docs/POPULATION_SURFACE_CONFORM_V2_VI.md). Native Creator 3.8.8 acceptance remains pending.
