@@ -167,6 +167,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Creator 3.8.8 MeshCollider import, Prefab/Undo/Redo and performance smoke tests remain pending.
 - [ ] Not solid mesh containment; next: prefab bounds inference, occupancy across controllers, more efficient Editor placement previews.
 
+### Phase 3.8c2b2b1 — Auto Static Prefab Footprint (v2 preview)
+
+- [x] Pure `SplinePrefabFootprintMath`: conservative static local AABB/Box/Sphere/Capsule radius, nested local Node position/scale, root translation ignored because ObjectController overwrites World placement, finite/size/cycle preflight.
+- [x] Account for affine parent World-matrix stretch and each candidate's scaleMultiplier, seeded randomScale, Modifiers.scale; stable per-variant selection for weighted/uniform prefab distribution.
+- [x] Extend precise sphere-to-AABB/OBB/Capsule/Mesh filters with validated per-candidate radii. Auto mode is opt-in, legacy Manual radius is unchanged by default.
+- [x] Strict preflight (Prefab.data, readable static Mesh bounds, Collider geometry, hierarchy limits, radius limits) before deleting existing spawned Nodes. Zero-weight unselectable variants do not block valid spawn.
+- [x] Inspector conditional Auto flag, offline Creator types, regression tests registered in CI and native 3.8.8 acceptance documentation.
+- [ ] Native Creator 3.8.8 prefab Mesh.minPosition/maxPosition, nested transform, save/reopen/Undo/Redo smoke test.
+- [ ] Next: explicit cross-controller occupancy and per-instance bounds for animated/skinned or arbitrary shape geometry.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
