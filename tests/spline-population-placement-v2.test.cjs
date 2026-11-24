@@ -29,7 +29,7 @@ try {
     {index:0,progress:.1,position:{x:.5,y:.5,z:.5}},
     {index:1,progress:.3,position:{x:1.2,y:1.2,z:0}},
     {index:2,progress:.7,position:{x:2,y:2,z:0}}
-  ],[{center:{x:0,y:0,z:0},halfExtents:{x:1,y:1,z:1}}],.3).map(c=>c.index),
+  ],[{center:{x:0,y:0,z:0},halfExtents:{x:1,y:1,z:1}}],.25).map(c=>c.index),
     [1,2], 'Sphere vs AABB must use shortest vector, not bounding cube');
   for(const bad of [
     [{center:{x:NaN,y:0,z:0},halfExtents:{x:1,y:1,z:1}}],
