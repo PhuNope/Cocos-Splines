@@ -154,7 +154,7 @@ try{
   assert.deepEqual(c.spawnedRoot.children,old);
   assert(old.every(n=>n.isValid));
   c.prefabs=[a,b];c.prefabWeights=[0,1];
-  c.scaleMultiplier=2;
+  c.scaleMultiplier=2.5;
   assert.equal(c.respawn(),0,'Scale multiplier inflates World prefab radius');
   c.scaleMultiplier=1;
   assert.equal(c.respawn(),1);
