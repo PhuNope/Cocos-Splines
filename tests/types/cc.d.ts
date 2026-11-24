@@ -44,6 +44,7 @@ declare module 'cc' {
         parent:Node|null;worldPosition:Vec3;activeInHierarchy:boolean;
         uuid:string;name:string;isValid:boolean;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
+        getComponents<T>(c:new (...args:any[])=>T):T[];
         addComponent<T>(c:new (...args:any[])=>T):T;
         setRotationFromEuler(x:number,y:number,z:number):void;
         inverseTransformPoint(out:Vec3,world:Vec3):Vec3;
@@ -75,6 +76,7 @@ declare module 'cc' {
         };
     };
     export class BoxCollider extends Collider {center:Vec3;size:Vec3;}
+    export class SphereCollider extends Collider {center:Vec3;radius:number;}
     export class CapsuleCollider extends Collider {center:Vec3;radius:number;cylinderHeight:number;direction:number;}
     export class MeshCollider extends Collider {mesh:Mesh|null;center:Vec3;convex:boolean;}
     export class Camera extends Component {}
@@ -84,6 +86,7 @@ declare module 'cc' {
     export class Prefab {uuid:string;data:Node|null;}
     export function instantiate(p:Prefab):Node;
     export class Mesh {uuid:string;hash:number;data:Uint8Array;allowDataAccess:boolean;
+        minPosition:Vec3;maxPosition:Vec3;
         struct:{primitives:any[];vertexBundles?:any[]};readAttribute(i:number,attr:string):Float32Array|Uint16Array|Int16Array|Uint32Array|Int32Array|null;
         readIndices(i:number):Uint16Array|Uint32Array|null;
         readAttributeFormat(i:number,attr:string):{name:string;size:number;count:number}|number|null;
