@@ -27,8 +27,8 @@ try{
  const tree=geom(V(7,0,0),V(2,2,2),[Math.sqrt(3)],[
    geom(V(3,0,0),V(2,2,2),[Math.sqrt(3)])
  ]);
- near(footprint.prefabHierarchyRadius(tree),2*(3+2*Math.sqrt(3)),
-   'Root translation is overwritten, but nested position and scale remain');
+ // Root translation is overwritten; child translations/scales remain.
+ near(footprint.prefabHierarchyRadius(tree),2*(3+2*Math.sqrt(3)));
  assert.throws(()=>footprint.prefabHierarchyRadius(geom()));
  const cyclic=geom();cyclic.children.push(cyclic);
  assert.throws(()=>footprint.prefabHierarchyRadius(cyclic));
