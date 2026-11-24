@@ -105,9 +105,10 @@ assert(partial.seams.every(s=>s.continuousC1));
 assert.equal(JSON.stringify([A.getNaturalResolvedKnots(),
  B.getNaturalResolvedKnots(),C.getNaturalResolvedKnots(),
  D.getNaturalResolvedKnots(),E.getNaturalResolvedKnots()]),baseline);
-C.knots[0].tangentOut.x+=1;
+const originalTangent=C.knots[0].tangentOut.x;
+C.knots[0].tangentOut.x=originalTangent+1;
 assert(!sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
-C.knots[0].tangentOut.x-=1;
+C.knots[0].tangentOut.x=originalTangent;
 assert(sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
 J3.connections[1].progress=.7;
 assert(!sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
