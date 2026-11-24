@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.8d Placement Debug Gizmos (V2 Preview)
+
+- Added optional selected-only Placement Debug Gizmos for SplineObjectController, registered through official Cocos-Gizmos v3 decorator with the drawer isolated under Editor.
+- Extracted the exact, non-destructive placement preflight shared by Respawn and preview so diagnostic World centers and acceptance match actual placement. No Scene mutation or instantiate during preview.
+- Added pure stage attribution for missing surface, Collider, Peer, Exclusion, Density and Spacing filters. Rejection callback is opt-in and does not alter legacy deterministic plan result or candidate indexes.
+- Added bounded preview markers (8–256), optional conservative footprint spheres, reason colors, revision-based cache, Inspector fields, regression tests and native Editor acceptance notes.
+- Native Cocos Creator 3.8.8 Editor, Prefab/Undo and performance validation remains pending; no tag/release.
+
 # Unreleased — Phase 3.8c2b2b2 Shared Occupancy (V2 Preview)
 
 - Added opt-in **Avoid Peer Population** with explicit Node references to earlier-priority SplineObjectControllers, a published conservative sphere radius per controller and optional World-space peer clearance.
