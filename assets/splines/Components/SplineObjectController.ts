@@ -2,6 +2,7 @@ import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum } fr
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
+import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
 const {ccclass,property,menu}=_decorator;
 
@@ -16,6 +17,8 @@ export class SplineObjectController extends Component {
     @property({type:[Prefab],tooltip:'Prefab variations. Selection is deterministic for the seed.'}) prefabs:Prefab[]=[];
     @property({type:Node,tooltip:'Generated children parent; defaults to this Node.'}) parentNode:Node|null=null;
     @property({type:SplineModifiers}) modifiers:SplineModifiers|null=null;
+    @property({type:SplineNoise,tooltip:'Optional seeded layered offset in spline-frame Right/Up/Forward coordinates. No Knot changes.'})
+    noise:SplineNoise|null=null;
     @property({type:Enum(InstantiateMethod)}) method:InstantiateMethod=InstantiateMethod.Count;
     @property({min:1,max:2048,step:1}) count=12;
     @property({min:0.001}) spacing=2;
@@ -43,7 +46,7 @@ export class SplineObjectController extends Component {
     private signature():string{
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),this.parentNode?.uuid,
-            this.modifiers?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
+            this.modifiers?.getRevision(),this.noise?.uuid,this.noise?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
             this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,this.alignToSpline,this.includeEndPoint]);
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
@@ -74,14 +77,15 @@ export class SplineObjectController extends Component {
             if(closedLoop&&d>=span-1e-6&&i>0)break;
             const progress=start+(spline.length>1e-8?d/spline.length:0);
             const modifier=this.modifiers?.sample(progress);
+            const noise=this.noise?.sample(progress);
             const template=variants[Math.min(variants.length-1,Math.floor(this.rand(i,0)*variants.length))];
             const node=instantiate(template);node.name=`Spline Object ${String(i).padStart(3,'0')}`;
             node.setParent(this.ensureSpawnRoot('Spline Objects'));
             const frame=new Quat();Quat.multiply(frame,spline.node.worldRotation,spline.evaluateRotation(progress));
             const jitter=(axis:number,range:number)=>(this.rand(i,axis)*2-1)*range;
-            const delta=new Vec3(this.offset.x+(modifier?.offset.x||0)+jitter(1,this.randomPosition.x),
-                this.offset.y+(modifier?.offset.y||0)+jitter(2,this.randomPosition.y),
-                this.offset.z+(modifier?.offset.z||0)+jitter(3,this.randomPosition.z));
+            const delta=new Vec3(this.offset.x+(modifier?.offset.x||0)+(noise?.x||0)+jitter(1,this.randomPosition.x),
+                this.offset.y+(modifier?.offset.y||0)+(noise?.y||0)+jitter(2,this.randomPosition.y),
+                this.offset.z+(modifier?.offset.z||0)+(noise?.z||0)+jitter(3,this.randomPosition.z));
             Vec3.transformQuat(delta,delta,frame);
             const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);node.setWorldPosition(pos);
             if(this.alignToSpline){
