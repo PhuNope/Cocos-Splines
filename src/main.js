@@ -821,6 +821,13 @@ const methods={
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
     },
+    async rebuildGeometryGraph(){
+        try{
+            const id=selected()[0];
+            if(!id)throw Error('Chọn Node chứa SplineGeometryGraphRenderer.');
+            return await invokeScene('rebuildGeometryGraph',id);
+        }catch(error){return alertError('rebuild-geometry-graph',error);}
+    },
     async rebuildRoad(){
         try{
             const id=selected()[0];if(!id)throw Error('Chọn Road hoặc SplineContainer.');
