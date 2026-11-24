@@ -31,8 +31,9 @@ export function sampleNoiseLayers(
     layers:ReadonlyArray<NoiseLayerConfig>,progress:number,seed:number,closed:boolean
 ):NoiseVector {
     const zero=():NoiseVector=>({x:0,y:0,z:0});
-    if(!Array.isArray(layers)||!finite(progress)||!finite(seed))
-        throw Error('Invalid spline noise input.');
+    if(!Array.isArray(layers)||!finite(progress)||!Number.isSafeInteger(seed)||
+       Math.abs(seed)>0x7fffffff)
+        throw Error('Invalid spline noise input or global integer seed.');
     if(layers.length>16)throw Error('Noise supports up to 16 layers.');
     const p=closed?((progress%1)+1)%1:Math.max(0,Math.min(1,progress));
     const result=zero();
