@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'..'),out=fs.mkdtempSync(path.join(os.tmpdir()
 try{
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),
      '--noEmit','false','--outDir',out],{stdio:'pipe'});
- const {sweptSphereAabbEntry,aabbFromCenterHalfExtents,sweptSphereObbEntry,validProximityObb}=
+ const {sweptSphereAabbEntry,aabbFromCenterHalfExtents,sweptSphereObbEntry,validProximityObb,sweptSphereCapsuleEntry,validProximityCapsule}=
      require(path.join(out,'Core/SplineProximityShapes.js'));
  const {SplineProximityRegistry}=require(path.join(out,'Core/SplineProximity.js'));
  const p=(x,y=0,z=0)=>({x,y,z});
@@ -92,6 +92,39 @@ try{
  // Endpoint-only touch must still apply the conservative stop margin.
  registry.set(obstacle,p(5),1);
  assert(registry.limit(mover,t=>p(3.5*t),.5,0).limited);
+
+ // Stationary capsule: side, rounded caps, tangent, axial/reverse and sphere limit.
+ const cap={a:p(3),b:p(7),radius:.5};
+ assert(validProximityCapsule(cap));
+ near(sweptSphereCapsuleEntry(p(0),p(10),cap,.5),.2);
+ near(sweptSphereCapsuleEntry(p(10),p(0),cap,.5),.2);
+ near(sweptSphereCapsuleEntry(p(5,3),p(5,-3),cap,.5),1/3);
+ near(sweptSphereCapsuleEntry(p(0,1),p(10,1),cap,.5),.3,1e-5);
+ assert.equal(sweptSphereCapsuleEntry(p(0,1.01),p(10,1.01),cap,.5),null);
+ assert.equal(sweptSphereCapsuleEntry(p(5),p(5),cap,.5),0);
+ assert.equal(sweptSphereCapsuleEntry(p(5,2),p(5,2),cap,.5),null);
+ near(sweptSphereCapsuleEntry(p(0),p(2),cap,.5),1);
+ near(sweptSphereCapsuleEntry(p(0),p(10),{a:p(5),b:p(5),radius:.5},.5),.4);
+ const diagonal={a:p(3,0,3),b:p(7,0,7),radius:.5};
+ near(sweptSphereCapsuleEntry(p(5,3,5),p(5,-3,5),diagonal,.5),1/3);
+ assert.throws(()=>registry.setCapsule(obstacle,{...cap,radius:-1}),/Invalid/);
+ registry.setCapsule(obstacle,cap);
+ report=registry.limit(mover,t=>p(t*10),.5,0);
+ assert(report.limited);near(report.fraction,.2,3e-4);
+ assert(!registry.limit(mover,t=>p(t*10,1.2),.5,0).limited);
+ assert.equal(registry.getTelemetry().lastCandidates,1);
+ report=registry.limit(mover,t=>p(t*10),.5,.5);
+ near(report.fraction,.15,3e-4);
+ cap.a.x=99;
+ assert.equal(registry.get(obstacle).capsule.a.x,3);
+ registry.get(obstacle).capsule.b.x=99;
+ assert.equal(registry.get(obstacle).capsule.b.x,7);
+ registry.setCapsule(obstacle,{a:p(103),b:p(107),radius:.5});
+ assert(!registry.limit(mover,t=>p(t*10),.5,0).limited);
+ registry.set(obstacle,p(5),1);
+ assert.equal(registry.get(obstacle).capsule,undefined);
+ registry.remove(obstacle);assert.equal(registry.size,0);
+ assert.equal(registry.getTelemetry().spatialCells,0);
  oldSphere.clear();registry.clear();
- console.log('PROXIMITY SHAPES PASS: exact swept Sphere–World-AABB, rounded corners, no long-box false positive, conservative broadphase and registry cleanup.');
+ console.log('PROXIMITY SHAPES PASS: swept Sphere–World-AABB/OBB/capsule, rounded corners and caps, no long-box false positive, conservative broadphase and registry cleanup.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}

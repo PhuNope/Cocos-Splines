@@ -1,11 +1,11 @@
 /** Opt-in, approximate swept-sphere world-proximity admission.
- * All registered followers are modeled as stationary spheres at their latest
- * known world positions. Segment-sphere intersections prevent large dt from
+ * Registered obstacles use stationary spheres, AABBs, OBBs or capsules at their
+ * latest known world poses. Segment-shape intersections prevent large dt from
  * tunneling across the sampled polyline of a follower's candidate path.
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
-import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb} from './SplineProximityShapes';
+import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb,sweptSphereCapsuleEntry,validProximityCapsule,copyProximityCapsule,type ProximityCapsule} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
 export interface ProximityTelemetry {
     occupants:number;spatialCells:number;queries:number;fallbackQueries:number;
@@ -19,6 +19,8 @@ export interface ProximityOccupant {
     bounds?:ProximityAabb;
     /** Explicit stationary world OBB; mutually exclusive with bounds. */
     obb?:ProximityObb;
+    /** Explicit stationary world capsule; mutually exclusive with box shapes. */
+    capsule?:ProximityCapsule;
 }
 export interface ProximityPlan {
     fraction:number;
@@ -78,7 +80,8 @@ export function planSplineProximity(
         for(let j=1;j<=samples;j++){
             const point=sampled[j];
             if(metrics)metrics.segmentTests++;
-            const entry=other.obb?
+            const entry=other.capsule?
+                sweptSphereCapsuleEntry(previous,point,other.capsule,radius+safetyGap):other.obb?
                 sweptSphereObbEntry(previous,point,other.obb,radius+safetyGap):other.bounds?
                 sweptSphereAabbEntry(previous,point,other.bounds,radius+safetyGap):
                 segmentEntry(previous,point,other.position,threshold);
@@ -153,6 +156,17 @@ export class SplineProximityRegistry {
         this.set(owner,copy.center,radius);
         this.occupants.get(owner)!.obb=copy;
     }
+    /** Register a stationary capsule and derive its enclosing broadphase sphere.
+     * Re-register after motion/resize; set() and setObb() replace the shape. */
+    public setCapsule(owner:object,capsule:ProximityCapsule):void{
+        if(!validProximityCapsule(capsule))throw Error('Invalid spline proximity capsule.');
+        const copy=copyProximityCapsule(capsule);
+        const a=copy.a,b=copy.b;
+        const center={x:a.x/2+b.x/2,y:a.y/2+b.y/2,z:a.z/2+b.z/2};
+        const radius=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z)/2+copy.radius;
+        this.set(owner,center,radius);
+        this.occupants.get(owner)!.capsule=copy;
+    }
     public remove(owner:object):void{
         const previous=this.occupants.get(owner);
         if(!previous)return;
@@ -164,7 +178,8 @@ export class SplineProximityRegistry {
         const value=this.occupants.get(owner);
         return value?{radius:value.radius,position:{...value.position},
             ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{}),
-            ...(value.obb?{obb:copyProximityObb(value.obb)}:{})}:null;
+            ...(value.obb?{obb:copyProximityObb(value.obb)}:{}),
+            ...(value.capsule?{capsule:copyProximityCapsule(value.capsule)}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,

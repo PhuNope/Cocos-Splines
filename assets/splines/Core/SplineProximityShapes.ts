@@ -129,3 +129,69 @@ export function sweptSphereObbEntry(start:ProximityVec3,end:ProximityVec3,
     return sweptSphereAabbEntry(local(start),local(end),
         {min:{x:-h.x,y:-h.y,z:-h.z},max:{...h}},radius);
 }
+
+/** World capsule: the segment between the centers of the two hemispheres,
+ * plus a constant world radius. Coincident endpoints represent a sphere. */
+export interface ProximityCapsule {
+    a:ProximityVec3;b:ProximityVec3;radius:number;
+}
+export function validProximityCapsule(c:ProximityCapsule|null|undefined):c is ProximityCapsule {
+    return !!c&&validVector(c.a)&&validVector(c.b)&&finite(c.radius)&&
+        c.radius>0&&c.radius<=100&&finite(Math.hypot(c.b.x-c.a.x,c.b.y-c.a.y,c.b.z-c.a.z));
+}
+export function copyProximityCapsule(c:ProximityCapsule):ProximityCapsule {
+    return {a:{...c.a},b:{...c.b},radius:c.radius};
+}
+const subtract=(a:ProximityVec3,b:ProximityVec3):ProximityVec3=>
+    ({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
+const times=(a:ProximityVec3,s:number):ProximityVec3=>({x:a.x*s,y:a.y*s,z:a.z*s});
+/** First contact along one linear segment against a stationary capsule.
+ * Inflate the capsule by the moving sphere radius. Split the sweep at the
+ * two planes through its end centers: squared distance is quadratic within
+ * each cap/cylinder region. Bounded minimization and bisection include grazing
+ * contacts, axial/parallel motion and a zero-length capsule. */
+export function sweptSphereCapsuleEntry(start:ProximityVec3,end:ProximityVec3,
+    capsule:ProximityCapsule,radius:number):number|null {
+    if(!validVector(start)||!validVector(end)||!validProximityCapsule(capsule)||
+       !finite(radius)||radius<=0||radius>200)throw Error('Invalid swept sphere/capsule query.');
+    const axis=subtract(capsule.b,capsule.a);
+    const length=Math.hypot(axis.x,axis.y,axis.z);
+    const u=length>0?times(axis,1/length):{x:0,y:0,z:0};
+    const offset=subtract(start,capsule.a),velocity=subtract(end,start);
+    const s=dot(offset,u),v=dot(velocity,u);
+    const combined=radius+capsule.radius,r2=combined*combined;
+    const eps=1e-12*Math.max(1,r2);
+    const cuts=[0,1];
+    if(length>0&&v!==0){
+        for(const plane of [0,length]){
+            const t=(plane-s)/v;
+            if(t>0&&t<1)cuts.push(t);
+        }
+    }
+    cuts.sort((a,b)=>a-b);
+    for(let i=1;i<cuts.length;i++){
+        const lo=cuts[i-1],hi=cuts[i];
+        const axial=s+v*((lo+hi)/2);
+        let q=offset,w=velocity;
+        if(length>0&&axial>=length)q=subtract(offset,axis);
+        else if(length>0&&axial>0){
+            q=subtract(offset,times(u,s));
+            w=subtract(velocity,times(u,v));
+        }
+        const f=(t:number)=>{
+            const x=q.x+w.x*t,y=q.y+w.y*t,z=q.z+w.z*t;
+            return x*x+y*y+z*z-r2;
+        };
+        if(f(lo)<=eps)return lo;
+        const speed2=dot(w,w);
+        const min=speed2>0?Math.max(lo,Math.min(hi,-dot(q,w)/speed2)):lo;
+        if(f(min)>eps)continue;
+        let left=lo,right=min;
+        for(let pass=0;pass<48;pass++){
+            const mid=(left+right)/2;
+            if(f(mid)<=eps)right=mid;else left=mid;
+        }
+        return right;
+    }
+    return null;
+}
