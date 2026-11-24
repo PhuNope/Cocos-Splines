@@ -120,7 +120,18 @@ function applyGraphEdit(json,action,details={}) {
       throw Error('Select a valid input and output socket.');
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
-    target.input=source.id;
+    if(target.id===source.id)throw Error('Cannot connect a node to itself.');
+    if(source.input&&['offset','width'].includes(source.type)&&
+       target.input!==source.id){
+      // V1 is one output and single-input path operations. A simple relink
+      // would orphan a path node. Move the chosen transform immediately
+      // before the target while preserving every other graph node instead.
+      const consumer=next.nodes.find(node=>node.input===source.id);
+      if(!consumer)throw Error('Cannot move disconnected Graph output.');
+      consumer.input=source.input;
+      source.input=target.input;
+      target.input=source.id;
+    }else target.input=source.id;
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
     if(!target||!TYPES[target.type].params.includes(key))
