@@ -3,6 +3,7 @@ const NAME='cocos-splines';
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
+const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
@@ -450,6 +451,48 @@ const methods={
                     ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
                     ' One Scene snapshot; tangent angles unchanged.'};
         }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Explicit conversion of a Junction target endpoint to Broken mode,
+     * preserving the currently resolved curve with one undo snapshot.
+     */
+    async convertJunctionTargetToBroken(targetIndex){
+        if(knotEditBusy)return alertError('convert-junction-tangent-mode',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select an enabled SplineJunction.');
+            const plan=await invokeScene('queryJunctionConversionPlan',
+                junctionUuid,targetIndex);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan tangent mode conversion.');
+            if(!plan.changed)return {ok:true,changed:false,
+                message:'Target Knot is already Broken. No snapshot.'};
+            if(plan.junctionUuid!==junctionUuid||plan.targetIndex!==targetIndex||
+               !plan.targetKnotUuid||!plan.targetSplineUuid||!plan.guard||
+               plan.afterMode!==4||!Array.isArray(plan.writes))
+                throw Error('Invalid Junction tangent conversion plan from Scene.');
+            const read=()=>invokeScene('queryJunctionConversionState',
+                plan.junctionUuid,plan.guard,plan.targetKnotUuid);
+            const write=async(w,value)=>{
+                const check=await read();
+                if(!check?.ok)throw Error(check?.error||'Conversion Scene changed.');
+                const response=await Editor.Message.request('scene','set-property',{
+                    uuid:w.uuid,path:w.path,dump:{type:w.type,value},record:false,
+                });
+                if(response===false||(response&&response.ok===false))
+                    throw Error('Scene rejected Knot tangent conversion write.');
+            };
+            const result=await commitJunctionBrokenConversion(plan,{read,write,snapshot});
+            if(result.changed){
+                try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+                catch(error){console.warn('[Cocos Splines] Knot mode conversion refresh failed:',error);}
+            }
+            return {ok:true,changed:result.changed,targetKnotUuid:plan.targetKnotUuid,
+                message:'Converted target link '+targetIndex+' from mode '+
+                    plan.sourceMode+' to Broken, preserving resolved curve tangents. '+
+                    'One Scene snapshot. You may now Align G1/C1.'};
+        }catch(error){return alertError('convert-junction-tangent-mode',error);}
         finally{knotEditBusy=false;}
     },
     /** Adjust exactly one Broken-mode endpoint tangent to connect two

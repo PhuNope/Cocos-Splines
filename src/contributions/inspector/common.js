@@ -88,6 +88,7 @@ function makeInspector(type){
           <div class="spl-btns">
             <label>Tangent <select class="spl-index-input spl-tangent-mode" style="max-width:120px;width:120px"><option value="g1">G1 · direction</option><option value="c1">C1 · magnitude</option></select></label>
             <label>Forward <select class="spl-index-input spl-tangent-direction" style="max-width:125px;width:125px"><option value="same">Same</option><option value="opposed">Opposed</option></select></label>
+            <button type="button" class="spl-btn spl-convert-connector-mode">Convert Target → Broken</button>
             <button type="button" class="spl-btn spl-align-connector">Align Tangent</button>
           </div>
         </details><div class="spl-btns"><button type="button" class="spl-btn spl-add-junction-mesh">＋ Add XZ Road Patch</button></div>`;
@@ -97,6 +98,7 @@ function makeInspector(type){
         selectors.connectorTarget='.spl-connector-target';
         selectors.snapConnector='.spl-snap-connector';
         selectors.alignConnector='.spl-align-connector';
+        selectors.convertConnectorMode='.spl-convert-connector-mode';
         selectors.tangentMode='.spl-tangent-mode';
         selectors.tangentDirection='.spl-tangent-direction';
     }
@@ -273,6 +275,8 @@ function makeInspector(type){
                 this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
                 this.$.snapConnector.addEventListener('click',()=>void callEditor(this,
                     'snap-junction-endpoint',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
+                this.$.convertConnectorMode.addEventListener('click',()=>void callEditor(this,
+                     'convert-junction-tangent-mode',Number(this.$.connectorTarget.value)));
                 this.$.alignConnector.addEventListener('click',()=>void callEditor(this,
                     'align-junction-tangent',Number(this.$.connectorAnchor.value),
                     Number(this.$.connectorTarget.value),this.$.tangentMode.value,

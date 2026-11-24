@@ -72,7 +72,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b2b2b2b2b2b2b2b2a — Headless profiling harness + deterministic broadphase/BVH complexity gates, opt-in in-runtime limit() sampler (p50/p95, counters), CI JSON artifacts and manual Creator 3.8.8 acceptance checklist. **Native validation NOT executed.**
 - [x] Phase 3.6b2b2b2b2b2b2b2b2b2b — Opt-in bounded constant-acceleration relative sweeps with per-segment quadratic chord error, acceleration-expanded broadphase and conservative rotation-envelope collision for non-spherical shapes, Inspector + offline tests. Native 3.8.8 validation pending.
 - [ ] Phase 3.6b2b2b2b2b2b2b2b2b2c — Exact rotating geometry narrowphase, native Creator 3.8.8 physics validation/profiling, physical collision resolution and server-authoritative multiplayer traffic.
-- [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
+- [x] Phase 3.2b2a — Explicit Junction target endpoint AutoSmooth/Linear/Mirrored/Continuous → Broken conversion preserving currently evaluated tangents, including Knot-space vectors and handle nodes, read-only Scene planner + fingerprint/transaction, best-effort rollback, single snapshot and regression tests. Native Creator 3.8.8 undo/prefab acceptance pending.
+- [ ] Phase 3.2b2b — Non-destructive connector merge graph / geometric Join workflow with independent source-spline preservation and native Editor acceptance.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

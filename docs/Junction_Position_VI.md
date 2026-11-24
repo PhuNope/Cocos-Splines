@@ -121,3 +121,12 @@ console.log(follower.currentProgress, follower.currentDistance, follower.current
 - **Event không chạy khi bắt đầu ngay tại mốc:** crossing logic có điểm đầu **exclusive** để chống bắn 2 lần; hãy để xe bắt đầu hơi trước mốc hoặc gọi event riêng lúc spawn.
 - **Distance bị lệch sau scale:** distance là đơn vị *local spline*, không phải khoảng cách thế giới. Tránh non-uniform scale hoặc quy đổi bằng scale của Node trước khi gán.
 - **Không thấy spline t/distance mới:** đóng Creator, thay toàn bộ `extensions/cocos-splines`, reload extension, reimport asset-db, kiểm tra tránh có bản runtime trùng trong `assets/splines`.
+
+ 
+## Junction: Convert Target to Broken (V2 preview)
+
+Workflow: Select an enabled `SplineJunction` → **Check Connectors / Snap Target Endpoint** if needed → choose **Target link #** (0-based serialized index) → click **Convert Target → Broken** → then **Align Tangent (G1/C1)**. Conversion is explicit; existing Align does not silently change a Knot's mode.
+
+This command supports **AutoSmooth (0), Linear (1), Mirrored (2), Continuous (3)** for an **open spline at exact link progress 0 or 1**. It resolves both tangent vectors from `SplineContainer.getNaturalResolvedKnots()` before changing anything, then writes both as independent `Broken (4)` tangents. Tangent handle nodes (when present) are updated through their real serialized `Node.position` fields. `tangentsInKnotSpace`, Knot local rotation, reversed traversal and 2D plane restrictions are taken into account. The target Knot position, unrelated child objects, source spline, Junction links and other components are not changed.
+
+A Scene/world-matrix/geometry fingerprint and selected target field checks protect the operation. Writes use Editor `set-property` with `record:false`, followed by **one snapshot**; failure attempts a guarded rollback and reports when rollback cannot safely proceed. If already Broken, it is a no-op with no snapshot. This conversion does not fuse Knot nodes, delete splines, create a merged asset or guarantee native Undo/Redo until Cocos Creator 3.8.8 smoke testing is performed. **Physical connector merge** remains a later roadmap slice.
