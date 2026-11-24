@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.7a SVG Path Interoperability (V2 Preview)
+
+- Added strict editor-independent SVG Path converter (`src/SplineSvgConverter.js`). Imports M/L/H/V/C/S/Q/T/Z commands (absolute and relative), converting straight lines and quadratic curves to exact cubic Bézier handles; rejects arc commands, multiple subpaths and transforms rather than misinterpreting geometry.
+- **Import SVG as new XY2D Spline** creates a sibling Node hierarchy with Broken-mode knots and parent-local tangent vectors. SVG Y-down converts to Cocos Y-up; an explicit units-per-pixel setting is available. No destructive edit of the current spline. Partial pre-snapshot failures attempt to remove only the newly created root.
+- **Export selected spline to SVG text** is a read-only Scene query through `getNaturalResolvedKnots()`, preserving resolved cubic controls for XY2D/XZ2D and natural knot order. Exports an SVG path, viewBox, and easy-to-copy Inspector textarea.
+- Bounded 200 KB SVG input/output, max 256 segments and coordinate limits; no script or external reference execution. Regression tests cover relative/smooth curves, closing seam, round-trip geometry, validation, Inspector/Editor IPC, snapshot and rollback contracts.
+- Native Cocos Creator 3.8.8 scene, Undo/Redo, Prefab, SVG screenshot and Gizmos acceptance remains pending. No tag or release.
+
 # Unreleased — Phase 2.19 Non-Destructive Spline Resampling
 
 - Added **Resample Spline · new copy** to SplineContainer Inspector, with target Knot count (open 2–128 / closed 3–128) or maximum nominal arc spacing, Local/World length metric and explicit maximum estimated deviation.
