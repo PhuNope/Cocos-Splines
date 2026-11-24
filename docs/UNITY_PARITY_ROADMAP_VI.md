@@ -198,6 +198,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Cocos Creator 3.8.8 Editor gizmos/Physics/Undo/Redo/performance smoke tests and visual legend/index labels.
 - [ ] Next: gizmo debug counts/Inspector diagnostics and Phase 4 Procedural Geometry Graph.
 
+### Phase 3.8d1 — Placement Summary (v2 preview)
+
+- [x] Pure reason histogram from full, already validated `PlacementDiagnostic[]` (0–2048 candidates), exact Accepted/Rejected totals, and at most three original candidate indexes per rejection class.
+- [x] Read-only `SplineObjectController.summarizePlacement()` calls the same non-destructive preflight as Respawn/Gizmos, not a separate approximate planner.
+- [x] Scene `queryPlacementSummary(uuid)` and Editor `query-placement-summary` IPC; no Scene snapshot, no Undo entry, no generated nodes or caller mutation.
+- [x] Inspector **Analyze Placement** button, explicit manual snapshot, text-only seven-reason count display with bounded examples, defensive result validation and pending-request guard.
+- [x] Native 3.8.8 acceptance checklist and offline Core/Scene/Editor/Inspector regression integration.
+- [ ] Native Cocos Creator 3.8.8 Inspector, physics and performance smoke acceptance. Future: variant-level histogram, scene marker index labels, CSV export.
+- [ ] Next: Phase 4 Procedural Geometry Graph, keeping V2 no-tag/no-release protocol.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
