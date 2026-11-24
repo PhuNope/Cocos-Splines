@@ -98,10 +98,11 @@ assert(reversed.ok,reversed.error);
 near(reversed.knots[1].position.x,2.5);
 near(reversed.knots[reversed.seams[1].atKnot].position.x,-3.5);
 assert(adapter.queryMultiJunctionJoinValid('j1',reversed.guard).ok);
-B.knots[0].tangentOut.x=2;
+const originalTangent=B.knots[0].tangentOut.x;
+B.knots[0].tangentOut.x=originalTangent+2;
 assert(!adapter.queryMultiJunctionJoinValid('j1',reversed.guard).ok,
  'Source edits invalidate global Scene lease');
-B.knots[0].tangentOut.x=5/3;
+B.knots[0].tangentOut.x=originalTangent;
 assert(adapter.queryMultiJunctionJoinValid('j1',reversed.guard).ok);
 J2.connections[0].progress=.5;
 assert(!adapter.queryMultiJunctionJoinValid('j1',reversed.guard).ok);
