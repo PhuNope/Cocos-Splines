@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.8d1 Placement Reason Statistics (V2 Preview)
+
+- Added on-demand **Analyze Placement** in SplineObjectController Inspector: exact totals, Accepted/Rejected and Surface/Collider/Peer/Exclusion/Density/Spacing counts, with up to three rejected indexes per reason.
+- Summarizes the authoritative non-destructive preview before any Scene mutation, independent of sampled Gizmo marker count. Read-only Editor→Scene IPC has no snapshot/Undo/Respawn and returns a small bounded payload.
+- Added defensive summary validation, textContent-only UI, request guard, strict native acceptance checklist and Core/IPC/Inspector regression.
+- Native Cocos Creator 3.8.8 smoke tests remain pending; no tag/release.
+
 # Unreleased — Phase 3.8d Placement Debug Gizmos (V2 Preview)
 
 - Added optional selected-only Placement Debug Gizmos for SplineObjectController, registered through official Cocos-Gizmos v3 decorator with the drawer isolated under Editor.
