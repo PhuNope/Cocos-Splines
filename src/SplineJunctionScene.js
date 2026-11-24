@@ -7,6 +7,7 @@ const {worldTangent,analyzeConnections,planEndpointSnap}=require('./SplineConnec
 const {worldVector,endpointSide,planJunctionTangent}=require('./SplineJunctionTangentMath');
 const {planJunctionBrokenConversion}=require('./SplineJunctionModeMath');
 const {planJunctionJoin}=require('./SplineJunctionJoinMath');
+const {planJunctionFanout}=require('./SplineJunctionFanoutMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
  function junctionAt(uuid){
@@ -117,6 +118,77 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
        junctionUuid:junction.node.uuid,anchorIndex,targetIndex,
        anchorSplineUuid:root.uuid,targetSplineUuid:target.spline.node.uuid,
        guard:fingerprint(junction,null,'join'),
+     };
+   }catch(error){return {ok:false,error:String(error?.message||error)};}
+ }
+ /** Branch-preserving multi-link Join planner: never edits sources.
+  * Returns separate spline chains for each requested Junction exit.
+  */
+ function queryJunctionFanoutPlan(uuid,anchorIndex,targetIndices){
+   try{
+     const junction=junctionAt(uuid);
+     if(!junction||!Number.isInteger(anchorIndex)||anchorIndex<0||
+        anchorIndex>=junction.connections.length||
+        !Array.isArray(targetIndices)||targetIndices.length<2||
+        targetIndices.length>8||targetIndices.some(i=>!Number.isInteger(i)||
+        i<0||i>=junction.connections.length||i===anchorIndex)||
+        new Set(targetIndices).size!==targetIndices.length)
+       throw Error('Select one anchor and 2 to 8 distinct valid target links.');
+     const entries=samples(junction);
+     const anchor=entries.find(e=>e.index===anchorIndex);
+     if(!anchor)throw Error('Anchor link is not active.');
+     const outgoing=targetIndices.map(index=>entries.find(e=>e.index===index));
+     if(outgoing.some(e=>!e))
+       throw Error('All target links must be active.');
+     const sourceSplines=[anchor.spline,...outgoing.map(e=>e.spline)];
+     if(new Set(sourceSplines.map(s=>s.node.uuid)).size!==sourceSplines.length)
+       throw Error('Fan-out Join requires distinct source SplineContainers.');
+     for(const entry of [anchor,...outgoing]){
+       const spline=entry.spline;
+       if(spline.closed||![0,1].includes(entry.progress))
+         throw Error('Fan-out requires exact endpoints on open splines.');
+       const knots=spline.knots;
+       if(knots.length<2||knots.length>128||
+          knots.some(k=>!k?.node||k.node.isValid===false||
+             k.node.parent!==spline.node))
+         throw Error('Invalid direct-child Knot hierarchy for Fan-out.');
+       if(typeof spline.getNaturalResolvedKnots!=='function')
+         throw Error('Spline resolved tangent calculation unavailable.');
+     }
+     const root=anchor.spline.node;
+     if(!root.parent||root.parent.isValid===false||!root.position||
+        !root.rotation||!root.scale)
+       throw Error('Anchor spline root transform unavailable.');
+     const descriptor=(entry)=>({
+       progress:entry.progress,reversed:!!entry.spline.reversed,
+       dimension:entry.spline.dimension,matrix:entry.worldMatrix,
+       knots:entry.spline.getNaturalResolvedKnots(),
+     });
+     const source=descriptor(anchor);
+     const joined=planJunctionFanout(source,outgoing.map(entry=>({
+       index:entry.index,source:descriptor(entry),
+     })));
+     const rootTransform={
+       position:{x:root.position.x,y:root.position.y,z:root.position.z},
+       rotation:{x:root.rotation.x,y:root.rotation.y,
+         z:root.rotation.z,w:root.rotation.w},
+       scale:{x:root.scale.x,y:root.scale.y,z:root.scale.z},
+     };
+     if(Object.values(rootTransform).some(obj=>
+        Object.values(obj).some(v=>!Number.isFinite(v))))
+       throw Error('Invalid anchor Container transform.');
+     const samplesPerCurve=Math.max(...sourceSplines.map(s=>s.samplesPerCurve));
+     if(!Number.isInteger(samplesPerCurve)||samplesPerCurve<4||
+        samplesPerCurve>256)
+       throw Error('Invalid source spline sampling density.');
+     return {ok:true,...joined,guard:fingerprint(junction,null,'join'),
+       junctionUuid:junction.node.uuid,anchorIndex,targetIndices:[...targetIndices],
+       anchorSplineUuid:root.uuid,
+       targetSplineUuids:outgoing.map(e=>e.spline.node.uuid),
+       parentUuid:root.parent.uuid,
+       sourceName:String(root.name||'Spline').slice(0,60),
+       rootTransform,samplesPerCurve,
+       containerAppearance:captureContainerAppearance(anchor.spline),
      };
    }catch(error){return {ok:false,error:String(error?.message||error)};}
  }
@@ -354,6 +426,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
  return {queryJunctionConnections,queryJunctionSnapPlan,queryJunctionSnapValid,
     queryJunctionTangentPlan,queryJunctionTangentState,
     queryJunctionConversionPlan,queryJunctionConversionState,
-    queryJunctionJoinPlan,queryJunctionJoinValid};
+    queryJunctionJoinPlan,queryJunctionJoinValid,
+    queryJunctionFanoutPlan};
 }
 module.exports={createJunctionScene};

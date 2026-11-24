@@ -6,6 +6,7 @@ const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
 const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
+const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
@@ -493,6 +494,46 @@ const methods={
                     ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
                     ' One Scene snapshot; tangent angles unchanged.'};
         }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Preserve Junction fan-out branches as separate independent splines
+     * under ONE new scene group, rather than flattening them into a path
+     * that would traverse a middle spoke twice.
+     */
+    async joinJunctionFanout(anchorIndex,targetsText){
+        if(knotEditBusy)return alertError('join-junction-fanout',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        try{
+            const targets=parseFanoutTargets(targetsText);
+            if(!Number.isInteger(anchorIndex)||anchorIndex<0||
+               anchorIndex>63||targets.includes(anchorIndex))
+                throw Error('Choose an anchor link distinct from all targets.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select a SplineJunction first.');
+            await ensureClasses();
+            const plan=await invokeScene('queryJunctionFanoutPlan',
+                junctionUuid,anchorIndex,targets);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan Junction fan-out.');
+            validateFanoutPlan(plan,anchorIndex,targets);
+            if(plan.junctionUuid!==junctionUuid)
+                throw Error('Junction fan-out planner returned a foreign Scene Junction.');
+            const check=async()=>{
+                const live=await invokeScene('queryJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!live?.ok)throw Error(live?.error||
+                    'Junction source or Scene changed during fan-out.');
+            };
+            return await commitJunctionFanout(plan,{
+                check,createNode:makeNode,component,
+                nodeProperty:setNodeSerialized,containerProperty:property,
+                appearanceWrites,position,setKnot:setKnotValue,snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',
+                    {uuid,snapshot:false}),
+                select:selectOnly,
+                refresh:uuid=>invokeScene('refreshPreview',uuid),
+            });
+        }catch(e){return alertError('join-junction-fanout',e);}
         finally{knotEditBusy=false;}
     },
     /** Make a NEW independent spline from two open Junction endpoint links.

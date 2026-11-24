@@ -7,6 +7,9 @@ function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineJunctionJoinMath.js');
+checkRel('dist/SplineJunctionFanoutMath.js');
+checkRel('dist/SplineJunctionFanoutEditor.js');
+assert.deepEqual(pkg.contributions.messages['join-junction-fanout']?.methods,['joinJunctionFanout']);
 assert.deepEqual(pkg.contributions.messages['join-junction-links']?.methods,['joinJunctionLinks']);
 checkRel('examples/installable/ExampleGallery.ts');
 checkRel('examples/installable/README.md');

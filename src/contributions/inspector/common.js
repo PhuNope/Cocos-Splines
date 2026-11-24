@@ -78,13 +78,19 @@ function makeInspector(type){
     }
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
-          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents, may have a visible G1 kink, and does not preserve extra Knot components. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
+          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents, may have a visible G1 kink, and does not preserve extra Knot components. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
           <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
           <div class="spl-btns">
             <label>Anchor link # <input type="number" class="spl-index-input spl-connector-anchor" min="0" max="63" step="1" value="0"></label>
             <label>Target link # <input type="number" class="spl-index-input spl-connector-target" min="0" max="63" step="1" value="1"></label>
             <button type="button" class="spl-btn spl-snap-connector">Snap Target Endpoint</button>
             <button type="button" class="spl-btn spl-join-connector">Join Links → New Spline</button>
+          </div>
+          <div class="spl-btns">
+            <label>Fan-out target links (comma-separated, 2–8)
+              <input type="text" class="spl-index-input spl-fanout-targets" value="1,2" style="width:115px" placeholder="1,2,3">
+            </label>
+            <button type="button" class="spl-btn spl-join-fanout">Join Fan-out → New Splines</button>
           </div>
           <div class="spl-btns">
             <label>Tangent <select class="spl-index-input spl-tangent-mode" style="max-width:120px;width:120px"><option value="g1">G1 · direction</option><option value="c1">C1 · magnitude</option></select></label>
@@ -99,6 +105,8 @@ function makeInspector(type){
         selectors.connectorTarget='.spl-connector-target';
         selectors.snapConnector='.spl-snap-connector';
         selectors.joinConnector='.spl-join-connector';
+        selectors.fanoutTargets='.spl-fanout-targets';
+        selectors.joinFanout='.spl-join-fanout';
         selectors.alignConnector='.spl-align-connector';
         selectors.convertConnectorMode='.spl-convert-connector-mode';
         selectors.tangentMode='.spl-tangent-mode';
@@ -275,6 +283,9 @@ function makeInspector(type){
             if(type==='junction'){
                 this.$.addJunctionMesh.addEventListener('click',()=>void callEditor(this,'create-junction-mesh'));
                 this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
+                this.$.joinFanout.addEventListener('click',()=>void callEditor(this,
+                    'join-junction-fanout',Number(this.$.connectorAnchor.value),
+                    this.$.fanoutTargets.value));
                 this.$.joinConnector.addEventListener('click',()=>void callEditor(this,
                     'join-junction-links',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
                 this.$.snapConnector.addEventListener('click',()=>void callEditor(this,
