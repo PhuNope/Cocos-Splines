@@ -113,7 +113,8 @@ export function summarizePlacementDiagnostics(
         surface:[],collider:[],peer:[],exclusion:[],density:[],spacing:[],
     };
     let last=-1;
-    for(const item of items){
+    for(const entry of items){
+        const item:PlacementDiagnostic=entry;
         if(!item||!Number.isInteger(item.index)||item.index<=last||item.index>2047||
             !finite(item.progress)||item.progress<0||item.progress>1||
             !point(item.position)||!finite(item.radius)||item.radius<0||
