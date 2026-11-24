@@ -74,6 +74,31 @@ export function prefabHierarchyRadius(root:FootprintNode):number {
     if(radius>100)throw Error('Prefab footprint exceeds 100 World units; use a smaller prefab or manual mode.');
     return radius;
 }
+/** Conservative upper bound for an arbitrary affine 3x3 World transform
+ * including shear induced by rotated nonuniform ancestor scales.
+ * sqrt(norm_1 * norm_inf) is >= the matrix spectral norm; identity => 1.
+ */
+export function parentLinearStretch(matrix:Readonly<{
+    m00:number;m01:number;m02:number;m04:number;m05:number;m06:number;
+    m08:number;m09:number;m10:number;
+}>):number {
+    if(!matrix)throw Error('Missing generated population parent World matrix.');
+    const a=[matrix.m00,matrix.m04,matrix.m08,
+        matrix.m01,matrix.m05,matrix.m09,
+        matrix.m02,matrix.m06,matrix.m10];
+    if(!a.every(valid))throw Error('Invalid generated population parent World matrix.');
+    const normInf=Math.max(
+        Math.abs(a[0])+Math.abs(a[1])+Math.abs(a[2]),
+        Math.abs(a[3])+Math.abs(a[4])+Math.abs(a[5]),
+        Math.abs(a[6])+Math.abs(a[7])+Math.abs(a[8]));
+    const norm1=Math.max(
+        Math.abs(a[0])+Math.abs(a[3])+Math.abs(a[6]),
+        Math.abs(a[1])+Math.abs(a[4])+Math.abs(a[7]),
+        Math.abs(a[2])+Math.abs(a[5])+Math.abs(a[8]));
+    const stretch=Math.sqrt(norm1*normInf);
+    if(!valid(stretch))throw Error('Parent transform stretch exceeds supported range.');
+    return stretch;
+}
 /** Return actual inflated radius for one placed candidate. A parent with
  * nonuniform scale is conservatively bounded by its largest absolute axis. */
 export function scaledPrefabFootprint(baseRadius:number,parentScale:FootprintVec3,
