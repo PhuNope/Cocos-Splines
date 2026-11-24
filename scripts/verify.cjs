@@ -6,6 +6,8 @@ assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
+checkRel('dist/SplineJunctionJoinMath.js');
+assert.deepEqual(pkg.contributions.messages['join-junction-links']?.methods,['joinJunctionLinks']);
 checkRel('examples/installable/ExampleGallery.ts');
 checkRel('examples/installable/README.md');
 checkRel('examples/installable/CREATE_GALLERY_IN_SCENE.md');

@@ -6,6 +6,8 @@
 const {worldTangent,analyzeConnections,planEndpointSnap}=require('./SplineConnectionMath');
 const {worldVector,endpointSide,planJunctionTangent}=require('./SplineJunctionTangentMath');
 const {planJunctionBrokenConversion}=require('./SplineJunctionModeMath');
+const {planJunctionJoin}=require('./SplineJunctionJoinMath');
+const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
  function junctionAt(uuid){
    const node=resolve(uuid);
@@ -61,6 +63,71 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
    });
    return JSON.stringify([scene,junction.node.uuid,junction.node.parent?.uuid||null,
      junction.enabled,junction.connections.length,state]);
+ }
+ /** Read-only Join planner. Produces independent sibling spline geometry
+  * with no source Knot, SplineJunction, prefab or component writes. */
+ function queryJunctionJoinPlan(uuid,anchorIndex,targetIndex){
+   try{
+     const junction=junctionAt(uuid);
+     if(!junction||!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
+        anchorIndex===targetIndex||anchorIndex<0||targetIndex<0||
+        anchorIndex>=junction.connections.length||
+        targetIndex>=junction.connections.length)
+       throw Error('Choose two different valid Junction link indices.');
+     const entries=samples(junction);
+     const anchor=entries.find(e=>e.index===anchorIndex),
+       target=entries.find(e=>e.index===targetIndex);
+     if(!anchor||!target||anchor.spline===target.spline)
+       throw Error('Join requires two distinct active spline links.');
+     for(const entry of [anchor,target]){
+       if(entry.spline.closed||![0,1].includes(entry.progress))
+         throw Error('Join requires exact endpoints on open splines.');
+       const spline=entry.spline,knots=spline.knots;
+       if(knots.length<2||knots.length>128||
+          knots.some(k=>!k?.node||k.node.isValid===false||
+             k.node.parent!==spline.node))
+         throw Error('Join requires direct-child Knot geometry.');
+       if(typeof spline.getNaturalResolvedKnots!=='function')
+         throw Error('Spline resolved tangent calculation unavailable.');
+     }
+     const root=anchor.spline.node;
+     if(!root.parent||root.parent.isValid===false||
+        !root.position||!root.rotation||!root.scale)
+       throw Error('Cannot copy anchor spline root transform.');
+     const source=(entry)=>({
+       progress:entry.progress,reversed:!!entry.spline.reversed,
+       dimension:entry.spline.dimension,matrix:entry.worldMatrix,
+       knots:entry.spline.getNaturalResolvedKnots(),
+     });
+     const joined=planJunctionJoin(source(anchor),source(target));
+     const rootTransform={
+       position:{x:root.position.x,y:root.position.y,z:root.position.z},
+       rotation:{x:root.rotation.x,y:root.rotation.y,
+          z:root.rotation.z,w:root.rotation.w},
+       scale:{x:root.scale.x,y:root.scale.y,z:root.scale.z},
+     };
+     const values=[...Object.values(rootTransform.position),
+       ...Object.values(rootTransform.rotation),...Object.values(rootTransform.scale)];
+     if(values.some(x=>!Number.isFinite(x)))
+       throw Error('Invalid anchor spline root transform.');
+     return {ok:true,...joined,parentUuid:root.parent.uuid,
+       sourceName:String(root.name||'Spline').slice(0,60),rootTransform,
+       samplesPerCurve:Math.max(anchor.spline.samplesPerCurve,target.spline.samplesPerCurve),
+       containerAppearance:captureContainerAppearance(anchor.spline),
+       junctionUuid:junction.node.uuid,anchorIndex,targetIndex,
+       anchorSplineUuid:root.uuid,targetSplineUuid:target.spline.node.uuid,
+       guard:fingerprint(junction,null,'join'),
+     };
+   }catch(error){return {ok:false,error:String(error?.message||error)};}
+ }
+ function queryJunctionJoinValid(uuid,guard){
+   try{
+     const junction=junctionAt(uuid);
+     if(!junction||typeof guard!=='string'||!guard||
+        fingerprint(junction,null,'join')!==guard)
+       throw Error('Junction source spline or active Scene changed during Join.');
+     return {ok:true};
+   }catch(error){return {ok:false,error:String(error?.message||error)};}
  }
  function queryJunctionConnections(uuid,positionTolerance=.1,angleTolerance=15){
    try{
@@ -286,6 +353,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId}){
  }
  return {queryJunctionConnections,queryJunctionSnapPlan,queryJunctionSnapValid,
     queryJunctionTangentPlan,queryJunctionTangentState,
-    queryJunctionConversionPlan,queryJunctionConversionState};
+    queryJunctionConversionPlan,queryJunctionConversionState,
+    queryJunctionJoinPlan,queryJunctionJoinValid};
 }
 module.exports={createJunctionScene};

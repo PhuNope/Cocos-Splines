@@ -495,6 +495,106 @@ const methods={
         }catch(e){return alertError('snap-junction-endpoint',e);}
         finally{knotEditBusy=false;}
     },
+    /** Make a NEW independent spline from two open Junction endpoint links.
+     * Unlike a destructive Unity spline merge, this operation never reparents
+     * or edits source knots, Junction connections or Prefab instances.
+     */
+    async joinJunctionLinks(anchorIndex,targetIndex){
+        if(knotEditBusy)return alertError('join-junction-links',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        let created=null,committed=false,plan=null;
+        try{
+            if(!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
+               anchorIndex<0||targetIndex<0||anchorIndex===targetIndex)
+                throw Error('Select two different Junction link indices.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select a SplineJunction first.');
+            await ensureClasses();
+            plan=await invokeScene('queryJunctionJoinPlan',junctionUuid,
+                anchorIndex,targetIndex);
+            if(!plan?.ok)throw Error(plan?.error||'Junction Join planner failed.');
+            const finiteVec=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            const finiteQuat=q=>finiteVec(q)&&Number.isFinite(q.w);
+            if(plan.junctionUuid!==junctionUuid||plan.anchorIndex!==anchorIndex||
+               plan.targetIndex!==targetIndex||!plan.anchorSplineUuid||
+               !plan.targetSplineUuid||plan.anchorSplineUuid===plan.targetSplineUuid||
+               typeof plan.guard!=='string'||!plan.guard||
+               typeof plan.parentUuid!=='string'||!plan.parentUuid||
+               !Number.isInteger(plan.count)||plan.count<3||plan.count>128||
+               !Array.isArray(plan.knots)||plan.knots.length!==plan.count||
+               plan.closed!==false||plan.reversed!==false||
+               ![0,1,2].includes(plan.dimension)||
+               !Number.isInteger(plan.samplesPerCurve)||
+               plan.samplesPerCurve<4||plan.samplesPerCurve>256||
+               !Number.isFinite(plan.gap)||plan.gap<0||plan.gap>1e-5||
+               !finiteVec(plan.rootTransform?.position)||
+               !finiteVec(plan.rootTransform?.scale)||
+               !finiteQuat(plan.rootTransform?.rotation)||
+               plan.knots.some(k=>!finiteVec(k?.position)||
+                   !finiteVec(k?.tangentIn)||!finiteVec(k?.tangentOut)||
+                   k.mode!==4))
+                throw Error('Invalid Junction Join plan returned from Scene.');
+            const appearance=appearanceWrites(plan.containerAppearance||{});
+            const assertSource=async()=>{
+                const check=await invokeScene('queryJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!check?.ok)throw Error(check?.error||
+                    'Junction source geometry changed during Join.');
+            };
+            await assertSource();
+            created=await makeNode(plan.parentUuid,
+                String(plan.sourceName||'Spline').slice(0,60)+' (Joined)');
+            await component(created,'Splines.SplineContainer');
+            await setNodeSerialized(created,'position','cc.Vec3',plan.rootTransform.position);
+            await setNodeSerialized(created,'rotation','cc.Quat',plan.rootTransform.rotation);
+            await setNodeSerialized(created,'scale','cc.Vec3',plan.rootTransform.scale);
+            await property(created,0,'closed',false,'Boolean',false);
+            await property(created,0,'reversed',false,'Boolean',false);
+            await property(created,0,'dimension',plan.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',plan.samplesPerCurve,'Integer',false);
+            for(const setting of appearance)
+                await property(created,0,setting.key,setting.value,setting.type,false);
+            for(let i=0;i<plan.count;i++){
+                if(i%8===0)await assertSource();
+                const k=plan.knots[i];
+                const node=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(node,'Splines.SplineKnot');
+                await position(node,[k.position.x,k.position.y,k.position.z]);
+                await setKnotValue(node,'mode',4,'Enum');
+                await setKnotValue(node,'tangentIn',k.tangentIn,'cc.Vec3');
+                await setKnotValue(node,'tangentOut',k.tangentOut,'cc.Vec3');
+            }
+            await assertSource();
+            await snapshot();
+            committed=true;
+            try{selectOnly(created);}catch(e){console.warn('[Cocos Splines] Join selection failed:',e);}
+            try{await invokeScene('refreshPreview',created);}
+            catch(e){console.warn('[Cocos Splines] Join preview refresh failed:',e);}
+            return {ok:true,root:created,count:plan.count,
+                gap:plan.gap,angleDeg:plan.angleDeg,continuousC1:plan.continuousC1,
+                message:'Created new independent Joined spline ('+plan.count+
+                    ' Knots) with one welded seam. Source splines and Junction unchanged. '+
+                    'Seam tangent angle: '+(plan.angleDeg===null?'undefined':plan.angleDeg.toFixed(2)+'°')+
+                    '. One Scene snapshot; new Knot tangents are Broken.'};
+        }catch(error){
+            let warning='';
+            if(created&&!committed&&plan?.junctionUuid&&plan?.guard){
+                try{
+                    const check=await invokeScene('queryJunctionJoinValid',
+                        plan.junctionUuid,plan.guard);
+                    if(check?.ok){
+                        const removed=await Editor.Message.request('scene','remove-node',
+                            {uuid:created,snapshot:false});
+                        if(removed===false||(removed&&removed.ok===false))
+                            throw Error('Editor rejected Join cleanup.');
+                    }else warning='; source/Scene changed — cleanup skipped';
+                }catch(e){warning='; cleanup failed: '+String(e?.message||e);}
+            }
+            return alertError('join-junction-links',
+                Error(String(error?.message||error)+warning));
+        }finally{knotEditBusy=false;}
+    },
     /** Explicit conversion of a Junction target endpoint to Broken mode,
      * preserving the currently resolved curve with one undo snapshot.
      */
