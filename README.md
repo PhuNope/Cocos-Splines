@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Placement Statistics — exact Inspector reason counts (v2 preview)
+
+SplineObjectController Inspector now includes an on-demand **Analyze Placement** button. It returns exact totals, accepted/rejected counts and the seven reason categories from the same non-mutating preview used by Respawn, plus up to three rejected candidate indexes for each category. The full plan (up to 2048 candidates) is counted even if Debug Gizmos draws only 8–256 markers. Analyze does not spawn, clear, mutate Scene objects or make an Undo snapshot; the Inspector displays an explicit **manual snapshot** that you can refresh after edits. See [Placement Statistics guide](docs/POPULATION_PLACEMENT_SUMMARY_V2_VI.md).
+
 ### Placement Debug Gizmos for Object Controllers (v2 preview)
 
 An opt-in **Placement Debug Gizmos** group in SplineObjectController draws colored World-space candidate markers **when selected**, using the same non-destructive placement preflight as Respawn. Colors: green accepted, orange missing surface, red Collider, purple peer occupancy, grey exclusion, yellow density, blue World spacing. Preview records the **first** rejection reason, preserves seed/index and original Knot/Mesh/Prefab assets, and draws at most 256 reason-aware sampled markers. Draw estimated footprint spheres optionally. Cocos-Gizmos v3 is required; disabled by default. See [Placement Debug Gizmos guide](docs/POPULATION_DEBUG_GIZMOS_V2_VI.md).
