@@ -363,6 +363,11 @@
           "spawnPrefabs"
         ]
       },
+      "query-placement-summary": {
+        "methods": [
+          "queryPlacementSummary"
+        ]
+      },
       "select-knot-ids": {
         "methods": [
           "selectKnotIds"
