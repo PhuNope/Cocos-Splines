@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Seeded Noise Layers for object population (v2 preview)
+
+Add **Spline Noise Layers** from the Extensions menu or SplineContainer Inspector. The opt-in `SplineNoise` Component exposes up to 16 deterministic multi-octave layers (`frequency`, `octaves`, `persistence`, `phase`, `seed`, `amplitude`, `fadeEnds`). Output is a Right/Up/Forward displacement sampled at normalized spline progress; closed loops tile continuously at the seam. Assign `SplineNoise` to **SplineObjectController → Noise** to offset generated prefab instances. With the field empty, legacy population is identical. No Knot, Road or source Mesh geometry changes. See [Noise Layers guide](docs/NOISE_LAYERS_V2_VI.md). Native Creator 3.8.8 validation remains pending.
+
 ### Versioned spline JSON round-trip (v2 preview)
 
 SplineContainer Inspector → **Cocos Splines JSON · Round-trip (V1)** exports exact **resolved** local Bézier controls and root local transform, plus dimension (3D/XY2D/XZ2D), Closed, Reversed, and Samples Per Curve. Import always creates a NEW sibling spline. The original spline/Prefab is not modified; previous Unity JSON import remains separate and unchanged. Converted Knots use **Broken** tangents (geometry remains the same, original tangent authoring modes/handle Nodes are not cloned). Only geometry and root local transform are included—no Road/Junction/Prefab/component references. Same-parent import preserves World placement; cross-parent import is local-relative. See [JSON guide](docs/JSON_INTEROP_V2_VI.md). Native Editor 3.8.8 Undo/Redo and prefab smoke tests still required.
