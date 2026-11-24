@@ -156,6 +156,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Inspector controls, automated pure/adapter/regression tests, doc and native Editor 3.8.8 acceptance checklist.
 - [ ] Native Cocos Creator 3.8.8 acceptance; accurate MeshCollider BVH, prefab geometry bounds and multi-controller occupancy remain future work.
 
+### Phase 3.8c2b2a — MeshCollider BVH for Population (v2 preview)
+
+- [x] Reuse `SplineMeshColliderAdapter` and immutable `SplineProximityMesh` BVH from SplineAnimate for opt-in non-convex, CPU-readable MeshCollider triangle surface tests.
+- [x] Add sphere/point static triangle distance query with BVH pruning and radius=0 exact surface touch, double-sided face/edge/vertex contact.
+- [x] Extend `SplinePopulationPreciseMath` to handle mesh shapes with strict validation, preserving original AABB/OBB/Capsule cases.
+- [x] Optional `SplineObjectController.useMeshColliderBVH`; cache by Collider identity, mesh identity/hash, world pose and bounds; unreadable/convex/unsupported data must fall back to conservative AABB.
+- [x] Inspector flag, mock controller/cache/fallback and pure triangle regression, CI registration, native Editor acceptance checklist.
+- [ ] Native Creator 3.8.8 MeshCollider import, Prefab/Undo/Redo and performance smoke tests remain pending.
+- [ ] Not solid mesh containment; next: prefab bounds inference, occupancy across controllers, more efficient Editor placement previews.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
