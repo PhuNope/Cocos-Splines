@@ -9,6 +9,7 @@ const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransa
 const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
 const {validateMultiJunctionPlan,commitMultiJunctionRoute}=require('./SplineJunctionRouteEditor');
 const {validateRouteCost,validateRoutePolicy}=require('./SplineJunctionRouteCost');
+const {validateRouteAdmission}=require('./SplineRouteAdmission');
 const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
@@ -506,7 +507,7 @@ const methods={
     async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,
         seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
         routeCostMode='switches',junctionPenalty=10,
-        routePolicy='ignore'){
+        routePolicy='ignore',admissionMode='ignore',requiredFollowers=1){
         if(knotEditBusy)return alertError('join-multi-junction-route',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
@@ -514,6 +515,7 @@ const methods={
             validateSeamMode(seamMode);
             validateRouteCost(routeCostMode,junctionPenalty);
             validateRoutePolicy(routePolicy);
+            validateRouteAdmission(admissionMode,requiredFollowers);
             if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
                ![0,1].includes(goalSide))
                 throw Error('Invalid partial route mode or entry/exit side.');
@@ -528,7 +530,10 @@ const methods={
             const args=[junctionUuid,anchorIndex,goal,seamMode,routeMode,
                 startSide,goalSide];
             // Legacy IPC shape retained for the default minimum-switch mode.
-            if(routePolicy!=='ignore')
+            if(admissionMode!=='ignore'||requiredFollowers!==1)
+                args.push(routeCostMode,junctionPenalty,routePolicy,
+                    admissionMode,requiredFollowers);
+            else if(routePolicy!=='ignore')
                 args.push(routeCostMode,junctionPenalty,routePolicy);
             else if(routeCostMode!=='switches'||junctionPenalty!==10)
                 args.push(routeCostMode,junctionPenalty);
@@ -536,7 +541,7 @@ const methods={
             if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
             validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode,
                 routeMode,startSide,goalSide,routeCostMode,junctionPenalty,
-                routePolicy);
+                routePolicy,admissionMode,requiredFollowers);
             if(plan.junctionUuid!==junctionUuid)
                 throw Error('Multi-Junction planner returned foreign Junction.');
             const check=async()=>{

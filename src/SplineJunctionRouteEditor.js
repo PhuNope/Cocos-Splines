@@ -4,18 +4,24 @@
 const finite=v=>!!v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
 function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
     seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
-    routeCostMode='switches',junctionPenalty=10,routePolicy='ignore'){
+    routeCostMode='switches',junctionPenalty=10,routePolicy='ignore',
+    admissionMode='ignore',requiredFollowers=1){
  const {validateSeamMode}=require('./SplineJunctionSeamMath');
  const {validateRouteCost,validateRoutePolicy}=require('./SplineJunctionRouteCost');
+ const {validateRouteAdmission}=require('./SplineRouteAdmission');
  validateSeamMode(seamMode);
  validateRouteCost(routeCostMode,junctionPenalty);
  validateRoutePolicy(routePolicy);
+ validateRouteAdmission(admissionMode,requiredFollowers);
  if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
     ![0,1].includes(goalSide))throw Error('Invalid route mode / sides.');
  if(!plan?.ok||plan.seamMode!==seamMode||
     (plan.routeCostMode??'switches')!==routeCostMode||
     (plan.junctionPenalty??10)!==junctionPenalty||
     (plan.routePolicy??'ignore')!==routePolicy||
+    (plan.admissionMode??'ignore')!==admissionMode||
+    (plan.requiredFollowers??1)!==requiredFollowers||
+    (admissionMode!=='ignore'&&plan.capacitySource!=='scene-configuration')||
     (plan.routeMode??'full')!==routeMode||
     (routeMode==='partial'&&(plan.startSide!==startSide||
        plan.goalSide!==goalSide))||
@@ -135,6 +141,8 @@ async function commitMultiJunctionRoute(plan,actions){
      seams:plan.seams,
      routeCostMode:plan.routeCostMode||'switches',
      routePolicy:plan.routePolicy||'ignore',
+     admissionMode:plan.admissionMode||'ignore',
+     requiredFollowers:plan.requiredFollowers??1,
      estimatedWorldDistance:plan.estimatedWorldDistance??null,
      estimatedRouteCost:plan.estimatedRouteCost??null,
      message:'Joined '+plan.sourceCount+' source splines across '+
@@ -143,6 +151,7 @@ async function commitMultiJunctionRoute(plan,actions){
        '. Traversal: '+(plan.routeMode||'full')+
        '. Route selection: '+(plan.routeCostMode||'switches')+
        '. Exit policy: '+(plan.routePolicy||'ignore')+
+       '. Admission: '+(plan.admissionMode||'ignore')+
        (Number.isFinite(plan.estimatedWorldDistance)?
         ', sampled world distance: '+plan.estimatedWorldDistance.toFixed(3):'')+'.'};
  }catch(error){

@@ -201,3 +201,16 @@ Trong `SplineJunction Inspector → Join Across Junctions`, chọn `Route exit p
 - **Respect direction + Green signal only**: ngoài hướng đi, chỉ xét exit đích có `trafficSignal=Green` tại thời điểm chạy Join. Red/Yellow không được chọn (Yellow cũng là no-entry). Đây là **Scene snapshot**, không dự đoán thời điểm đổi pha, không giữ chỗ cho follower hoặc bảo đảm passage trong runtime.
 
 Tính năng dùng được với Full / Partial, các lựa chọn Fewest switches / Shortest distance / Balanced, và Preserve/G1/C1 smoothing; khi bật filter, ngay cả Fewest switches sẽ dùng cost-aware planner để áp điều kiện. Chỉ ghi spline kết quả, không sửa source. Fingerprint toàn Scene nay bao gồm exitDirection và trafficSignal: nếu tín hiệu bị sửa sau khi lập plan thì transaction từ chối thay vì dùng snapshot cũ. Đây là static planning, **không** kiểm tra `maxFollowers`, queue/capacity, controller phases hoặc quyền chuyển động theo clock. Chưa kiểm tra native Undo/Redo/Prefab Cocos Creator 3.8.8.
+
+
+## Configured Capacity / Potential Phase Admission (V2 opt-in)
+
+Trong **SplineJunction Inspector → Configured admission (Editor estimate)** có 3 chế độ:
+
+- **Ignore capacity (default):** giữ nguyên lựa chọn Join cũ; không kiểm tra maxFollowers hoặc chu kỳ đèn.
+- **Respect configured Max Followers:** so sánh số **Required followers** (1–4096) với `SplineJunctionLink.maxFollowers` trên từng exit đích. `maxFollowers=0` nghĩa là không giới hạn; exit có giới hạn dương nhỏ hơn yêu cầu thì bị loại.
+- **Max Followers + potential Green phases:** ngoài sức chứa cấu hình, nếu một Junction có SplineTrafficController đang bật, kiểm tra exit có xuất hiện trong **ít nhất một pha Green hợp lệ**; nếu không có controller bật, dùng tín hiệu Green thủ công tại lúc lập kế hoạch. Các phase không hợp lệ (index trùng/sai, conflict đồng thời Green, thời lượng ngoài giới hạn, adaptive config sai) sẽ **từ chối** kế hoạch, không âm thầm coi là thông suốt. Controller bị tắt không quản lý Junction; khi nhiều controller bật cùng quản lý một Junction, cũng từ chối.
+
+**Cảnh báo giới hạn quan trọng:** Đây là **kiểm tra cấu hình trong Editor**, không phải số lượng vị trí thực còn trống lúc chạy game. `SplineTrafficGate` lưu occupancy và queue chỉ trong runtime; Editor không đọc được nên planner **không** trừ số slot đã được chiếm, không dự đoán thời điểm đến, lịch bật đèn chính xác hay trạng thái đã pause. Một exit có `maxFollowers=2` với yêu cầu 2 chỉ có nghĩa **cấu hình cho phép 2**, không đảm bảo có 2 slot trống. Potential Green nghĩa là có cơ hội Green trong chu kỳ hợp lệ, **không** đảm bảo chuyển thành công ngay khi tới nơi. Nếu đồng thời chọn **Route exit policy: Direction + Green**, bộ lọc Green hiện thời vẫn có hiệu lực độc lập với Potential Green.
+
+Các lựa chọn mới độc lập với Full / Partial, Fewest switches / Distance / Balanced, G1/C1; vẫn tạo spline mới và giữ nguyên nguồn. Source fingerprint nay bao gồm `maxFollowers`, danh sách controller, trạng thái enabled, target Junction, phases/conflicts và cấu hình adaptive: thay đổi sau khi lập kế hoạch sẽ từ chối commit để tránh dùng dữ liệu cũ. Native Cocos Creator 3.8.8 (Undo/Redo, Prefab, lưu/mở lại Scene) vẫn cần kiểm tra.

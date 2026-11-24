@@ -5,6 +5,8 @@
  * capacity and direction constraints are intentionally not consulted.
  * Legacy minimum-switch BFS remains the default in SplineJunctionRouteMath.
  */
+const {validateRouteAdmission,configuredExitAvailable}=
+ require('./SplineRouteAdmission');
 const MODES=Object.freeze(['switches','distance','balanced']);
 const POLICIES=Object.freeze(['ignore','direction','direction-green']);
 function validateRoutePolicy(policy='ignore'){
@@ -81,7 +83,9 @@ const compareLink=(a,b)=>a.junctionId.localeCompare(b.junctionId)||
  a.linkIndex-b.linkIndex||a.splineId.localeCompare(b.splineId);
 function costRoute(links,anchor,goalSplineId,options={}){
  const {mode='distance',penalty=10,routeMode='full',
-   startSide=0,goalSide=1,maxGap=1e-5,policy='ignore'}=options;
+   startSide=0,goalSide=1,maxGap=1e-5,policy='ignore',
+   admissionMode='ignore',requiredFollowers=1}=options;
+ validateRouteAdmission(admissionMode,requiredFollowers);
  validateRoutePolicy(policy);
  validateRouteCost(mode,penalty);
  if(!['full','partial'].includes(routeMode)||
@@ -103,7 +107,10 @@ function costRoute(links,anchor,goalSplineId,options={}){
       l.worldTotal>1e9||l.worldArc<0||
       l.worldArc>l.worldTotal+1e-5||
       (policy!=='ignore'&&![0,1,2].includes(l.exitDirection))||
-      (policy==='direction-green'&&![0,1,2].includes(l.trafficSignal)))
+      (policy==='direction-green'&&![0,1,2].includes(l.trafficSignal))||
+      (admissionMode!=='ignore'&&(!Number.isInteger(l.maxFollowers)||
+        l.maxFollowers<0||l.maxFollowers>4096))||
+      (admissionMode==='capacity-phases'&&typeof l.phaseEligible!=='boolean'))
      throw Error('Cost-aware routes require finite sampled world arc lengths for all links.');
    const key=JSON.stringify([l.junctionId,l.linkIndex]);
    if(seen.has(key))throw Error('Duplicate Junction link index.');
@@ -164,6 +171,7 @@ function costRoute(links,anchor,goalSplineId,options={}){
        junctionIds:path.slice(1).map(p=>p.junctionId),
        ...(routeMode==='partial'?{routeMode:'partial',startSide,goalSide}:{}),
        costMode:mode,switchPenalty:penalty,routePolicy:policy,
+       admissionMode,requiredFollowers,
        estimatedWorldDistance:state.worldDistance,
        estimatedRouteCost:state.score};
    }
@@ -174,6 +182,7 @@ function costRoute(links,anchor,goalSplineId,options={}){
      if(target.splineId===state.exit.splineId||
         state.path.some(p=>p.splineId===target.splineId)||
         distance(target.world,state.exit.world)>maxGap||
+        !configuredExitAvailable(target,admissionMode,requiredFollowers)||
         (routeMode==='full'&&![0,1].includes(target.progress)))continue;
      const base={splineId:target.splineId,progress:target.progress,
        junctionId:target.junctionId,linkIndex:target.linkIndex};

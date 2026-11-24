@@ -12,6 +12,8 @@ const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {planEndpointJunctionChain,planMultiJunctionGeometry,
   planPartialJunctionChain,planPartialJunctionGeometry}=require('./SplineJunctionRouteMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
+const {validateRouteAdmission,compileControllerEligibility}=
+  require('./SplineRouteAdmission');
 const {validateRouteCost,validateRoutePolicy,measureSplineWorldArc,costRoute}=
   require('./SplineJunctionRouteCost');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRoot}){
@@ -65,7 +67,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      return [e.index,spline.node.uuid,spline.node.parent?.uuid||null,
        spline.enabled,spline.closed,spline.reversed,spline.dimension,
        spline.samplesPerCurve,link.positionMode,link.progress,link.distance,
-       link.exitDirection,link.trafficSignal,e.worldMatrix,knots];
+       link.exitDirection,link.trafficSignal,link.maxFollowers,e.worldMatrix,knots];
    });
    return JSON.stringify([scene,junction.node.uuid,junction.node.parent?.uuid||null,
      junction.enabled,junction.connections.length,state]);
@@ -238,18 +240,82 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
    if(junctions.length>128)throw Error('More than 128 Junctions in Scene.');
    return junctions;
  }
+ /** A controller may be on the Junction Node or a separate Node with
+  * an explicit Junction reference. In the Editor, onEnable is NOT run;
+  * read the serialized phase configuration without touching playback state.
+  * Include disabled controllers in the lease so enabling one invalidates it.
+  */
+ function allSceneControllerSnapshots(){
+   const root=sceneRoot();
+   if(!root||root.isValid===false||root.uuid!==sceneId())
+     throw Error('Scene changed while inspecting traffic controllers.');
+   const stack=[root],seen=new Set(),result=[];
+   while(stack.length){
+     const node=stack.pop();
+     if(!node||node.isValid===false||seen.has(node))continue;
+     seen.add(node);
+     if(seen.size>20000)throw Error('Scene exceeds traffic snapshot safety limit.');
+     for(const comp of Array.isArray(node.components)?node.components:[]){
+       if(!comp||comp.isValid===false||
+          classOf(comp)!=='Splines.SplineTrafficController')continue;
+       const local=node.components.find(c=>c?.isValid!==false&&
+         classOf(c)==='Splines.SplineJunction');
+       const target=comp.junction||local;
+       const phases=Array.isArray(comp.phases)?comp.phases.map(p=>p?{
+         greenExits:Array.isArray(p.greenExits)?[...p.greenExits]:null,
+         greenSeconds:p.greenSeconds,yellowSeconds:p.yellowSeconds,
+       }:null):null;
+       const conflicts=Array.isArray(comp.conflicts)?
+         comp.conflicts.map(c=>c?{
+           firstExit:c.firstExit,secondExit:c.secondExit,
+         }:null):null;
+       result.push({
+         uuid:node.uuid,
+         enabled:comp.enabled!==false,
+         targetId:target?.node?.uuid??null,
+         phases,conflicts,allRedSeconds:comp.allRedSeconds,
+         adaptiveTraffic:!!comp.adaptiveTraffic,
+         minGreenSeconds:comp.minGreenSeconds,
+         maxGreenSeconds:comp.maxGreenSeconds,
+         maxDemandWaitSeconds:comp.maxDemandWaitSeconds,
+       });
+     }
+     if(Array.isArray(node.children))
+       for(const child of node.children)stack.push(child);
+   }
+   if(result.length>128)
+     throw Error('More than 128 SplineTrafficControllers in Scene.');
+   result.sort((a,b)=>a.uuid.localeCompare(b.uuid)||
+     String(a.targetId).localeCompare(String(b.targetId)));
+   return result;
+ }
+ function routeControllerEligibility(junctions){
+   const byId=new Map(junctions.map(j=>[j.node.uuid,j]));
+   const eligible=new Map();
+   for(const snapshot of allSceneControllerSnapshots()){
+     if(!snapshot.enabled||!byId.has(snapshot.targetId))continue;
+     if(eligible.has(snapshot.targetId))
+       throw Error('Ambiguous enabled SplineTrafficControllers for one Junction.');
+     const junction=byId.get(snapshot.targetId);
+     eligible.set(snapshot.targetId,compileControllerEligibility(
+       snapshot,junction.connections.length));
+   }
+   return eligible;
+ }
  function multiJunctionFingerprint(junctions){
    return JSON.stringify([sceneId(),junctions.map(j=>[
      j.node.uuid,fingerprint(j,null,'join'),
-   ])]);
+   ]),allSceneControllerSnapshots()]);
  }
  function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid,
    seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
-   costMode='switches',switchPenalty=10,routePolicy='ignore'){
+   costMode='switches',switchPenalty=10,routePolicy='ignore',
+   admissionMode='ignore',requiredFollowers=1){
    try{
      validateSeamMode(seamMode);
      validateRouteCost(costMode,switchPenalty);
      validateRoutePolicy(routePolicy);
+     validateRouteAdmission(admissionMode,requiredFollowers);
      if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
         ![0,1].includes(goalSide))
        throw Error('Invalid Join route mode or partial traversal direction.');
@@ -269,6 +335,8 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      if(!junctions.includes(anchorJunction))
        throw Error('Selected anchor Junction is not in active Scene.');
      const links=[],bySpline=new Map();
+     const phaseEligible=admissionMode==='capacity-phases'?
+       routeControllerEligibility(junctions):new Map();
      for(const junction of junctions){
        for(const e of samples(junction)){
          const splineId=e.spline.node.uuid;
@@ -279,13 +347,18 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
          links.push({junctionId:junction.node.uuid,linkIndex:e.index,
            splineId,progress:e.progress,world:e.position,
            exitDirection:e.link.exitDirection,
-           trafficSignal:e.link.trafficSignal});
+           trafficSignal:e.link.trafficSignal,
+           maxFollowers:e.link.maxFollowers,
+           phaseEligible:phaseEligible.has(junction.node.uuid)?
+             phaseEligible.get(junction.node.uuid).has(e.index):
+             e.link.trafficSignal===0});
        }
      }
      if(links.length>1024)
        throw Error('More than 1024 Junction links in Scene.');
      let chain;
-     if(costMode==='switches'&&routePolicy==='ignore'){
+     if(costMode==='switches'&&routePolicy==='ignore'&&
+        admissionMode==='ignore'){
        // Preserve original BFS exactly for all existing projects.
        chain=routeMode==='partial'?
          planPartialJunctionChain(links,{junctionId:uuid,linkIndex:anchorIndex},
@@ -307,7 +380,8 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
        }
        chain=costRoute(costLinks,{junctionId:uuid,linkIndex:anchorIndex},
          goalSplineUuid,{mode:costMode,penalty:switchPenalty,
-           routeMode,startSide,goalSide,policy:routePolicy});
+           routeMode,startSide,goalSide,policy:routePolicy,
+           admissionMode,requiredFollowers});
      }
      const descriptors=chain.path.map(entry=>{
        const spline=bySpline.get(entry.splineId);
@@ -367,6 +441,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
        throw Error('Invalid route sampling density.');
      return {ok:true,...result,routeMode,startSide,goalSide,
        routeCostMode:costMode,junctionPenalty:switchPenalty,routePolicy,
+       admissionMode,requiredFollowers,capacitySource:'scene-configuration',
        estimatedWorldDistance:chain.estimatedWorldDistance??null,
        estimatedRouteCost:chain.estimatedRouteCost??null,
        junctionUuid:uuid,anchorIndex,goalSplineUuid,

@@ -12,6 +12,7 @@ checkRel('dist/SplineJunctionFanoutMath.js');
 checkRel('dist/SplineJunctionFanoutEditor.js');
 checkRel('dist/SplineJunctionRouteMath.js');
 checkRel('dist/SplineJunctionRouteCost.js');
+checkRel('dist/SplineRouteAdmission.js');
 checkRel('dist/SplineRouteSliceMath.js');
 checkRel('dist/SplineJunctionRouteEditor.js');
 assert.deepEqual(pkg.contributions.messages['join-multi-junction-route']?.methods,['joinMultiJunctionRoute']);

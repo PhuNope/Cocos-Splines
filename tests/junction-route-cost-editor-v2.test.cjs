@@ -73,8 +73,11 @@ const request=async(channel,method,arg)=>{
    if(arg.method==='queryMultiJunctionJoinPlan'){
      invocations.push(arg.args);
      const mode=arg.args[7]||'switches',penalty=arg.args[8]??10,
-       policy=arg.args[9]||'ignore';
-     const output={...plan(mode,penalty),routePolicy:policy};
+       policy=arg.args[9]||'ignore',admission=arg.args[10]||'ignore',
+       followers=arg.args[11]??1;
+     const output={...plan(mode,penalty),routePolicy:policy,
+       admissionMode:admission,requiredFollowers:followers,
+       capacitySource:'scene-configuration'};
      return badResponse?{...output,estimatedWorldDistance:-3}:output;
    }
    if(arg.method==='queryMultiJunctionJoinValid')
@@ -160,6 +163,15 @@ const {methods}=require('../dist/main.js');
  assert.equal(snapshots,4);
  assert.deepEqual(invocations.at(-1),
  ['j1',0,'d','preserve','full',0,1,'distance',10,'direction-green']);
+ selected=['j1'];
+ result=await methods.joinMultiJunctionRoute(0,'d','preserve',
+ 'full',0,1,'switches',10,'ignore','capacity',2);
+ assert(result.ok,result.error);
+ assert.equal(result.admissionMode,'capacity');
+ assert.equal(result.requiredFollowers,2);
+ assert.equal(snapshots,5);
+ assert.deepEqual(invocations.at(-1),
+ ['j1',0,'d','preserve','full',0,1,'switches',10,'ignore','capacity',2]);
  const count=created.length,oldSnapshots=snapshots;
  selected=['j1'];badResponse=true;
  result=await methods.joinMultiJunctionRoute(0,'d','preserve',
@@ -188,6 +200,10 @@ const {methods}=require('../dist/main.js');
  'full',0,1,'distance',10,'bad-policy');
  assert(!result.ok&&/route policy/.test(result.error));
  assert.equal(created.length,count+2);
+ result=await methods.joinMultiJunctionRoute(0,'d','preserve',
+ 'full',0,1,'distance',10,'ignore','capacity',0);
+ assert(!result.ok&&/Required follower/.test(result.error));
+ assert.equal(created.length,count+2);
  assert.deepEqual([...nodes.entries()].filter(([id])=>
    ['a','b','c','d','e'].includes(id)),JSON.parse(sources));
  const inspector=require('../dist/contributions/inspector/Junction');
@@ -196,6 +212,10 @@ const {methods}=require('../dist/main.js');
  assert(inspector.template.includes('value="distance"'));
  assert(inspector.template.includes('value="balanced"'));
  assert(inspector.template.includes('spl-route-switch-penalty'));
+ assert(inspector.template.includes('spl-route-admission'));
+ assert(inspector.template.includes('spl-route-required-followers'));
+ assert(inspector.template.includes('value="capacity"'));
+ assert(inspector.template.includes('value="capacity-phases"'));
  assert(inspector.template.includes('spl-route-policy'));
  assert(inspector.template.includes('value="ignore"'));
  assert(inspector.template.includes('value="direction"'));

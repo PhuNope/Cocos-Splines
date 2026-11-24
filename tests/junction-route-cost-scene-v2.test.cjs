@@ -44,7 +44,7 @@ function junction(id,entries){
  const node={uuid:id,parent:scene,isValid:true,components:[],children:[]};
  const connections=entries.map(([s,p])=>({
    spline:s,progress:p,positionMode:0,distance:0,exitDirection:0,
-   trafficSignal:0,
+   trafficSignal:0,maxFollowers:0,
    getProgress(){return this.progress;},
  }));
  const j={kind:'Splines.SplineJunction',node,enabled:true,connections};
@@ -141,4 +141,68 @@ assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
 assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
  'preserve','full',0,1,'distance',10,'unsupported').ok);
 assert(sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
+// Configured capacity is NOT runtime occupancy: 0 means unlimited,
+// a bounded maxFollowers below requested group size is ineligible.
+J1.connections[1].maxFollowers=1;
+let capacity=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity',2);
+assert(capacity.ok,capacity.error);
+assert.deepEqual(names(capacity),['a','c','e','d']);
+assert.equal(capacity.admissionMode,'capacity');
+assert.equal(capacity.requiredFollowers,2);
+assert.equal(capacity.capacitySource,'scene-configuration');
+assert(sceneApi.queryMultiJunctionJoinValid('j1',capacity.guard).ok);
+J1.connections[1].maxFollowers=0; // restore unlimited.
+assert(!sceneApi.queryMultiJunctionJoinValid('j1',capacity.guard).ok);
+capacity=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity',2);
+assert(capacity.ok,capacity.error);
+assert.deepEqual(names(capacity),['a','b','d']);
+// A controller on the Junction Node advertises potential GREEN phases
+// even if its CURRENT manual serialized signal is red. Runtime occupancy
+// and controller clock remain deliberately unobserved.
+const controller={
+ kind:'Splines.SplineTrafficController',
+ node:J1.node,enabled:true,junction:null,
+ allRedSeconds:1,adaptiveTraffic:false,
+ phases:[{greenExits:[2],greenSeconds:8,yellowSeconds:2}],
+ conflicts:[],
+};
+J1.node.components.push(controller);
+const savedGuard=capacity.guard;
+let phases=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity-phases',2);
+assert(phases.ok,phases.error);
+assert.deepEqual(names(phases),['a','c','e','d']);
+assert(!sceneApi.queryMultiJunctionJoinValid('j1',savedGuard).ok);
+J1.connections[1].trafficSignal=1;
+controller.phases[0].greenExits=[1];
+assert(!sceneApi.queryMultiJunctionJoinValid('j1',phases.guard).ok);
+phases=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity-phases',2);
+assert(phases.ok,phases.error);
+assert.deepEqual(names(phases),['a','b','d'],
+ 'Future scheduled Green is possible despite static manual Red');
+assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'direction-green',
+ 'capacity-phases',2).ok,
+ 'Direction Green-only independently filters current static Red');
+// When the phase says only A (the anchor), no legal B or C transfer.
+controller.phases[0].greenExits=[0];
+assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity-phases',2).ok);
+// Conflicting simultaneous Green phases are invalid, fail closed.
+controller.conflicts=[{firstExit:1,secondExit:2}];
+controller.phases[0].greenExits=[1,2];
+assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity-phases',2).ok);
+controller.conflicts=[];
+controller.phases[0].greenExits=[2];
+controller.enabled=false; // Disabled controller: use current manual Green.
+J1.connections[1].trafficSignal=0;
+phases=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'ignore','capacity-phases',2);
+assert(phases.ok,phases.error);
+assert.deepEqual(names(phases),['a','b','d']);
+console.log('JUNCTION CAPACITY SCENE PASS: configured maxFollowers, future Green phases, conflict guard, disabled controller fallback.');
 console.log('JUNCTION COST SCENE PASS: legacy BFS, 2-vs-3 switches, sampled world path length, Full/Partial, C1, source lease.');
