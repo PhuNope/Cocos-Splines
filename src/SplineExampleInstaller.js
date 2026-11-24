@@ -7,6 +7,7 @@ const fs=require('node:fs'),path=require('node:path');
 const FOLDER='CocosSplinesExamples';
 const FILES=Object.freeze([
  ['README.md','examples/installable/README.md'],
+ ['CREATE_GALLERY_IN_SCENE.md','examples/installable/CREATE_GALLERY_IN_SCENE.md'],
  ['ExampleGallery.ts','examples/installable/ExampleGallery.ts'],
  ['Train/TrainSingleSpline.ts','docs/examples/TrainSingleSpline.ts'],
  ['Train/TrainRouteConsist.ts','docs/examples/TrainRouteConsist.ts'],

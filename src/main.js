@@ -1,6 +1,7 @@
 'use strict';
 const NAME='cocos-splines';
 const {installSplineExamples}=require('./SplineExampleInstaller');
+const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -207,6 +208,27 @@ const methods={
             console.log('[Cocos Splines] '+message);
             return {ok:true,...result,message,refreshWarning};
         }catch(e){return alertError('install-examples',e);}
+    },
+    /** Create the gallery in the CURRENT open Scene through native Scene
+     * messages; the user saves the .scene using Creator. */
+    async createExampleGallery(){
+        try {
+            const result=await createExampleGalleryWorkflow({
+                query:()=>invokeScene('queryExampleGallery'),
+                scriptReady:kind=>Editor.Message.request('scene','query-component-has-script',kind),
+                createNode:name=>makeNode(undefined,name),
+                addComponent:(uuid,kind)=>Editor.Message.request('scene','create-component',{
+                    uuid,component:kind,
+                }),
+                snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',{
+                    uuid,snapshot:false,
+                }),
+                select:uuid=>selectOnly(uuid),
+            });
+            console.log('[Cocos Splines] '+result.message);
+            return result;
+        }catch(e){return alertError('create-example-gallery',e);}
     },
     async create2DSpline(){
         try{

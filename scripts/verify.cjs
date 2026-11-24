@@ -8,6 +8,13 @@ checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('examples/installable/ExampleGallery.ts');
 checkRel('examples/installable/README.md');
+checkRel('examples/installable/CREATE_GALLERY_IN_SCENE.md');
+checkRel('dist/SplineExampleScene.js');
+checkRel('dist/SplineExampleSceneWorkflow.js');
+assert.deepEqual(pkg.contributions.messages['create-example-gallery']?.methods,
+    ['createExampleGallery']);
+assert(pkg.contributions.menu.some(m=>m.message==='create-example-gallery'&&
+    m.label==='Create Example Gallery in Scene'),'Missing Example Gallery menu');
 assert.deepEqual(pkg.contributions.messages['install-examples']?.methods,['installExamples']);
 assert(pkg.contributions.menu.some(m=>m.message==='install-examples'&&
     m.label==='Install Examples'),'Missing Install Examples menu item');if(pkg.panels)throw new Error('No standalone spline panel should ship');

@@ -14,6 +14,8 @@ function resolve(id) {
     return find(root);
 }
 function classOf(c){return require('cc').js.getClassName(c);}
+const {queryExampleGalleryScene}=require('./SplineExampleScene');
+function queryExampleGallery(){return queryExampleGalleryScene(require('cc').director.getScene(),classOf);}
 function containerOf(node) {
     let n=node;
     while(n){if(n.components.some(c=>classOf(c)==='Splines.SplineContainer'))return n;n=n.parent;}
@@ -556,5 +558,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

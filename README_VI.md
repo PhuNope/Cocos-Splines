@@ -136,3 +136,13 @@ file `.scene` hay Prefab, và không sửa project Scene khi chưa Play.
 Một số script Train/Junction nâng cao cần được gán tham chiếu trong Inspector.
 Cần cài Cocos-Gizmos. Nếu Assets panel chưa cập nhật, dùng Refresh.
 Các bài kiểm thử headless không thay thế native Creator 3.8.8.
+
+### Tạo Gallery ngay trong Scene
+
+Sau **Install Examples** và khi script compile xong, mở một Scene 3D trong Editor rồi chọn
+**Extension → Cocos Splines → Create Example Gallery in Scene**. Extension sẽ tạo
+Node gắn `CocosSplinesExampleGalleryV2` (không tạo trùng khi bấm lại).
+Chọn mode demo trong Inspector, **Save Scene** và Play. Creator chịu trách nhiệm
+serialize file .scene; plugin không tự ghi JSON scene thủ công. Nếu script chưa
+compile, lệnh sẽ báo lỗi và không tạo node. Hướng dẫn chi tiết ở
+`assets/CocosSplinesExamples/CREATE_GALLERY_IN_SCENE.md`.

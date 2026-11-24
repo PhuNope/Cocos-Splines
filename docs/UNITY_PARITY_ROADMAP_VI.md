@@ -75,6 +75,7 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.2b2a — Explicit Junction target endpoint AutoSmooth/Linear/Mirrored/Continuous → Broken conversion preserving currently evaluated tangents, including Knot-space vectors and handle nodes, read-only Scene planner + fingerprint/transaction, best-effort rollback, single snapshot and regression tests. Native Creator 3.8.8 undo/prefab acceptance pending.
 - [ ] Phase 3.2b2b — Non-destructive connector merge graph / geometric Join workflow with independent source-spline preservation and native Editor acceptance.
 - [x] Phase 6.1 — Extension menu **Install Examples**: optional project-local examples in assets/CocosSplinesExamples, six runtime gallery modes, reusable Train/Road/Extrude/Junction sample scripts; idempotent, no overwrite, asset-db refresh and security/regression tests. **Native Creator 3.8.8 compile/scene smoke test pending.**
+- [x] Phase 6.2 — **Create Example Gallery in Scene** menu: native Editor Scene messages for a compiled Gallery component, duplicate-safe read-only Scene lookup, Scene lease guard, single snapshot, guarded cleanup, project-local quick-start guide and offline Editor regression tests. Saving an actual .scene remains a manual Creator operation; native 3.8.8 smoke test pending.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

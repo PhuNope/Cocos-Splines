@@ -42,3 +42,12 @@ Not every feature is a one-click scene. Advanced cases (Mesh Deformation, Traffi
 - Generated procedural meshes and unlit box materials are intentionally simple teaching visuals.
 - Proximity prediction is NOT a physical collision or multiplayer safety solver.
 - Test Editor save/reopen, native preview and physics backend behavior on your own Creator 3.8.8 installation. The GitHub offline tests do not certify native rendering.
+
+## One-click Editor Gallery node (V2)
+
+After the examples compile, open an existing 3D Scene and choose
+**Extension → Cocos Splines → Create Example Gallery in Scene**.
+The extension adds one native Gallery component Node, takes one Scene snapshot,
+then selects it. Set Example mode, **Save Scene**, and Play. Re-running
+selects the existing Gallery. Details:
+`CREATE_GALLERY_IN_SCENE.md`.
