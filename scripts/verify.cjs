@@ -6,6 +6,13 @@ assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
+checkRel('dist/SplineGeometryGraphVisualModel.js');
+checkRel('dist/contributions/inspector/GeometryGraph.js');
+checkRel('assets/splines/Core/SplineGeometryGraph.ts');
+checkRel('assets/splines/Core/SplineGeometryGraph.ts.meta');
+checkRel('assets/splines/Components/SplineGeometryGraphRenderer.ts');
+checkRel('assets/splines/Components/SplineGeometryGraphRenderer.ts.meta');
+assert.deepEqual(pkg.contributions.messages['rebuild-geometry-graph']?.methods,['rebuildGeometryGraph']);
 checkRel('dist/SplineSvgConverter.js');
 checkRel('dist/SplineJsonInterop.js');
 checkRel('dist/contributions/inspector/Noise.js');
