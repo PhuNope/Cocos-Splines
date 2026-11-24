@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | SplineArchitect Editor handles, rotate, multi-knot selection | Chưa có workflow tương đương hoàn chỉnh | 1–2 |
 | SplineArchitect SnapSettings / align / snapping | Thiếu tool tích hợp editor | 2 |
-| SplineArchitect Noise/Population | Phase 3.8a thêm opt-in deterministic multi-layer noise cho ObjectController population offset; còn thiếu density/mesh/Knot noise, advanced population graph | 3–4 |
+| SplineArchitect Noise/Population | Phase 3.8a Noise Layers + Phase 3.8b opt-in population density keys, excluded arc intervals, minimum World-center gap; còn thiếu Collider/terrain masks, weighted variants, advanced population graph | 3–4 |
 | SplineArchitect connectors / Curvy connections | Có Junction cơ bản; thiếu network graph operations | 3/5 |
 | Curvy JSON/SVG converters | Legacy Unity JSON import + Cocos versioned geometry JSON round-trip 3D/XY2D/XZ2D (preview); SVG single-path import/export 2D. Thiếu SVG multi-path/transform/arc và full component/prefab serialization | 3 |
 | Curvy ConformPath, BuildVolumeCaps/Spots | Một phần qua geometry hiện có | 4 |
