@@ -8,6 +8,8 @@ try{
  const {sweptSphereAabbEntry,aabbFromCenterHalfExtents,sweptSphereObbEntry,validProximityObb,sweptSphereCapsuleEntry,validProximityCapsule}=
      require(path.join(out,'Core/SplineProximityShapes.js'));
  const {SplineProximityRegistry}=require(path.join(out,'Core/SplineProximity.js'));
+ const {buildProximityTriangleMesh,sweptSphereTriangleEntry,sweptSphereMeshEntry}=
+     require(path.join(out,'Core/SplineProximityMesh.js'));
  const p=(x,y=0,z=0)=>({x,y,z});
  const near=(v,expected,epsilon=1e-5)=>assert(Math.abs(v-expected)<=epsilon,
      v+' != '+expected);
@@ -125,6 +127,53 @@ try{
  assert.equal(registry.get(obstacle).capsule,undefined);
  registry.remove(obstacle);assert.equal(registry.size,0);
  assert.equal(registry.getTelemetry().spatialCells,0);
+
+ // Exact moving sphere against double-sided WORLD triangles.
+ const tri=[p(4,-2,-2),p(4,2,-2),p(4,0,2)];
+ near(sweptSphereTriangleEntry(p(0),p(10),...tri,.5),.35);
+ near(sweptSphereTriangleEntry(p(10),p(0),...tri,.5),.55);
+ near(sweptSphereTriangleEntry(p(0,2,-2),p(10,2,-2),...tri,.5),.35);
+ assert.equal(sweptSphereTriangleEntry(p(0,5,5),p(10,5,5),...tri,.5),null);
+ assert.equal(sweptSphereTriangleEntry(p(4.2),p(5),...tri,.5),0);
+ near(sweptSphereTriangleEntry(p(0),p(10),p(4),p(4),p(4),.5),.35);
+ // Axis-parallel approach toward an edge in the triangle plane.
+ near(sweptSphereTriangleEntry(p(4,3,0),p(4,0,0),...tri,.5),
+      (3-(1+Math.sqrt(5)/4))/3,2e-5);
+ const vertices=tri.map(q=>({...q}));
+ const compiled=buildProximityTriangleMesh(vertices,[0,1,2]);
+ vertices[0].x=1000; // Snapshot is immutable.
+ assert(Object.isFrozen(compiled.root));
+ assert(Object.isFrozen(compiled.root.triangles[0].a));
+ near(sweptSphereMeshEntry(p(0),p(10),compiled,.5),.35);
+ assert.equal(sweptSphereMeshEntry(p(0,7),p(10,7),compiled,.5),null);
+ const meshRegistry=new SplineProximityRegistry(),solid={},driver={};
+ meshRegistry.setMesh(solid,tri,[0,1,2]);
+ report=meshRegistry.limit(driver,t=>p(t*10),.5,0);
+ assert(report.limited);near(report.fraction,.35,3e-4);
+ assert.equal(meshRegistry.get(solid).mesh.triangleCount,1);
+ assert.equal(meshRegistry.getTelemetry().lastTriangleTests>0,true);
+ assert(!meshRegistry.limit(driver,t=>p(t*10,7),.5,0).limited);
+ // BVH must narrow test set: one near triangle, hundreds of distant ones.
+ const far=tri.map(q=>({...q})),ix=[0,1,2];
+ for(let i=0;i<512;i++){
+    const offset=far.length;
+    far.push(p(40+i*.03,-1,-1),p(40+i*.03,1,-1),p(40+i*.03,0,1));
+    ix.push(offset,offset+1,offset+2);
+ }
+ const big=buildProximityTriangleMesh(far,ix),perf={triangleTests:0,visitedNodes:0};
+ near(sweptSphereMeshEntry(p(0),p(10),big,.5,perf),.35);
+ assert(perf.triangleTests<32,'BVH should cull far mesh triangles');
+ assert(perf.visitedNodes<100,'BVH visits only nearby nodes');
+ meshRegistry.setMesh(solid,far,ix);
+ assert(meshRegistry.limit(driver,t=>p(t*10),.5,0).limited);
+ meshRegistry.set(solid,p(5),.5);
+ assert.equal(meshRegistry.get(solid).mesh,undefined,'Replacing shape releases mesh BVH');
+ assert.throws(()=>buildProximityTriangleMesh(tri,[0,1,9]),/indices/);
+ assert.throws(()=>buildProximityTriangleMesh(tri,[0,1]),/size/);
+ assert.throws(()=>buildProximityTriangleMesh([p(NaN),...tri],[0,1,2]),/vertices/);
+ assert.throws(()=>meshRegistry.setMesh({},[p(-500),p(500),p(0)],[0,1,2]),/radius/);
+ meshRegistry.remove(solid);assert.equal(meshRegistry.size,0);
+ meshRegistry.clear();
  oldSphere.clear();registry.clear();
- console.log('PROXIMITY SHAPES PASS: swept Sphere–World-AABB/OBB/capsule, rounded corners and caps, no long-box false positive, conservative broadphase and registry cleanup.');
+ console.log('PROXIMITY SHAPES PASS: mesh BVH and swept Sphere–World-AABB/OBB/capsule, rounded corners and caps, no long-box false positive, conservative broadphase and registry cleanup.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}

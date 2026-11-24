@@ -5,13 +5,14 @@
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
+import {buildProximityTriangleMesh,sweptSphereMeshEntry,type ProximityTriangleMesh} from './SplineProximityMesh';
 import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb,sweptSphereCapsuleEntry,validProximityCapsule,copyProximityCapsule,type ProximityCapsule} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
 export interface ProximityTelemetry {
     occupants:number;spatialCells:number;queries:number;fallbackQueries:number;
     lastCandidates:number;lastSegmentTests:number;lastSamplePoints:number;
     lastVisitedCells:number;lastFallback:boolean;totalCandidates:number;
-    totalSegmentTests:number;
+    totalSegmentTests:number;lastTriangleTests:number;totalTriangleTests:number;
 }
 export interface ProximityOccupant {
     position:ProximityPoint;radius:number;
@@ -21,6 +22,8 @@ export interface ProximityOccupant {
     obb?:ProximityObb;
     /** Explicit stationary world capsule; mutually exclusive with box shapes. */
     capsule?:ProximityCapsule;
+    /** Frozen WORLD mesh and BVH; independent of Cocos MeshCollider. */
+    mesh?:ProximityTriangleMesh;
 }
 export interface ProximityPlan {
     fraction:number;
@@ -56,7 +59,7 @@ export function planSplineProximity(
     own:object,points:(fraction:number)=>ProximityPoint,
     occupants:ReadonlyMap<object,ProximityOccupant>,
     radius:number,safetyGap:number,samples=16,
-    metrics?:{segmentTests:number},
+    metrics?:{segmentTests:number;triangleTests?:number},
 ):ProximityPlan{
     if(!own||typeof points!=='function'||!finite(radius)||radius<=0||radius>100||
        !finite(safetyGap)||safetyGap<0||safetyGap>100||
@@ -80,11 +83,15 @@ export function planSplineProximity(
         for(let j=1;j<=samples;j++){
             const point=sampled[j];
             if(metrics)metrics.segmentTests++;
-            const entry=other.capsule?
+            const meshMetrics=other.mesh?{triangleTests:0,visitedNodes:0}:undefined;
+            const entry=other.mesh?
+                sweptSphereMeshEntry(previous,point,other.mesh,radius+safetyGap,meshMetrics):other.capsule?
                 sweptSphereCapsuleEntry(previous,point,other.capsule,radius+safetyGap):other.obb?
                 sweptSphereObbEntry(previous,point,other.obb,radius+safetyGap):other.bounds?
                 sweptSphereAabbEntry(previous,point,other.bounds,radius+safetyGap):
                 segmentEntry(previous,point,other.position,threshold);
+            if(meshMetrics&&metrics&&metrics.triangleTests!==undefined)
+                metrics.triangleTests+=meshMetrics.triangleTests;
             if(entry!==null){
                 const hit=(j-1+entry)/samples;
                 if(hit<=first){
@@ -114,6 +121,8 @@ export class SplineProximityRegistry {
     private _totalSegmentTests=0;
     private _lastCandidates=0;
     private _lastSegmentTests=0;
+    private _lastTriangleTests=0;
+    private _totalTriangleTests=0;
     private _lastSamplePoints=0;
     private _lastVisitedCells=0;
     private _lastFallback=false;
@@ -131,6 +140,7 @@ export class SplineProximityRegistry {
             lastCandidates:this._lastCandidates,lastSegmentTests:this._lastSegmentTests,
             lastSamplePoints:this._lastSamplePoints,lastVisitedCells:this._lastVisitedCells,
             lastFallback:this._lastFallback,totalCandidates:this._totalCandidates,
+            lastTriangleTests:this._lastTriangleTests,totalTriangleTests:this._totalTriangleTests,
             totalSegmentTests:this._totalSegmentTests};
     }
     public set(owner:object,position:ProximityPoint,radius:number,bounds?:ProximityAabb):void{
@@ -167,6 +177,21 @@ export class SplineProximityRegistry {
         this.set(owner,center,radius);
         this.occupants.get(owner)!.capsule=copy;
     }
+    /** Explicit stationary WORLD triangles. Geometry is copied and frozen at
+     * registration; update manually if mesh transforms/vertices change.
+     * Large meshes must be spatially divided into chunks. */
+    public setMesh(owner:object,vertices:readonly ProximityPoint[],
+        indices:readonly number[]):void{
+        if(!ownValid(owner))throw Error('Invalid proximity mesh owner.');
+        const mesh=buildProximityTriangleMesh(vertices,indices);
+        const lo=mesh.bounds.min,hi=mesh.bounds.max;
+        const center={x:lo.x/2+hi.x/2,y:lo.y/2+hi.y/2,z:lo.z/2+hi.z/2};
+        const radius=Math.max(1e-6,Math.hypot(hi.x-lo.x,hi.y-lo.y,hi.z-lo.z)/2);
+        if(!finite(radius)||radius>100)
+            throw Error('Proximity mesh exceeds 100 world unit broadphase radius.');
+        this.set(owner,center,radius);
+        this.occupants.get(owner)!.mesh=mesh;
+    }
     public remove(owner:object):void{
         const previous=this.occupants.get(owner);
         if(!previous)return;
@@ -179,7 +204,8 @@ export class SplineProximityRegistry {
         return value?{radius:value.radius,position:{...value.position},
             ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{}),
             ...(value.obb?{obb:copyProximityObb(value.obb)}:{}),
-            ...(value.capsule?{capsule:copyProximityCapsule(value.capsule)}:{})}:null;
+            ...(value.capsule?{capsule:copyProximityCapsule(value.capsule)}:{}),
+            ...(value.mesh?{mesh:value.mesh}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,
@@ -219,7 +245,7 @@ export class SplineProximityRegistry {
                 if(state)selected.set(id,state);
             }
         }
-        const metrics={segmentTests:0};
+        const metrics={segmentTests:0,triangleTests:0};
         const report=planSplineProximity(owner,
             fraction=>sampled[Math.min(samples,Math.max(0,Math.round(fraction*samples)))],
             selected,radius,safetyGap,samples,metrics);
@@ -227,6 +253,8 @@ export class SplineProximityRegistry {
         if(fallback)this._fallbackQueries++;
         this._lastCandidates=selected.size;
         this._lastSegmentTests=metrics.segmentTests;
+        this._lastTriangleTests=metrics.triangleTests;
+        this._totalTriangleTests+=metrics.triangleTests;
         this._lastSamplePoints=sampled.length;
         this._lastVisitedCells=query?.visitedCells??0;
         this._lastFallback=fallback;
@@ -237,7 +265,7 @@ export class SplineProximityRegistry {
     public clear():void{
         this.occupants.clear();this.index.clear();this._maxRadius=0;
         this._queries=0;this._fallbackQueries=0;this._totalCandidates=0;
-        this._totalSegmentTests=0;this._lastCandidates=0;
+        this._totalSegmentTests=0;this._totalTriangleTests=0;this._lastTriangleTests=0;this._lastCandidates=0;
         this._lastSegmentTests=0;this._lastSamplePoints=0;
         this._lastVisitedCells=0;this._lastFallback=false;
     }
