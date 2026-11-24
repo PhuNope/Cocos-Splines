@@ -55,7 +55,7 @@ function triangleUpNormal(surface,triangle){
  * face-to-face crease angle. Explicit split vertices remain hard edges.
  * Built per surface ray batch only when smoothing is requested.
  */
-function smoothingData(surface){
+function smoothingData(surface,weldSeams=false){
     const {positions:p,indices:ix,triangleCount}=surface;
     const adjacent=Array.from({length:p.length/3},()=>[]);
     const normals=new Array(triangleCount),areas=new Array(triangleCount);
@@ -80,6 +80,38 @@ function smoothingData(surface){
             normals[tri]=null;
             areas[tri]=0;
         }
+    }
+    if(weldSeams){
+        // UV seams duplicate positions. Only weld smoothing adjacency, not geometry.
+        const epsilon=1e-5,cells=new Map(),parent=adjacent.map((_,i)=>i);
+        const find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+        const join=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[Math.max(a,b)]=Math.min(a,b);};
+        const key=(x,y,z)=>x+','+y+','+z;
+        for(let i=0;i<adjacent.length;i++){
+            const a=i*3,x=p[a],y=p[a+1],z=p[a+2];
+            const qx=Math.floor(x/epsilon),qy=Math.floor(y/epsilon),qz=Math.floor(z/epsilon);
+            if(![qx,qy,qz].every(Number.isSafeInteger))
+                throw Error('Surface seam coordinates exceed safe weld grid range.');
+            for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+                const matches=cells.get(key(qx+dx,qy+dy,qz+dz));
+                if(!matches)continue;
+                for(const j of matches){
+                    const b=j*3;
+                    if(Math.hypot(x-p[b],y-p[b+1],z-p[b+2])<=epsilon)join(i,j);
+                }
+            }
+            const k=key(qx,qy,qz);
+            if(!cells.has(k))cells.set(k,[]);
+            cells.get(k).push(i);
+        }
+        const groups=new Map();
+        for(let i=0;i<adjacent.length;i++){
+            const root=find(i);
+            if(!groups.has(root))groups.set(root,new Set());
+            for(const tri of adjacent[i])groups.get(root).add(tri);
+        }
+        for(let i=0;i<adjacent.length;i++)
+            adjacent[i]=Array.from(groups.get(find(i)));
     }
     return {adjacent,normals,areas};
 }
@@ -164,7 +196,7 @@ function snapOrigins(surface,entries,options={}){
         if(typeof creaseAngle!=='number'||!Number.isFinite(creaseAngle)||
            creaseAngle<0||creaseAngle>89)
             throw Error('Normal smoothing crease angle must be from 0 to 89 degrees.');
-        smoothing={creaseCos:Math.cos(creaseAngle*Math.PI/180),prepared:smoothingData(surface)};
+        smoothing={creaseCos:Math.cos(creaseAngle*Math.PI/180),prepared:smoothingData(surface,options.weldSeams===true)};
     }
     for(const entry of entries){
         const hit=castDown(surface,entry.position,height,maxDrop,alignNormal,smoothing);
