@@ -23,6 +23,7 @@ const style=`
 .spl-btn:hover{background:rgba(73,141,172,.27)}.spl-btn:disabled{opacity:.4;cursor:default}
 .spl-danger{border-color:#a05f63}.spl-error{color:#f9a9a5;white-space:pre-wrap;font-size:11px}
 .spl-status{font-size:11px;min-height:14px;color:#8ad6bb;white-space:pre-wrap}
+.spl-placement-results{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.65;padding:8px;margin:6px 0;background:rgba(90,126,149,.07);border:1px solid var(--color-border-normal,#374b5c);border-radius:5px;user-select:text}
 .spl-index-input{width:57px;max-width:57px;background:transparent;border:1px solid var(--color-border-normal,#364551);color:inherit;border-radius:4px;padding:3px}
 `;
 const configs={
@@ -204,6 +205,15 @@ function makeInspector(type){
         groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-spawn">＋ Spawn</button><button type="button" class="spl-btn spl-respawn">↻ Respawn</button><button type="button" class="spl-btn spl-clear-spawned spl-danger">✕ Clear Spawned</button></div>`;
         selectors.spawn='.spl-spawn';selectors.respawn='.spl-respawn';selectors.clearSpawned='.spl-clear-spawned';
     }
+    if(type==='objectController'){
+        groups+=`<details class="spl-section" open><summary>Placement statistics · read-only</summary>
+          <div class="spl-btns"><button type="button" class="spl-btn spl-placement-analyze">Analyze Placement</button></div>
+          <div class="spl-note">Exact candidate totals; not limited by Gizmo marker count. Manual snapshot: click after changing settings or peers. No Scene mutation.</div>
+          <div class="spl-placement-results" role="status">Chưa phân tích. Nhấn Analyze Placement.</div>
+        </details>`;
+        selectors.placementAnalyze='.spl-placement-analyze';
+        selectors.placementSummary='.spl-placement-results';
+    }
     if(type==='junctionMesh'||type==='bender'||type==='morph'){
         const names={junctionMesh:['Rebuild Patch','rebuild-junction-patch'],bender:['Apply Bend','apply-bender'],morph:['Apply Morph','apply-morph']};
         const actions=names[type];
@@ -362,10 +372,22 @@ function makeInspector(type){
                 this.$.respawn.addEventListener('click',()=>void callEditor(this,'spawn-prefabs',type,'respawn'));
                 this.$.clearSpawned.addEventListener('click',()=>void callEditor(this,'spawn-prefabs',type,'clear'));
             }
-            if(type==='instantiate'||type==='objectController'){
-        groups+=`<div class="spl-btns"><button type="button" class="spl-btn spl-spawn">＋ Spawn</button><button type="button" class="spl-btn spl-respawn">↻ Respawn</button><button type="button" class="spl-btn spl-clear-spawned spl-danger">✕ Clear Spawned</button></div>`;
-        selectors.spawn='.spl-spawn';selectors.respawn='.spl-respawn';selectors.clearSpawned='.spl-clear-spawned';
-    }
+            if(type==='objectController'){
+                this.$.placementAnalyze.addEventListener('click',async()=>{
+                    const button=this.$.placementAnalyze,output=this.$.placementSummary;
+                    if(button.disabled)return;
+                    button.disabled=true;
+                    output.textContent='Đang tính thống kê (không tạo prefab)...';
+                    try{
+                        const result=await callEditor(this,'query-placement-summary');
+                        output.textContent=result?.ok===true?
+                            formatPlacementSummary(result.summary):
+                            'Không thể phân tích: '+String(result?.error||'Unknown error');
+                    }catch(error){
+                        output.textContent='Không thể phân tích: '+String(error?.message||error);
+                    }finally{button.disabled=false;}
+                });
+            }
     if(type==='junctionMesh'||type==='bender'||type==='morph'){
                 const name=type==='junctionMesh'?'rebuild-junction-patch':type==='bender'?'apply-bender':'apply-morph';
                 this.$.action.addEventListener('click',()=>void callEditor(this,name));
@@ -436,4 +458,34 @@ async function callEditor(inspector,message,...args){
         return {ok:false,error:String(e)};
     }
 }
-module.exports={makeInspector,style,callEditor,escapeHtml};
+/** Text-only snapshot formatter. Never inject values into HTML. */
+function formatPlacementSummary(stats){
+    if(!stats||!Number.isInteger(stats.total)||stats.total<0||
+       stats.total>2048||!Number.isInteger(stats.accepted)||
+       stats.accepted<0||stats.accepted>stats.total||
+       !Number.isInteger(stats.rejected)||stats.rejected!==stats.total-stats.accepted)
+        throw Error('Invalid placement summary returned from Scene.');
+    const legend=[
+        ['accepted','✓ Accepted'],['surface','● Surface'],['collider','● Collider'],
+        ['peer','● Peer'],['exclusion','● Exclusion'],['density','● Density'],
+        ['spacing','● Spacing']
+    ];
+    let sum=0;
+    const rows=legend.map(([reason,label])=>{
+        const count=stats.byReason?.[reason];
+        if(!Number.isInteger(count)||count<0||count>stats.total)
+            throw Error('Invalid '+reason+' placement reason count.');
+        sum+=count;
+        const indices=reason==='accepted'?[]:stats.examples?.[reason];
+        if(reason!=='accepted'&&(!Array.isArray(indices)||indices.length>3||
+            indices.some(n=>!Number.isInteger(n)||n<0||n>2047)))
+            throw Error('Invalid placement rejection examples.');
+        return label+': '+count+(indices?.length?'  (index '+indices.join(', ')+')':'');
+    });
+    if(sum!==stats.total||stats.byReason.accepted!==stats.accepted)
+        throw Error('Placement reason totals do not match candidate count.');
+    const pct=stats.total?Math.round(stats.accepted/stats.total*1000)/10:0;
+    return 'Total: '+stats.total+'  |  Accepted: '+stats.accepted+' ('+pct+'%)  |  Rejected: '+
+        stats.rejected+'\n'+rows.join('\n')+'\nSnapshot: press Analyze Placement again to refresh.';
+}
+module.exports={makeInspector,style,callEditor,escapeHtml,formatPlacementSummary};
