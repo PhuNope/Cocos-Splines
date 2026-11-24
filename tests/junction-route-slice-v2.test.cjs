@@ -79,7 +79,7 @@ assert.throws(()=>planEndpointJunctionChain(links,
 assert.throws(()=>planPartialJunctionChain(links,
  {junctionId:'j1',linkIndex:0},'c',.5,1),/direction/);
 assert.throws(()=>planPartialJunctionChain(links,
- {junctionId:'j1',linkIndex:0},'a'),/different/);
+ {junctionId:'j1',linkIndex:0},'a'),/differ/);
 assert.throws(()=>planPartialJunctionChain(links.slice(0,3),
  {junctionId:'j1',linkIndex:0},'c'),/No partial route/);
 assert.throws(()=>planPartialJunctionChain([...links,l('j2',0,'z',.7,8.5)],
