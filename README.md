@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Automatic static prefab footprint for placement (v2 preview)
+
+SplineObjectController → **Auto Prefab Footprint** (requires Collider Avoidance + Precise Obstacle Shapes) derives an opt-in conservative sphere radius per selected prefab, from static MeshRenderer mesh bounds and supported Collider shapes across the prefab's nested Node hierarchy. Per-candidate radius accounts for prefab/parent scale, ScaleMultiplier, random scale and Modifiers. Missing/unsupported geometry fails preflight without deleting existing instances. Manual radius and legacy population remain unchanged when disabled. This is a static bounding sphere, not animated mesh geometry or multi-controller collision. See [Automatic Footprint guide](docs/POPULATION_AUTO_PREFAB_FOOTPRINT_V2_VI.md).
+
 ### MeshCollider triangle BVH population placement (v2 preview)
 
 SplineObjectController now supports **Use Mesh Collider BVH** inside opt-in Precise Obstacle Shapes. It reuses the strict static World triangle BVH previously built for SplineAnimate, to evaluate sphere-footprint contact against readable non-convex 3D MeshColliders; convex/unreadable/unsupported geometry falls back conservatively to World AABB. BVHs are cached per Collider/mesh hash/pose. This checks double-sided triangle SURFACES, not enclosed-solid occupancy or the exact prefab shape. Disabled by default. See [Mesh BVH guide](docs/POPULATION_MESH_BVH_V2_VI.md).
