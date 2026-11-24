@@ -138,6 +138,16 @@
           "importJSON"
         ]
       },
+      "import-svg": {
+        "methods": [
+          "importSVG"
+        ]
+      },
+      "export-svg": {
+        "methods": [
+          "exportSVG"
+        ]
+      },
       "preview-animate": {
         "methods": [
           "previewAnimate"
