@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.8c1 Collider-aware Population and Weighted Variants (V2 Preview)
+
+- Added explicit Collider World-AABB center clearance for prefab population: opt-in list of up to 64 active colliders, conservative sphere-to-AABB overlap and world-unit clearance, tested on final spline-frame placement after noise/jitter.
+- Added opt-in weighted prefab selection with zero-weight exclusion, strict length/finite validation and deterministic seed/index sampling; unweighted legacy selection is unchanged.
+- Obstacle candidates are removed before density/World spacing so blocked spots cannot reserve space. Invalid active bounds/weights fail during preflight before clearing saved spawned instances.
+- Added Inspector controls, pure math and component regressions, Cocos offline Node type and native acceptance checklist. Detailed 3D physics overlap/terrain conform not yet supported.
+- Native Cocos Creator 3.8.8 smoke tests remain pending. No tag or release.
+
 # Unreleased — Phase 3.8b Advanced Population Rules (V2 Preview)
 
 - Added opt-in density masks keyed by normalized arc, seed-stable candidate thinning, open/closed exclusion intervals and World-center minimum spacing after final modifiers/noise/jitter.
