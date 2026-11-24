@@ -5,7 +5,7 @@
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
-import {sweptSphereAabbEntry,validProximityAabb,type ProximityAabb} from './SplineProximityShapes';
+import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
 export interface ProximityTelemetry {
     occupants:number;spatialCells:number;queries:number;fallbackQueries:number;
@@ -17,6 +17,8 @@ export interface ProximityOccupant {
     position:ProximityPoint;radius:number;
     /** Opt-in actual world AABB of a Cocos 3D Collider; absent = sphere. */
     bounds?:ProximityAabb;
+    /** Explicit stationary world OBB; mutually exclusive with bounds. */
+    obb?:ProximityObb;
 }
 export interface ProximityPlan {
     fraction:number;
@@ -76,12 +78,13 @@ export function planSplineProximity(
         for(let j=1;j<=samples;j++){
             const point=sampled[j];
             if(metrics)metrics.segmentTests++;
-            const entry=other.bounds?
+            const entry=other.obb?
+                sweptSphereObbEntry(previous,point,other.obb,radius+safetyGap):other.bounds?
                 sweptSphereAabbEntry(previous,point,other.bounds,radius+safetyGap):
                 segmentEntry(previous,point,other.position,threshold);
             if(entry!==null){
                 const hit=(j-1+entry)/samples;
-                if(hit<first){
+                if(hit<=first){
                     first=Math.max(0,hit-1e-5);
                     obstacle=id;
                 }
@@ -139,6 +142,17 @@ export class SplineProximityRegistry {
         else if(previous&&previous.radius>=this._maxRadius&&radius<previous.radius)
             this.recalculateMaxRadius();
     }
+    /** Register an explicit world OBB. Its circumscribed sphere is computed
+     * internally to keep the center-based broadphase conservative.
+     * Call setObb again after any transform/size change; set() resets shape. */
+    public setObb(owner:object,box:ProximityObb):void{
+        if(!validProximityObb(box))throw Error('Invalid spline proximity OBB.');
+        const copy=copyProximityObb(box);
+        // Tiny inflation covers the accepted orthonormality tolerance.
+        const radius=Math.max(1e-6,Math.hypot(copy.half.x,copy.half.y,copy.half.z)*(1+1e-7));
+        this.set(owner,copy.center,radius);
+        this.occupants.get(owner)!.obb=copy;
+    }
     public remove(owner:object):void{
         const previous=this.occupants.get(owner);
         if(!previous)return;
@@ -149,7 +163,8 @@ export class SplineProximityRegistry {
     public get(owner:object):ProximityOccupant|null{
         const value=this.occupants.get(owner);
         return value?{radius:value.radius,position:{...value.position},
-            ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{})}:null;
+            ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{}),
+            ...(value.obb?{obb:copyProximityObb(value.obb)}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,

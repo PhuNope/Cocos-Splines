@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'..'),out=fs.mkdtempSync(path.join(os.tmpdir()
 try{
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),
      '--noEmit','false','--outDir',out],{stdio:'pipe'});
- const {sweptSphereAabbEntry,aabbFromCenterHalfExtents}=
+ const {sweptSphereAabbEntry,aabbFromCenterHalfExtents,sweptSphereObbEntry,validProximityObb}=
      require(path.join(out,'Core/SplineProximityShapes.js'));
  const {SplineProximityRegistry}=require(path.join(out,'Core/SplineProximity.js'));
  const p=(x,y=0,z=0)=>({x,y,z});
@@ -58,6 +58,40 @@ try{
  assert.equal(registry.size,0);
  assert.equal(registry.getTelemetry().spatialCells,0);
  assert.throws(()=>registry.set({},p(0),.5,{min:p(1),max:p(0)}),/Invalid/);
+
+ // Rotated long thin obstacle: the world AABB includes empty corners.
+ const k=Math.SQRT1_2;
+ const obb={center:p(5,0,0),half:p(2,.2,.2),axes:[p(k,0,k),p(0,1,0),p(-k,0,k)]};
+ const world=(x,y,z)=>p(5+k*(x-z),y,k*(x+z));
+ assert(validProximityObb(obb));
+ near(sweptSphereObbEntry(world(-5,0,0),world(5,0,0),obb,.5),.25);
+ near(sweptSphereObbEntry(world(5,0,0),world(-5,0,0),obb,.5),.25);
+ assert.equal(sweptSphereObbEntry(world(-5,0,1),world(5,0,1),obb,.5),null);
+ assert.equal(sweptSphereObbEntry(world(0,0,0),world(0,0,0),obb,.5),0);
+ assert.equal(sweptSphereObbEntry(world(0,0,1),world(0,0,1),obb,.5),null);
+ near(sweptSphereObbEntry(world(-5,0,0),world(-2.5,0,0),obb,.5),1);
+ const bad={...obb,axes:[p(1),p(1),p(0,0,1)]};
+ assert(!validProximityObb(bad));
+ assert.throws(()=>registry.setObb(obstacle,bad),/Invalid/);
+ registry.setObb(obstacle,obb);
+ assert.equal(registry.limit(mover,t=>world(-5+10*t,0,1),.5,0).limited,false);
+ assert.equal(registry.getTelemetry().lastCandidates,1);
+ report=registry.limit(mover,t=>world(-5+10*t,0,0),.5,0);
+ assert(report.limited);near(report.fraction,.25,3e-4);
+ // Input and read-back are independent snapshots, including nested axes.
+ obb.center.x=500;obb.axes[0].x=0;
+ const copy=registry.get(obstacle);
+ assert.equal(copy.obb.center.x,5);near(copy.obb.axes[0].x,k);
+ copy.obb.axes[0].x=123;
+ near(registry.get(obstacle).obb.axes[0].x,k);
+ registry.set(obstacle,p(5),2);
+ assert.equal(registry.get(obstacle).obb,undefined);
+ // Combined moving sphere radius and safety gap may legally exceed 100.
+ registry.set(obstacle,p(5),2,box);
+ assert(registry.limit(mover,t=>p(10*t),80,80).stopped);
+ // Endpoint-only touch must still apply the conservative stop margin.
+ registry.set(obstacle,p(5),1);
+ assert(registry.limit(mover,t=>p(3.5*t),.5,0).limited);
  oldSphere.clear();registry.clear();
  console.log('PROXIMITY SHAPES PASS: exact swept Sphere–World-AABB, rounded corners, no long-box false positive, conservative broadphase and registry cleanup.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}

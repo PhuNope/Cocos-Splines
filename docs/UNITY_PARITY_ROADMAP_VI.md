@@ -62,7 +62,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b2b2b2a — Sparse 3D spatial-hash broadphase for opt-in proximity, cached sampled sweep, safe oversized-query fallback, configurable sweep precision and read-only cross-system traffic telemetry with regression tests.
 - [x] Phase 3.6b2b2b2b2b1 — Opt-in Cocos 3D Collider.worldBounds-derived conservative bounding-sphere proximity and explicit per-exit World asphalt half-width 3D conflict diagnostics (with vertical clearance), Inspector and mock regression.
 - [x] Phase 3.6b2b2b2b2b2a — World-AABB obstacle narrowphase for swept follower spheres; read-only sampled nominal SplineRoad asphalt widths (taper/range/modifiers), auto-by-connection index Inspector and mock regression.
-- [ ] Phase 3.6b2b2b2b2b2b — Exact OBB/capsule/mesh collision and dynamic-agent prediction, Creator 3.8.8 profiling, physical collision resolution and server-authoritative multiplayer traffic.
+- [x] Phase 3.6b2b2b2b2b2b1 — Explicit stationary World OBB narrowphase for swept spheres, orthonormal basis validation, conservative registry broadphase radius, immutable snapshots and regression coverage. API-only; native Collider auto-adapter remains pending.
+- [ ] Phase 3.6b2b2b2b2b2b2 — Native BoxCollider OBB adapter (scale/shear/backend validation), capsule/mesh collision, dynamic-agent prediction, Creator 3.8.8 profiling, physical collision resolution and server-authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 

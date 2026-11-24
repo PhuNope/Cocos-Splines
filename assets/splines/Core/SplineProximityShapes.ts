@@ -36,7 +36,7 @@ function distanceSquared(p:ProximityVec3,b:ProximityAabb):number{
 }
 /** First contact t in [0,1], or null. Piecewise quadratic distance to AABB:
  * split the interval at every crossing of a slab plane, then minimize the
- * quadratic on each interval and bisect its FIRST crossing. 18 breakpoints max.
+ * quadratic on each interval and bisect its FIRST crossing. 8 breakpoints max.
  */
 export function sweptSphereAabbEntry(
     start:ProximityVec3,end:ProximityVec3,b:ProximityAabb,radius:number,
@@ -44,7 +44,7 @@ export function sweptSphereAabbEntry(
     if(!start||!end||!['x','y','z'].every(k=>{
         const a=k as keyof ProximityVec3;
         return finite(start[a])&&finite(end[a]);
-    })||!validProximityAabb(b)||!finite(radius)||radius<=0||radius>100)
+    })||!validProximityAabb(b)||!finite(radius)||radius<=0||radius>200)
         throw Error('Invalid swept sphere/AABB query.');
     const delta={x:end.x-start.x,y:end.y-start.y,z:end.z-start.z};
     const r2=radius*radius,at=(t:number):ProximityVec3=>({
@@ -88,4 +88,44 @@ export function sweptSphereAabbEntry(
         return right;
     }
     return null;
+}
+
+/** Explicit WORLD OBB. Axes must form an orthonormal basis; no shear or scale.
+ * Half extents are world distances along those axes. */
+export interface ProximityObb {
+    center:ProximityVec3;
+    half:ProximityVec3;
+    axes:readonly [ProximityVec3,ProximityVec3,ProximityVec3];
+}
+const validVector=(v:ProximityVec3)=>!!v&&finite(v.x)&&finite(v.y)&&finite(v.z);
+const dot=(a:ProximityVec3,b:ProximityVec3)=>a.x*b.x+a.y*b.y+a.z*b.z;
+export function validProximityObb(box:ProximityObb|null|undefined):box is ProximityObb {
+    if(!box||!validVector(box.center)||!validVector(box.half)||
+       box.half.x<0||box.half.y<0||box.half.z<0||
+       !Array.isArray(box.axes)||box.axes.length!==3||
+       !box.axes.every(validVector))return false;
+    const [x,y,z]=box.axes;
+    const epsilon=1e-8;
+    return [x,y,z].every(a=>Math.abs(dot(a,a)-1)<=epsilon)&&
+        Math.abs(dot(x,y))<=epsilon&&Math.abs(dot(x,z))<=epsilon&&
+        Math.abs(dot(y,z))<=epsilon;
+}
+export function copyProximityObb(box:ProximityObb):ProximityObb {
+    return {center:{...box.center},half:{...box.half},
+        axes:[{...box.axes[0]},{...box.axes[1]},{...box.axes[2]}]};
+}
+/** First contact of a moving sphere with a stationary explicit OBB.
+ * Transform endpoints to the box basis and reuse the rounded AABB sweep.
+ * Exact for an orthonormal box and a linear segment, within numeric tolerance. */
+export function sweptSphereObbEntry(start:ProximityVec3,end:ProximityVec3,
+    box:ProximityObb,radius:number):number|null {
+    if(!validProximityObb(box)||!validVector(start)||!validVector(end))
+        throw Error('Invalid swept sphere/OBB query.');
+    const local=(p:ProximityVec3):ProximityVec3=>{
+        const d={x:p.x-box.center.x,y:p.y-box.center.y,z:p.z-box.center.z};
+        return {x:dot(d,box.axes[0]),y:dot(d,box.axes[1]),z:dot(d,box.axes[2])};
+    };
+    const h=box.half;
+    return sweptSphereAabbEntry(local(start),local(end),
+        {min:{x:-h.x,y:-h.y,z:-h.z},max:{...h}},radius);
 }
