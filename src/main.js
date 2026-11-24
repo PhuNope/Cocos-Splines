@@ -1,5 +1,6 @@
 'use strict';
 const NAME='cocos-splines';
+const {parseSvg,exportSvg}=require('./SplineSvgConverter');
 const {installSplineExamples}=require('./SplineExampleInstaller');
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
@@ -867,6 +868,50 @@ const methods={
             await invokeScene('refreshPreview',root);
             return {ok:true,root,knots:data.knots.length};
         }catch(e){return alertError('import',e);}
+    },
+    /** SVG import always creates a NEW sibling XY2D Spline. On partial failure,
+     * remove only the nodes created by this operation (never touch source). */
+    async importSVG(input,unitsPerPixel=1){
+        let created=null;
+        try{
+            const data=parseSvg(input,unitsPerPixel);
+            await ensureClasses();
+            const current=selected()[0];
+            const active=current?await invokeScene('querySpline',current):null;
+            const parent=active?.found?active.parentUuid:current;
+            created=await makeNode(parent,'Imported SVG Spline');
+            await component(created,'Splines.SplineContainer');
+            await property(created,0,'dimension',1,'Enum',false);
+            for(let i=0;i<data.knots.length;i++){
+                const knot=data.knots[i],id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(id,'Splines.SplineKnot');
+                await position(id,[knot.position.x,knot.position.y,0]);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',knot.tangentIn,'cc.Vec3');
+                await setKnotValue(id,'tangentOut',knot.tangentOut,'cc.Vec3');
+                await setKnotValue(id,'tangentsInKnotSpace',false,'Boolean');
+            }
+            if(data.closed)await property(created,0,'closed',true,'Boolean',false);
+            await snapshot();
+            selectOnly(created);
+            await invokeScene('refreshPreview',created);
+            return {ok:true,root:created,knots:data.knots.length,closed:data.closed};
+        }catch(error){
+            if(created){
+                try{await Editor.Message.request('scene','remove-node',{uuid:created,snapshot:false});}
+                catch(cleanupError){console.error('[Cocos Splines] SVG import cleanup failed:',cleanupError);}
+            }
+            return alertError('import-svg',error);
+        }
+    },
+    async exportSVG(){
+        try{
+            const spline=await selectedSpline();
+            if(!spline?.found)throw Error(spline?.message||'Select a spline to export.');
+            const data=await invokeScene('querySvgGeometry',spline.rootUuid);
+            if(!data?.ok)throw Error(data?.error||'Cannot resolve exact spline cubic controls.');
+            return {ok:true,svg:exportSvg(data),knots:data.knots.length};
+        }catch(error){return alertError('export-svg',error);}
     },
     async createSpline(){
         try{
