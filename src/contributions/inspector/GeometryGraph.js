@@ -8,6 +8,13 @@ const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
  '<div class="spl-note">Drag node headers. Click an output socket then a compatible input socket to connect. All edits use native Inspector property commits.</div>',
+ '<div class="spl-vg-toolbar spl-vg-asset-toolbar">',
+ '<button type="button" class="spl-btn spl-vg-export">Export JSON…</button>',
+ '<button type="button" class="spl-btn spl-vg-import">Import JSON → Local…</button>',
+ '<button type="button" class="spl-btn spl-vg-copy-local">Copy Asset to Local</button>',
+ '<button type="button" class="spl-btn spl-vg-refresh">Refresh Asset View</button>',
+ '</div>',
+ '<div class="spl-vg-source-mode" role="status">Local graph JSON</div>',
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
  '<button type="button" class="spl-btn spl-vg-add-width">＋ Width</button>',
@@ -48,6 +55,9 @@ const style=base.style+[
 '.spl-vg-status.error{color:#f7b2a9}'
 ].join('\n');
 const $={...base.$,
+  vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',
+  vgCopyLocal:'.spl-vg-copy-local',vgRefresh:'.spl-vg-refresh',
+  vgSourceMode:'.spl-vg-source-mode',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
@@ -58,6 +68,13 @@ function status(panel,message,isError=false){
   panel.$.vgStatus.classList?.toggle?.('error',isError);
 }
 function render(panel){
+  if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=panel._vgShared?
+    'Shared JsonAsset mode · canvas is read-only. Export or Copy Asset to Local to edit.':
+    'Local graph · editable Visual Canvas';
+  for(const key of ['vgAddOffset','vgAddWidth','vgAuto','vgCopyLocal']){
+    const element=panel.$?.[key];
+    if(element)element.disabled=key==='vgCopyLocal'?!panel._vgShared:!!panel._vgShared;
+  }
   const stage=panel.$?.vgStage,properties=panel.$?.vgProperties;
   if(!stage||!properties)return;
   try{
@@ -68,7 +85,7 @@ function render(panel){
       panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
-      !['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
+      !!panel._vgShared||!['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
@@ -84,6 +101,7 @@ function render(panel){
  * change-dump. Do not use low-level scene.set-property or a manual snapshot.
  */
 function commitProperty(panel,key,nextValue){
+  if(panel._vgShared)throw Error('Shared JsonAsset is read-only: use Copy Asset to Local first.');
   if(!['graphJson','graphLayoutJson'].includes(key))
     throw Error('Visual Graph cannot edit '+key+'.');
   const dump=panel._splineDump?.value?.[key];
@@ -128,6 +146,25 @@ function commitLayout(panel,next){
     status(panel,String(error?.message||error),true);
   }
 }
+async function refreshAsset(panel){
+  const requestToken=(panel._vgRequestToken||0)+1;
+  panel._vgRequestToken=requestToken;
+  try{
+    const info=await Editor.Message.request('cocos-splines','query-geometry-graph-asset');
+    if(panel._vgRequestToken!==requestToken||!panel._vgShared)return;
+    if(!info?.ok||!info.assetMode)throw Error(info?.error||'Shared graph unavailable.');
+    graph.parseGraph(info.graphJson);
+    panel._vgGraphJson=info.graphJson;
+    panel._vgSelected=null;panel._vgPending=null;
+    render(panel);
+    status(panel,'Shared JsonAsset: '+(info.assetName||'unnamed')+' · read-only view.');
+  }catch(error){
+    if(panel._vgRequestToken!==requestToken||!panel._vgShared)return;
+    panel._vgGraphJson='invalid shared graph';
+    render(panel);
+    status(panel,String(error?.message||error),true);
+  }
+}
 function closest(target,selector){
   return target&&typeof target.closest==='function'?target.closest(selector):null;
 }
@@ -141,19 +178,42 @@ const inspector={
       status(this,'Both graphJson and graphLayoutJson are required.',true);return;
     }
     if(this._vgDrag)return;
+    const shared=dump?.value?.useGraphAsset?.value===true;
+    const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
+    const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
     const changed=this._vgGraphJson!==graphJson||
-      this._vgLayoutJson!==layoutJson;
-    this._vgGraphJson=graphJson;this._vgLayoutJson=layoutJson;
+      this._vgLayoutJson!==layoutJson||changedShared;
+    this._vgShared=shared;this._vgAssetIdentity=assetIdentity;
+    this._vgLayoutJson=layoutJson;
+    if(!shared)this._vgGraphJson=graphJson;
+    else if(changedShared){this._vgGraphJson='Asset loading';}
     if(changed||!this._vgRendered){this._vgRendered=true;render(this);}
+    if(shared&&changedShared&&this.$?.vgRefresh)void refreshAsset(this);
+    if(!shared&&changedShared)this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
   ready(){
     base.ready.call(this);
     this._vgSelected=null;this._vgPending=null;this._vgDrag=null;
     this._vgRendered=false;this._vgPreviewLayout=null;
+    this._vgShared=false;this._vgAssetIdentity=null;this._vgRequestToken=0;
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
        !this.$.vgAddWidth||!this.$.vgRemove||!this.$.vgAuto)return;
+    const actions={
+      vgExport:'export-geometry-graph-asset',
+      vgImport:'import-geometry-graph-asset',
+      vgCopyLocal:'copy-geometry-graph-to-local',
+    };
+    for(const [button,message] of Object.entries(actions)){
+      this.$?.[button]?.addEventListener('click',()=>void
+        Editor.Message.request('cocos-splines',message).then(result=>{
+          if(!result?.ok&&!result?.canceled)status(this,
+            String(result?.error||'Geometry Graph operation failed.'),true);
+          else if(result?.message)status(this,result.message);
+        }).catch(error=>status(this,String(error?.message||error),true)));
+    }
+    this.$?.vgRefresh?.addEventListener('click',()=>void refreshAsset(this));
     const insert=type=>{
       try{
         const nodes=graph.parseGraph(this._vgGraphJson).ordered;
@@ -170,6 +230,7 @@ const inspector={
     this.$.vgAuto.addEventListener('click',()=>commitLayout(this,'{}'));
     this.$.vgStage.addEventListener('click',event=>{
       if(this._vgIgnoreClick){this._vgIgnoreClick=false;return;}
+      if(this._vgShared)return;
       const socket=closest(event.target,'[data-socket]');
       if(socket){
         const id=socket.dataset.node;
@@ -185,14 +246,14 @@ const inspector={
     });
     this.$.vgProperties.addEventListener('change',event=>{
       const input=closest(event.target,'[data-graph-param]');
-      if(!input||!this._vgSelected)return;
+      if(this._vgShared||!input||!this._vgSelected)return;
       const key=input.dataset.graphParam;
       editGraph(this,'param',{id:this._vgSelected,key,
         value:key==='capEnds'?!!input.checked:Number(input.value)});
     });
     this.$.vgStage.addEventListener('pointerdown',event=>{
       const handle=closest(event.target,'[data-drag]');
-      if(!handle||event.button!==0)return;
+      if(this._vgShared||!handle||event.button!==0)return;
       try{
         const id=handle.dataset.drag;
         const positions=graph.parseLayout(this._vgLayoutJson,this._vgGraphJson);
@@ -232,7 +293,7 @@ const inspector={
     this.$.vgStage.addEventListener('pointerup',finish);
     this.$.vgStage.addEventListener('pointercancel',finish);
     this.$.vgStage.addEventListener('keydown',event=>{
-      if(!this._vgSelected||
+      if(this._vgShared||!this._vgSelected||
         !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
       const pos=graph.parseLayout(this._vgLayoutJson,this._vgGraphJson)[this._vgSelected];
       if(!pos)return;
@@ -249,6 +310,8 @@ const inspector={
     this._vgGraphJson=null;this._vgLayoutJson=null;
     this._vgPreviewLayout=null;this._vgSelected=null;
     this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
+    this._vgShared=false;this._vgAssetIdentity=null;
+    this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
 };
 module.exports=inspector;
