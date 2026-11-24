@@ -6,6 +6,9 @@ assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
+checkRel('dist/SplineSvgConverter.js');
+assert.deepEqual(pkg.contributions.messages['import-svg']?.methods,['importSVG']);
+assert.deepEqual(pkg.contributions.messages['export-svg']?.methods,['exportSVG']);
 checkRel('dist/SplineJunctionJoinMath.js');
 checkRel('dist/SplineJunctionSeamMath.js');
 checkRel('dist/SplineJunctionFanoutMath.js');
