@@ -1,3 +1,4 @@
+import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {_decorator,Component,MeshRenderer,Mesh,Material,Vec3,Mat4,utils} from 'cc';
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
@@ -83,7 +84,7 @@ export class SplineGeometryGraphRenderer extends Component {
     onEnable():void {
         if(this.source()?.count && this.source()!.count>=2){
             try{this.rebuild();}
-            catch(error){console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
+            catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
         }
     }
     update():void {
@@ -96,7 +97,7 @@ export class SplineGeometryGraphRenderer extends Component {
         if(signature===this._revision||signature===this._lastAttempt)return;
         this._lastAttempt=signature;
         try{this.rebuild();}
-        catch(error){console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
+        catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
     }
     /** Two-phase mesh commit: a parse, evaluator or createMesh failure keeps
      * the previously rendered mesh and its wireframe intact.
