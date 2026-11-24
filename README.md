@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### MeshCollider triangle BVH population placement (v2 preview)
+
+SplineObjectController now supports **Use Mesh Collider BVH** inside opt-in Precise Obstacle Shapes. It reuses the strict static World triangle BVH previously built for SplineAnimate, to evaluate sphere-footprint contact against readable non-convex 3D MeshColliders; convex/unreadable/unsupported geometry falls back conservatively to World AABB. BVHs are cached per Collider/mesh hash/pose. This checks double-sided triangle SURFACES, not enclosed-solid occupancy or the exact prefab shape. Disabled by default. See [Mesh BVH guide](docs/POPULATION_MESH_BVH_V2_VI.md).
+
 ### Precise OBB/Capsule obstacle placement (v2 preview)
 
 SplineObjectController → **Collider obstacle avoidance** optionally enables **Use Precise Obstacle Shapes**. Valid BoxCollider OBB and CapsuleCollider world shapes are checked with a **manual spherical prefab footprint radius** + clearance; unsupported or mismatched Collider transforms conservatively fall back to the engine World AABB. Off by default; no changes to legacy population, Knot or source prefab. This is center-sphere placement clearance, not automatic prefab mesh collision or full Physics overlap. See [Precise Obstacle guide](docs/POPULATION_PRECISE_OBSTACLES_V2_VI.md).
