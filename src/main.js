@@ -333,6 +333,8 @@ const methods={
 
     async createNoiseLayers(){try{
         await ensureClasses();
+        const compiled=await Editor.Message.request('scene','query-component-has-script','Splines.SplineNoise');
+        if(!compiled)throw Error('SplineNoise script is not compiled. Refresh Asset DB before adding Noise Layers.');
         const info=await selectedSpline();
         if(!info?.found)throw Error('Select a SplineContainer.');
         const dump=await Editor.Message.request('scene','query-node',info.rootUuid);
