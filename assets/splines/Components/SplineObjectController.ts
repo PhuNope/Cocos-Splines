@@ -117,7 +117,15 @@ export class SplineObjectController extends Component {
     private inferPrefabRadius(prefab:Prefab):number {
         const root=prefab?.data;
         if(!root)throw Error('Automatic footprint needs Prefab.data with readable static geometry.');
-        const extract=(node:Node):FootprintNode=>{
+        const seen=new Set<Node>();
+        let visited=0;
+        const extract=(node:Node,depth:number):FootprintNode=>{
+            // Validate the engine-owned Node graph before recursively copying
+            // so malformed/cyclic serialized prefabs cannot bypass math limits.
+            if(!node||seen.has(node)||depth>32||++visited>1024||
+                !Array.isArray(node.children)||!node.position||!node.scale)
+                throw Error('Prefab hierarchy is invalid, cyclic or too large for automatic bounds.');
+            seen.add(node);
             const radii:number[]=[];
             for(const collider of node.getComponents(Collider)){
                 if(collider instanceof BoxCollider)
@@ -141,9 +149,9 @@ export class SplineObjectController extends Component {
             }
             return {position:{x:node.position.x,y:node.position.y,z:node.position.z},
                 scale:{x:node.scale.x,y:node.scale.y,z:node.scale.z},
-                radii,children:node.children.map(extract)};
+                radii,children:node.children.map(child=>extract(child,depth+1))};
         };
-        return prefabHierarchyRadius(extract(root));
+        return prefabHierarchyRadius(extract(root,0));
     }
     /** Snapshot explicit Collider.worldBounds without touching the physics scene or generated Nodes. */
     private obstacleBounds():PopulationWorldAabb[]{
