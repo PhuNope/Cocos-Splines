@@ -4,7 +4,22 @@ import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
+import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
 const {ccclass,property,menu}=_decorator;
+
+/** Serializable density control point along normalized arc progress. */
+@ccclass('Splines.SplinePopulationDensityKey')
+export class SplinePopulationDensityKey implements PopulationDensityKey {
+    @property({range:[0,1,0.001],slide:true}) progress=0;
+    @property({range:[0,1,0.01],slide:true}) density=1;
+}
+
+/** Forbidden spawn interval. On closed loops start > end wraps over the seam. */
+@ccclass('Splines.SplinePopulationExclusion')
+export class SplinePopulationExclusion implements PopulationExclusion {
+    @property({range:[0,1,0.001],slide:true}) startProgress=0;
+    @property({range:[0,1,0.001],slide:true}) endProgress=0;
+}
 
 /** Distribute multiple prefab variants over arc distance with deterministic jitter,
  * lane offsets and keyframed modifiers. Only runtime-owned instances are cleared
@@ -30,6 +45,16 @@ export class SplineObjectController extends Component {
     @property({min:0,max:1,tooltip:'Uniform scale variation (+/- fraction).'}) randomScale=0;
     @property({min:0.01}) scaleMultiplier=1;
     @property({tooltip:'Seed for prefab choice and all jitter axes.'}) seed=12345;
+    @property({tooltip:'Opt-in deterministic candidate filter. Disabled keeps legacy output identical.'})
+    enablePopulationRules=false;
+    @property({range:[0,1,0.01],slide:true,tooltip:'Uniform retention probability before density mask.'})
+    density=1;
+    @property({type:[SplinePopulationDensityKey],tooltip:'Optional linear density mask over normalized arc progress (max 64 distinct keys).'})
+    densityKeys:SplinePopulationDensityKey[]=[];
+    @property({type:[SplinePopulationExclusion],tooltip:'Blocked normalized arc intervals; start > end wraps on CLOSED splines (max 64).'})
+    exclusions:SplinePopulationExclusion[]=[];
+    @property({min:0,max:10000,tooltip:'Optional minimum WORLD distance between final placed prefab centers, after all jitter/noise (0 disables). Not collider overlap.'})
+    minWorldSpacing=0;
     @property alignToSpline=true;
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
@@ -47,7 +72,10 @@ export class SplineObjectController extends Component {
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),this.parentNode?.uuid,
             this.modifiers?.getRevision(),this.noise?.node.uuid,this.noise?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
-            this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,this.alignToSpline,this.includeEndPoint]);
+            this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,
+            this.enablePopulationRules,this.density,this.densityKeys.map(k=>[k.progress,k.density]),
+            this.exclusions.map(x=>[x.startProgress,x.endProgress]),this.minWorldSpacing,
+            this.alignToSpline,this.includeEndPoint]);
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
     update():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned&&this.rebuildOnChange&&this.signature()!==this._signature)this.respawn();}
@@ -60,12 +88,13 @@ export class SplineObjectController extends Component {
     public respawn():number{
         // Reject malformed noise configs BEFORE destroying previously spawned objects.
         if(this.noise)this.noise.sample(0);
-        this.clear();
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         const variants=this.prefabs.filter((p):p is Prefab=>!!p);
-        if(!spline||spline.count<2||!variants.length){this._signature=this.signature();return 0;}
+        if(!spline||spline.count<2||!variants.length){
+            this.clear();this._signature=this.signature();return 0;
+        }
         const start=Math.max(0,Math.min(1,this.startProgress)),end=Math.max(0,Math.min(1,this.endProgress));
-        if(end<start){this._signature=this.signature();return 0;}
+        if(end<start){this.clear();this._signature=this.signature();return 0;}
         const range=end-start;
         const closedLoop=spline.closed&&range>=1-1e-6;
         const span=spline.length*range;
@@ -73,10 +102,41 @@ export class SplineObjectController extends Component {
         const total=this.method===InstantiateMethod.Distance
             ? Math.min(2048,Math.max(1,Math.floor(span/steps)+1))
             : Math.min(2048,Math.max(1,Math.floor(this.count)));
+        // Plan ALL final World-space positions before destroying previously spawned
+        // Nodes. Strict policy errors cannot destroy a valid existing population.
+        // The legacy (opt-out) path below is otherwise unchanged.
+        let accepted:Set<number>|null=null;
+        if(this.enablePopulationRules){
+            const policy:PopulationPolicy={
+                seed:this.seed,closed:spline.closed===true,density:this.density,
+                densityKeys:this.densityKeys,exclusions:this.exclusions,
+                minWorldSpacing:this.minWorldSpacing,
+            };
+            const candidates:PopulationCandidate[]=[];
+            for(let i=0;i<total;i++){
+                const d=this.method===InstantiateMethod.Distance?Math.min(span,i*steps):
+                    (total>1?span*i/((closedLoop||!this.includeEndPoint)?total:total-1):0);
+                if(closedLoop&&d>=span-1e-6&&i>0)break;
+                const progress=start+(spline.length>1e-8?d/spline.length:0);
+                const modifier=this.modifiers?.sample(progress),noise=this.noise?.sample(progress);
+                const frame=new Quat();Quat.multiply(frame,spline.node.worldRotation,spline.evaluateRotation(progress));
+                const jitter=(axis:number,range:number)=>(this.rand(i,axis)*2-1)*range;
+                const delta=new Vec3(
+                    this.offset.x+(modifier?.offset.x||0)+(noise?.x||0)+jitter(1,this.randomPosition.x),
+                    this.offset.y+(modifier?.offset.y||0)+(noise?.y||0)+jitter(2,this.randomPosition.y),
+                    this.offset.z+(modifier?.offset.z||0)+(noise?.z||0)+jitter(3,this.randomPosition.z));
+                Vec3.transformQuat(delta,delta,frame);
+                const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);
+                candidates.push({index:i,progress,position:{x:pos.x,y:pos.y,z:pos.z}});
+            }
+            accepted=new Set(planPopulation(candidates,policy));
+        }
+        this.clear();
         for(let i=0;i<total;i++){
             const d=this.method===InstantiateMethod.Distance?Math.min(span,i*steps):
                 (total>1?span*i/((closedLoop||!this.includeEndPoint)?total:total-1):0);
             if(closedLoop&&d>=span-1e-6&&i>0)break;
+            if(accepted&&!accepted.has(i))continue;
             const progress=start+(spline.length>1e-8?d/spline.length:0);
             const modifier=this.modifiers?.sample(progress);
             const noise=this.noise?.sample(progress);
