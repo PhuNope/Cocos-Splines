@@ -146,3 +146,12 @@ Chọn mode demo trong Inspector, **Save Scene** và Play. Creator chịu trách
 serialize file .scene; plugin không tự ghi JSON scene thủ công. Nếu script chưa
 compile, lệnh sẽ báo lỗi và không tạo node. Hướng dẫn chi tiết ở
 `assets/CocosSplinesExamples/CREATE_GALLERY_IN_SCENE.md`.
+
+### Mở rộng bộ Example Gallery
+
+Gallery mới có **10 chế độ** (bổ sung Projector, Trigger Events, Modifiers,
+Morph). Ví dụ minh họa được tạo lúc Play, không tự ghi vào Scene hiện tại.
+**Cài lại không ghi đè ExampleGallery.ts cũ**: project đã cài trước đó cần
+tự merge script mới, tránh xóa script đang được Scene/Prefab tham chiếu vì
+có thể mất liên kết component UUID. Hướng dẫn tại
+`assets/CocosSplinesExamples/README.md`.

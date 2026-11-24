@@ -4,11 +4,11 @@ Installed from **Extension → Cocos Splines → Install Examples**.
 
 These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples **skips existing files**; it never replaces changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
 
-## Quick start: 6 runnable examples
+## Quick start: 10 runnable examples
 
-1. Make a new **3D Scene** in Cocos Creator 3.8.x and save it.
-2. Create an empty node named **Spline Example Gallery**.
-3. Once script compilation finishes, add component **CocosSplinesExampleGalleryV2** (from ExampleGallery.ts) to that node.
+1. Make or open a **3D Scene** in Cocos Creator 3.8.x and save it.
+2. Once script compilation finishes, choose **Extension → Cocos Splines → Create Example Gallery in Scene**. The Editor creates a Node with **CocosSplinesExampleGalleryV2**; clicking again selects the same Node.
+3. Alternatively, create a Node manually and add component **CocosSplinesExampleGalleryV2** from ExampleGallery.ts.
 4. Set **Example** to one of the choices below, then press **Play**. The component creates a Camera, Light, Splines, procedural meshes and sample objects **at runtime only**. Return to Edit Mode and switch the enum to view another.
 5. Keep the installed **Cocos Splines** and **Cocos-Gizmos** extensions enabled. If your scene already has a Main Camera, disable it or the generated Examples Camera while testing.
 
@@ -20,6 +20,10 @@ These are **project-owned scripts** (not linked to the extension package). You c
 | Junction | Three spline branches and a FirstOther route switch |
 | Proximity | Two crossing followers with opt-in 3D swept proximity and velocity prediction |
 | Positioner | Static positioning of three markers at arc progress 20%, 50%, 80% |
+| Projector | Find the closest point on the spline from an off-curve source marker |
+| Triggers | Event markers at 25%, 50% and 75% of a looping follower trajectory |
+| Modifiers | Reusable speed and road-width keyframes shared by a vehicle and its road |
+| Morph | Blend two source splines into an independent output spline at 50% |
 
 The gallery creates nodes only in **Play mode**; the generated nodes are ephemeral and not saved in your scene. To save editable examples permanently, use the extension's menu/Inspector actions to create spline nodes in Edit Mode and reconstruct the chosen setup.
 
@@ -51,3 +55,9 @@ The extension adds one native Gallery component Node, takes one Scene snapshot,
 then selects it. Set Example mode, **Save Scene**, and Play. Re-running
 selects the existing Gallery. Details:
 `CREATE_GALLERY_IN_SCENE.md`.
+
+### Updating an existing Gallery installation
+
+Install Examples always **skips existing files** to preserve your edits and Cocos-generated .meta UUIDs. Consequently, a pre-existing ExampleGallery.ts will retain its older set of modes, even after installing this newer extension.
+
+For an existing project, prefer comparing the bundled new ExampleGallery.ts to your project copy and merging new enum modes/methods manually. To replace a clean, unreferenced Gallery script, back up your project first and remove only that script, then run Install Examples again. **Deleting a script referenced by saved Scenes may break component references**, so do not delete your live Gallery script without a backup and migration plan. New projects receive all ten modes immediately.

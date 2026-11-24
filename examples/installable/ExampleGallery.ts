@@ -9,6 +9,10 @@ import { SplineRoad } from 'db://cocos-splines/splines/Components/SplineRoad';
 import { SplineExtrude } from 'db://cocos-splines/splines/Components/SplineExtrude';
 import { SplineJunction, SplineJunctionLink } from 'db://cocos-splines/splines/Components/SplineJunction';
 import { SplinePositioner } from 'db://cocos-splines/splines/Components/SplinePositioner';
+import { SplineProjector } from 'db://cocos-splines/splines/Components/SplineProjector';
+import { SplineTrigger } from 'db://cocos-splines/splines/Components/SplineTrigger';
+import { SplineModifiers, SplineModifierKey } from 'db://cocos-splines/splines/Components/SplineModifiers';
+import { SplineMorph } from 'db://cocos-splines/splines/Components/SplineMorph';
 
 const {ccclass,property}= _decorator;
 /** Each mode builds an independent, temporary scene setup during Play.
@@ -17,6 +21,7 @@ const {ccclass,property}= _decorator;
  */
 export enum SplineExampleKind {
     Follower=0, Road=1, Extrude=2, Junction=3, Proximity=4, Positioner=5,
+    Projector=6, Triggers=7, Modifiers=8, Morph=9,
 }
 Enum(SplineExampleKind);
 
@@ -37,6 +42,10 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             case SplineExampleKind.Junction:this.showJunction();break;
             case SplineExampleKind.Proximity:this.showProximity();break;
             case SplineExampleKind.Positioner:this.showPositioner();break;
+            case SplineExampleKind.Projector:this.showProjector();break;
+            case SplineExampleKind.Triggers:this.showTriggers();break;
+            case SplineExampleKind.Modifiers:this.showModifiers();break;
+            case SplineExampleKind.Morph:this.showMorph();break;
         }
     }
     private child(parent:Node,name:string,at?:Vec3):Node {
@@ -173,6 +182,103 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             animate.proximityRadius=.7;
             animate.proximitySafetyGap=.2;
         }
+    }
+    private showProjector():void {
+        const spline=this.spline('07 — Nearest-point Projection',[
+            new Vec3(-9,0,-2),new Vec3(-4,0,3),
+            new Vec3(2,0,-3),new Vec3(9,0,2),
+        ]);
+        this.road(spline,1.7);
+        const source=this.box('Projection Source (offset from curve)',
+            new Color(255,175,65));
+        source.setPosition(new Vec3(-2,2,6));
+        const marker=this.box('Nearest Point on Spline',new Color(30,220,155));
+        const driver=this.child(this.node,'Nearest-point Projector');
+        const projector=driver.addComponent(SplineProjector);
+        projector.spline=spline;
+        projector.sourceNode=source;
+        projector.projectedNode=marker;
+        projector.snapToSpline=true;
+        projector.alignToSpline=false;
+        projector.autoProject=true;
+        projector.projectNow();
+    }
+    private showTriggers():void {
+        const spline=this.spline('08 — Trigger Events',[
+            new Vec3(-9,0,-1),new Vec3(-3,0,2),
+            new Vec3(3,0,-2),new Vec3(9,0,1),
+        ]);
+        this.road(spline,2);
+        const follower=this.follower(spline,'Trigger Test Follower',
+            new Color(50,180,250));
+        follower.duration=9;
+        follower.loopMode=LoopMode.Loop;
+        for(const [progress,color] of [
+            [.25,new Color(60,210,130)],
+            [.5,new Color(255,205,60)],
+            [.75,new Color(245,110,90)],
+        ] as [number,Color][]){
+            const marker=this.box('Trigger '+Math.round(progress*100)+'%',color);
+            marker.setWorldPosition(spline.evaluateWorldPosition(progress));
+            const trigger=marker.addComponent(SplineTrigger);
+            trigger.spline=spline;
+            trigger.progress=progress;
+            trigger.oncePerFollower=false;
+            trigger.AddOnCrossEvent(event=>{
+                console.log('[Cocos Splines Example] Trigger '+Math.round(progress*100)+
+                    '% crossed by '+event.target.name);
+            });
+        }
+    }
+    private showModifiers():void {
+        const spline=this.spline('09 — Modifiers: Speed + Width',[
+            new Vec3(-9,0,0),new Vec3(-4,0,-3),
+            new Vec3(3,0,3),new Vec3(9,0,0),
+        ]);
+        const modifierNode=this.child(spline.node,'Speed and Width Keys');
+        const modifiers=modifierNode.addComponent(SplineModifiers);
+        modifiers.spline=spline;
+        const key=(progress:number,speed:number,width:number):SplineModifierKey=>{
+            const value=new SplineModifierKey();
+            value.progress=progress;
+            value.speed=speed;
+            value.width=width;
+            return value;
+        };
+        modifiers.keys=[
+            key(0,1,1),key(.35,.45,1.8),key(.65,.45,1.8),key(1,1,1),
+        ];
+        const road=this.road(spline,2.4);
+        road.modifiers=modifiers;
+        road.rebuild();
+        const follower=this.follower(spline,'Speed-modified Vehicle',
+            new Color(250,165,40));
+        follower.modifiers=modifiers;
+        follower.duration=8;
+    }
+    private showMorph():void {
+        const a=this.spline('10 — Shape A',[
+            new Vec3(-9,0,0),new Vec3(-3,0,-5),
+            new Vec3(3,0,-4),new Vec3(9,0,0),
+        ]);
+        const b=this.spline('10 — Shape B',[
+            new Vec3(-9,0,0),new Vec3(-3,0,5),
+            new Vec3(3,0,4),new Vec3(9,0,0),
+        ]);
+        const output=this.spline('10 — Morph Output (50%)',[
+            new Vec3(-9,0,0),new Vec3(-3,0,0),
+            new Vec3(3,0,0),new Vec3(9,0,0),
+        ]);
+        const driver=this.child(this.node,'Morph Controller');
+        const morph=driver.addComponent(SplineMorph);
+        morph.sourceA=a;
+        morph.sourceB=b;
+        morph.outputSpline=output;
+        morph.blend=.5;
+        morph.updateOnChange=false;
+        morph.apply();
+        this.road(output,2);
+        this.follower(output,'Morph Output Follower',new Color(190,90,245));
     }
     private showPositioner():void {
         const spline=this.spline('06 — Non-animated Positioners',[
