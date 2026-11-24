@@ -14,6 +14,7 @@
     "../docs/examples/ExtrudeTubeSetup.ts",
     "../docs/examples/JunctionRoadPatchSetup.ts",
     "types/cc.d.ts",
-    "types/gizmos.d.ts"
+    "types/gizmos.d.ts",
+    "../examples/installable/ExampleGallery.ts"
   ]
 }

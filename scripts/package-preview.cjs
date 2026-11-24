@@ -19,7 +19,7 @@ const stage=fs.mkdtempSync(path.join(os.tmpdir(),'cocos-splines-v2-'));
 const extension=path.join(stage,'cocos-splines');
 const allowed=[
     'package.json','README.md','README_VI.md','CHANGELOG.md','LICENSE',
-    'assets','dist','docs',
+    'assets','dist','docs','examples',
 ];
 
 try {
@@ -30,7 +30,8 @@ try {
         fs.cpSync(source,path.join(extension,entry),{recursive:true});
     }
     for(const required of ['dist/main.js','dist/scene.js',
-        'assets/splines/Core/SplineKnot.ts','assets/splines/Editor/SplineKnotGizmos.ts']){
+        'assets/splines/Core/SplineKnot.ts','assets/splines/Editor/SplineKnotGizmos.ts',
+        'dist/SplineExampleInstaller.js','examples/installable/ExampleGallery.ts']){
         if(!fs.existsSync(path.join(extension,required)))throw new Error('Incomplete preview: '+required);
     }
     fs.writeFileSync(path.join(extension,'PREVIEW_BUILD.txt'),[

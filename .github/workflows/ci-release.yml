@@ -27,6 +27,8 @@ jobs:
         run: npm install --no-save --no-package-lock --ignore-scripts typescript@5.9.3
       - name: Validate runtime types
         run: npm run check:runtime
+      - name: Typecheck bundled installable examples (offline stubs)
+        run: npm run check:examples
       - name: Generate editor extension files
         run: npm run build
       - name: Verify Cocos extension structure

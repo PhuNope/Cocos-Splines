@@ -4,7 +4,13 @@ const root=path.resolve(__dirname,'..');
 const pkg=require(path.join(root,'package.json'));
 assert.equal(pkg.name,'cocos-splines');assert.equal(pkg.editor,'>=3.8.2');
 function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
-checkRel(pkg.main);checkRel(pkg.contributions.scene.script);if(pkg.panels)throw new Error('No standalone spline panel should ship');
+checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
+checkRel('dist/SplineExampleInstaller.js');
+checkRel('examples/installable/ExampleGallery.ts');
+checkRel('examples/installable/README.md');
+assert.deepEqual(pkg.contributions.messages['install-examples']?.methods,['installExamples']);
+assert(pkg.contributions.menu.some(m=>m.message==='install-examples'&&
+    m.label==='Install Examples'),'Missing Install Examples menu item');if(pkg.panels)throw new Error('No standalone spline panel should ship');
 checkRel(pkg.contributions['asset-db'].mount.path);
 for(const p of Object.values(pkg.contributions.inspector.section.node))checkRel(p);
 for(const file of pkg.contributions.messages ? Object.keys(pkg.contributions.messages) : []) {

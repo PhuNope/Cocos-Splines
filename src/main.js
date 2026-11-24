@@ -1,5 +1,6 @@
 'use strict';
 const NAME='cocos-splines';
+const {installSplineExamples}=require('./SplineExampleInstaller');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -188,6 +189,25 @@ async function applyKnotPlacement(operation,ids,options){
     }finally{knotEditBusy=false;}
 }
 const methods={
+    /** Installs bundled project-owned examples only after explicit menu action. */
+    async installExamples(){
+        try{
+            const result=installSplineExamples({projectPath:Editor.Project?.path});
+            let refreshWarning='';
+            try{
+                // Creator 3.x asset DB rescans the project assets mount.
+                // Deliberately not awaited: Editor versions may delay folder refresh.
+                if(typeof Editor.Message?.send==='function')
+                    Editor.Message.send('asset-db','refresh-asset','db://assets');
+                else refreshWarning='Asset DB refresh message unavailable; refresh Assets manually.';
+            }catch(e){refreshWarning='Refresh Assets manually: '+String(e?.message||e);}
+            const message='Install Examples: '+result.installed+' new, '+
+                result.skipped+' existing preserved in '+result.assetUrl+'.'+
+                (refreshWarning?' '+refreshWarning:'');
+            console.log('[Cocos Splines] '+message);
+            return {ok:true,...result,message,refreshWarning};
+        }catch(e){return alertError('install-examples',e);}
+    },
     async create2DSpline(){
         try{
             await ensureClasses();

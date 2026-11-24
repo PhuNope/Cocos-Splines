@@ -74,6 +74,7 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Phase 3.6b2b2b2b2b2b2b2b2b2c — Exact rotating geometry narrowphase, native Creator 3.8.8 physics validation/profiling, physical collision resolution and server-authoritative multiplayer traffic.
 - [x] Phase 3.2b2a — Explicit Junction target endpoint AutoSmooth/Linear/Mirrored/Continuous → Broken conversion preserving currently evaluated tangents, including Knot-space vectors and handle nodes, read-only Scene planner + fingerprint/transaction, best-effort rollback, single snapshot and regression tests. Native Creator 3.8.8 undo/prefab acceptance pending.
 - [ ] Phase 3.2b2b — Non-destructive connector merge graph / geometric Join workflow with independent source-spline preservation and native Editor acceptance.
+- [x] Phase 6.1 — Extension menu **Install Examples**: optional project-local examples in assets/CocosSplinesExamples, six runtime gallery modes, reusable Train/Road/Extrude/Junction sample scripts; idempotent, no overwrite, asset-db refresh and security/regression tests. **Native Creator 3.8.8 compile/scene smoke test pending.**
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
 ### Phase 4 — Procedural geometry

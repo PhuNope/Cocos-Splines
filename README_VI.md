@@ -119,3 +119,20 @@ Trong **SplineContainer Inspector → Resample Spline · new copy**, chọn `Kno
 Thao tác tạo **một SplineContainer mới cùng cấp**, copy local position/rotation/scale và thuộc tính closed/dimension/samplesPerCurve. Spline gốc vẫn giữ nguyên, bao gồm Prefab overrides. Thứ tự Knot mới là thứ tự evaluator; nếu spline gốc bật `reversed`, spline mới dùng Hierarchy tương ứng và `reversed=false`.
 
 **Không phải clone Prefab hoàn chỉnh:** không sao chép rotation riêng từng Knot, handle Node, Road, Extrude, MeshDeform, Junction hoặc các component con khác. Resample xấp xỉ hình dạng theo giới hạn sai số *lấy mẫu*, không bảo đảm khoảng cách Hausdorff liên tục. Undo/Redo việc tạo cả cấu trúc vẫn cần test Creator 3.8.8 thực tế.
+
+
+## Cài đặt ví dụ tính năng (V2 preview)
+
+Mở **Extension → Cocos Splines → Install Examples**. Extension sẽ tạo thư mục
+`assets/CocosSplinesExamples` trong **project đang mở**, bao gồm
+`README.md`, `ExampleGallery.ts` và các script ví dụ Road, Extrude,
+Junction, Train. Nếu bấm lại, installer bỏ qua mọi file đã có và không ghi
+đè scene/prefab/meta hoặc chỉnh sửa của bạn.
+
+Để xem 6 demo tạo từ code: tạo scene 3D và Node rỗng, gắn component
+`CocosSplinesExampleGalleryV2`, chọn kiểu demo tại Inspector rồi **Play**.
+Demo tự tạo spline, vật thể, Camera, Light trong runtime; không tự động tạo
+file `.scene` hay Prefab, và không sửa project Scene khi chưa Play.
+Một số script Train/Junction nâng cao cần được gán tham chiếu trong Inspector.
+Cần cài Cocos-Gizmos. Nếu Assets panel chưa cập nhật, dùng Refresh.
+Các bài kiểm thử headless không thay thế native Creator 3.8.8.
