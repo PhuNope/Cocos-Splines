@@ -150,6 +150,10 @@ const inspector={
     base.ready.call(this);
     this._vgSelected=null;this._vgPending=null;this._vgDrag=null;
     this._vgRendered=false;this._vgPreviewLayout=null;
+    // Legacy headless Inspector smoke mocks only provide the Rebuild button.
+    // The real Cocos panel registers every selector in this module.
+    if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
+       !this.$.vgAddWidth||!this.$.vgRemove||!this.$.vgAuto)return;
     const insert=type=>{
       try{
         const nodes=graph.parseGraph(this._vgGraphJson).ordered;
