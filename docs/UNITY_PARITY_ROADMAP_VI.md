@@ -137,7 +137,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.8c2b1: opt-in shape-aware population clearance for supported BoxCollider World OBB / CapsuleCollider + manually configured prefab footprint sphere radius; unsupported geometry conservatively falls back to AABB.
 - [x] Phase 3.8c2b2a: opt-in static readable non-convex MeshCollider triangle BVH for double-sided sphere footprint surface contact, with conservative AABB fallback and bounded geometry/cache.
 - [x] Phase 3.8c2b2b1: opt-in conservative static Prefab.data hierarchy spherical footprint from MeshRenderer and supported Colliders with scale-aware per-candidate narrowphase; fails before clear on missing bounds.
-- [ ] Phase 3.8c2b2b2: explicit cross-controller occupancy, animated geometry/closed-solid occupancy, per-shape placement and candidate debug Gizmos.
+- [x] Phase 3.8c2b2b2: explicit priority-ordered cross-controller shared occupancy using already spawned World centers and published sphere radius; strict same-Scene/ownership validation and deterministic spatial hash, opt-in.
+- [ ] Remaining: automated multi-controller batch scheduling, persisted per-instance radii, animated geometry/closed-solid occupancy, per-shape placement and candidate debug Gizmos.
 
 ### Phase 3.8c2a — Surface / Terrain Conform for Prefab Population (v2 preview)
 
