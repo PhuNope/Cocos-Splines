@@ -1,4 +1,4 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, CapsuleCollider, MeshCollider, Mesh, gfx, PhysicsSystem, geometry } from 'cc';
+import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, SphereCollider, CapsuleCollider, MeshCollider, Mesh, MeshRenderer, gfx, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -9,7 +9,11 @@ import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selec
 import {colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
 import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
 import type {ProximityTriangleMesh} from '../Core/SplineProximityMesh';
-import {filterPopulationShapeCandidates,type PopulationObstacleShape} from '../Core/SplinePopulationPreciseMath';
+import {filterPopulationShapeCandidates,filterPopulationShapeCandidatesForRadii,
+    type PopulationObstacleShape} from '../Core/SplinePopulationPreciseMath';
+import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
+    prefabSphereRadius,prefabCapsuleRadius,parentLinearStretch,scaledPrefabFootprint,
+    type FootprintNode} from '../Core/SplinePrefabFootprintMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 const {ccclass,property,menu}=_decorator;
 
@@ -75,6 +79,8 @@ export class SplineObjectController extends Component {
     usePreciseObstacleShapes=false;
     @property({min:0,max:100,tooltip:'Manual conservative prefab footprint SPHERE radius in World units, in addition to Obstacle Clearance. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes. Does not read prefab mesh dimensions.'})
     placementFootprintRadius=0;
+    @property({tooltip:'Opt-in conservative sphere footprint per selected prefab. Reads supported static MeshRenderer and Collider geometry on prefab root and children and accounts for instance/parent scale. Unknown/missing bounds reject Respawn before old instances are cleared. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes.'})
+    autoPrefabFootprint=false;
     @property({tooltip:'Optional when Precise Obstacle Shapes is enabled: read a non-convex MeshCollider with CPU-accessible triangle data, build a static World BVH and check prefab sphere contact against triangles. Convex/unreadable/unsupported meshes fall back to AABB.'})
     useMeshColliderBVH=false;
     @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces. No source geometry changes.'})
@@ -105,6 +111,39 @@ export class SplineObjectController extends Component {
         let v=(this.seed|0)^Math.imul(index+13,0x9e3779b9)^Math.imul(channel+7,0x85ebca6b);
         v=Math.imul(v^(v>>>16),0x7feb352d);v=Math.imul(v^(v>>>15),0x846ca68b);
         return ((v^(v>>>16))>>>0)/4294967296;
+    }
+    /** Read ONLY serialized prefab asset geometry; does not instantiate a Node
+     * or touch Physics. Unknown Collider geometry fails closed. */
+    private inferPrefabRadius(prefab:Prefab):number {
+        const root=prefab?.data;
+        if(!root)throw Error('Automatic footprint needs Prefab.data with readable static geometry.');
+        const extract=(node:Node):FootprintNode=>{
+            const radii:number[]=[];
+            for(const collider of node.getComponents(Collider)){
+                if(collider instanceof BoxCollider)
+                    radii.push(prefabBoxRadius(collider.center,collider.size));
+                else if(typeof SphereCollider==='function'&&collider instanceof SphereCollider)
+                    radii.push(prefabSphereRadius(collider.center,collider.radius));
+                else if(collider instanceof CapsuleCollider)
+                    radii.push(prefabCapsuleRadius(collider.center,collider.radius,
+                        collider.cylinderHeight));
+                else if(collider instanceof MeshCollider){
+                    const mesh=collider.mesh;
+                    if(!mesh)throw Error('Prefab MeshCollider is missing its Mesh bounds.');
+                    radii.push(prefabMeshAabbRadius(mesh.minPosition,mesh.maxPosition)+
+                        Math.hypot(collider.center.x,collider.center.y,collider.center.z));
+                }else throw Error('Automatic footprint cannot bound an unsupported prefab Collider.');
+            }
+            for(const renderer of node.getComponents(MeshRenderer)){
+                const mesh=renderer.mesh;
+                if(!mesh)throw Error('Prefab MeshRenderer has no readable Mesh bounds.');
+                radii.push(prefabMeshAabbRadius(mesh.minPosition,mesh.maxPosition));
+            }
+            return {position:{x:node.position.x,y:node.position.y,z:node.position.z},
+                scale:{x:node.scale.x,y:node.scale.y,z:node.scale.z},
+                radii,children:node.children.map(extract)};
+        };
+        return prefabHierarchyRadius(extract(root));
     }
     /** Snapshot explicit Collider.worldBounds without touching the physics scene or generated Nodes. */
     private obstacleBounds():PopulationWorldAabb[]{
@@ -245,7 +284,7 @@ export class SplineObjectController extends Component {
             ]:null,this.avoidObstacleColliders?[
                 this.usePreciseObstacleShapes,
                 this.usePreciseObstacleShapes?[
-                    this.placementFootprintRadius,this.useMeshColliderBVH,
+                    this.placementFootprintRadius,this.autoPrefabFootprint,this.useMeshColliderBVH,
                     this.obstacleColliders.map(c=>{
                         if(!c)return null;
                         return [c.node?.worldMatrix,
@@ -304,6 +343,18 @@ export class SplineObjectController extends Component {
         const total=this.method===InstantiateMethod.Distance
             ? Math.min(2048,Math.max(1,Math.floor(span/steps)+1))
             : Math.min(2048,Math.max(1,Math.floor(this.count)));
+        // Auto footprint is opt-in: calculate all selectable prefab asset radii
+        // without instantiating, before any generated Node can be cleared.
+        const autoFootprints=this.avoidObstacleColliders&&this.usePreciseObstacleShapes&&
+            this.autoPrefabFootprint?
+            variants.map((prefab,index)=>{
+                if(weights&&weights[index]===0)return 0; // slot cannot be selected
+                return this.inferPrefabRadius(prefab);
+            }):null;
+        const placementParent=this.spawnedRoot?.isValid?this.spawnedRoot:
+            (this.parentNode||this.node);
+        const parentStretch=autoFootprints?
+            parentLinearStretch(placementParent.worldMatrix):1;
         // Plan ALL final World-space positions before destroying previously spawned
         // Nodes. Strict policy errors cannot destroy a valid existing population.
         // The legacy (opt-out) path below is otherwise unchanged.
@@ -319,6 +370,7 @@ export class SplineObjectController extends Component {
                 densityKeys:[],exclusions:[],minWorldSpacing:0,
             };
             const candidates:PopulationCandidate[]=[];
+            const candidateRadii=new Map<number,number>();
             for(let i=0;i<total;i++){
                 const d=this.method===InstantiateMethod.Distance?Math.min(span,i*steps):
                     (total>1?span*i/((closedLoop||!this.includeEndPoint)?total:total-1):0);
@@ -334,6 +386,18 @@ export class SplineObjectController extends Component {
                 Vec3.transformQuat(delta,delta,frame);
                 const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);
                 candidates.push({index:i,progress,position:{x:pos.x,y:pos.y,z:pos.z}});
+                if(autoFootprints){
+                    const selectedVariant=weights?
+                        selectWeightedPrefab(weights,this.rand(i,0)):
+                        Math.min(variants.length-1,Math.floor(this.rand(i,0)*variants.length));
+                    const scaleFactor=this.scaleMultiplier*(1+jitter(7,this.randomScale));
+                    const modifierScale={
+                        x:modifier?.scale.x||1,y:modifier?.scale.y||1,z:modifier?.scale.z||1,
+                    };
+                    candidateRadii.set(i,scaledPrefabFootprint(
+                        autoFootprints[selectedVariant],{x:parentStretch,y:parentStretch,z:parentStretch},
+                        scaleFactor,modifierScale));
+                }
             }
             // Surface projection happens before AABB and World-spacing filters.
             // The projected position is also reused at commit, never recomputed.
@@ -343,8 +407,15 @@ export class SplineObjectController extends Component {
             // Exclude occupied obstacle centers BEFORE pairwise spacing.
             const viable=this.avoidObstacleColliders?
                 (this.usePreciseObstacleShapes?
-                    filterPopulationShapeCandidates(projected,this.obstacleShapes(),
-                        this.obstacleClearance,this.placementFootprintRadius):
+                    (autoFootprints?
+                        filterPopulationShapeCandidatesForRadii(projected,this.obstacleShapes(),
+                            this.obstacleClearance,projected.map(c=>{
+                                const radius=candidateRadii.get(c.index);
+                                if(radius===undefined)throw Error('Missing planned prefab radius.');
+                                return radius;
+                            })):
+                        filterPopulationShapeCandidates(projected,this.obstacleShapes(),
+                            this.obstacleClearance,this.placementFootprintRadius)):
                     filterObstacleCandidates(projected,this.obstacleBounds(),this.obstacleClearance)):
                 projected;
             accepted=new Set(planPopulation(viable,policy));
