@@ -21,6 +21,12 @@ try {
      assert(fs.statSync(target).isFile(),relative);
      assert(!fs.existsSync(target+'.meta'), 'No extension UUIDs should be copied');
  }
+ const demo=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/BasicRibbonGraph.json'),'utf8'));
+ assert.equal(demo.version,1);
+ assert.equal(demo.output,'output');
+ assert.deepEqual(demo.nodes.map(n=>n.type),
+   ['spline','offset','width','ribbon','output']);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
