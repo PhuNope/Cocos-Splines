@@ -1,4 +1,4 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, CapsuleCollider, PhysicsSystem, geometry } from 'cc';
+import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, CapsuleCollider, MeshCollider, Mesh, gfx, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -7,6 +7,8 @@ import { InstantiateMethod } from './SplineInstantiate';
 import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
 import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
 import {colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
+import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
+import type {ProximityTriangleMesh} from '../Core/SplineProximityMesh';
 import {filterPopulationShapeCandidates,type PopulationObstacleShape} from '../Core/SplinePopulationPreciseMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 const {ccclass,property,menu}=_decorator;
@@ -73,6 +75,8 @@ export class SplineObjectController extends Component {
     usePreciseObstacleShapes=false;
     @property({min:0,max:100,tooltip:'Manual conservative prefab footprint SPHERE radius in World units, in addition to Obstacle Clearance. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes. Does not read prefab mesh dimensions.'})
     placementFootprintRadius=0;
+    @property({tooltip:'Optional when Precise Obstacle Shapes is enabled: read a non-convex MeshCollider with CPU-accessible triangle data, build a static World BVH and check prefab sphere contact against triangles. Convex/unreadable/unsupported meshes fall back to AABB.'})
+    useMeshColliderBVH=false;
     @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces. No source geometry changes.'})
     conformToSurface=false;
     @property({type:[Collider],tooltip:'1–64 explicit target 3D Colliders including TerrainCollider. Other raycast hits are ignored.'})
@@ -157,6 +161,34 @@ export class SplineObjectController extends Component {
             });
         });
     }
+    /** Cache immutable World BVHs by mesh identity + hash + collider pose/bounds.
+     * Weak keys prevent detached obstacle references from being retained.
+     * Mesh changes without updated hash require explicit invalidation/reload. */
+    private _populationMeshCache=new WeakMap<MeshCollider,{
+        asset:Mesh;key:string;geometry:ProximityTriangleMesh|null
+    }>();
+    private obstacleMeshShape(collider:MeshCollider,
+        bounds:PopulationWorldAabb):ProximityTriangleMesh|null{
+        const mesh=collider.mesh,node=collider.node;
+        if(!mesh||!mesh.allowDataAccess||collider.convex||!node?.worldMatrix||
+            !collider.center)return null;
+        const m=node.worldMatrix,v=collider.center,b=bounds;
+        const key=JSON.stringify([mesh.hash,
+            m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,
+            m.m08,m.m09,m.m10,m.m12,m.m13,m.m14,
+            v.x,v.y,v.z,
+            b.center.x,b.center.y,b.center.z,
+            b.halfExtents.x,b.halfExtents.y,b.halfExtents.z]);
+        const cached=this._populationMeshCache.get(collider);
+        if(cached?.asset===mesh&&cached.key===key)return cached.geometry;
+        const result=meshColliderWorldBvh(mesh,m,v,b,{
+            positionAttribute:gfx.AttributeName.ATTR_POSITION,
+            formatTable:gfx.Format as unknown as Readonly<Record<string,number|string>>,
+            triangleListMode:gfx.PrimitiveMode.TRIANGLE_LIST,
+        });
+        this._populationMeshCache.set(collider,{asset:mesh,key,geometry:result});
+        return result;
+    }
     /** Snapshot all active obstacle shapes once, prior to population clear().
      * Reuses the same strict adapters as SplineAnimate; a rejected OBB/Capsule
      * does NOT fall through to an optimistic approximation: use World AABB. */
@@ -182,6 +214,13 @@ export class SplineObjectController extends Component {
                 const capsule=colliderWorldCapsule(collider.center,collider.radius,
                     collider.cylinderHeight,collider.direction,matrix,bounds);
                 shapes.push(capsule?{kind:'capsule',capsule}:fallback);
+            }else if(matrix&&this.useMeshColliderBVH&&
+                typeof MeshCollider==='function'&&collider instanceof MeshCollider){
+                // Invalid/unreadable/convex/stale MeshCollider never drops a collision.
+                let mesh:ProximityTriangleMesh|null=null;
+                try{mesh=this.obstacleMeshShape(collider,fallback.bounds);}
+                catch{mesh=null;}
+                shapes.push(mesh?{kind:'mesh',mesh}:fallback);
             }else shapes.push(fallback);
         }
         return shapes;
@@ -206,14 +245,18 @@ export class SplineObjectController extends Component {
             ]:null,this.avoidObstacleColliders?[
                 this.usePreciseObstacleShapes,
                 this.usePreciseObstacleShapes?[
-                    this.placementFootprintRadius,
+                    this.placementFootprintRadius,this.useMeshColliderBVH,
                     this.obstacleColliders.map(c=>{
                         if(!c)return null;
                         return [c.node?.worldMatrix,
                             typeof BoxCollider==='function'&&c instanceof BoxCollider?
                                 [c.center,c.size]:null,
                             typeof CapsuleCollider==='function'&&c instanceof CapsuleCollider?
-                                [c.center,c.radius,c.cylinderHeight,c.direction]:null];
+                                [c.center,c.radius,c.cylinderHeight,c.direction]:null,
+                            this.useMeshColliderBVH&&typeof MeshCollider==='function'&&
+                                c instanceof MeshCollider?
+                                [c.mesh?.uuid,c.mesh?.hash,c.mesh?.allowDataAccess,
+                                    c.convex,c.center]:null];
                     }),
                 ]:null,
             ]:null,this.conformToSurface,this.conformToSurface?[
