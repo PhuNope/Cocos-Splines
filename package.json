@@ -233,6 +233,18 @@
           "rebuildGeometryGraph"
         ]
       },
+      "query-geometry-graph-asset": {
+        "methods": ["queryGeometryGraphAsset"]
+      },
+      "export-geometry-graph-asset": {
+        "methods": ["exportGeometryGraphAsset"]
+      },
+      "import-geometry-graph-asset": {
+        "methods": ["importGeometryGraphAsset"]
+      },
+      "copy-geometry-graph-to-local": {
+        "methods": ["copyGeometryGraphAssetToLocal"]
+      },
       "create-road-spline": {
         "methods": [
           "createRoadSpline"
