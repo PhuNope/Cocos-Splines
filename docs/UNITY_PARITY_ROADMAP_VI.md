@@ -105,6 +105,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Preserve richer authoring metadata (Knot rotations, tangent handles, non-geometry components) only with a separate opt-in schema and Prefab-aware migration.
 - [ ] Native Creator Editor 3.8.8 Undo/Redo, Prefab/save-reopen acceptance and full CI verification remain pending.
 
+### Phase 3.8a — Deterministic Noise Layers for Prefab Population (v2 preview)
+
+- [x] Core `SplineNoiseMath`: bounded, stateless seeded 1D multi-octave value noise; integer cycles, normalized octave sum and exact 0/1 seam on closed splines; 16 layers max, finite-property preflight.
+- [x] Serializable `Splines.SplineNoise` / `Splines.SplineNoiseLayer` with Editor Inspector settings and a revision signature, default no layers (neutral).
+- [x] Optional `SplineObjectController.noise` applies Right/Up/Forward offsets during prefab placement, additive to existing Modifiers/jitter; no source Knot or mesh mutation. Null reference preserves legacy output.
+- [x] Extension + Container menu **Add Noise Layers**, duplicate prevention, script availability preflight, one snapshot and installable TS asset UUIDs.
+- [x] Automated pure noise, closed seam, disabled/default, input-boundary and mock population/Inspector/Editor regression tests added to v2 CI.
+- [ ] Native Cocos Creator 3.8.8 Inspector layer serialization, prefab save/reopen, Gizmos and Undo/Redo acceptance.
+- [ ] Next: density masks and interval-based population rules, noise preview Gizmos, optional procedural geometry consumers (none enabled by default).
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
