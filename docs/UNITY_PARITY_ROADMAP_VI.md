@@ -17,7 +17,7 @@
 | SplineArchitect SnapSettings / align / snapping | Thiếu tool tích hợp editor | 2 |
 | SplineArchitect Noise/Population | Chưa có cùng mô hình noise + distribution | 3–4 |
 | SplineArchitect connectors / Curvy connections | Có Junction cơ bản; thiếu network graph operations | 3/5 |
-| Curvy JSON/SVG converters | Có JSON import; thiếu SVG và round-trip | 3 |
+| Curvy JSON/SVG converters | JSON import có sẵn; SVG single-path M/L/H/V/C/S/Q/T/Z import/export XY2D/XZ2D đã thêm (preview); thiếu full multi-path/transform/arc, JSON export | 3 |
 | Curvy ConformPath, BuildVolumeCaps/Spots | Một phần qua geometry hiện có | 4 |
 | Curvy Generator / CG module graph | Chưa có typed module graph + dirty propagation | 4 |
 | Curvy advanced controllers | Animate/Positioner mới hỗ trợ một phần | 5 |
@@ -87,6 +87,14 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 6.3 — Example Gallery 10-feature catalog: four additional runtime demos (Projection, Trigger callbacks, Modifier speed/width, source-to-output Morph), TypeScript static catalog coverage, installation/update safety guide. Native Creator 3.8.8 visual test pending.
 - [x] Phase 6.4 — Installable Example Gallery expanded to 13 feature modes (Mesh Deform with procedural input, two-phase Junction Traffic signals, runtime Prefab Spawning), three project-owned imported-asset setup scripts, additive no-overwrite installation, offline TypeScript/catalog tests; native Creator 3.8.8 visual/physics/prefab acceptance pending.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
+
+### Phase 3.7a — SVG path import/export (preview)
+
+- [x] Strict single-path SVG d parser: M/L/H/V/C/S/Q/T/Z absolute/relative; convert lines/quadratics to exact cubic Bezier.
+- [x] Create NEW sibling XY2D spline from SVG, Y-down mapping, user units-per-pixel, Broken Knot tangents in parent-local space, closed Z seam; best-effort cleanup before snapshot on failure.
+- [x] Export XY2D/XZ2D from natural resolved Knot handles (supports AutoSmooth/Linear/Mirrored/Continuous/Broken), readonly Scene query; cubic path and viewBox text in Inspector.
+- [x] Limits: 200 KB text, 256 segments; reject SVG transform/arc/geometry collections instead of silently distorting; pure and mocked Editor regression tests.
+- [ ] Native Cocos Creator 3.8.8 XY2D spline geometry, prefab and native Undo acceptance; future SVG multiple-path import, arc conversion, transform flattening and JSON export.
 
 ### Phase 4 — Procedural geometry
 
