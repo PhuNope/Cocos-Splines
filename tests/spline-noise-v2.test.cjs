@@ -104,5 +104,32 @@ try {
   assert(noiseInspector.template.includes(s),'Missing noise property '+s);
  assert(require(root+'/dist/contributions/inspector/Container.js').template.includes('spl-create-noise'));
  assert(require(root+'/dist/contributions/inspector/ObjectController.js').template.includes('spl-field-noise'));
- console.log('NOISE LAYERS V2 PASS: periodic deterministic noise, validation and non-destructive population.');
+ let selection=['source'],createCount=0,snapshotCount=0;
+ global.Editor={
+  Selection:{getSelected:()=>selection,clear(){selection=[];},select(_type,id){selection=[id];}},
+  Message:{request:async(_channel,method,payload)=>{
+   if(method==='query-component-has-script')return true;
+   if(method==='execute-scene-script'&&payload.method==='querySpline')
+    return {found:true,rootUuid:'source',knots:[]};
+   if(method==='query-node')
+    return {__comps__:[{type:'Splines.SplineContainer'},
+      ...(createCount?[{type:'Splines.SplineNoise'}]:[])]};
+   if(method==='create-component'){
+    assert.equal(payload.uuid,'source');
+    assert.equal(payload.component,'Splines.SplineNoise');createCount++;return true;
+   }
+   if(method==='snapshot'){snapshotCount++;return true;}
+   throw Error('Unexpected noise Editor action '+method);
+  }}
+ };
+ const actions=require(root+'/dist/main.js').methods;
+ (async()=>{
+  const created=await actions.createNoiseLayers();
+  assert(created.ok&&created.changed,'Noise created on selected SplineContainer');
+  const duplicate=await actions.createNoiseLayers();
+  assert(duplicate.ok&&!duplicate.changed,'No duplicated noise components');
+  assert.equal(createCount,1);assert.equal(snapshotCount,1);
+  console.log('NOISE LAYERS V2 PASS: deterministic loop-safe math, opt-in population, idempotent Editor action and Inspector.');
+ })().catch(e=>{console.error(e);process.exitCode=1;});
+
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
