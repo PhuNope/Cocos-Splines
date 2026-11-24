@@ -11,7 +11,7 @@ Hệ thống gồm:
 - **Editor/SplineMeshDrawers.ts**: drawer selected-only qua decorator Cocos-Gizmos v3 để preview wireframe; không dùng callback legacy.
 - **Inspector/GeometryGraph.js**: chọn spline, nhập `graphJson`, độ phân giải, material, tùy chọn rebuild tự động, wireframe, và nút **Rebuild Graph**. Nút chỉ chạy lệnh scene đọc/ghi mesh transient, **không tạo snapshot/Undo entry**.
 
-**Giai đoạn này dùng JSON graph**, chưa có visual node-canvas kéo-thả hay UI thêm cổng. Đây là bước nền tảng cho editor đồ họa sau khi typed IO và evaluation cache ổn định.
+**Phase 4.1** xây dựng nền tảng typed DAG JSON; **Phase 4.2a** đã bổ sung visual node canvas trong Inspector. **Phase 4.2b** bổ sung shared Cocos JsonAsset và import/export/copy-to-local (xem [Shared Graph Assets](PROCEDURAL_GEOMETRY_GRAPH_ASSETS_V2_VI.md)).
 
 ## Hướng dẫn trong Cocos Creator 3.8.8
 
