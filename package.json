@@ -228,6 +228,11 @@
           "rebuildRoad"
         ]
       },
+      "rebuild-geometry-graph": {
+        "methods": [
+          "rebuildGeometryGraph"
+        ]
+      },
       "create-road-spline": {
         "methods": [
           "createRoadSpline"
@@ -466,7 +471,8 @@
           "Splines.SplineObjectController": "./dist/contributions/inspector/ObjectController.js",
           "Splines.SplineObjectBender": "./dist/contributions/inspector/Bender.js",
           "Splines.SplineMorph": "./dist/contributions/inspector/Morph.js",
-          "Splines.SplineJunctionMesh": "./dist/contributions/inspector/JunctionMesh.js"
+          "Splines.SplineJunctionMesh": "./dist/contributions/inspector/JunctionMesh.js",
+          "Splines.SplineGeometryGraphRenderer": "./dist/contributions/inspector/GeometryGraph.js"
         }
       }
     }
