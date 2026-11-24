@@ -165,3 +165,8 @@ hay thay đổi Scene nguồn. Ví dụ Mesh nhập từ project cần Allow Dat
 và có đủ subdivision; ví dụ prefab có thể gán file .prefab thật trong Inspector.
 Đối với project đã cài Examples, installer không ghi đè các script cũ;
 merge bản mới để giữ UUID của component tham chiếu từ Scene/Prefab.
+
+
+### Junction Join: tùy chọn làm mượt G1/C1
+
+Trong Inspector của `SplineJunction` chọn **Join seam treatment**: Preserve (mặc định không sửa đường gốc), G1 (chỉnh hướng tangent của đoạn ra), C1 (chỉnh cả hướng và độ dài). Áp dụng riêng cho spline kết quả của Join hai link, Fan-out hoặc Join qua nhiều Junction. Source splines luôn giữ nguyên. Tangent degenerate sẽ bị từ chối nếu bật G1/C1; xem `docs/Junction_Position_VI.md`.

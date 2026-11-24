@@ -6,6 +6,7 @@
  * it chooses minimum number of switches with deterministic UUID tie-breaks.
  */
 const {planJunctionJoin}=require('./SplineJunctionJoinMath');
+const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const finite=p=>!!p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
 const gap=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 function planEndpointJunctionChain(links,anchor,goalSplineId,maxGap=1e-5){
@@ -87,7 +88,8 @@ function planEndpointJunctionChain(links,anchor,goalSplineId,maxGap=1e-5){
  * The merged output is in the first source's local transform space;
  * a transformed intermediate spline is not modified or reparented.
  */
-function planMultiJunctionGeometry(path,descriptors){
+function planMultiJunctionGeometry(path,descriptors,seamMode='preserve'){
+ validateSeamMode(seamMode);
  if(!Array.isArray(path)||path.length<3||path.length>8||
     !Array.isArray(descriptors)||descriptors.length!==path.length||
     new Set(path.map(p=>p.splineId)).size!==path.length)
@@ -102,13 +104,14 @@ function planMultiJunctionGeometry(path,descriptors){
    const prefix=i===1?start:{
      ...start,knots:result.knots,reversed:false,progress:1,
    };
-   result=planJunctionJoin(prefix,descriptors[i]);
+   result=planJunctionJoin(prefix,descriptors[i],1e-5,seamMode);
    seams.push({atKnot:result.sourceCounts[0]-1,
      junctionId:path[i].junctionId,
-     angleDeg:result.angleDeg,continuousC1:result.continuousC1,
-     gap:result.gap});
+     angleDeg:result.angleDeg,beforeAngleDeg:result.beforeAngleDeg,
+     seamMode:result.seamMode,seamAdjusted:result.seamAdjusted,
+     continuousC1:result.continuousC1,gap:result.gap});
  }
- return {...result,seams,sourceCount:path.length,
+ return {...result,seams,seamMode,sourceCount:path.length,
    switchCount:path.length-1,
    sourceSplineUuids:path.map(p=>p.splineId)};
 }

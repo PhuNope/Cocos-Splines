@@ -4,9 +4,9 @@
  * Sources are never mutated; output is fresh Broken-mode spline geometry.
  */
 const {transformFrame}=require('./SplineKnotEditMath');
+const {smoothJunctionSeam,validateSeamMode}=require('./SplineJunctionSeamMath');
 const AXES=['x','y','z'];
 const valid=v=>!!v&&AXES.every(k=>Number.isFinite(v[k]));
-const dot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
 const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});
 const neg=v=>({x:-v.x,y:-v.y,z:-v.z});
 const len=v=>Math.hypot(v.x,v.y,v.z);
@@ -26,7 +26,8 @@ function descriptor(source){
  * A link at progress=0 reverses the A path, a link at progress=1
  * reverses B. Reversed SplineContainers are already traversed backward.
  */
-function planJunctionJoin(anchor,target,tolerance=1e-5){
+function planJunctionJoin(anchor,target,tolerance=1e-5,seamMode='preserve'){
+ validateSeamMode(seamMode);
  if(!Number.isFinite(tolerance)||tolerance<=0||tolerance>0.1)
     throw Error('Invalid Join endpoint tolerance.');
  const a=descriptor(anchor),b=descriptor(target);
@@ -69,21 +70,18 @@ function planJunctionJoin(anchor,target,tolerance=1e-5){
  // Exactly one seam Knot retains A's incoming derivative and B's
  // outgoing derivative. C0 is guaranteed within tolerance; G1/C1 is
  // only achieved if source curves already have aligned controls.
- const seam={position:{...end.position},tangentIn:{...end.tangentIn},
-     tangentOut:{...start.tangentOut},mode:4};
+ const correction=smoothJunctionSeam(end.tangentIn,start.tangentOut,seamMode);
+ const seam={position:{...end.position},tangentIn:correction.tangentIn,
+     tangentOut:correction.tangentOut,mode:4};
  const knots=[...first.slice(0,-1),seam,...second.slice(1)];
  if(knots.some(k=>!valid(k.position)||!valid(k.tangentIn)||!valid(k.tangentOut)))
     throw Error('Join generated invalid knots.');
- const inVec=neg(seam.tangentIn),outVec=seam.tangentOut;
- const aLength=len(inVec),bLength=len(outVec);
- const dotAngle=aLength>1e-9&&bLength>1e-9?
-     Math.min(1,Math.max(-1,dot(inVec,outVec)/(aLength*bLength))):null;
- const angleDeg=dotAngle===null?null:Math.acos(dotAngle)*180/Math.PI;
  return {knots,count,closed:false,reversed:false,
-     dimension:anchor.dimension,
-     gap,angleDeg,continuousC1:
-       gap<=1e-7&&aLength>1e-9&&Math.abs(aLength-bLength)<=1e-5&&
-       angleDeg!==null&&angleDeg<=.01,
+     dimension:anchor.dimension,gap,
+     angleDeg:correction.angleDeg,
+     beforeAngleDeg:correction.beforeAngleDeg,
+     seamMode:correction.seamMode,seamAdjusted:correction.adjusted,
+     continuousC1:gap<=1e-7&&correction.continuousC1,
      sourceCounts:[first.length,second.length]};
 }
 module.exports={planJunctionJoin};

@@ -8,6 +8,7 @@ const {worldVector,endpointSide,planJunctionTangent}=require('./SplineJunctionTa
 const {planJunctionBrokenConversion}=require('./SplineJunctionModeMath');
 const {planJunctionJoin}=require('./SplineJunctionJoinMath');
 const {planJunctionFanout}=require('./SplineJunctionFanoutMath');
+const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {planEndpointJunctionChain,planMultiJunctionGeometry}=require('./SplineJunctionRouteMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRoot}){
@@ -68,8 +69,9 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
  }
  /** Read-only Join planner. Produces independent sibling spline geometry
   * with no source Knot, SplineJunction, prefab or component writes. */
- function queryJunctionJoinPlan(uuid,anchorIndex,targetIndex){
+ function queryJunctionJoinPlan(uuid,anchorIndex,targetIndex,seamMode='preserve'){
    try{
+     validateSeamMode(seamMode);
      const junction=junctionAt(uuid);
      if(!junction||!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
         anchorIndex===targetIndex||anchorIndex<0||targetIndex<0||
@@ -101,7 +103,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
        dimension:entry.spline.dimension,matrix:entry.worldMatrix,
        knots:entry.spline.getNaturalResolvedKnots(),
      });
-     const joined=planJunctionJoin(source(anchor),source(target));
+     const joined=planJunctionJoin(source(anchor),source(target),1e-5,seamMode);
      const rootTransform={
        position:{x:root.position.x,y:root.position.y,z:root.position.z},
        rotation:{x:root.rotation.x,y:root.rotation.y,
@@ -125,8 +127,9 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
  /** Branch-preserving multi-link Join planner: never edits sources.
   * Returns separate spline chains for each requested Junction exit.
   */
- function queryJunctionFanoutPlan(uuid,anchorIndex,targetIndices){
+ function queryJunctionFanoutPlan(uuid,anchorIndex,targetIndices,seamMode='preserve'){
    try{
+     validateSeamMode(seamMode);
      const junction=junctionAt(uuid);
      if(!junction||!Number.isInteger(anchorIndex)||anchorIndex<0||
         anchorIndex>=junction.connections.length||
@@ -168,7 +171,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      const source=descriptor(anchor);
      const joined=planJunctionFanout(source,outgoing.map(entry=>({
        index:entry.index,source:descriptor(entry),
-     })));
+     })),seamMode);
      const rootTransform={
        position:{x:root.position.x,y:root.position.y,z:root.position.z},
        rotation:{x:root.rotation.x,y:root.rotation.y,
@@ -237,8 +240,9 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      j.node.uuid,fingerprint(j,null,'join'),
    ])]);
  }
- function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid){
+ function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid,seamMode='preserve'){
    try{
+     validateSeamMode(seamMode);
      if(typeof uuid!=='string'||!uuid||typeof goalSplineUuid!=='string'||
         !goalSplineUuid||goalSplineUuid.length>128||
         !Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63)
@@ -290,7 +294,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
          dimension:spline.dimension,reversed:!!spline.reversed,
          progress:entry.progress};
      });
-     const result=planMultiJunctionGeometry(chain.path,descriptors);
+     const result=planMultiJunctionGeometry(chain.path,descriptors,seamMode);
      const first=bySpline.get(chain.path[0].splineId);
      const node=first.node;
      if(!node.parent||node.parent.isValid===false||

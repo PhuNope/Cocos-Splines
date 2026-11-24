@@ -2,8 +2,10 @@
 /** Single-route Editor authoring transaction, fully isolated from source
  * Components. One snapshot after all knots are written. */
 const finite=v=>!!v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
-function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid){
- if(!plan?.ok||plan.anchorIndex!==anchorIndex||
+function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,seamMode='preserve'){
+ const {validateSeamMode}=require('./SplineJunctionSeamMath');
+ validateSeamMode(seamMode);
+ if(!plan?.ok||plan.seamMode!==seamMode||plan.anchorIndex!==anchorIndex||
     plan.goalSplineUuid!==goalSplineUuid||
     typeof plan.junctionUuid!=='string'||!plan.junctionUuid||
     typeof plan.guard!=='string'||!plan.guard||
@@ -36,7 +38,7 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid){
       ![0,1].includes(step.progress)||
       !Number.isInteger(seam.atKnot)||seam.atKnot<=lastAt||
       seam.atKnot<=0||seam.atKnot>=plan.count-1||
-      seam.junctionId!==step.junctionId||
+      seam.junctionId!==step.junctionId||seam.seamMode!==seamMode||
       !Number.isFinite(seam.gap)||seam.gap<0||seam.gap>1e-5||
       (seam.angleDeg!==null&&(!Number.isFinite(seam.angleDeg)||
        seam.angleDeg<0||seam.angleDeg>180)))
@@ -93,7 +95,7 @@ async function commitMultiJunctionRoute(plan,actions){
      seams:plan.seams,
      message:'Joined '+plan.sourceCount+' whole splines across '+
        plan.switchCount+' Junction switches into one independent '+
-       plan.count+'-Knot spline. Sources unchanged. G1/C1 remains as authored.'};
+       plan.count+'-Knot spline. Sources unchanged. Seam mode: '+plan.seamMode+'.'};
  }catch(error){
    let warning='';
    if(root&&!committed){

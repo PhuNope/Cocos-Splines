@@ -8,6 +8,7 @@ const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
 const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
 const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
 const {validateMultiJunctionPlan,commitMultiJunctionRoute}=require('./SplineJunctionRouteEditor');
+const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 function selected(){return Editor.Selection.getSelected('node')||[];}
@@ -501,11 +502,12 @@ const methods={
      * The destination is an existing SplineContainer Node UUID. Each source
      * spline is traversed end-to-end, once, preserving the authored cubics.
      */
-    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid){
+    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,seamMode='preserve'){
         if(knotEditBusy)return alertError('join-multi-junction-route',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
         try{
+            validateSeamMode(seamMode);
             if(!Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63||
                typeof goalSplineUuid!=='string'||!goalSplineUuid.trim()||
                goalSplineUuid.length>128)
@@ -515,9 +517,9 @@ const methods={
             await ensureClasses();
             const goal=goalSplineUuid.trim();
             const plan=await invokeScene('queryMultiJunctionJoinPlan',
-                junctionUuid,anchorIndex,goal);
+                junctionUuid,anchorIndex,goal,seamMode);
             if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
-            validateMultiJunctionPlan(plan,anchorIndex,goal);
+            validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode);
             if(plan.junctionUuid!==junctionUuid)
                 throw Error('Multi-Junction planner returned foreign Junction.');
             const check=async()=>{
@@ -542,11 +544,12 @@ const methods={
      * under ONE new scene group, rather than flattening them into a path
      * that would traverse a middle spoke twice.
      */
-    async joinJunctionFanout(anchorIndex,targetsText){
+    async joinJunctionFanout(anchorIndex,targetsText,seamMode='preserve'){
         if(knotEditBusy)return alertError('join-junction-fanout',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
         try{
+            validateSeamMode(seamMode);
             const targets=parseFanoutTargets(targetsText);
             if(!Number.isInteger(anchorIndex)||anchorIndex<0||
                anchorIndex>63||targets.includes(anchorIndex))
@@ -555,9 +558,9 @@ const methods={
             if(!junctionUuid)throw Error('Select a SplineJunction first.');
             await ensureClasses();
             const plan=await invokeScene('queryJunctionFanoutPlan',
-                junctionUuid,anchorIndex,targets);
+                junctionUuid,anchorIndex,targets,seamMode);
             if(!plan?.ok)throw Error(plan?.error||'Cannot plan Junction fan-out.');
-            validateFanoutPlan(plan,anchorIndex,targets);
+            validateFanoutPlan(plan,anchorIndex,targets,seamMode);
             if(plan.junctionUuid!==junctionUuid)
                 throw Error('Junction fan-out planner returned a foreign Scene Junction.');
             const check=async()=>{
@@ -582,12 +585,13 @@ const methods={
      * Unlike a destructive Unity spline merge, this operation never reparents
      * or edits source knots, Junction connections or Prefab instances.
      */
-    async joinJunctionLinks(anchorIndex,targetIndex){
+    async joinJunctionLinks(anchorIndex,targetIndex,seamMode='preserve'){
         if(knotEditBusy)return alertError('join-junction-links',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
         let created=null,committed=false,plan=null;
         try{
+            validateSeamMode(seamMode);
             if(!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
                anchorIndex<0||targetIndex<0||anchorIndex===targetIndex)
                 throw Error('Select two different Junction link indices.');
@@ -595,11 +599,12 @@ const methods={
             if(!junctionUuid)throw Error('Select a SplineJunction first.');
             await ensureClasses();
             plan=await invokeScene('queryJunctionJoinPlan',junctionUuid,
-                anchorIndex,targetIndex);
+                anchorIndex,targetIndex,seamMode);
             if(!plan?.ok)throw Error(plan?.error||'Junction Join planner failed.');
             const finiteVec=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
             const finiteQuat=q=>finiteVec(q)&&Number.isFinite(q.w);
-            if(plan.junctionUuid!==junctionUuid||plan.anchorIndex!==anchorIndex||
+            if(plan.junctionUuid!==junctionUuid||plan.seamMode!==seamMode||
+               plan.anchorIndex!==anchorIndex||
                plan.targetIndex!==targetIndex||!plan.anchorSplineUuid||
                !plan.targetSplineUuid||plan.anchorSplineUuid===plan.targetSplineUuid||
                typeof plan.guard!=='string'||!plan.guard||
@@ -658,7 +663,7 @@ const methods={
                 gap:plan.gap,angleDeg:plan.angleDeg,continuousC1:plan.continuousC1,
                 message:'Created new independent Joined spline ('+plan.count+
                     ' Knots) with one welded seam. Source splines and Junction unchanged. '+
-                    'Seam tangent angle: '+(plan.angleDeg===null?'undefined':plan.angleDeg.toFixed(2)+'°')+
+                    'Seam '+plan.seamMode+' angle: '+(plan.angleDeg===null?'undefined':plan.angleDeg.toFixed(2)+'°')+
                     '. One Scene snapshot; new Knot tangents are Broken.'};
         }catch(error){
             let warning='';

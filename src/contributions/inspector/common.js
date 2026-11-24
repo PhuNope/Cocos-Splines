@@ -78,8 +78,17 @@ function makeInspector(type){
     }
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
-          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents, may have a visible G1 kink, and does not preserve extra Knot components. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Across Junctions chooses a deterministic minimum-switch route through full open splines between a selected Anchor link and a destination Spline Node UUID (at least two distinct Junctions); requires physically snapped endpoints, ignores runtime traffic rules. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
+          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents and does not preserve extra Knot components. Choose Preserve (exact source cubic segments), G1 (align outgoing only, keep its magnitude) or C1 (align outgoing and match incoming magnitude); smoothing changes only the NEW output segment, not source splines. Degenerate seam tangents reject optional smoothing. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Across Junctions chooses a deterministic minimum-switch route through full open splines between a selected Anchor link and a destination Spline Node UUID (at least two distinct Junctions); requires physically snapped endpoints, ignores runtime traffic rules. Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
           <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
+          <div class="spl-btns">
+            <label>Join seam treatment
+              <select class="spl-index-input spl-join-seam-mode" style="max-width:220px;width:220px">
+                <option value="preserve">Preserve source curves (default)</option>
+                <option value="g1">G1 · align outgoing direction</option>
+                <option value="c1">C1 · align direction + magnitude</option>
+              </select>
+            </label>
+          </div>
           <div class="spl-btns">
             <label>Anchor link # <input type="number" class="spl-index-input spl-connector-anchor" min="0" max="63" step="1" value="0"></label>
             <label>Target link # <input type="number" class="spl-index-input spl-connector-target" min="0" max="63" step="1" value="1"></label>
@@ -115,6 +124,7 @@ function makeInspector(type){
         selectors.joinFanout='.spl-join-fanout';
         selectors.routeDestination='.spl-route-destination';
         selectors.joinRoute='.spl-join-route';
+        selectors.joinSeamMode='.spl-join-seam-mode';
         selectors.alignConnector='.spl-align-connector';
         selectors.convertConnectorMode='.spl-convert-connector-mode';
         selectors.tangentMode='.spl-tangent-mode';
@@ -293,12 +303,13 @@ function makeInspector(type){
                 this.$.checkConnections.addEventListener('click',()=>void callEditor(this,'check-junction-connections'));
                 this.$.joinRoute.addEventListener('click',()=>void callEditor(this,
                     'join-multi-junction-route',Number(this.$.connectorAnchor.value),
-                    this.$.routeDestination.value.trim()));
+                    this.$.routeDestination.value.trim(),this.$.joinSeamMode.value));
                 this.$.joinFanout.addEventListener('click',()=>void callEditor(this,
                     'join-junction-fanout',Number(this.$.connectorAnchor.value),
-                    this.$.fanoutTargets.value));
+                    this.$.fanoutTargets.value,this.$.joinSeamMode.value));
                 this.$.joinConnector.addEventListener('click',()=>void callEditor(this,
-                    'join-junction-links',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
+                    'join-junction-links',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value),
+                    this.$.joinSeamMode.value));
                 this.$.snapConnector.addEventListener('click',()=>void callEditor(this,
                     'snap-junction-endpoint',Number(this.$.connectorAnchor.value),Number(this.$.connectorTarget.value)));
                 this.$.convertConnectorMode.addEventListener('click',()=>void callEditor(this,

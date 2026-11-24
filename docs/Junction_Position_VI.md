@@ -157,3 +157,14 @@ Chọn **SplineJunction** ở Hierarchy, chọn **Anchor link #** tại một en
 Planner duyệt các `SplineJunction` đang bật trong Scene, chỉ kết nối link ở đúng endpoint (progress 0/1), khoảng cách world giữa hai đầu tại một Junction tối đa `1e-5`; nếu lệch cần Snap trước. Mỗi lần nối chọn spline tiếp theo, đi **hết chiều dài spline** đến endpoint bên kia rồi chuyển tại Junction kế tiếp. Dùng BFS có thứ tự UUID ổn định để chọn tuyến ít lần chuyển Junction nhất, không phải tuyến có chiều dài vật lý ngắn nhất; không xét tín hiệu đèn/công suất/luật traffic hoặc chuyển hướng runtime. Giữ thứ tự và dấu tangent cho spline reversed, chuyển hệ tọa độ của các nguồn thành local của spline đầu; mỗi điểm nối giữ một Knot Broken với hai tangent resolved nguyên gốc. Không tự động làm mượt seam G1/C1.
 
 Yêu cầu **ít nhất 2 Junction khác nhau**, từ **3 đến 8 spline mở riêng biệt**, tối đa **128 Knot output** và các nguồn có dimension 2D/3D tương thích. Những link giữa spline, những đường cần U-turn ở giữa spline, disconnected/cyclic route không hợp lệ sẽ bị từ chối hoặc chỉ xét các tuyến hợp lệ toàn chiều dài. Kiểm tra fingerprint của **mọi Junction đang bật trong Scene** cùng source knots, transform, link, scene ID trước và trong thao tác; thành công tạo một snapshot, lỗi sẽ cố gắng xóa spline output mới nếu Scene chưa thay đổi. Không sao chép các component đặc biệt của Knot/Handle. **Undo/Redo, Prefab override và native 3.8.8 phải test trong Editor**.
+
+
+## Join seam Preserve / G1 / C1 (V2 opt-in)
+
+Trong `SplineJunction Inspector`, chọn **Join seam treatment** trước khi bấm **Join Links**, **Join Fan-out** hoặc **Join Across Junctions**. Mặc định là **Preserve source curves**: các cubic Bezier của spline nguồn được giữ chính xác như trước, đường có thể gãy tại điểm nối.
+
+- **G1:** giữ nguyên `tangentIn` từ đoạn trước, xoay duy nhất `tangentOut` của **Knot Broken mới** cùng hướng với tiếp tuyến đầu vào, giữ **độ dài `tangentOut` ban đầu**. Chỉ đoạn phía sau điểm nối của bản sao thay đổi hình dạng.
+- **C1:** vẫn giữ `tangentIn`, đặt `tangentOut = -tangentIn` (cùng độ dài/đạo hàm tham số), tạo liên tục đạo hàm bậc một khi endpoint trùng khớp. Đoạn phía sau điểm nối của bản sao thay đổi hình dạng.
+- Nếu một trong hai tangent có độ dài gần bằng 0, G1/C1 **báo lỗi và không tạo spline**, thay vì tạo dữ liệu không hợp lệ. Preserve vẫn hỗ trợ tangent bằng 0.
+
+Mỗi seam của Multi-Junction hoặc Fan-out dùng cùng lựa chọn; **không thay đổi bất cứ Knot/Handle nào trong spline nguồn**, không có smoothing ngầm và không tự thêm Junction logic vào output. Kiểm tra `seamMode` được truyền từ Inspector xuyên qua Scene plan tới transaction để tránh áp sai chế độ. Phần Undo/Redo, rendering, Prefab phải xác nhận trực tiếp trong Creator 3.8.8.

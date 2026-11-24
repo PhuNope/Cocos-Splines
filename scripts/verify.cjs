@@ -7,6 +7,7 @@ function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineJunctionJoinMath.js');
+checkRel('dist/SplineJunctionSeamMath.js');
 checkRel('dist/SplineJunctionFanoutMath.js');
 checkRel('dist/SplineJunctionFanoutEditor.js');
 checkRel('dist/SplineJunctionRouteMath.js');

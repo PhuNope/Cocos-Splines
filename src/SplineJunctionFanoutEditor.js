@@ -15,9 +15,11 @@ function parseFanoutTargets(value){
    throw Error('Target indices must be unique integers between 0 and 63.');
  return indices;
 }
-function validateFanoutPlan(plan,anchorIndex,targets){
+function validateFanoutPlan(plan,anchorIndex,targets,seamMode='preserve'){
+ const {validateSeamMode}=require('./SplineJunctionSeamMath');
+ validateSeamMode(seamMode);
  if(!plan?.ok||!Number.isInteger(anchorIndex)||!Array.isArray(targets)||
-    plan.anchorIndex!==anchorIndex||
+    plan.anchorIndex!==anchorIndex||plan.seamMode!==seamMode||
     !Array.isArray(plan.targetIndices)||
     plan.targetIndices.length!==targets.length||
     plan.targetIndices.some((i,j)=>i!==targets[j])||
@@ -41,7 +43,7 @@ function validateFanoutPlan(plan,anchorIndex,targets){
  let total=0;
  for(let i=0;i<plan.routes.length;i++){
    const r=plan.routes[i];
-   if(!r||r.targetIndex!==targets[i]||!Number.isInteger(r.count)||
+   if(!r||r.seamMode!==seamMode||r.targetIndex!==targets[i]||!Number.isInteger(r.count)||
       r.count<3||r.count>128||
       !Array.isArray(r.knots)||r.knots.length!==r.count||
       !Number.isFinite(r.gap)||r.gap<0||r.gap>1e-5||
@@ -108,7 +110,7 @@ async function commitJunctionFanout(plan,actions){
      totalKnotCount:plan.totalKnotCount,warning,
      message:'Created '+roots.length+' independent Joined splines ('+
        plan.totalKnotCount+' Knots) in one group. Source spline branches and Junction unchanged. '+
-       'One Scene snapshot. G1/C1 is not modified.'};
+       'One Scene snapshot. Seam mode: '+plan.seamMode+'. Source Knots not modified.'};
  }catch(error){
    let warning='';
    if(group&&!committed){
