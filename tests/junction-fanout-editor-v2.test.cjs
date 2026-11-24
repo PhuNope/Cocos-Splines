@@ -111,6 +111,7 @@ const methods=require('../dist/main.js').methods;
  assert.deepEqual([...nodes.entries()].filter(([key])=>key.startsWith('s-')),
    JSON.parse(before));
  const initial=created.length,snap=snapshots;
+ selection=['junction']; // Re-select the Junction after successful grouped Join.
  result=await methods.joinJunctionFanout(0,'1,1');
  assert(!result.ok);assert.equal(created.length,initial);
  result=await methods.joinJunctionFanout(1,'1,2');
