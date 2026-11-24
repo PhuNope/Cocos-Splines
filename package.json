@@ -63,6 +63,11 @@
       },
       {
         "path": "i18n:menu.extension/Cocos Splines",
+        "label": "Add Noise Layers",
+        "message": "create-noise-layers"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos Splines",
         "label": "Add Object Controller",
         "message": "create-object-controller"
       },
@@ -303,6 +308,11 @@
           "createModifiers"
         ]
       },
+      "create-noise-layers": {
+        "methods": [
+          "createNoiseLayers"
+        ]
+      },
       "create-object-controller": {
         "methods": [
           "createObjectController"
@@ -447,6 +457,7 @@
           "Splines.SplineProjector": "./dist/contributions/inspector/Projector.js",
           "Splines.SplineLengthMonitor": "./dist/contributions/inspector/LengthMonitor.js",
           "Splines.SplineModifiers": "./dist/contributions/inspector/Modifiers.js",
+          "Splines.SplineNoise": "./dist/contributions/inspector/Noise.js",
           "Splines.SplineObjectController": "./dist/contributions/inspector/ObjectController.js",
           "Splines.SplineObjectBender": "./dist/contributions/inspector/Bender.js",
           "Splines.SplineMorph": "./dist/contributions/inspector/Morph.js",
