@@ -29,6 +29,7 @@ try {
   class Collider extends Component {constructor(){super();this.worldBounds={center:new Vec3(),halfExtents:new Vec3(.5,.5,.5)};}}
   class BoxCollider extends Collider {constructor(){super();this.center=new Vec3();this.size=new Vec3(1,1,1);}}
   class CapsuleCollider extends Collider {constructor(){super();this.center=new Vec3();this.radius=.5;this.cylinderHeight=1;this.direction=1;}}
+  class MeshCollider extends Collider {constructor(){super();this.mesh=null;this.center=new Vec3();this.convex=false;}}
   class Node {
     constructor(uuid){this.uuid=uuid;this.isValid=true;this.parent=null;this.worldPosition=new Vec3(4,0,0);this.worldRotation=new Quat();this.events=[];}
     emit(name,payload){this.events.push({name,payload});}
@@ -40,7 +41,8 @@ try {
   class EventHandler { static emitEvents(events,...payload){for(const e of events||[])if(typeof e==='function')e(...payload);else if(typeof e?.handler==='function')e.handler(...payload);handlers.push(...payload);}}
   const env={EDITOR_NOT_IN_PREVIEW:true};
   const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls},
-    Component,Collider,BoxCollider,CapsuleCollider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
+    Component,Collider,BoxCollider,CapsuleCollider,MeshCollider,Node,Vec3,Quat,EventHandler,Enum:x=>x,
+    gfx:{AttributeName:{ATTR_POSITION:'a_position'},Format:{RGB32F:1},PrimitiveMode:{TRIANGLE_LIST:4}}};
   const original=Module._load;
   Module._load=function(request,parent,isMain){if(request==='cc')return cc;if(request==='cc/env')return env;return original.call(this,request,parent,isMain);};
   try{
@@ -645,7 +647,51 @@ try {
      boundsFollower.proximityUseCapsule=false;boundsFollower.update(.001);
      assert(!splineProximityRegistry.get(boundsFollower).capsule);
      assert(splineProximityRegistry.get(boundsFollower).bounds);
+     // Native MeshCollider: double-sided triangle BVH, cached until transform or hash changes.
+     const meshCollider=new MeshCollider();meshCollider.node=boundsFollower.target;
+     meshCollider.node.worldMatrix={m00:1,m01:0,m02:0,m04:0,m05:1,m06:0,
+       m08:0,m09:0,m10:1,m12:3,m13:0,m14:0};
+     meshCollider.worldBounds={center:new Vec3(4,0,0),halfExtents:new Vec3(0,1,1)};
+     let meshReads=0;
+     meshCollider.mesh={allowDataAccess:true,hash:4,
+       struct:{primitives:[{primitiveMode:4}]},
+       readAttribute:()=>{meshReads++;return new Float32Array([1,-1,-1,1,1,-1,1,0,1]);},
+       readAttributeFormat:()=>({name:'RGB32F'}),readIndices:()=>new Uint16Array([0,1,2])};
+     boundsFollower.proximityCollider=meshCollider;
+     assert.equal(boundsFollower.proximityUseMeshCollider,false);
+     boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     boundsFollower.proximityUseMeshCollider=true;
+     boundsFollower.update(.001);
+     const firstMesh=splineProximityRegistry.get(boundsFollower).mesh;
+     assert(firstMesh&&firstMesh.triangleCount===1);
+     assert.equal(meshReads,1);
+     boundsFollower.update(.001);
+     assert.strictEqual(splineProximityRegistry.get(boundsFollower).mesh,firstMesh);
+     assert.equal(meshReads,1,'Stationary mesh must reuse cached BVH');
+     meshCollider.node.worldMatrix.m12=4;
+     meshCollider.worldBounds={center:new Vec3(5,0,0),halfExtents:new Vec3(0,1,1)};
+     boundsFollower.update(.001);
+     assert.notStrictEqual(splineProximityRegistry.get(boundsFollower).mesh,firstMesh);
+     assert.equal(meshReads,2,'Transform change must rebuild world BVH');
+     meshCollider.mesh.hash=5;
+     boundsFollower.update(.001);
+     assert.equal(meshReads,3,'Mesh data revision hash invalidates cache');
+     meshCollider.convex=true;boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).mesh);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     meshCollider.convex=false;meshCollider.mesh.allowDataAccess=false;
+     boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).mesh);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     meshCollider.mesh.allowDataAccess=true;
+     meshCollider.worldBounds={center:new Vec3(50,0,0),halfExtents:new Vec3(0,1,1)};
+     boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).mesh);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     boundsFollower.proximityUseMeshCollider=false;
      boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
+     assert.equal(splineProximityRegistry.get(boundsFollower),null);
      assert.equal(splineProximityRegistry.get(boundsFollower),null);
     // Cross-spline follower at the same 3D intersection is a real blocker;
     // elevated bridge (Y=3) is not, even with identical XZ projection.

@@ -1,4 +1,4 @@
-import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider, BoxCollider, CapsuleCollider } from 'cc';
+import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider, BoxCollider, CapsuleCollider, MeshCollider, Mesh, gfx } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
@@ -11,7 +11,9 @@ import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
-import {colliderProximityRadius,colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
+import {colliderProximityRadius,colliderWorldObb,colliderWorldCapsule,type ColliderWorldBounds} from '../Core/SplineColliderBounds';
+import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
+import type {ProximityTriangleMesh} from '../Core/SplineProximityMesh';
 import {aabbFromCenterHalfExtents,type ProximityAabb,type ProximityObb,type ProximityCapsule} from '../Core/SplineProximityShapes';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
@@ -123,6 +125,8 @@ export class SplineAnimate extends Component {
     proximityUseBoxObb=false;
     @property({tooltip:'Preview opt-in: use a stationary World Capsule for a 3D CapsuleCollider with uniform scale and matching world bounds. Unsupported transforms fall back to AABB.'})
     proximityUseCapsule=false;
+    @property({tooltip:'Preview opt-in: use a static World triangle BVH from a readable non-convex 3D MeshCollider. Falls back to Collider.worldBounds if unreadable or unsupported. Rebuilds when transform changes.'})
+    proximityUseMeshCollider=false;
     @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child. When blank, reads 3D Collider on the Target node. Collider2D is not supported.'})
     proximityCollider:Collider|null=null;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
@@ -190,7 +194,35 @@ export class SplineAnimate extends Component {
             this.proximityBounds().valid;
     }
     public get proximityEffectiveRadius():number{return this.proximityBounds().radius;}
-    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb;obb?:ProximityObb;capsule?:ProximityCapsule}{
+    private _meshColliderCache:{asset:Mesh;key:string;geometry:ProximityTriangleMesh}|null=null;
+    /** Cache immutable world triangle BVH while asset, data hash, pose and
+     * engine bounds remain unchanged. Dynamic geometry must update its hash
+     * or callers must toggle the opt-in setting to force a new read. */
+    private proximityMeshColliderShape(collider:MeshCollider,
+        bounds:ColliderWorldBounds):ProximityTriangleMesh|null{
+        const mesh=collider.mesh,node=collider.node;
+        if(!mesh||!mesh.allowDataAccess||collider.convex||!node?.worldMatrix){
+            this._meshColliderCache=null;return null;
+        }
+        const m=node.worldMatrix,c=collider.center;
+        if(!c){this._meshColliderCache=null;return null;}
+        const key=JSON.stringify([mesh.hash,
+            m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,
+            m.m08,m.m09,m.m10,m.m12,m.m13,m.m14,
+            c.x,c.y,c.z,
+            bounds.center.x,bounds.center.y,bounds.center.z,
+            bounds.halfExtents.x,bounds.halfExtents.y,bounds.halfExtents.z]);
+        if(this._meshColliderCache?.asset===mesh&&this._meshColliderCache.key===key)
+            return this._meshColliderCache.geometry;
+        const geometry=meshColliderWorldBvh(mesh,m,c,bounds,{
+            positionAttribute:gfx.AttributeName.ATTR_POSITION,
+            formatTable:gfx.Format as unknown as Readonly<Record<string,number|string>>,
+            triangleListMode:gfx.PrimitiveMode.TRIANGLE_LIST,
+        });
+        this._meshColliderCache=geometry?{asset:mesh,key,geometry}:null;
+        return geometry;
+    }
+    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb;obb?:ProximityObb;capsule?:ProximityCapsule;mesh?:ProximityTriangleMesh}{
         const fallback=Number.isFinite(this.proximityRadius)&&this.proximityRadius>0&&
             this.proximityRadius<=100?this.proximityRadius:.5;
         if(!this.proximityUseColliderBounds)return {radius:fallback,valid:false};
@@ -218,8 +250,17 @@ export class SplineAnimate extends Component {
                     collider.cylinderHeight,collider.direction,collider.node.worldMatrix,bounds);}
                 catch{/* Unsupported native shape: retain AABB. */}
             }
+            let mesh:ProximityTriangleMesh|null=null;
+            if(aabb&&this.proximityUseMeshCollider&&typeof MeshCollider==='function'&&
+               collider instanceof MeshCollider){
+                try{mesh=this.proximityMeshColliderShape(collider,bounds);}
+                catch{this._meshColliderCache=null;}
+            }else if(!this.proximityUseMeshCollider){
+                this._meshColliderCache=null;
+            }
             return {radius:report.radius,valid:report.valid,
-                ...(aabb?{bounds:aabb}:{}),...(obb?{obb}:{}),...(capsule?{capsule}:{})};
+                ...(aabb?{bounds:aabb}:{}),...(obb?{obb}:{}),
+                ...(capsule?{capsule}:{}),...(mesh?{mesh}:{})};
         }catch{
             // A disabled physics world / stale shape never breaks playback.
             return {radius:fallback,valid:false};
@@ -444,20 +485,23 @@ export class SplineAnimate extends Component {
         }else{
             const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
             const collider=this.proximityBounds();
-            if(collider.capsule){
+            if(collider.mesh){
+                splineProximityRegistry.setBuiltMesh(this,collider.mesh);
+            }else if(collider.capsule){
                 splineProximityRegistry.setCapsule(this,collider.capsule);
             }else if(collider.obb){
                 splineProximityRegistry.setObb(this,collider.obb);
             }else{
                 // Opt-in shape mode uses the actual target pose for a valid
                 // world AABB, including between internal progress and apply().
-                const origin=(this.proximityUseBoxObb||this.proximityUseCapsule)&&collider.bounds?
+                const origin=(this.proximityUseBoxObb||this.proximityUseCapsule||this.proximityUseMeshCollider)&&collider.bounds?
                     (this.target||this.node).worldPosition:position;
                 splineProximityRegistry.set(this,origin,collider.radius,collider.bounds);
             }
         }
     }
     private clearSpatialTraffic():void{
+        this._meshColliderCache=null;
         splineHeadwayRegistry.remove(this);
         splineProximityRegistry.remove(this);
         this._headwayBlocked=false;

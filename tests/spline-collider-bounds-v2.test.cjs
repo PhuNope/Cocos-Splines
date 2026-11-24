@@ -61,5 +61,46 @@ try{
  const sphere=colliderWorldCapsule(p(1),.5,0,1,uniform,{center:capCenter,halfExtents:p(1,1,1)});
  assert(sphere);assert.deepEqual(sphere.a,sphere.b);
  assert.equal(colliderWorldCapsule(p(1),.5,2,3,uniform,{center:capCenter,halfExtents:p(1,1,1)}),null);
+ // Native MeshCollider reader: indexed local positions -> WORLD triangles.
+ const {meshColliderWorldBvh}=require(path.join(out,'Core/SplineMeshColliderAdapter.js'));
+ const {sweptSphereMeshEntry}=require(path.join(out,'Core/SplineProximityMesh.js'));
+ const worldMatrix={m00:1,m01:0,m02:0,m04:0,m05:1,m06:0,
+   m08:0,m09:0,m10:1,m12:3,m13:0,m14:0};
+ const settings={positionAttribute:'a_position',
+   formatTable:{RGB32F:1,RGB16F:2},triangleListMode:4};
+ const rawPositions=new Float32Array([1,-1,-1,1,1,-1,1,0,1]);
+ const nativeMesh={allowDataAccess:true,struct:{primitives:[{primitiveMode:4}]},
+   readAttribute:()=>rawPositions,readAttributeFormat:()=>({name:'RGB32F'}),
+   readIndices:()=>new Uint16Array([0,1,2])};
+ const worldBounds={center:p(4),halfExtents:p(0,1,1)};
+ let built=meshColliderWorldBvh(nativeMesh,worldMatrix,p(0),worldBounds,settings);
+ assert(built&&built.triangleCount===1);
+ near(sweptSphereMeshEntry(p(0),p(10),built,.5),.35,1e-5);
+ const shifted=meshColliderWorldBvh(nativeMesh,{...worldMatrix,m12:2},p(1),worldBounds,settings);
+ assert(shifted);near(sweptSphereMeshEntry(p(0),p(10),shifted,.5),.35);
+ assert.equal(meshColliderWorldBvh({...nativeMesh,allowDataAccess:false},
+   worldMatrix,p(0),worldBounds,settings),null);
+ assert.equal(meshColliderWorldBvh({...nativeMesh,struct:{primitives:[{primitiveMode:5}]}},
+   worldMatrix,p(0),worldBounds,settings),null,'Unsupported triangle strips');
+ assert.equal(meshColliderWorldBvh(nativeMesh,worldMatrix,p(0),
+   {center:p(3),halfExtents:p(0,1,1)},settings),null,'Stale physics bounds');
+ assert.equal(meshColliderWorldBvh({...nativeMesh,readIndices:()=>new Uint16Array([0,1,8])},
+   worldMatrix,p(0),worldBounds,settings),null,'Invalid vertex index');
+ assert.equal(meshColliderWorldBvh({...nativeMesh,readAttributeFormat:()=>({name:'RGB8UN'})},
+   worldMatrix,p(0),worldBounds,settings),null,'Unsupported packed format');
+ // Half floats are stored as raw Uint16 IEEE754 bits, never numeric uint values.
+ const half={...nativeMesh,readAttribute:()=>new Uint16Array([
+   0x3c00,0xbc00,0xbc00,0x3c00,0x3c00,0xbc00,0x3c00,0,0x3c00]),
+   readAttributeFormat:()=>({name:'RGB16F'})};
+ built=meshColliderWorldBvh(half,worldMatrix,p(0),worldBounds,settings);
+ assert(built);near(sweptSphereMeshEntry(p(0),p(10),built,.5),.35);
+ // Multiple primitive index buffers must use submesh-local indices.
+ const multi={...nativeMesh,struct:{primitives:[{primitiveMode:4},{primitiveMode:4}]},
+   readAttribute:(i)=>i?new Float32Array([4,-1,-1,4,1,-1,4,0,1]):rawPositions,
+   readIndices:()=>new Uint16Array([0,1,2])};
+ built=meshColliderWorldBvh(multi,worldMatrix,p(0),
+   {center:p(5.5),halfExtents:p(1.5,1,1)},settings);
+ assert(built&&built.triangleCount===2);
+ near(sweptSphereMeshEntry(p(0),p(10),built,.5),.35);
  console.log('COLLIDER BOUNDS PASS: conservative WORLD AABB sphere, off-center shapes, nonuniform scale, disabled/unavailable bounds and safe fallback.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}

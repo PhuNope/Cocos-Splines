@@ -183,7 +183,16 @@ export class SplineProximityRegistry {
     public setMesh(owner:object,vertices:readonly ProximityPoint[],
         indices:readonly number[]):void{
         if(!ownValid(owner))throw Error('Invalid proximity mesh owner.');
-        const mesh=buildProximityTriangleMesh(vertices,indices);
+        this.setBuiltMesh(owner,buildProximityTriangleMesh(vertices,indices));
+    }
+    /** Register a previously built immutable BVH without rebuilding per frame.
+     * Intended for validated native mesh adapters and static mesh caches. */
+    public setBuiltMesh(owner:object,mesh:ProximityTriangleMesh):void{
+        if(!ownValid(owner)||!mesh||!Object.isFrozen(mesh)||
+           !mesh.root||!Object.isFrozen(mesh.root)||!validProximityAabb(mesh.bounds)||
+           !Number.isInteger(mesh.triangleCount)||mesh.triangleCount<1||
+           mesh.triangleCount>16384)
+            throw Error('Invalid built proximity mesh.');
         const lo=mesh.bounds.min,hi=mesh.bounds.max;
         const center={x:lo.x/2+hi.x/2,y:lo.y/2+hi.y/2,z:lo.z/2+hi.z/2};
         const radius=Math.max(1e-6,Math.hypot(hi.x-lo.x,hi.y-lo.y,hi.z-lo.z)/2);
