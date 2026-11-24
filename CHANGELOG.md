@@ -1,3 +1,11 @@
+# Unreleased — Phase 3.8c2b1 OBB/Capsule Population Clearance (V2 Preview)
+
+- Added opt-in **Use Precise Obstacle Shapes** and a manual spherical **Placement Footprint Radius** on SplineObjectController (only with Avoid Obstacle Colliders enabled).
+- Valid BoxCollider OBB and CapsuleCollider shapes reuse strict world-space conversion adapters from SplineAnimate and exact center-to-shape sphere tests; mismatched/unsupported shapes fall back to conservative AABB.
+- Placement shape filtering runs before density/World spacing and before instance cleanup, preserving previous population on invalid active bounds or radius. Legacy AABB path is unchanged when toggled off.
+- Added standalone pure tests and mocked controller regression for rotated OBB overreject, Capsule ends, radius, fallback, signature and opt-out. Native Creator 3.8.8 validation pending.
+- MeshCollider BVH and automatic prefab bounds intentionally remain unimplemented; no tag/release.
+
 # Unreleased — Phase 3.8c2a Surface / Terrain Conform (V2 Preview)
 
 - Added opt-in Physics 3D downward raycasts against explicit active target Collider/TerrainCollider components for prefab population. Closest valid target hit, slope threshold, normal offset and drop/keep missing-hit policy; unlisted hits cannot be used.
