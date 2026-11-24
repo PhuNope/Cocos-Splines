@@ -125,6 +125,16 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Native Cocos Creator 3.8.8 Inspector/Prefab/Undo/Redo acceptance and CI pass/artifact verification pending.
 - [ ] Next: Collider-aware placement + terrain/material density masks, weighted prefab variants, typed procedural population module graph.
 
+### Phase 3.8c1 — Weighted Prefab Variants & Explicit Collider World-AABB Avoidance (v2 preview)
+
+- [x] Strict pure placement utilities: deterministic positive-weight CDF sampler with zero-weight exclusion; World-AABB sphere-center clearance with max 64 boxes and finite-coordinate validation.
+- [x] Optional `usePrefabWeights` + `prefabWeights` serialized on ObjectController; unchanged uniform seed channel and order when off; max 128 variant slots when enabled.
+- [x] Optional `avoidObstacleColliders` + explicit `obstacleColliders` + `obstacleClearance`; use active Collider.worldBounds only, no scene auto-scan or Physics overlap.
+- [x] Candidate positions calculated after Modifiers/Noise/Jitter, obstacles filtered **before** spacing and density planner, stable original indexes; weight/bound preflight before deleting spawned Nodes.
+- [x] Inspector groups + conditional controls, offline TypeScript stub update and new placement regression suite registered in v2 CI.
+- [ ] Native Creator 3.8.8 Inspector, Prefab, Undo/Redo and build smoke acceptance.
+- [ ] Phase 3.8c2: terrain/surface projection, accurate OBB/Capsule/Mesh collision avoidance, prefab geometry bounds, multi-controller occupancy and weighting UI improvements.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
