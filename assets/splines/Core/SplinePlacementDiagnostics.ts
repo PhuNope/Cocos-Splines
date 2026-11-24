@@ -86,6 +86,48 @@ export function attributePlacementDiagnostics(stages:PlacementDiagnosticStages):
     }
     return results;
 }
+export const PLACEMENT_REASONS:ReadonlyArray<PlacementReason>=
+    ['accepted','surface','collider','peer','exclusion','density','spacing'];
+
+export interface PlacementSummary {
+    total:number;
+    accepted:number;
+    rejected:number;
+    byReason:Record<PlacementReason,number>;
+    /** At most three original candidate indexes per rejection reason. */
+    examples:Record<Exclude<PlacementReason,'accepted'>,number[]>;
+}
+/** Exact totals for all preflight candidates, NOT the sampled Gizmo markers.
+ * Validates reason/index contracts before returning a compact, serializable
+ * read-only snapshot suitable for the Editor IPC bridge.
+ */
+export function summarizePlacementDiagnostics(
+    items:ReadonlyArray<PlacementDiagnostic>
+):PlacementSummary {
+    if(!Array.isArray(items)||items.length>2048)
+        throw Error('Placement summary supports up to 2048 candidates.');
+    const counts:Record<PlacementReason,number>={
+        accepted:0,surface:0,collider:0,peer:0,exclusion:0,density:0,spacing:0,
+    };
+    const examples:PlacementSummary['examples']={
+        surface:[],collider:[],peer:[],exclusion:[],density:[],spacing:[],
+    };
+    let last=-1;
+    for(const item of items){
+        if(!item||!Number.isInteger(item.index)||item.index<=last||item.index>2047||
+            !finite(item.progress)||item.progress<0||item.progress>1||
+            !point(item.position)||!finite(item.radius)||item.radius<0||
+            item.radius>100||!PLACEMENT_REASONS.includes(item.reason))
+            throw Error('Invalid placement summary item or order.');
+        last=item.index;
+        counts[item.reason]++;
+        if(item.reason!=='accepted'&&examples[item.reason].length<3)
+            examples[item.reason].push(item.index);
+    }
+    const accepted=counts.accepted;
+    return {total:items.length,accepted,rejected:items.length-accepted,
+        byReason:counts,examples};
+}
 /** Preview has at most N markers with representation across reason classes.
  * Never drops a complete reason class when N >= the number of present classes.
  */
