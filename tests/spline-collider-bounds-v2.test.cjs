@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),cp=require('node:child_process'),
 const root=path.resolve(__dirname,'..'),out=fs.mkdtempSync(path.join(os.tmpdir(),'spline-collider-bounds-'));
 try{
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),'--noEmit','false','--outDir',out],{stdio:'pipe'});
- const {colliderProximityRadius}=require(path.join(out,'Core/SplineColliderBounds.js'));
+ const {colliderProximityRadius,colliderWorldObb}=require(path.join(out,'Core/SplineColliderBounds.js'));
  const p=(x,y=0,z=0)=>({x,y,z});
  const near=(a,b,t=1e-8)=>assert(Math.abs(a-b)<t,a+' != '+b);
  const box={center:p(0),halfExtents:p(1,.5,.25)};
@@ -28,5 +28,20 @@ try{
  assert.deepEqual(colliderProximityRadius(box,null,.5),
    {radius:.5,valid:false,source:'fallback'});
  assert.throws(()=>colliderProximityRadius(box,p(0),-1),/Invalid/);
+ // Rotated box, off-center geometry, orthogonal nonuniform scale.
+ const k=Math.SQRT1_2,m={m00:2*k,m01:0,m02:2*k,m04:0,m05:3,m06:0,
+    m08:-k,m09:0,m10:k,m12:10,m13:2,m14:4};
+ const local=p(1,0,0),size=p(2,2,2);
+ const world={center:p(10+2*k,2,4+2*k),halfExtents:p(3*k,3,3*k)};
+ const obb=colliderWorldObb(local,size,m,world);
+ assert(obb);near(obb.half.x,2);near(obb.half.y,3);near(obb.half.z,1);
+ near(obb.center.x,world.center.x);near(obb.axes[0].z,k);
+ assert.equal(colliderWorldObb(local,size,{...m,m04:.4},world),null,'shear');
+ assert.equal(colliderWorldObb(local,size,{...m,m05:-3},world),null,'reflection');
+ assert.equal(colliderWorldObb(local,size,{...m,m05:0},world),null,'singular');
+ assert.equal(colliderWorldObb(local,size,m,{...world,center:p(0)}),null,'stale center');
+ assert.equal(colliderWorldObb(local,size,m,{...world,halfExtents:p(1,3,1)}),null,'backend extents mismatch');
+ assert.equal(colliderWorldObb(local,p(-2,2,2),m,world),null);
+ assert.equal(colliderWorldObb(local,size,{...m,m00:NaN},world),null);
  console.log('COLLIDER BOUNDS PASS: conservative WORLD AABB sphere, off-center shapes, nonuniform scale, disabled/unavailable bounds and safe fallback.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}

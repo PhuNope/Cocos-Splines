@@ -1,4 +1,4 @@
-import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider } from 'cc';
+import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider, BoxCollider } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
@@ -11,8 +11,8 @@ import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
-import {colliderProximityRadius} from '../Core/SplineColliderBounds';
-import {aabbFromCenterHalfExtents,type ProximityAabb} from '../Core/SplineProximityShapes';
+import {colliderProximityRadius,colliderWorldObb} from '../Core/SplineColliderBounds';
+import {aabbFromCenterHalfExtents,type ProximityAabb,type ProximityObb} from '../Core/SplineProximityShapes';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -119,6 +119,8 @@ export class SplineAnimate extends Component {
     proximityRadius=.5;
     @property({tooltip:'Opt-in: use the world AABB of a 3D Cocos Collider to calculate a conservative bounding sphere around Target. Falls back to Proximity Radius when unavailable.'})
     proximityUseColliderBounds=false;
+    @property({tooltip:'Preview opt-in: use a stationary World OBB for a valid 3D BoxCollider obstacle. Falls back to World AABB for unsupported transforms or bounds mismatches. Moving follower remains a conservative sphere.'})
+    proximityUseBoxObb=false;
     @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child. When blank, reads 3D Collider on the Target node. Collider2D is not supported.'})
     proximityCollider:Collider|null=null;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
@@ -186,7 +188,7 @@ export class SplineAnimate extends Component {
             this.proximityBounds().valid;
     }
     public get proximityEffectiveRadius():number{return this.proximityBounds().radius;}
-    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb}{
+    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb;obb?:ProximityObb}{
         const fallback=Number.isFinite(this.proximityRadius)&&this.proximityRadius>0&&
             this.proximityRadius<=100?this.proximityRadius:.5;
         if(!this.proximityUseColliderBounds)return {radius:fallback,valid:false};
@@ -200,8 +202,15 @@ export class SplineAnimate extends Component {
             const report=colliderProximityRadius(bounds,target?.worldPosition,fallback);
             const aabb=report.valid?aabbFromCenterHalfExtents(
                 bounds.center,bounds.halfExtents):null;
+            let obb:ProximityObb|null=null;
+            if(aabb&&this.proximityUseBoxObb&&typeof BoxCollider==='function'&&
+               collider instanceof BoxCollider){
+                try{obb=colliderWorldObb(collider.center,collider.size,
+                    collider.node.worldMatrix,bounds);}
+                catch{/* Unsupported backend/transform: keep valid AABB. */}
+            }
             return {radius:report.radius,valid:report.valid,
-                ...(aabb?{bounds:aabb}:{})};
+                ...(aabb?{bounds:aabb}:{}),...(obb?{obb}:{})};
         }catch{
             // A disabled physics world / stale shape never breaks playback.
             return {radius:fallback,valid:false};
@@ -426,7 +435,15 @@ export class SplineAnimate extends Component {
         }else{
             const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
             const collider=this.proximityBounds();
-            splineProximityRegistry.set(this,position,collider.radius,collider.bounds);
+            if(collider.obb){
+                splineProximityRegistry.setObb(this,collider.obb);
+            }else{
+                // Opt-in shape mode uses the actual target pose for a valid
+                // world AABB, including between internal progress and apply().
+                const origin=this.proximityUseBoxObb&&collider.bounds?
+                    (this.target||this.node).worldPosition:position;
+                splineProximityRegistry.set(this,origin,collider.radius,collider.bounds);
+            }
         }
     }
     private clearSpatialTraffic():void{

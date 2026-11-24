@@ -54,7 +54,7 @@ const configs={
     {title:'Playback',fields:['method','duration','speed','loopMode','easing','alignToSpline','upMode','upReference','forwardAxis','rotationOffset','orient2D','orient2DAngleOffset','playOnStart','startPositionMode','startProgress','startDistance']},
     {title:'Follower lane & headway (opt-in)',fields:['headwayLaneId','enableHeadway','headwayWorldGap','headwayBrakeDistance']},
     {title:'Physical lane position (opt-in)',fields:['enableLanePlacement','laneCount','laneWidth']},
-    {title:'3D proximity sweep (opt-in)',fields:['enableProximityAvoidance','proximityRadius','proximityUseColliderBounds','proximityCollider','proximitySafetyGap','proximitySweepSamples']},
+    {title:'3D proximity sweep (opt-in)',fields:['enableProximityAvoidance','proximityRadius','proximityUseColliderBounds','proximityUseBoxObb','proximityCollider','proximitySafetyGap','proximitySweepSamples']},
     {title:'Junction routing & follower events',fields:['junctionMode','routeDestination','routeDestinationProgress','routeTransferPenalty','routeMaxWorldGap','routeCostSpace','stopOnRouteArrival','onRouteArrived','enableTrafficCapacity','trafficPriority','rerouteAroundTraffic','junctionOffsetBlendDistance','onBeginningReached','onEndReached']},
     {title:'Editor preview',fields:['previewInEditor','previewPositionMode','previewProgress','previewDistance']},
   ]},
@@ -183,7 +183,7 @@ function makeInspector(type){
             if(['headwayWorldGap','headwayBrakeDistance'].includes(field))return v('enableHeadway')===true;
             if(['laneCount','laneWidth'].includes(field))return v('enableLanePlacement')===true;
             if(['proximityRadius','proximitySafetyGap','proximitySweepSamples','proximityUseColliderBounds'].includes(field))return v('enableProximityAvoidance')===true;
-            if(field==='proximityCollider')return v('enableProximityAvoidance')===true&&v('proximityUseColliderBounds')===true;
+            if(['proximityCollider','proximityUseBoxObb'].includes(field))return v('enableProximityAvoidance')===true&&v('proximityUseColliderBounds')===true;
             if(field==='startProgress')return Number(v('startPositionMode'))!==1;
             if(field==='startDistance')return Number(v('startPositionMode'))===1;
             if(field==='previewProgress')return Number(v('previewPositionMode'))!==1;

@@ -56,6 +56,7 @@ declare module 'cc' {
     export class Collider extends Component {
         worldBounds:Readonly<{center:Vec3;halfExtents:Vec3}>;
     }
+    export class BoxCollider extends Collider {center:Vec3;size:Vec3;}
     export class EventHandler { static emitEvents(events:EventHandler[],...args:any[]):void; }
     export class Prefab {uuid:string}
     export function instantiate(p:Prefab):Node;

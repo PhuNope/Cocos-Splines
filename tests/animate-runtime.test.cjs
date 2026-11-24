@@ -27,6 +27,7 @@ try {
   const deco=(...args)=>args.length>1?undefined:noOp;
   class Component {constructor(){this.enabled=true;}getComponent(type){return this.node.getComponent(type);}}
   class Collider extends Component {constructor(){super();this.worldBounds={center:new Vec3(),halfExtents:new Vec3(.5,.5,.5)};}}
+  class BoxCollider extends Collider {constructor(){super();this.center=new Vec3();this.size=new Vec3(1,1,1);}}
   class Node {
     constructor(uuid){this.uuid=uuid;this.isValid=true;this.parent=null;this.worldPosition=new Vec3(4,0,0);this.worldRotation=new Quat();this.events=[];}
     emit(name,payload){this.events.push({name,payload});}
@@ -38,7 +39,7 @@ try {
   class EventHandler { static emitEvents(events,...payload){for(const e of events||[])if(typeof e==='function')e(...payload);else if(typeof e?.handler==='function')e.handler(...payload);handlers.push(...payload);}}
   const env={EDITOR_NOT_IN_PREVIEW:true};
   const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls},
-    Component,Collider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
+    Component,Collider,BoxCollider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
   const original=Module._load;
   Module._load=function(request,parent,isMain){if(request==='cc')return cc;if(request==='cc/env')return env;return original.call(this,request,parent,isMain);};
   try{
@@ -596,7 +597,33 @@ try {
     near(splineProximityRegistry.get(boundsFollower).radius,.25);
     assert.equal(splineProximityRegistry.get(boundsFollower).bounds,undefined,
       'Invalid Collider automatically restores legacy spherical narrowphase');
-    boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
+    // BoxCollider preview defaults off and uses AABB until opted in.
+     const rotatedBox=new BoxCollider();rotatedBox.node=boundsFollower.target;
+     const kObb=Math.SQRT1_2;
+     rotatedBox.size=new Vec3(4,.4,.4);
+     rotatedBox.node.worldMatrix={m00:kObb,m01:0,m02:kObb,m04:0,m05:1,m06:0,
+       m08:-kObb,m09:0,m10:kObb,m12:3,m13:0,m14:0};
+     rotatedBox.worldBounds={center:new Vec3(3,0,0),
+       halfExtents:new Vec3(2.2*kObb,.2,2.2*kObb)};
+     boundsFollower.proximityCollider=rotatedBox;
+     assert.equal(boundsFollower.proximityUseBoxObb,false);
+     boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     boundsFollower.proximityUseBoxObb=true;boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).obb);
+     assert(boundsFollower.proximityEffectiveRadius>=2);
+     rotatedBox.node.worldMatrix.m04=.4;
+     boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).obb);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     rotatedBox.node.worldMatrix.m04=0;
+     boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).obb);
+     boundsFollower.proximityUseBoxObb=false;boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).obb);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
+     assert.equal(splineProximityRegistry.get(boundsFollower),null);
     // Cross-spline follower at the same 3D intersection is a real blocker;
     // elevated bridge (Y=3) is not, even with identical XZ projection.
     const junctionBlocker=headFollower(.5);

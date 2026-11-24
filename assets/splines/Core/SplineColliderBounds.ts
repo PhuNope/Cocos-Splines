@@ -1,3 +1,4 @@
+import {validProximityObb,type ProximityObb} from './SplineProximityShapes';
 /** Engine-agnostic adapter for Cocos Creator 3.8 3D Collider.worldBounds.
  * Converts an axis-aligned WORLD bounding box into a conservative sphere
  * centered at the follower TARGET (not the possibly offset Collider center).
@@ -32,4 +33,45 @@ export function colliderProximityRadius(
     if(!finite(result)||result<=1e-6||result>100)
         return {radius:fallbackRadius,valid:false,source:'fallback'};
     return {radius:result,valid:true,source:'collider'};
+}
+
+/** Column-major affine world transform; independent of cc. */
+export interface ColliderBoxMatrix {
+    m00:number;m01:number;m02:number;m04:number;m05:number;m06:number;
+    m08:number;m09:number;m10:number;m12:number;m13:number;m14:number;
+}
+/** Preview world box adapter. Reject shear, singular/reflected transforms
+ * and backend bounds mismatches. Agreement is a sanity check, not proof of
+ * native shape fidelity. Callers retain the AABB fallback. */
+export function colliderWorldObb(center:ColliderBoundsPoint,size:ColliderBoundsPoint,
+    m:ColliderBoxMatrix,bounds:ColliderWorldBounds):ProximityObb|null {
+    const point=(p:ColliderBoundsPoint)=>!!p&&[p.x,p.y,p.z].every(finite);
+    if(!point(center)||!point(size)||!m||!bounds||!point(bounds.center)||
+       !point(bounds.halfExtents)||[size.x,size.y,size.z].some(v=>v<=0)||
+       [bounds.halfExtents.x,bounds.halfExtents.y,bounds.halfExtents.z].some(v=>v<0))return null;
+    const columns=[{x:m.m00,y:m.m01,z:m.m02},{x:m.m04,y:m.m05,z:m.m06},
+        {x:m.m08,y:m.m09,z:m.m10}];
+    if(!columns.every(point)||![m.m12,m.m13,m.m14].every(finite))return null;
+    const scale=columns.map(v=>Math.hypot(v.x,v.y,v.z));
+    if(scale.some(v=>!finite(v)||v<=1e-8))return null;
+    const axes=columns.map((v,i)=>({x:v.x/scale[i],y:v.y/scale[i],z:v.z/scale[i]})) as
+        [ColliderBoundsPoint,ColliderBoundsPoint,ColliderBoundsPoint];
+    const [a,b,c]=axes;
+    const det=a.x*(b.y*c.z-b.z*c.y)-a.y*(b.x*c.z-b.z*c.x)+a.z*(b.x*c.y-b.y*c.x);
+    if(Math.abs(det-1)>1e-8)return null;
+    const box:ProximityObb={axes,center:{
+        x:m.m12+m.m00*center.x+m.m04*center.y+m.m08*center.z,
+        y:m.m13+m.m01*center.x+m.m05*center.y+m.m09*center.z,
+        z:m.m14+m.m02*center.x+m.m06*center.y+m.m10*center.z,
+    },half:{x:size.x*scale[0]/2,y:size.y*scale[1]/2,z:size.z*scale[2]/2}};
+    if(!validProximityObb(box))return null;
+    const h=box.half;
+    if(Math.hypot(h.x,h.y,h.z)*(1+1e-7)>100)return null;
+    for(const k of ['x','y','z'] as const){
+        const extent=Math.abs(a[k])*h.x+Math.abs(b[k])*h.y+Math.abs(c[k])*h.z;
+        const tolerance=1e-5+1e-4*Math.max(extent,bounds.halfExtents[k]);
+        if(!finite(extent)||Math.abs(box.center[k]-bounds.center[k])>tolerance||
+           Math.abs(extent-bounds.halfExtents[k])>tolerance)return null;
+    }
+    return box;
 }
