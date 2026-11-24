@@ -60,6 +60,7 @@ async function run(){
   const original=Module._load;
   Module._load=function(name,parent,isMain){
    if(name==='cc')return cc;
+   if(name==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};
    if(name==='db://cocos-gizmos/RegisterGizmos')
     return {registerGizmos:()=>klass=>klass};
    if(name==='../Core/SplineContainer')return {SplineContainer:class SplineContainer{}};
