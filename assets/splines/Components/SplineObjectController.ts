@@ -537,12 +537,19 @@ export class SplineObjectController extends Component {
             const indices=planPopulation(shared,policy,trace?
                 (index,reason)=>finalRejections.push({index,reason}):undefined);
             accepted=new Set(indices);
-            if(trace)diagnostics=attributePlacementDiagnostics({
-                planned:candidates,projected,obstacle:viable,peers:shared,
-                accepted:indices,finalRejections,radii:candidateRadii,
-                defaultRadius:this.avoidObstacleColliders&&this.usePreciseObstacleShapes?
-                    this.placementFootprintRadius:0,
-            });
+            if(trace){
+                const previewRadii=this.avoidPeerPopulation?
+                    new Map([...candidateRadii].map(([index,radius])=>
+                        [index,Math.max(radius,this.sharedOccupancyRadius)])):candidateRadii;
+                const manual=this.avoidObstacleColliders&&this.usePreciseObstacleShapes&&
+                    !this.autoPrefabFootprint?this.placementFootprintRadius:0;
+                diagnostics=attributePlacementDiagnostics({
+                    planned:candidates,projected,obstacle:viable,peers:shared,
+                    accepted:indices,finalRejections,radii:previewRadii,
+                    defaultRadius:Math.max(manual,
+                        this.avoidPeerPopulation?this.sharedOccupancyRadius:0),
+                });
+            }
         }
         return {spline,variants,weights,start,closedLoop,span,steps,total,accepted,
             surfacePlan,diagnostics};
