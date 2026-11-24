@@ -8,7 +8,7 @@ async function run(){
  try{
   cp.execFileSync('tsc',['-p',root+'/tsconfig.runtime.json',
    '--noEmit','false','--outDir',temp],{stdio:'pipe'});
-  let index=0,failCreate=false;
+  let index=0,failCreate=false,frameBuilds=0;
   class Vec3{
    constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
    clone(){return new Vec3(this.x,this.y,this.z);}
@@ -68,6 +68,7 @@ async function run(){
    if(name==='./SplineContainer')return {SplineContainer:class SplineContainer{}};
    if(name==='../Core/SplineWorldFrames'){
     return {createWorldFrameField:(source,begin,end,steps)=>{
+     frameBuilds++;
      const frames=Array.from({length:steps+1},(_,i)=>({
       t:i/steps,
       position:{x:0,y:0,z:10*i/steps},
@@ -97,10 +98,12 @@ async function run(){
    const first=out.mesh;
    assert(first&&first.data.positions.length>0);
    assert.deepEqual(renderer.getGraphMetrics(),{computed:3,reused:0,nodes:3});
+   assert.equal(frameBuilds,1,'Initial stable World-frame sampling occurs once');
    const geomBefore=JSON.stringify(first.data);
    renderer.rebuild();
    assert.deepEqual(renderer.getGraphMetrics(),{computed:0,reused:3,nodes:3},
     'Stable graph and revision reuses all Core nodes');
+   assert.equal(frameBuilds,1,'Unchanged Geometry Graph reuses sample cache too');
    assert(first.destroyed,'Replacing an owned mesh destroys only the old generated mesh');
    assert.equal(JSON.stringify(out.mesh.data),geomBefore);
    const previous=out.mesh;
@@ -125,12 +128,14 @@ async function run(){
    assert(previous.destroyed,'Successful commit releases previous generated mesh');
    assert.equal(renderer.getGraphMetrics().reused,4,
     'Core DAG data remains valid when renderer allocation failed');
+   assert.equal(frameBuilds,1,'Graph parameter edits never resample unchanged spline');
    assert(out.mesh.data.positions.some((v,i)=>i%3===1&&v===1));
    const updated=out.mesh;
    revision++;
    renderer.rebuild();
    assert.deepEqual(renderer.getGraphMetrics(),{computed:4,reused:0,nodes:4},
     'Spline source revision invalidates the whole DAG');
+   assert.equal(frameBuilds,2,'Source revision forces stable World-frame resampling');
    const beforeLive=out.mesh;
    renderer.graphJson=JSON.stringify({
     version:1,nodes:[
