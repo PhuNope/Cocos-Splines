@@ -1,6 +1,7 @@
 'use strict';
 const NAME='cocos-splines';
 const {parseSvg,exportSvg}=require('./SplineSvgConverter');
+const {parseSplineJSON,serializeSplineJSON}=require('./SplineJsonInterop');
 const {installSplineExamples}=require('./SplineExampleInstaller');
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
@@ -913,6 +914,64 @@ const methods={
             if(!data?.ok)throw Error(data?.error||'Cannot resolve exact spline cubic controls.');
             return {ok:true,svg:exportSvg(data),knots:data.knots.length};
         }catch(error){return alertError('export-svg',error);}
+    },
+    /** Versioned geometry JSON import. Legacy Unity JSON importer is untouched.
+     * The original spline and its Prefab overrides are never modified. */
+    async importSplineJSON(input){
+        let created=null,committed=false;
+        try{
+            const data=parseSplineJSON(input);
+            await ensureClasses();
+            const current=selected()[0];
+            const active=current?await invokeScene('querySpline',current):null;
+            const parent=active?.found?active.parentUuid:current;
+            created=await makeNode(parent,'Imported JSON Spline');
+            await component(created,'Splines.SplineContainer');
+            const transform=data.localTransform;
+            const xyz=arr=>({x:arr[0],y:arr[1],z:arr[2]});
+            await setNodeSerialized(created,'position','cc.Vec3',xyz(transform.position));
+            await setNodeSerialized(created,'rotation','cc.Quat',{
+                x:transform.rotation[0],y:transform.rotation[1],
+                z:transform.rotation[2],w:transform.rotation[3],
+            });
+            await setNodeSerialized(created,'scale','cc.Vec3',xyz(transform.scale));
+            await property(created,0,'dimension',data.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',data.samplesPerCurve,'Integer',false);
+            for(let i=0;i<data.knots.length;i++){
+                const k=data.knots[i];
+                const id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(id,'Splines.SplineKnot');
+                await position(id,k.position);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',xyz(k.tangentIn),'cc.Vec3');
+                await setKnotValue(id,'tangentOut',xyz(k.tangentOut),'cc.Vec3');
+                await setKnotValue(id,'tangentsInKnotSpace',false,'Boolean');
+            }
+            await property(created,0,'closed',data.closed,'Boolean',false);
+            await property(created,0,'reversed',data.reversed,'Boolean',false);
+            await snapshot();
+            committed=true;
+            selectOnly(created);
+            try{await invokeScene('refreshPreview',created);}
+            catch(error){console.warn('[Cocos Splines] JSON preview refresh skipped:',error);}
+            return {ok:true,root:created,knots:data.knots.length,dimension:data.dimension,
+                closed:data.closed,reversed:data.reversed};
+        }catch(error){
+            if(created&&!committed){
+                try{await Editor.Message.request('scene','remove-node',{uuid:created,snapshot:false});}
+                catch(cleanupError){console.error('[Cocos Splines] JSON import cleanup failed:',cleanupError);}
+            }
+            return alertError('import-spline-json',error);
+        }
+    },
+    async exportSplineJSON(){
+        try{
+            const selected=await selectedSpline();
+            if(!selected?.found)throw Error(selected?.message||'Select a spline to export.');
+            const geometry=await invokeScene('queryJsonGeometry',selected.rootUuid);
+            if(!geometry?.ok)throw Error(geometry?.error||'Cannot read spline geometry.');
+            return {ok:true,json:serializeSplineJSON(geometry),knots:geometry.knots.length};
+        }catch(error){return alertError('export-spline-json',error);}
     },
     async createSpline(){
         try{
