@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle',surfaceWeldSeams:'.spl-surface-weld-seams'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',svg:'.spl-svg',svgImport:'.spl-svg-import',svgExport:'.spl-svg-export',svgScale:'.spl-svg-scale',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle',surfaceWeldSeams:'.spl-surface-weld-seams'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -65,6 +65,12 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <p class="spl-note">Dán JSON từ UnitySplineJsonExporter.cs. Tạo spline mới cùng cấp với spline đang chọn, không ghi đè knot cũ.</p>
     <textarea class="spl-json" rows="5" spellcheck="false" placeholder='{"closed":false,"knots":[...]}'></textarea>
     <div class="spl-btns"><button type="button" class="spl-btn spl-import">Import as new spline</button></div>
+  </details>
+  <details class="spl-section"><summary>SVG Path · Import / Export (2D)</summary>
+    <p class="spl-note">Paste a single SVG &lt;path&gt; or its d attribute. Import creates a NEW sibling XY2D spline; SVG Y-down becomes Cocos Y-up. Supports M/L/H/V/C/S/Q/T/Z (relative/absolute). No transforms, arcs, multiple paths or external SVG resources. Export uses resolved local Bézier curves from XY2D/XZ2D only; use Copy to transfer the text.</p>
+    <div class="spl-btns spl-batch-inputs"><label>Units per SVG pixel <input class="spl-svg-scale" type="number" min="0.000001" max="10000" step="0.1" value="1" aria-label="SVG import units per pixel"></label></div>
+    <textarea class="spl-svg" rows="6" spellcheck="false" placeholder='M 0 0 C 50 0 50 80 100 80'></textarea>
+    <div class="spl-btns"><button type="button" class="spl-btn spl-svg-import">Import SVG as new XY2D Spline</button><button type="button" class="spl-btn spl-svg-export">Export selected spline to SVG text</button></div>
   </details><div class="spl-status" role="status"></div>
 </div>`;
 const ownStyle=style+`
@@ -359,6 +365,18 @@ module.exports={
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
         this.$.reverse.addEventListener('click',async()=>{const r=await callEditor(this,'reverse-direction');if(r?.ok)await refresh(this);});
         this.$.import.addEventListener('click',async()=>{const r=await callEditor(this,'import-json',this.$.json.value);if(r?.ok){show(this,`Imported ${r.knots} knots.`);await refresh(this);}});
+        this.$.svgImport.addEventListener('click',async()=>{
+            const scale=Number(this.$.svgScale.value);
+            if(!Number.isFinite(scale)||scale<=0||scale>10000)
+                return show(this,'SVG units per pixel must be > 0 and <= 10000.',true);
+            const r=await callEditor(this,'import-svg',this.$.svg.value,scale);
+            if(r?.ok){show(this,'Imported '+r.knots+' SVG knots into a new XY2D spline.');await refresh(this);}
+        });
+        this.$.svgExport.addEventListener('click',async()=>{
+            const r=await callEditor(this,'export-svg');
+            if(r?.ok){this.$.svg.value=r.svg;this.$.svg.focus();this.$.svg.select();
+                show(this,'Exported '+r.knots+' knots. SVG text selected for copying.');}
+        });
         void refresh(this).then(()=>updateSurfaces());
     },
     update(dump){
