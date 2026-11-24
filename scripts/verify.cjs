@@ -12,6 +12,8 @@ checkRel('dist/contributions/inspector/Noise.js');
 checkRel('assets/splines/Core/SplineNoiseMath.ts');
 checkRel('assets/splines/Core/SplinePopulationMath.ts');
 checkRel('assets/splines/Core/SplinePopulationMath.ts.meta');
+checkRel('assets/splines/Core/SplinePopulationPlacementMath.ts');
+checkRel('assets/splines/Core/SplinePopulationPlacementMath.ts.meta');
 checkRel('assets/splines/Components/SplineNoise.ts');
 assert.deepEqual(pkg.contributions.messages['create-noise-layers']?.methods,['createNoiseLayers']);
 assert(pkg.contributions.menu.some(m=>m.message==='create-noise-layers'));
