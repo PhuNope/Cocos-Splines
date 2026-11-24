@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.8c2b2b1 Auto Prefab Footprint (V2 Preview)
+
+- Added opt-in automatic conservative prefab sphere footprint from serialized `Prefab.data` static MeshRenderer bounds / Box-, Sphere-, Capsule- and MeshCollider bounds across nested Node hierarchies. No temporary instantiate, changes to prefab assets or source Knot data.
+- Per-candidate radius accounts for selected weighted/uniform variant, prefab-local hierarchy, parent World affine stretch, scaleMultiplier, seeded random scale and Modifiers.scale; new precise filter overload accepts validated radius arrays.
+- Unsupported/unreadable geometry, huge/cyclic hierarchies and oversize radii reject Respawn before clearing previously generated instances. Manual radius remains default when disabled.
+- Added Inspector flag, offline Creator types, pure/controller regression and native Editor checklist. No automatic animated mesh bounds or multi-controller occupancy; no tag/release.
+
 # Unreleased — Phase 3.8c2b2a MeshCollider BVH Population (V2 Preview)
 
 - Added an opt-in static non-convex MeshCollider triangle BVH contact filter for SplineObjectController with manual sphere footprint, clearance and double-sided surface tests (face, edge and vertex), reusing SplineAnimate mesh reading and World transform adapters.
