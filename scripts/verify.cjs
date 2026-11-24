@@ -7,6 +7,9 @@ function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineSvgConverter.js');
+checkRel('dist/SplineJsonInterop.js');
+assert.deepEqual(pkg.contributions.messages['import-spline-json']?.methods,['importSplineJSON']);
+assert.deepEqual(pkg.contributions.messages['export-spline-json']?.methods,['exportSplineJSON']);
 assert.deepEqual(pkg.contributions.messages['import-svg']?.methods,['importSVG']);
 assert.deepEqual(pkg.contributions.messages['export-svg']?.methods,['exportSVG']);
 checkRel('dist/SplineJunctionJoinMath.js');
