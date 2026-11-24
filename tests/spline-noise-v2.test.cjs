@@ -30,6 +30,8 @@ try {
   assert.throws(()=>sampleNoiseLayers([bad],.2,12,false));
  assert.throws(()=>sampleNoiseLayers(Array(17).fill(layer()),.2,123,false));
  assert.throws(()=>sampleNoiseLayers([layer()],NaN,123,false));
+ assert.throws(()=>sampleNoiseLayers([layer()],.25,1.5,false));
+ assert.throws(()=>sampleNoiseLayers([layer()],.25,0x100000000,false));
 
  class Vec3 {
   constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
@@ -93,6 +95,12 @@ try {
   controller.noise=null;controller.respawn();
   assert.deepEqual(made.slice(-3).map(n=>n.worldPosition.x),[0,5,10],'Legacy unchanged');
   assert.equal(spline.getRevision(),123,'Spline geometry never mutated');
+  const prior=controller.spawnedRoot.children.slice();
+  controller.noise=noise;l.frequency=0;
+  assert.throws(()=>controller.respawn(),'Invalid noise must fail before clear()');
+  assert.deepEqual(controller.spawnedRoot.children,prior);
+  assert(prior.every(n=>n.isValid),'Previously spawned Nodes remain intact');
+  l.frequency=3;
  }finally{Module._load=original;}
  const pkg=require(root+'/package.json');
  assert(pkg.contributions.menu.some(m=>m.message==='create-noise-layers'));
