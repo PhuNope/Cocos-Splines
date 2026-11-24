@@ -69,6 +69,33 @@ function querySvgGeometry(rootUuid){
         return {ok:true,dimension:spline.dimension,closed:!!spline.closed,knots};
     }catch(error){return {ok:false,error:String(error?.message||error)};}
 }
+/** Read-only, versioned JSON export of the exact natural cubic geometry.
+ * Transforms are local to the root's parent, never absolute World coordinates. */
+function queryJsonGeometry(rootUuid){
+    const root=resolve(rootUuid);
+    const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
+    if(!root||containerOf(root)!==root||!spline||spline.enabled===false||
+       root.isValid===false||typeof spline.getNaturalResolvedKnots!=='function')
+        return {ok:false,error:'Select a valid SplineContainer with resolved knots.'};
+    try{
+        const before=typeof spline.getRevision==='function'?spline.getRevision():null;
+        const knots=spline.getNaturalResolvedKnots();
+        if(!Array.isArray(knots)||knots.length<2||knots.length>256)
+            throw Error('JSON export supports 2–256 resolved Knots.');
+        const vec=p=>({x:p.x,y:p.y,z:p.z});
+        const rot=root.rotation;
+        const localTransform={position:vec(root.position),
+            rotation:{x:rot.x,y:rot.y,z:rot.z,w:rot.w},
+            scale:vec(root.scale)};
+        const data=knots.map(k=>({position:vec(k.position),
+            tangentIn:vec(k.tangentIn),tangentOut:vec(k.tangentOut)}));
+        if(before!==null&&before!==spline.getRevision())
+            throw Error('Spline changed during JSON geometry export.');
+        return {ok:true,dimension:spline.dimension,closed:!!spline.closed,
+            reversed:!!spline.reversed,samplesPerCurve:spline.samplesPerCurve,
+            localTransform,knots:data};
+    }catch(error){return {ok:false,error:String(error?.message||error)};}
+}
 function queryKnotEditFrame(rootUuid){
     const root=resolve(rootUuid);
     if(!root||containerOf(root)!==root||
@@ -582,5 +609,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
