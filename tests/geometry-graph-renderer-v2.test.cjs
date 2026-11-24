@@ -12,6 +12,7 @@ async function run(){
   class Vec3{
    constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
    clone(){return new Vec3(this.x,this.y,this.z);}
+   length(){return Math.hypot(this.x,this.y,this.z);}
    set(x,y,z){if(x&&typeof x==='object')return this.set(x.x,x.y,x.z);
     Object.assign(this,{x,y,z});return this;}
    static add(o,a,b){return o.set(a.x+b.x,a.y+b.y,a.z+b.z);}
