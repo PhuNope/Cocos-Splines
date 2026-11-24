@@ -21,9 +21,14 @@ try{
   assert.deepEqual(planPopulation(all,policy()),[0,1,2,3,4],
     'Density 1 without rules retains all original indexes');
   assert.deepEqual(planPopulation(all,policy({density:0})),[]);
-  assert.deepEqual(planPopulation(all,policy({densityKeys:[
+  const gradient=planPopulation(all,policy({densityKeys:[
     {progress:0,density:0},{progress:1,density:1}
-  ]})),[4], 'Linear density mask: zero start and fully retained end');
+  ]}));
+  assert(!gradient.includes(0)&&gradient.includes(4),
+    'Linear density mask has zero start and fully retained end');
+  for(const item of all)
+    assert.equal(gradient.includes(item.index),
+      populationGate(1234,item.index)<item.progress || item.progress===1);
   const masked=planPopulation(all,policy({density:.5}));
   assert.deepEqual(masked,planPopulation(all,policy({density:.5})),
     'Fixed seed yields a fixed population');
@@ -40,12 +45,10 @@ try{
   assert.throws(()=>validatePopulationPolicy(policy({exclusions:[
     {startProgress:.75,endProgress:.25}]})),'Open splines cannot wrap exclusion');
   const center=(t)=>[{index:0,progress:t,position:{x:10,y:0,z:0}}];
-  for(const p of [0,.025,.25,.75,1]){
-    const keys=[{progress:.2,density:.1},{progress:.8,density:.9}];
-    assert.deepEqual(planPopulation(center(p),policy({closed:true,densityKeys:keys})),
-      planPopulation(center(p+1===1?p+1:p===1?0:p),policy({closed:true,densityKeys:keys})),
-      'Seam keys periodic when applicable');
-  }
+  const seamKeys=[{progress:.2,density:.1},{progress:.8,density:.9}];
+  assert.deepEqual(planPopulation(center(0),policy({closed:true,densityKeys:seamKeys})),
+    planPopulation(center(1),policy({closed:true,densityKeys:seamKeys})),
+    'Density masks must match at 0/1 on closed splines');
   assert.deepEqual(planPopulation([
     {index:0,progress:0,position:{x:0,y:0,z:0}},
     {index:1,progress:.25,position:{x:.4,y:0,z:0}},
