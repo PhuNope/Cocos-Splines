@@ -1,4 +1,4 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider } from 'cc';
+import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -6,6 +6,7 @@ import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
 import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
 import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
+import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 const {ccclass,property,menu}=_decorator;
 
 /** Serializable density control point along normalized arc progress. */
@@ -66,6 +67,22 @@ export class SplineObjectController extends Component {
     obstacleColliders:Collider[]=[];
     @property({min:0,max:10000,tooltip:'World-unit radius around each candidate center kept clear of assigned Collider World AABBs.'})
     obstacleClearance=0;
+    @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces. No source geometry changes.'})
+    conformToSurface=false;
+    @property({type:[Collider],tooltip:'1–64 explicit target 3D Colliders including TerrainCollider. Other raycast hits are ignored.'})
+    surfaceColliders:Collider[]=[];
+    @property({min:0,max:10000,tooltip:'Start vertical DOWN ray this many World units above the original candidate center.'})
+    surfaceRayHeight=10;
+    @property({min:0,max:10000,tooltip:'Continue downward this many World units below the original candidate center.'})
+    surfaceRayDepth=50;
+    @property({min:-1000,max:1000,tooltip:'Offset final point along the hit surface normal, in World units.'})
+    surfaceOffset=0;
+    @property({range:[0,1,0.01],slide:true,tooltip:'Minimum hit normal World Y. 0 accepts vertical faces, 1 only accepts horizontal upward faces.'})
+    minSurfaceNormalY=.3;
+    @property({tooltip:'If no valid target hit, discard candidate. Off = keep unprojected candidate.'})
+    skipMissingSurface=true;
+    @property({tooltip:'If Align To Spline is on, align prefab local Y to hit normal while keeping projected spline forward. Does not affect positional offsets.'})
+    alignToSurfaceNormal=false;
     @property alignToSpline=true;
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
@@ -95,6 +112,44 @@ export class SplineObjectController extends Component {
         }
         return boxes;
     }
+    /** Read only explicit, active surface targets; no Scene-wide auto-discovery. */
+    private surfaceTargets():Collider[]{
+        if(!Array.isArray(this.surfaceColliders)||this.surfaceColliders.length<1||
+           this.surfaceColliders.length>64)
+            throw Error('Surface Conform needs 1–64 explicitly assigned 3D Colliders.');
+        for(const collider of this.surfaceColliders)
+            if(!collider)throw Error('Surface Conform contains a missing Collider reference.');
+        const active=this.surfaceColliders.filter(c=>c.enabled!==false&&
+            c.node?.isValid!==false&&c.node?.activeInHierarchy!==false);
+        if(active.length===0)throw Error('Surface Conform has no active target Collider.');
+        return active;
+    }
+    /** PhysicsSystem raycastResults are transient engine-owned results; copy values
+     * inside each call, and permit only hits on the explicit target components. */
+    private conformCandidates(candidates:PopulationCandidate[]):PopulationSurfacePlacement[]{
+        const targets=this.surfaceTargets();
+        const settings:PopulationSurfaceSettings={
+            rayHeight:this.surfaceRayHeight,rayDepth:this.surfaceRayDepth,
+            surfaceOffset:this.surfaceOffset,minNormalY:this.minSurfaceNormalY,
+            skipMissing:this.skipMissingSurface,targetCount:targets.length,
+        };
+        if(!PhysicsSystem?.instance||typeof PhysicsSystem.instance.raycast!=='function'||
+           typeof geometry?.Ray!=='function')
+            throw Error('Surface Conform requires a working Physics 3D raycast in the active Scene.');
+        const physics=PhysicsSystem.instance;
+        return projectSurfaceCandidates(candidates,settings,(origin,length)=>{
+            const ray=new geometry.Ray(origin.x,origin.y,origin.z,0,-1,0);
+            if(!physics.raycast(ray,0xffffffff,length,false))return [];
+            const results=physics.raycastResults;
+            if(!Array.isArray(results))throw Error('Physics raycastResults must be an array.');
+            return results.map(hit=>{
+                const index=targets.indexOf(hit.collider);
+                const p=hit.hitPoint,n=hit.hitNormal;
+                return {targetIndex:index,distance:hit.distance,
+                    point:{x:p?.x,y:p?.y,z:p?.z},normal:{x:n?.x,y:n?.y,z:n?.z}};
+            });
+        });
+    }
     private signature():string{
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),
@@ -111,6 +166,15 @@ export class SplineObjectController extends Component {
                     if(c.enabled===false||c.node?.activeInHierarchy===false)return [c.node?.uuid,false];
                     const bounds=c.worldBounds;
                     return [c.node?.uuid,true,bounds?.center,bounds?.halfExtents];
+                }),
+            ]:null,this.conformToSurface,this.conformToSurface?[
+                this.surfaceRayHeight,this.surfaceRayDepth,this.surfaceOffset,
+                this.minSurfaceNormalY,this.skipMissingSurface,this.alignToSurfaceNormal,
+                this.surfaceColliders.map(c=>{
+                    if(!c)return null;
+                    const bounds=c.worldBounds;
+                    return [c.node?.uuid,c.enabled,c.node?.activeInHierarchy,
+                        c.node?.worldMatrix,bounds?.center,bounds?.halfExtents];
                 }),
             ]:null,this.alignToSpline,this.includeEndPoint]);
     }
@@ -152,7 +216,8 @@ export class SplineObjectController extends Component {
         // Nodes. Strict policy errors cannot destroy a valid existing population.
         // The legacy (opt-out) path below is otherwise unchanged.
         let accepted:Set<number>|null=null;
-        if(this.enablePopulationRules||this.avoidObstacleColliders){
+        const surfacePlan=new Map<number,PopulationSurfacePlacement>();
+        if(this.enablePopulationRules||this.avoidObstacleColliders||this.conformToSurface){
             const policy:PopulationPolicy=this.enablePopulationRules?{
                 seed:this.seed,closed:spline.closed===true,density:this.density,
                 densityKeys:this.densityKeys,exclusions:this.exclusions,
@@ -178,11 +243,15 @@ export class SplineObjectController extends Component {
                 const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);
                 candidates.push({index:i,progress,position:{x:pos.x,y:pos.y,z:pos.z}});
             }
+            // Surface projection happens before AABB and World-spacing filters.
+            // The projected position is also reused at commit, never recomputed.
+            const projected=this.conformToSurface?this.conformCandidates(candidates):candidates;
+            if(this.conformToSurface)for(const hit of projected as PopulationSurfacePlacement[])
+                surfacePlan.set(hit.index,hit);
             // Exclude occupied obstacle centers BEFORE pairwise spacing.
-            // Otherwise a rejected candidate could reserve space against a valid one.
             const viable=this.avoidObstacleColliders?
-                filterObstacleCandidates(candidates,this.obstacleBounds(),this.obstacleClearance):
-                candidates;
+                filterObstacleCandidates(projected,this.obstacleBounds(),this.obstacleClearance):
+                projected;
             accepted=new Set(planPopulation(viable,policy));
         }
         this.clear();
@@ -206,8 +275,20 @@ export class SplineObjectController extends Component {
                 this.offset.y+(modifier?.offset.y||0)+(noise?.y||0)+jitter(2,this.randomPosition.y),
                 this.offset.z+(modifier?.offset.z||0)+(noise?.z||0)+jitter(3,this.randomPosition.z));
             Vec3.transformQuat(delta,delta,frame);
-            const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);node.setWorldPosition(pos);
+            const planned=surfacePlan.get(i);
+            const pos=spline.evaluateWorldPosition(progress);Vec3.add(pos,pos,delta);
+            if(planned)pos.set(planned.position.x,planned.position.y,planned.position.z);
+            node.setWorldPosition(pos);
             if(this.alignToSpline){
+                if(this.conformToSurface&&this.alignToSurfaceNormal&&planned?.surfaceNormal){
+                    const forward=new Vec3();
+                    Vec3.transformQuat(forward,new Vec3(0,0,1),frame);
+                    const axes=surfaceBasis(planned.surfaceNormal,forward);
+                    Quat.fromAxes(frame,
+                        new Vec3(axes.right.x,axes.right.y,axes.right.z),
+                        new Vec3(axes.up.x,axes.up.y,axes.up.z),
+                        new Vec3(axes.forward.x,axes.forward.y,axes.forward.z));
+                }
                 const r=Quat.fromEuler(new Quat(),jitter(4,this.randomRotation.x),jitter(5,this.randomRotation.y),
                     jitter(6,this.randomRotation.z)+(modifier?.roll||0));
                 Quat.multiply(frame,frame,r);node.setWorldRotation(frame);
