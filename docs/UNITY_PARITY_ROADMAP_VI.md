@@ -138,7 +138,7 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Barycentric smoothing normals tại các đỉnh **chung chỉ số** theo trọng số diện tích, có crease threshold 0–89 độ.
 - [x] Mặc định tắt; tránh thay đổi path Surface Snap cũ, không tác động vị trí hit.
 - [x] Unit tests cho ranh giới tam giác, crease=0, hard seam, mesh nonuniform scale, opt-in và Scene contract.
-- [ ] Làm mượt qua UV split (cần mesh topology welding option riêng); native Cocos Creator 3.8.8 acceptance vẫn chờ test.
+- [x] Opt-in seam-position adjacency welding (1e-5 World units) for UV-split MeshRenderer vertices; keeps positions, mesh indices and crease guard unchanged. Native Creator 3.8.8 acceptance pending.
 
 ### Phase 2.6 — Collider & Terrain support (preview)
 
