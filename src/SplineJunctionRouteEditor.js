@@ -38,8 +38,9 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
    throw Error('Invalid multi-Junction route Join plan.');
  if(routeMode==='partial'){
    for(const step of plan.chain){
-     if(![0,1].every(side=>Number.isFinite(step.fromProgress)&&
-          Number.isFinite(step.toProgress))||
+     if(!Number.isFinite(step.fromProgress)||
+        !Number.isFinite(step.toProgress)||
+        step.progress!==step.fromProgress||
         step.fromProgress<0||step.fromProgress>1||
         step.toProgress<0||step.toProgress>1||
         Math.abs(step.fromProgress-step.toProgress)<1e-5)
@@ -55,7 +56,8 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
    const seam=plan.seams[i],step=plan.chain[i+1];
    if(!step||typeof step.junctionId!=='string'||!step.junctionId||
       !Number.isInteger(step.linkIndex)||step.linkIndex<0||
-      ![0,1].includes(step.progress)||
+      (routeMode==='full'?![0,1].includes(step.progress):
+         (!Number.isFinite(step.progress)||step.progress<0||step.progress>1))||
       !Number.isInteger(seam.atKnot)||seam.atKnot<=lastAt||
       seam.atKnot<=0||seam.atKnot>=plan.count-1||
       seam.junctionId!==step.junctionId||seam.seamMode!==seamMode||
