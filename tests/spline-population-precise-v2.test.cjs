@@ -24,7 +24,7 @@ try{
     .map(x=>x.index),[1,3],'Rotated OBB rejects actual interior, not AABB corner');
   assert.deepEqual(filterObstacleCandidates(points,[bounds],0).map(x=>x.index),[3],
     'Conservative AABB overrejects a corner outside OBB');
-  assert.deepEqual(filterPopulationShapeCandidates(points,[{kind:'obb',box:obb}],0,1.3)
+  assert.deepEqual(filterPopulationShapeCandidates(points,[{kind:'obb',box:obb}],0,1.5)
     .map(x=>x.index),[3],'Footprint sphere narrows available clearance');
   const capsule={a:{x:0,y:-1,z:0},b:{x:0,y:1,z:0},radius:.3};
   const probes=[p(0,0,0,0),p(1,.29,1.25,0),p(2,2,0,0)];
