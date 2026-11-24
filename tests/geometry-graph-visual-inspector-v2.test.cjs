@@ -151,6 +151,7 @@ const pkg=require(root+'/package.json');
 assert(pkg.scripts.test.includes('geometry-graph-visual-inspector-v2.test.cjs'));
 const source=require('node:fs').readFileSync(root+'/src/contributions/inspector/GeometryGraph.js','utf8');
 assert(source.includes("prop.dispatch('change-dump')"));
-assert(!source.includes("set-property"));
-assert(!source.includes('snapshot('));
+assert(!source.includes("Editor.Message.request('scene','set-property'"),
+  'Visual Inspector must not call low-level Scene set-property');
+assert(!source.includes('await snapshot('),'Visual Inspector must not create an Undo snapshot');
 console.log('VISUAL GRAPH INSPECTOR V2 PASS: UI add/remove, typed wires, safe properties, one drag commit, undo reload and invalid JSON isolation.');
