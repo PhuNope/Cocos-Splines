@@ -42,6 +42,7 @@ These scripts demonstrate serialized-component workflows where you provide refer
 - **MeshDeform/MeshDeformSetup.ts** — configure a readable, subdivided imported Mesh; supports Stretch/Repeat.
 - **Traffic/TrafficSignalsSetup.ts** — bind a 3-link Junction to two non-overlapping traffic phases.
 - **Population/PrefabSpawningSetup.ts** — bind actual project .prefab assets to a seeded, runtime-only spline population.
+- **GeometryGraph/BasicRibbonGraph.json** — complete typed v1 graph connecting Spline → Offset → Width → Ribbon → Output. Add `Splines.SplineGeometryGraphRenderer` to a Node with MeshRenderer, assign an existing SplineContainer, copy this JSON into `Graph Json`, then press **Rebuild Graph**. The file is a text sample, not a graph asset editor or auto-instantiated Scene.
 
 The Gallery's MeshDeform and PrefabSpawning modes use **temporary runtime-only assets**. For production-like meshes and prefab distribution, assign your imported mesh and authored prefab assets with the new setup scripts. Advanced cases (Collider backends, Noise and full Traffic validation) still require Editor and backend checks. Read the extension documentation for full configuration.
 
