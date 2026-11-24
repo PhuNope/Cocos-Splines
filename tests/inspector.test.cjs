@@ -99,12 +99,12 @@ assert.equal(routePanel.$.r_proximityUseBoxObb.hidden,false);
 assert.equal(routePanel.$.r_proximityUseCapsule.hidden,false);
 assert.equal(routePanel.$.r_proximityUseMeshCollider.hidden,false);
 animate.update.call(routePanel,{value:{enableProximityAvoidance:{value:true},
-  proximityPredictAgents:{value:false},proximityPredictionHorizon:{value:.25}}});
+  proximityPredictAgents:{value:false},proximityPredictionHorizon:{value:.25},proximityPredictAcceleration:{value:false},proximityPredictRotationEnvelope:{value:false}}});
 assert.equal(routePanel.$.r_proximityPredictionHorizon.hidden,true);
 assert.equal(routePanel.$.r_proximityPredictAcceleration.hidden,true);
 assert.equal(routePanel.$.r_proximityPredictRotationEnvelope.hidden,true);
 animate.update.call(routePanel,{value:{enableProximityAvoidance:{value:true},
-  proximityPredictAgents:{value:true},proximityPredictionHorizon:{value:.25}}});
+  proximityPredictAgents:{value:true},proximityPredictionHorizon:{value:.25},proximityPredictAcceleration:{value:false},proximityPredictRotationEnvelope:{value:false}}});
 assert.equal(routePanel.$.r_proximityPredictionHorizon.hidden,false);
 assert.equal(routePanel.$.r_proximityPredictAcceleration.hidden,false);
 assert.equal(routePanel.$.r_proximityPredictRotationEnvelope.hidden,false);
