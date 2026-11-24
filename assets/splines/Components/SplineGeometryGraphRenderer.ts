@@ -43,6 +43,8 @@ export class SplineGeometryGraphRenderer extends Component {
     private _revision='';
     private _lastAttempt='';
     private _runner=new GeometryGraphRunner();
+    private _frameRevision='';
+    private _frameCache:RoadFrame[]|null=null;
     public getMeshGizmoGeometry():MeshGizmoLines|null{return this._gizmo;}
     public getGraphMetrics():{computed:number;reused:number;nodes:number}{
         return this._runner.metrics;
@@ -107,35 +109,41 @@ export class SplineGeometryGraphRenderer extends Component {
         if(!source||source.count<2||source.segmentCount<1||!renderer)
             throw Error('Geometry Graph requires an active SplineContainer (2+ knots) and MeshRenderer.');
         const plan=parseGeometryGraph(this.graphJson);
-        const samples=Math.max(2,Math.min(64,Math.floor(this.samplesPerCurve)));
-        const count=Math.min(1024,Math.max(2,source.segmentCount*samples));
-        const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
-        // Use Road's stable World frames and convert POSITION + BASIS to this
-        // renderer's local space before passing any data to the pure graph.
-        const worldFrames=createWorldFrameField(source,0,1,count);
-        const basisToLocal=(world:Vec3,v:Vec3,local:Vec3):Vec3=>{
-            const tip=Vec3.add(new Vec3(),world,v);
-            Vec3.transformMat4(tip,tip,inverse);
-            return Vec3.subtract(new Vec3(),tip,local);
-        };
-        const frames:RoadFrame[]=[];
-        let previous:Vec3|null=null,distance=0;
-        for(const f of worldFrames.frames){
-            const world=new Vec3(f.position.x,f.position.y,f.position.z);
-            const local=Vec3.transformMat4(new Vec3(),world,inverse);
-            if(previous)distance+=Vec3.subtract(new Vec3(),world,previous).length();
-            previous=world;
-            frames.push({
-                position:{x:local.x,y:local.y,z:local.z},
-                forward:basisToLocal(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local),
-                right:basisToLocal(world,new Vec3(f.right.x,f.right.y,f.right.z),local),
-                up:basisToLocal(world,new Vec3(f.up.x,f.up.y,f.up.z),local),
-                distance,
-            });
+        const frameRevision=this.frameSignature();
+        let frames:RoadFrame[];
+        if(this._frameCache&&this._frameRevision===frameRevision){
+            frames=this._frameCache;
+        }else{
+            const samples=Math.max(2,Math.min(64,Math.floor(this.samplesPerCurve)));
+            const count=Math.min(1024,Math.max(2,source.segmentCount*samples));
+            const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
+            // Use Road's stable World frames and convert POSITION + BASIS to this
+            // renderer's local space before passing any data to the pure graph.
+            const worldFrames=createWorldFrameField(source,0,1,count);
+            const basisToLocal=(world:Vec3,v:Vec3,local:Vec3):Vec3=>{
+                const tip=Vec3.add(new Vec3(),world,v);
+                Vec3.transformMat4(tip,tip,inverse);
+                return Vec3.subtract(new Vec3(),tip,local);
+            };
+            const frames:RoadFrame[]=[];
+            let previous:Vec3|null=null,distance=0;
+            for(const f of worldFrames.frames){
+                const world=new Vec3(f.position.x,f.position.y,f.position.z);
+                const local=Vec3.transformMat4(new Vec3(),world,inverse);
+                if(previous)distance+=Vec3.subtract(new Vec3(),world,previous).length();
+                previous=world;
+                frames.push({
+                    position:{x:local.x,y:local.y,z:local.z},
+                    forward:basisToLocal(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local),
+                    right:basisToLocal(world,new Vec3(f.right.x,f.right.y,f.right.z),local),
+                    up:basisToLocal(world,new Vec3(f.up.x,f.up.y,f.up.z),local),
+                    distance,
+                });
+            }
         }
         const signature=this.signature();
         const geometry=this._runner.evaluate(plan,{
-            frames,closed:source.closed,revision:this.frameSignature(),
+            frames,closed:source.closed,revision:frameRevision,
         });
         const wire=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({
@@ -148,6 +156,7 @@ export class SplineGeometryGraphRenderer extends Component {
         try{renderer.mesh=mesh;}
         catch(error){mesh.destroy();throw error;}
         this._mesh=mesh;this._gizmo=wire;
+        this._frameCache=frames;this._frameRevision=frameRevision;
         this._revision=signature;this._lastAttempt='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
         this.syncMaterial(renderer);
@@ -159,6 +168,6 @@ export class SplineGeometryGraphRenderer extends Component {
         if(renderer&&this._fallback&&renderer.getSharedMaterial(0)===this._fallback)
             renderer.setSharedMaterial(null,0);
         this._fallback?.destroy();this._fallback=null;this._boundMaterial=null;
-        this._runner.clear();
+        this._runner.clear();this._frameCache=null;this._frameRevision='';
     }
 }
