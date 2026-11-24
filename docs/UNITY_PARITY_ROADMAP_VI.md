@@ -136,6 +136,15 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.8c2a: opt-in downward raycast surface/terrain projection on explicitly assigned 3D Physics Colliders, normal-aligned prefab orientation and preflight-safe population planning. Native Creator 3.8.8 still pending.
 - [ ] Phase 3.8c2b: accurate OBB/Capsule/Mesh collision avoidance, prefab geometry bounds, multi-controller occupancy and advanced weighting UI.
 
+### Phase 3.8c2a — Surface / Terrain Conform for Prefab Population (v2 preview)
+
+- [x] Pure `SplinePopulationSurfaceMath`: validated directional hit projections, normal threshold, normal offset, missing-hit policy, closest explicit valid hit and orthonormal frame basis.
+- [x] Optional ObjectController `conformToSurface` with 1–64 explicit active Physics 3D Collider/TerrainCollider targets, World -Y ray Height/Depth, slope threshold, normal offset, optional local-Up surface orientation and missing-hit skip/keep.
+- [x] Projection of fully offset/jittered World candidates **before** obstacle, density and World-spacing filters; final projected positions reused at spawn, with no second raycast. Invalid Physics/raycast settings fail before clearing old objects.
+- [x] Inspector conditional controls, offline Physics type stubs, runtime/pure regression tests registered in v2 CI, setup and Editor acceptance checklist.
+- [ ] Native Cocos Creator 3.8.8 Physics Scene TerrainCollider/Prefab/Undo/Redo acceptance.
+- [ ] Follow-ups: exact OBB/Capsule/Mesh overlap, Collider2D/terrain-native projection and performance batching/visual preview.
+
 ### Phase 4 — Procedural geometry
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
