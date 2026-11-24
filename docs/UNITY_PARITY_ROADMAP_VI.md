@@ -136,7 +136,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.8c2a: opt-in downward raycast surface/terrain projection on explicitly assigned 3D Physics Colliders, normal-aligned prefab orientation and preflight-safe population planning. Native Creator 3.8.8 still pending.
 - [x] Phase 3.8c2b1: opt-in shape-aware population clearance for supported BoxCollider World OBB / CapsuleCollider + manually configured prefab footprint sphere radius; unsupported geometry conservatively falls back to AABB.
 - [x] Phase 3.8c2b2a: opt-in static readable non-convex MeshCollider triangle BVH for double-sided sphere footprint surface contact, with conservative AABB fallback and bounded geometry/cache.
-- [ ] Phase 3.8c2b2b: automatic prefab geometry bounds (instead of manual sphere), closed-solid occupancy and multi-controller population avoidance.
+- [x] Phase 3.8c2b2b1: opt-in conservative static Prefab.data hierarchy spherical footprint from MeshRenderer and supported Colliders with scale-aware per-candidate narrowphase; fails before clear on missing bounds.
+- [ ] Phase 3.8c2b2b2: explicit cross-controller occupancy, animated geometry/closed-solid occupancy, per-shape placement and candidate debug Gizmos.
 
 ### Phase 3.8c2a — Surface / Terrain Conform for Prefab Population (v2 preview)
 
