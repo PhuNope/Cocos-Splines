@@ -77,6 +77,8 @@ async function main(){
     Selection:{getSelected:()=>selected?[selected]:[]},
     Message:{request:async (...args)=>{
      calls.push(args);
+     if(args[0]==='cocos-splines'&&args[1]==='query-placement-summary')
+      return extension.methods.queryPlacementSummary();
      if(args[0]==='scene'&&args[1]==='execute-scene-script'){
       const payload=args[2];
       assert.equal(payload.name,'cocos-splines');
@@ -119,12 +121,12 @@ async function main(){
    assert.match(ui.$.placementSummary.textContent,/Spacing: 1/);
    assert.match(ui.$.placementSummary.textContent,/index 6/);
    assert.equal(ui.$.placementAnalyze.disabled,false);
-   assert.equal(calls.length,2);
+   assert.equal(calls.length,3,'Inspector click uses plugin and read-only Scene query');
    component.summarizePlacement=()=>{throw Error('invalid density');};
    await ui.$.placementAnalyze.events.click();
    assert.match(ui.$.placementSummary.textContent,/invalid density/);
    assert.equal(ui.$.placementAnalyze.disabled,false);
-   assert.equal(calls.length,3);
+   assert.equal(calls.length,5,'Second click repeats plugin and Scene query without snapshot');
    const {formatPlacementSummary}=require(root+'/dist/contributions/inspector/common.js');
    assert.match(formatPlacementSummary(empty),/Total: 0/);
    assert.throws(()=>formatPlacementSummary({...stats,rejected:99}));
