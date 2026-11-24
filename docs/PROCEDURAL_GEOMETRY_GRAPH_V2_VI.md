@@ -41,6 +41,10 @@ Hệ thống gồm:
 
 **Lưu ý**: chiều dài UV tính bằng Cocos/World units trên sample path. `Offset` tính theo stable local basis đã chuyển từ frame World vào output node local space. Taper ribbon hỗ trợ `endWidth > 0`, `cornerMode=0` giữ mặt ribbon legacy, `cornerMode=1` dùng JoinAndTrim từ Road. Ribbon chia sẻ tessellator với SplineRoad, không tự viết bộ sinh topology thứ hai.
 
+## Install Examples
+
+Menu **Extension → Cocos Splines → Install Examples** sẽ tạo thêm `assets/CocosSplinesExamples/GeometryGraph/BasicRibbonGraph.json` trong project (nếu chưa có). Đây là dữ liệu mẫu độc lập, **không tự tạo Scene hay sửa prefab**. Mở file, sao chép nội dung vào thuộc tính `Graph Json` của SplineGeometryGraphRenderer rồi nhấn **Rebuild Graph**. Installer không ghi đè file đã chỉnh sửa và không sao chép UUID .meta từ extension.
+
 ## Danh mục node V1
 
 | Node type | Input | Output | Cấu hình |
