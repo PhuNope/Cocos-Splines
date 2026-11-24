@@ -25,6 +25,11 @@ export class SplineGeometryGraphRenderer extends Component {
     spline:SplineContainer|null=null;
     @property({multiline:true,tooltip:'Versioned typed node graph JSON v1. Supported: spline, offset, width, ribbon, output.'})
     graphJson=DEFAULT_GEOMETRY_GRAPH;
+    /** Editor canvas coordinates only. Kept separate from graphJson so dragging
+     * cards never invalidates the geometry/frame cache. Serialized with Scene.
+     */
+    @property({tooltip:'Visual Graph layout only (positions JSON); does not change generated geometry.'})
+    graphLayoutJson='{}';
     @property({min:2,max:64,step:1,tooltip:'Sample resolution per Bezier segment. Full graph is evaluated on Rebuild.'})
     samplesPerCurve=12;
     @property({type:Material,tooltip:'Optional shared material; otherwise respects a manually assigned MeshRenderer material.'})
