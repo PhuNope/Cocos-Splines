@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Procedural Geometry Graph — Phase 4.1 (v2 preview)
+
+**SplineGeometryGraphRenderer** adds a bounded, typed spline-to-mesh DAG on a dedicated MeshRenderer Node. The V1 JSON graph supports `spline` (stable path frames) → optional `offset` / `width` nodes → `ribbon` → `output`, with strict path/mesh ports, dependency ordering, cycle detection and per-node dirty propagation/cache. Ribbon geometry reuses **SplineRoadMath** tessellation, UV, normals and caps; graph execution does not modify Knot, Spline, Road or original Mesh assets. The Inspector provides a JSON editor and **Rebuild Graph** button; an optional Cocos-Gizmos v3 selected wireframe previews generated geometry. Invalid graph/rebuild failure keeps the prior owned mesh. This is **the typed foundation**, not a visual drag-and-drop node canvas yet. See [Geometry Graph V2 guide](docs/PROCEDURAL_GEOMETRY_GRAPH_V2_VI.md).
+
 ### Placement Statistics — exact Inspector reason counts (v2 preview)
 
 SplineObjectController Inspector now includes an on-demand **Analyze Placement** button. It returns exact totals, accepted/rejected counts and the seven reason categories from the same non-mutating preview used by Respawn, plus up to three rejected candidate indexes for each category. The full plan (up to 2048 candidates) is counted even if Debug Gizmos draws only 8–256 markers. Analyze does not spawn, clear, mutate Scene objects or make an Undo snapshot; the Inspector displays an explicit **manual snapshot** that you can refresh after edits. See [Placement Statistics guide](docs/POPULATION_PLACEMENT_SUMMARY_V2_VI.md).
