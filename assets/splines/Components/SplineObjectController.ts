@@ -73,9 +73,10 @@ export class SplineObjectController extends Component {
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),this.parentNode?.uuid,
             this.modifiers?.getRevision(),this.noise?.node.uuid,this.noise?.getRevision(),this.method,this.count,this.spacing,this.startProgress,this.endProgress,this.offset,
             this.randomPosition,this.randomRotation,this.randomScale,this.scaleMultiplier,this.seed,
-            this.enablePopulationRules,this.density,this.densityKeys.map(k=>[k.progress,k.density]),
-            this.exclusions.map(x=>[x.startProgress,x.endProgress]),this.minWorldSpacing,
-            this.alignToSpline,this.includeEndPoint]);
+            this.enablePopulationRules,this.enablePopulationRules?[
+                this.density,this.densityKeys.map(k=>[k.progress,k.density]),
+                this.exclusions.map(x=>[x.startProgress,x.endProgress]),this.minWorldSpacing,
+            ]:null,this.alignToSpline,this.includeEndPoint]);
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
     update():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned&&this.rebuildOnChange&&this.signature()!==this._signature)this.respawn();}
