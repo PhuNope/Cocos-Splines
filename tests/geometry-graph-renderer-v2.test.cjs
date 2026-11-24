@@ -149,6 +149,40 @@ async function run(){
    assert(beforeLive.destroyed);
    renderer.showMeshGizmos=true;
    assert(renderer.getMeshGizmoGeometry()?.edgePairs.length>0);
+   // Shared native Cocos JsonAsset may be referenced by many renderers;
+   // content changes must invalidate graph revision without resampling spline.
+   const shared={name:'RibbonPreset',json:{
+     version:1,nodes:[{id:'source',type:'spline'},
+      {id:'ribbon',type:'ribbon',input:'source',width:6},
+      {id:'output',type:'output',input:'ribbon'}],output:'output',
+   }};
+   const localSaved=renderer.graphJson;
+   renderer.graphAsset=shared;renderer.useGraphAsset=true;
+   assert.equal(JSON.parse(renderer.activeGraphJson()).nodes[1].width,6);
+   const beforeShared=out.mesh;
+   const framesBefore=frameBuilds;
+   renderer.rebuild();
+   assert.notEqual(out.mesh,beforeShared);
+   assert(beforeShared.destroyed,'Shared mode reuses output mesh ownership protocol');
+   assert.equal(frameBuilds,framesBefore,'JsonAsset edit cannot resample unchanged spline');
+   const sharedMesh=out.mesh;
+   shared.json.nodes[1].width=9;
+   renderer.update();
+   assert.notEqual(out.mesh,sharedMesh,'Editing shared JsonAsset content must invalidate graph revision');
+   assert.equal(frameBuilds,framesBefore);
+   const validShared=out.mesh;
+   shared.json.nodes[1].width=-10;
+   assert.throws(()=>renderer.rebuild(),/width/);
+   assert.equal(out.mesh,validShared,'Invalid shared graph preserves previous Mesh');
+   assert.equal(renderer.graphJson,localSaved,'Shared edit cannot overwrite local graph JSON');
+   shared.json.nodes[1].width=6;
+   renderer.graphAsset=null;
+   assert.throws(()=>renderer.rebuild(),/assigned JsonAsset/);
+   assert.equal(out.mesh,validShared,'Missing asset must not destroy generated mesh');
+   renderer.useGraphAsset=false;
+   assert.equal(renderer.graphJson,localSaved);
+   renderer.rebuild();
+   assert.notEqual(out.mesh,validShared,'Return to local override restores local graph');
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
