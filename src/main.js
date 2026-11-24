@@ -850,6 +850,13 @@ const methods={
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
     },
+    async queryGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer.');
+            return await invokeScene('queryGeometryGraphAsset',uuid);
+        }catch(error){return alertError('query-geometry-graph-asset',error);}
+    },
     /** Export the active graph (shared JsonAsset or local override) to a new
      * JSON file. Saving under project Assets lets Creator import a native
      * JsonAsset automatically. Exclusive writes protect existing user files.
