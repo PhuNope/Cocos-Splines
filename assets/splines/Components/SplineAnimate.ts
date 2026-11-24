@@ -133,6 +133,10 @@ export class SplineAnimate extends Component {
     proximitySafetyGap=.2;
     @property({min:2,max:64,step:1,tooltip:'Samples per proximity movement sweep (2..64). Default 16. Higher values improve detection on sharp bends at extra CPU cost; shared spatial broadphase limits candidates.'})
     proximitySweepSamples=16;
+    @property({tooltip:'Preview opt-in: predict other opted-in followers from their measured WORLD linear velocity. Static obstacle behavior is unchanged by default. Not a physics solver.'})
+    proximityPredictAgents=false;
+    @property({min:.01,max:1,tooltip:'Maximum future prediction horizon (seconds, 0.01–1). Actual sweep time and speed are bounded. Default 0.25 s.'})
+    proximityPredictionHorizon=.25;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
@@ -414,13 +418,14 @@ export class SplineAnimate extends Component {
     onDisable():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
     onDestroy():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
-    public pause():void {this.playing=false;}
+    public pause():void {this.playing=false;splineProximityRegistry.clearVelocity(this);}
     public restart():void {
         this.clearTraffic();
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);this.syncSpatialTraffic();
+        splineProximityRegistry.clearVelocity(this);
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncSpatialTraffic();}
+    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncSpatialTraffic();splineProximityRegistry.clearVelocity(this);}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -498,6 +503,7 @@ export class SplineAnimate extends Component {
                     (this.target||this.node).worldPosition:position;
                 splineProximityRegistry.set(this,origin,collider.radius,collider.bounds);
             }
+            if(!this.proximityPredictAgents)splineProximityRegistry.clearVelocity(this);
         }
     }
     private clearSpatialTraffic():void{
@@ -673,6 +679,7 @@ export class SplineAnimate extends Component {
         this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);this.syncSpatialTraffic();
+        splineProximityRegistry.clearVelocity(this);
     }
     /** Switch spline at an absolute distance, not at a normalized progress. */
     public setCurrentSplineAtDistance(spline:SplineContainer,distance:number,direction:Direction=1):void {
@@ -704,6 +711,7 @@ export class SplineAnimate extends Component {
             if(spline)this.deliverEvents(spline,previous,next,dir);
         }
         this.apply(this._raw);this.syncSpatialTraffic();
+        splineProximityRegistry.clearVelocity(this);
     }
     private previewKey(spline:SplineContainer|null):string {
         const m=spline?.node.worldMatrix;
@@ -724,9 +732,28 @@ export class SplineAnimate extends Component {
         }
         this.syncSpatialTraffic();
         const spline=this.source();
-        if(!this.playing||!spline||spline.count<2||!Number.isFinite(dt)||dt<=0)return;
+        if(!this.playing||!spline||spline.count<2||!Number.isFinite(dt)||dt<=0){
+            splineProximityRegistry.clearVelocity(this);
+            return;
+        }
+        const target=this.target||this.node,initial=target.worldPosition;
+        const start={x:initial.x,y:initial.y,z:initial.z};
         const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
-        this.advance(dt*Math.max(0.01,multiplier));
+        const rate=Math.max(0.01,multiplier);
+        this.advance(dt*rate,rate);
+        if(!this.playing||!this.enableProximityAvoidance||!this.proximityPredictAgents){
+            splineProximityRegistry.clearVelocity(this);
+            return;
+        }
+        // Only actual per-frame displacement supplies the next prediction.
+        // Reject invalid/teleport-like estimates; paused agents stay static.
+        const now=target.worldPosition;
+        const velocity={x:(now.x-start.x)/dt,y:(now.y-start.y)/dt,
+            z:(now.z-start.z)/dt};
+        if([velocity.x,velocity.y,velocity.z].every(Number.isFinite)&&
+           Math.hypot(velocity.x,velocity.y,velocity.z)<=100){
+            splineProximityRegistry.setVelocity(this,velocity);
+        }else splineProximityRegistry.clearVelocity(this);
     }
     /** Preview never dispatches gameplay events and never follows junctions. */
     public previewAt(t:number):boolean {
@@ -798,7 +825,7 @@ export class SplineAnimate extends Component {
     /** Time-preserving traversal across multiple markers, loop seams and junctions.
      * Safety budget prevents infinite route cycles with coincident junction positions.
      */
-    private advance(dt:number):void {
+    private advance(dt:number,rate=1):void {
         let remaining=Math.max(0,dt);
         let iterations=0;
         while(remaining>1e-8&&this.playing&&iterations++<512){
@@ -862,9 +889,15 @@ export class SplineAnimate extends Component {
                Number.isInteger(this.proximitySweepSamples)&&
                this.proximitySweepSamples>=2&&this.proximitySweepSamples<=64){
                 const movement=to-from;
+                const seconds=this.proximityPredictAgents&&
+                    Number.isFinite(this.proximityPredictionHorizon)&&
+                    this.proximityPredictionHorizon>=.01&&
+                    this.proximityPredictionHorizon<=1?
+                    Math.min(this.proximityPredictionHorizon,step*duration/rate):0;
                 const report=splineProximityRegistry.limit(this,
                     ratio=>this.blendedWorldPosition(spline,from+movement*ratio),
-                    this.proximityEffectiveRadius,this.proximitySafetyGap,this.proximitySweepSamples);
+                    this.proximityEffectiveRadius,this.proximitySafetyGap,
+                    this.proximitySweepSamples,seconds);
                 proximityLimited=report.limited;
                 this.proximityStatus(report.stopped,spline,report.obstacle,
                     report.nearestWorldDistance);

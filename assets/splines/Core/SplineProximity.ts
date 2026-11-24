@@ -5,6 +5,7 @@
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
+import {relativePredictionSegment,validPredictionVelocity,validPredictionSeconds,predictionMagnitude,type PredictionPoint} from './SplineProximityPrediction';
 import {buildProximityTriangleMesh,sweptSphereMeshEntry,type ProximityTriangleMesh} from './SplineProximityMesh';
 import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb,sweptSphereCapsuleEntry,validProximityCapsule,copyProximityCapsule,type ProximityCapsule} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
@@ -13,6 +14,7 @@ export interface ProximityTelemetry {
     lastCandidates:number;lastSegmentTests:number;lastSamplePoints:number;
     lastVisitedCells:number;lastFallback:boolean;totalCandidates:number;
     totalSegmentTests:number;lastTriangleTests:number;totalTriangleTests:number;
+    lastPredictedCandidates:number;lastPredictionSeconds:number;
 }
 export interface ProximityOccupant {
     position:ProximityPoint;radius:number;
@@ -24,6 +26,8 @@ export interface ProximityOccupant {
     capsule?:ProximityCapsule;
     /** Frozen WORLD mesh and BVH; independent of Cocos MeshCollider. */
     mesh?:ProximityTriangleMesh;
+    /** Optional measured WORLD linear velocity in units/second. */
+    velocity?:PredictionPoint;
 }
 export interface ProximityPlan {
     fraction:number;
@@ -60,10 +64,12 @@ export function planSplineProximity(
     occupants:ReadonlyMap<object,ProximityOccupant>,
     radius:number,safetyGap:number,samples=16,
     metrics?:{segmentTests:number;triangleTests?:number},
+    predictionSeconds=0,
 ):ProximityPlan{
     if(!own||typeof points!=='function'||!finite(radius)||radius<=0||radius>100||
        !finite(safetyGap)||safetyGap<0||safetyGap>100||
-       !Number.isInteger(samples)||samples<2||samples>64)
+       !Number.isInteger(samples)||samples<2||samples>64||
+       !validPredictionSeconds(predictionSeconds))
         throw Error('Invalid spline proximity sweep.');
     const sampled:ProximityPoint[]=[];
     for(let i=0;i<=samples;i++){
@@ -82,14 +88,19 @@ export function planSplineProximity(
         let previous=start;
         for(let j=1;j<=samples;j++){
             const point=sampled[j];
+            const relative=predictionSeconds>0&&validPredictionVelocity(other.velocity)&&
+                predictionMagnitude(other.velocity)>0?
+                relativePredictionSegment(previous,point,other.velocity,
+                    predictionSeconds,(j-1)/samples,j/samples):null;
+            const from=relative?.start??previous,to=relative?.end??point;
             if(metrics)metrics.segmentTests++;
             const meshMetrics=other.mesh?{triangleTests:0,visitedNodes:0}:undefined;
             const entry=other.mesh?
-                sweptSphereMeshEntry(previous,point,other.mesh,radius+safetyGap,meshMetrics):other.capsule?
-                sweptSphereCapsuleEntry(previous,point,other.capsule,radius+safetyGap):other.obb?
-                sweptSphereObbEntry(previous,point,other.obb,radius+safetyGap):other.bounds?
-                sweptSphereAabbEntry(previous,point,other.bounds,radius+safetyGap):
-                segmentEntry(previous,point,other.position,threshold);
+                sweptSphereMeshEntry(from,to,other.mesh,radius+safetyGap,meshMetrics):other.capsule?
+                sweptSphereCapsuleEntry(from,to,other.capsule,radius+safetyGap):other.obb?
+                sweptSphereObbEntry(from,to,other.obb,radius+safetyGap):other.bounds?
+                sweptSphereAabbEntry(from,to,other.bounds,radius+safetyGap):
+                segmentEntry(from,to,other.position,threshold);
             if(meshMetrics&&metrics&&metrics.triangleTests!==undefined)
                 metrics.triangleTests+=meshMetrics.triangleTests;
             if(entry!==null){
@@ -115,6 +126,9 @@ export class SplineProximityRegistry {
     private readonly occupants=new Map<object,ProximityOccupant>();
     private readonly index=new SplineSpatialHash3D();
     private _maxRadius=0;
+    private _maxPredictionSpeed=0;
+    private _lastPredictedCandidates=0;
+    private _lastPredictionSeconds=0;
     private _queries=0;
     private _fallbackQueries=0;
     private _totalCandidates=0;
@@ -131,6 +145,12 @@ export class SplineProximityRegistry {
         for(const value of this.occupants.values())
             this._maxRadius=Math.max(this._maxRadius,value.radius);
     }
+    private recalculateMaxPredictionSpeed():void{
+        this._maxPredictionSpeed=0;
+        for(const entry of this.occupants.values())
+            this._maxPredictionSpeed=Math.max(this._maxPredictionSpeed,
+                predictionMagnitude(entry.velocity));
+    }
     /** Read-only telemetry. No global Scene scan or instrumentation objects
      * created for every follower when the feature is disabled.
      */
@@ -141,6 +161,8 @@ export class SplineProximityRegistry {
             lastSamplePoints:this._lastSamplePoints,lastVisitedCells:this._lastVisitedCells,
             lastFallback:this._lastFallback,totalCandidates:this._totalCandidates,
             lastTriangleTests:this._lastTriangleTests,totalTriangleTests:this._totalTriangleTests,
+            lastPredictedCandidates:this._lastPredictedCandidates,
+            lastPredictionSeconds:this._lastPredictionSeconds,
             totalSegmentTests:this._totalSegmentTests};
     }
     public set(owner:object,position:ProximityPoint,radius:number,bounds?:ProximityAabb):void{
@@ -149,7 +171,8 @@ export class SplineProximityRegistry {
             throw Error('Invalid spline proximity occupant.');
         const previous=this.occupants.get(owner);
         this.occupants.set(owner,{position:{x:position.x,y:position.y,z:position.z},radius,
-            ...(bounds?{bounds:{min:{...bounds.min},max:{...bounds.max}}}:{})});
+            ...(bounds?{bounds:{min:{...bounds.min},max:{...bounds.max}}}:{}),
+            ...(previous?.velocity?{velocity:{...previous.velocity}}:{})});
         this.index.set(owner,position);
         if(radius>this._maxRadius)this._maxRadius=radius;
         else if(previous&&previous.radius>=this._maxRadius&&radius<previous.radius)
@@ -201,12 +224,37 @@ export class SplineProximityRegistry {
         this.set(owner,center,radius);
         this.occupants.get(owner)!.mesh=mesh;
     }
+    /** Only already-registered occupants can publish velocity.
+     * Invalid/outlier velocities are rejected before modifying the registry. */
+    public setVelocity(owner:object,velocity:PredictionPoint):boolean{
+        if(!ownValid(owner)||!validPredictionVelocity(velocity))
+            throw Error('Invalid proximity prediction velocity.');
+        const occupant=this.occupants.get(owner);
+        if(!occupant)return false;
+        const oldSpeed=predictionMagnitude(occupant.velocity);
+        const newSpeed=predictionMagnitude(velocity);
+        occupant.velocity={...velocity};
+        if(newSpeed>this._maxPredictionSpeed)this._maxPredictionSpeed=newSpeed;
+        else if(oldSpeed>=this._maxPredictionSpeed&&newSpeed<oldSpeed)
+            this.recalculateMaxPredictionSpeed();
+        return true;
+    }
+    /** Clear velocity when prediction is disabled, paused or teleported. */
+    public clearVelocity(owner:object):void{
+        const occupant=this.occupants.get(owner);
+        if(!occupant?.velocity)return;
+        const old=predictionMagnitude(occupant.velocity);
+        delete occupant.velocity;
+        if(old>=this._maxPredictionSpeed)this.recalculateMaxPredictionSpeed();
+    }
     public remove(owner:object):void{
         const previous=this.occupants.get(owner);
         if(!previous)return;
         this.occupants.delete(owner);
         this.index.remove(owner);
         if(previous.radius>=this._maxRadius)this.recalculateMaxRadius();
+        if(predictionMagnitude(previous.velocity)>=this._maxPredictionSpeed)
+            this.recalculateMaxPredictionSpeed();
     }
     public get(owner:object):ProximityOccupant|null{
         const value=this.occupants.get(owner);
@@ -214,14 +262,16 @@ export class SplineProximityRegistry {
             ...(value.bounds?{bounds:{min:{...value.bounds.min},max:{...value.bounds.max}}}:{}),
             ...(value.obb?{obb:copyProximityObb(value.obb)}:{}),
             ...(value.capsule?{capsule:copyProximityCapsule(value.capsule)}:{}),
-            ...(value.mesh?{mesh:value.mesh}:{})}:null;
+            ...(value.mesh?{mesh:value.mesh}:{}),
+            ...(value.velocity?{velocity:{...value.velocity}}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,
-        radius:number,safetyGap:number,samples=16):ProximityPlan{
+        radius:number,safetyGap:number,samples=16,predictionSeconds=0):ProximityPlan{
         if(!ownValid(owner)||typeof points!=='function'||!finite(radius)||
            radius<=0||radius>100||!finite(safetyGap)||safetyGap<0||
-           safetyGap>100||!Number.isInteger(samples)||samples<2||samples>64)
+           safetyGap>100||!Number.isInteger(samples)||samples<2||samples>64||
+           !validPredictionSeconds(predictionSeconds))
             throw Error('Invalid spline proximity sweep.');
         // Sample the candidate path ONCE, regardless of the number of nearby
         // followers. A swept AABB encloses the whole sampled polyline, not
@@ -236,7 +286,8 @@ export class SplineProximityRegistry {
             min.x=Math.min(min.x,pt.x);min.y=Math.min(min.y,pt.y);min.z=Math.min(min.z,pt.z);
             max.x=Math.max(max.x,pt.x);max.y=Math.max(max.y,pt.y);max.z=Math.max(max.z,pt.z);
         }
-        const margin=radius+safetyGap+this._maxRadius;
+        const margin=radius+safetyGap+this._maxRadius+
+            this._maxPredictionSpeed*predictionSeconds;
         const lower={x:min.x-margin,y:min.y-margin,z:min.z-margin};
         const upper={x:max.x+margin,y:max.y+margin,z:max.z+margin};
         const safe=[...Object.values(lower),...Object.values(upper)].every(Number.isFinite);
@@ -255,12 +306,17 @@ export class SplineProximityRegistry {
             }
         }
         const metrics={segmentTests:0,triangleTests:0};
+        let predictedCandidates=0;
+        if(predictionSeconds>0)for(const state of selected.values())
+            if(predictionMagnitude(state.velocity)>0)predictedCandidates++;
         const report=planSplineProximity(owner,
             fraction=>sampled[Math.min(samples,Math.max(0,Math.round(fraction*samples)))],
-            selected,radius,safetyGap,samples,metrics);
+            selected,radius,safetyGap,samples,metrics,predictionSeconds);
         this._queries++;
         if(fallback)this._fallbackQueries++;
         this._lastCandidates=selected.size;
+        this._lastPredictedCandidates=predictedCandidates;
+        this._lastPredictionSeconds=predictionSeconds;
         this._lastSegmentTests=metrics.segmentTests;
         this._lastTriangleTests=metrics.triangleTests;
         this._totalTriangleTests+=metrics.triangleTests;
@@ -273,6 +329,8 @@ export class SplineProximityRegistry {
     }
     public clear():void{
         this.occupants.clear();this.index.clear();this._maxRadius=0;
+        this._maxPredictionSpeed=0;this._lastPredictedCandidates=0;
+        this._lastPredictionSeconds=0;
         this._queries=0;this._fallbackQueries=0;this._totalCandidates=0;
         this._totalSegmentTests=0;this._totalTriangleTests=0;this._lastTriangleTests=0;this._lastCandidates=0;
         this._lastSegmentTests=0;this._lastSamplePoints=0;

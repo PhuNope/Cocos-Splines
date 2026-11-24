@@ -578,6 +578,40 @@ try {
     assert(!collisionMover.isProximityBlocked);
     assert.equal(collisionMover.node.events.filter(e=>e.name==='spline-proximity-cleared').length,1);
     collisionMover.onDestroy();assert.equal(splineProximityRegistry.size,0);
+    // Dynamic prediction from WORLD frame displacement. Pausing, seeking,
+    // and manual spline changes must not retain stale obstacle velocity.
+    const predictiveLeader=headFollower(.75,-1);
+    predictiveLeader.enableHeadway=false;
+    predictiveLeader.enableProximityAvoidance=true;
+    predictiveLeader.proximityPredictAgents=true;
+    predictiveLeader.proximityRadius=.5;
+    predictiveLeader.setCurrentSpline(road,.75,-1);
+    predictiveLeader.update(.4);
+    near(predictiveLeader.currentProgress,.65);
+    near(splineProximityRegistry.get(predictiveLeader).velocity.x,-2.5);
+    const predictiveMover=headFollower(.2);
+    predictiveMover.enableHeadway=false;
+    predictiveMover.enableProximityAvoidance=true;
+    predictiveMover.proximityPredictAgents=true;
+    predictiveMover.proximityPredictionHorizon=.25;
+    predictiveMover.proximitySafetyGap=0;
+    predictiveMover.setCurrentSpline(road,.2);
+    predictiveMover.update(1.2);
+    assert(predictiveMover.currentProgress<.5&&predictiveMover.currentProgress>.48,
+      'Prediction should brake earlier for an oncoming follower');
+    assert(splineProximityRegistry.getTelemetry().lastPredictedCandidates>=1);
+    predictiveLeader.pause();
+    assert.equal(splineProximityRegistry.get(predictiveLeader).velocity,undefined,
+      'Pause must immediately drop stale prediction');
+    predictiveLeader.play();predictiveLeader.update(.2);
+    assert(splineProximityRegistry.get(predictiveLeader).velocity);
+    predictiveLeader.seek(.3);
+    assert.equal(splineProximityRegistry.get(predictiveLeader).velocity,undefined,
+      'Seek/teleport must reset stale velocity');
+    predictiveLeader.setCurrentSpline(road,.3,-1);
+    assert.equal(splineProximityRegistry.get(predictiveLeader).velocity,undefined);
+    predictiveLeader.onDisable();predictiveMover.onDestroy();
+    assert.equal(splineProximityRegistry.size,0);
     // Collider.worldBounds radius is conservative and off-center aware.
     const boundsFollower=headFollower(.3);
     boundsFollower.enableHeadway=false;boundsFollower.enableProximityAvoidance=true;
