@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.8c2b2a MeshCollider BVH Population (V2 Preview)
+
+- Added an opt-in static non-convex MeshCollider triangle BVH contact filter for SplineObjectController with manual sphere footprint, clearance and double-sided surface tests (face, edge and vertex), reusing SplineAnimate mesh reading and World transform adapters.
+- Supports radius=0 point-on-triangle contact and BVH pruning. MeshCollider data validation failures, unreadable/convex meshes or bounds mismatches retain conservative World AABB fallback.
+- Added per-Collider weak BVH cache keyed by mesh identity/hash, pose, center and bounds and opt-in Inspector flag; disabled by default, no source Knot/Mesh/Prefab mutation.
+- Added pure and mocked integration regressions and documentation. Mesh-solid occupancy, automatic prefab bounds and native Editor 3.8.8 validation remain pending. No tag/release.
+
 # Unreleased — Phase 3.8c2b1 OBB/Capsule Population Clearance (V2 Preview)
 
 - Added opt-in **Use Precise Obstacle Shapes** and a manual spherical **Placement Footprint Radius** on SplineObjectController (only with Avoid Obstacle Colliders enabled).
