@@ -220,7 +220,10 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] `SplineGeometryGraphRenderer` uses stable World frames from `SplineWorldFrames`, converts to renderer-local, creates transient meshes with a two-phase commit, and preserves prior output if JSON/geometry/mesh allocation fails. Supports material, Rebuild On Change and selected-only wireframe through Cocos-Gizmos v3 decorator.
 - [x] Dedicated JSON Inspector / Rebuild Graph action, native Cocos Creator 3.8.8 acceptance guide and Core/component regression tests in V2 CI.
 - [ ] Native Cocos Creator 3.8.8 JSON Inspector, Material, parent scale, closed seam and Undo/Redo smoke tests.
-- [ ] Phase 4.2: interactive visual node canvas with typed sockets and graph assets; Phase 4.3: tube/extrude/deform/profile generator nodes, multi-input outputs, graph profiling.
+- [x] Phase 4.2a: in-Inspector visual graph canvas with typed path/mesh socket reconnection, Offset/Width insertion/removal, numeric parameter editing, draggable card layout, native dump commits and isolated frame layout serialization.
+- [ ] Phase 4.2b: independent graph assets, import/export and reusable graph references; multi-input/branching and richer auto layout.
+- [ ] Phase 4.3: tube/extrude/deform/profile generator nodes, multi-output graphs and profiling.
+- [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
 
