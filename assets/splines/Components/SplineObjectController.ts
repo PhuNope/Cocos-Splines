@@ -5,7 +5,7 @@ import { SplineModifiers } from './SplineModifiers';
 import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
 import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,PopulationRejectReason,planPopulation} from '../Core/SplinePopulationMath';
-import {PlacementDiagnostic,attributePlacementDiagnostics} from '../Core/SplinePlacementDiagnostics';
+import {PlacementDiagnostic,PlacementSummary,attributePlacementDiagnostics,summarizePlacementDiagnostics} from '../Core/SplinePlacementDiagnostics';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplinePlacementGizmos} from '../Editor/SplinePlacementGizmos';
 import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
@@ -420,6 +420,10 @@ export class SplineObjectController extends Component {
     /** Authoritative preflight for both read-only preview and Respawn. */
     public previewPlacement():PlacementDiagnostic[]{
         return this.preparePlacement(true)?.diagnostics??[];
+    }
+    /** Read-only exact candidate counts (not the limited drawn Gizmo markers). */
+    public summarizePlacement():PlacementSummary{
+        return summarizePlacementDiagnostics(this.previewPlacement());
     }
     public placementPreviewRevision():string{
         return JSON.stringify([this.signature(),this.showPlacementGizmos,
