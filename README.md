@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Placement Debug Gizmos for Object Controllers (v2 preview)
+
+An opt-in **Placement Debug Gizmos** group in SplineObjectController draws colored World-space candidate markers **when selected**, using the same non-destructive placement preflight as Respawn. Colors: green accepted, orange missing surface, red Collider, purple peer occupancy, grey exclusion, yellow density, blue World spacing. Preview records the **first** rejection reason, preserves seed/index and original Knot/Mesh/Prefab assets, and draws at most 256 reason-aware sampled markers. Draw estimated footprint spheres optionally. Cocos-Gizmos v3 is required; disabled by default. See [Placement Debug Gizmos guide](docs/POPULATION_DEBUG_GIZMOS_V2_VI.md).
+
 ### Shared Occupancy between multiple Object Controllers (v2 preview)
 
 SplineObjectController → **Shared Occupancy · opt-in** filters final candidate centers against already spawned children of explicit peer Controller Nodes. Assign strictly increasing **Occupancy Priority** (e.g. first 0, second 1), spawn lower priority first, set conservative **Shared Occupancy Radius** on both controllers, and optional **Peer Occupancy Clearance**. No peer is ever respawned or modified. The new spatial hash keeps original candidate indexes and works after Save/Reopen using spawnedRoot children, but only captures World center + manually published sphere radius (not exact mesh overlap). Read-only peer validation happens before cleanup; disabled by default. See [Shared Occupancy guide](docs/POPULATION_SHARED_OCCUPANCY_V2_VI.md).
