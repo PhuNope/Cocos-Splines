@@ -3,6 +3,7 @@ const NAME='cocos-splines';
 const {parseSvg,exportSvg}=require('./SplineSvgConverter');
 const {parseSplineJSON,serializeSplineJSON}=require('./SplineJsonInterop');
 const {installSplineExamples}=require('./SplineExampleInstaller');
+const {canonicalGraphJSON,readGraphFile,writeGraphFile}=require('./SplineGeometryGraphAssetWorkflow');
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
@@ -195,6 +196,34 @@ async function applyKnotPlacement(operation,ids,options){
                 operation==='distribute-arc'?'Distributed '+edits.length+' knot(s) on the original '+options.space+' spline arc.':
                 'Moved '+edits.length+' knot(s) together.'};
     }finally{knotEditBusy=false;}
+}
+/** Transactional JSON property commit: one native Scene snapshot after all
+ * serializable properties were written. Rollback on rejection, preserving the
+ * original shared JsonAsset reference and previous graph contents.
+ */
+async function commitGraphCopy(uuid,before,content){
+    if(!before?.ok||!Number.isInteger(before.componentIndex)||
+       before.componentIndex<0||before.componentIndex>1024||
+       typeof before.localGraphJson!=='string')
+        throw Error('Graph component preflight is incomplete.');
+    const normalized=canonicalGraphJSON(content);
+    const changed=normalized!==before.localGraphJson||before.assetMode;
+    if(!changed)return false;
+    try{
+        await property(uuid,before.componentIndex,'graphJson',normalized,'String',false);
+        if(before.assetMode)await property(uuid,before.componentIndex,
+            'useGraphAsset',false,'Boolean',false);
+        await snapshot();
+    }catch(error){
+        try{
+            await property(uuid,before.componentIndex,'graphJson',
+                before.localGraphJson,'String',false);
+            if(before.assetMode)await property(uuid,before.componentIndex,
+                'useGraphAsset',true,'Boolean',false);
+        }catch(rollback){throw Error('Graph import failed and rollback was rejected: '+String(rollback));}
+        throw error;
+    }
+    return true;
 }
 const methods={
     /** Installs bundled project-owned examples only after explicit menu action. */
@@ -820,6 +849,63 @@ const methods={
             await snapshot();selectOnly(id);
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
+    },
+    /** Export the active graph (shared JsonAsset or local override) to a new
+     * JSON file. Saving under project Assets lets Creator import a native
+     * JsonAsset automatically. Exclusive writes protect existing user files.
+     */
+    async exportGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer để export.');
+            const info=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!info?.ok)throw Error(info?.error||'Graph is unavailable.');
+            const text=canonicalGraphJSON(info.graphJson);
+            const result=await Editor.Dialog.save({
+                title:'Export Geometry Graph to a NEW JSON file',
+                path:Editor.Project?.path,
+                filters:[{name:'Geometry Graph JSON',extensions:['json']}],
+            });
+            if(result?.canceled||!result?.filePath)return {ok:false,canceled:true};
+            const saved=writeGraphFile(result.filePath,text);
+            return {ok:true,...saved,message:'Graph exported to '+saved.file};
+        }catch(error){return alertError('export-geometry-graph-asset',error);}
+    },
+    /** Copy an external JSON file into the current component's local graph.
+     * Source assets are NEVER mutated. Restore old properties on any failure.
+     */
+    async importGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer để import.');
+            const before=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!before?.ok)throw Error(before?.error||'Graph is unavailable.');
+            const result=await Editor.Dialog.select({
+                title:'Import Geometry Graph JSON (local copy)',
+                path:Editor.Project?.path,
+                filters:[{name:'Geometry Graph JSON',extensions:['json']}],
+            });
+            if(result?.canceled||!result?.filePaths?.[0])return {ok:false,canceled:true};
+            const content=readGraphFile(result.filePaths[0]);
+            await commitGraphCopy(uuid,before,content);
+            return {ok:true,graphJson:content,message:'Valid graph imported as local copy.'};
+        }catch(error){return alertError('import-geometry-graph-asset',error);}
+    },
+    /** Explicitly detach a graph instance from its shared JsonAsset: make a
+     * local copy through native serialized property writes and one Undo snapshot.
+     */
+    async copyGeometryGraphAssetToLocal(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer.');
+            const before=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!before?.ok)throw Error(before?.error||'Graph is unavailable.');
+            if(!before.assetMode)return {ok:true,changed:false,message:'Already using local graph.'};
+            const content=canonicalGraphJSON(before.graphJson);
+            await commitGraphCopy(uuid,before,content);
+            return {ok:true,changed:true,graphJson:content,
+                message:'Shared graph copied to local override; original JsonAsset unchanged.'};
+        }catch(error){return alertError('copy-geometry-graph-to-local',error);}
     },
     async rebuildGeometryGraph(){
         try{
