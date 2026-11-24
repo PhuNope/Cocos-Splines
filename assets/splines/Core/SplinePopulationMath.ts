@@ -7,6 +7,7 @@ export interface PopulationVector {x:number;y:number;z:number}
 export interface PopulationDensityKey {progress:number;density:number}
 export interface PopulationExclusion {startProgress:number;endProgress:number}
 export interface PopulationCandidate {index:number;progress:number;position:PopulationVector}
+export type PopulationRejectReason='exclusion'|'density'|'spacing';
 export interface PopulationPolicy {
     density:number;
     densityKeys:ReadonlyArray<PopulationDensityKey>;
@@ -96,7 +97,8 @@ function cellKey(x:number,y:number,z:number):string {
 }
 /** Keeps original candidate indexes. Rejected candidates never consume/shift RNG. */
 export function planPopulation(
-    candidates:ReadonlyArray<PopulationCandidate>,policy:PopulationPolicy
+    candidates:ReadonlyArray<PopulationCandidate>,policy:PopulationPolicy,
+    onReject?:(index:number,reason:PopulationRejectReason)=>void
 ):number[] {
     validatePopulationPolicy(policy);
     if(!Array.isArray(candidates)||candidates.length>2048)
@@ -120,10 +122,13 @@ export function planPopulation(
     const spacing=policy.minWorldSpacing,spacing2=spacing*spacing;
     const grid=new Map<string,PopulationVector[]>();
     for(const candidate of candidates){
-        if(excluded(candidate.progress,policy.exclusions,policy.closed))continue;
+        if(excluded(candidate.progress,policy.exclusions,policy.closed)){
+            onReject?.(candidate.index,'exclusion');continue;
+        }
         const threshold=policy.density*densityAtSorted(keys,candidate.progress,policy.closed);
-        if(threshold<=0|| (threshold<1&&populationGate(policy.seed,candidate.index)>=threshold))
-            continue;
+        if(threshold<=0|| (threshold<1&&populationGate(policy.seed,candidate.index)>=threshold)){
+            onReject?.(candidate.index,'density');continue;
+        }
         const p=candidate.position;
         if(spacing>0){
             const x=Math.floor(p.x/spacing),y=Math.floor(p.y/spacing),z=Math.floor(p.z/spacing);
@@ -138,7 +143,7 @@ export function planPopulation(
                             if(a*a+b*b+c*c<spacing2){blocked=true;break;}
                         }
                     }
-            if(blocked)continue;
+            if(blocked){onReject?.(candidate.index,'spacing');continue;}
             const key=cellKey(x,y,z);
             if(!grid.has(key))grid.set(key,[]);
             grid.get(key)!.push(p);
