@@ -133,7 +133,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Candidate positions calculated after Modifiers/Noise/Jitter, obstacles filtered **before** spacing and density planner, stable original indexes; weight/bound preflight before deleting spawned Nodes.
 - [x] Inspector groups + conditional controls, offline TypeScript stub update and new placement regression suite registered in v2 CI.
 - [ ] Native Creator 3.8.8 Inspector, Prefab, Undo/Redo and build smoke acceptance.
-- [ ] Phase 3.8c2: terrain/surface projection, accurate OBB/Capsule/Mesh collision avoidance, prefab geometry bounds, multi-controller occupancy and weighting UI improvements.
+- [x] Phase 3.8c2a: opt-in downward raycast surface/terrain projection on explicitly assigned 3D Physics Colliders, normal-aligned prefab orientation and preflight-safe population planning. Native Creator 3.8.8 still pending.
+- [ ] Phase 3.8c2b: accurate OBB/Capsule/Mesh collision avoidance, prefab geometry bounds, multi-controller occupancy and advanced weighting UI.
 
 ### Phase 4 — Procedural geometry
 
