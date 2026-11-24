@@ -95,11 +95,12 @@ export function samplePlacementMarkers(items:ReadonlyArray<PlacementDiagnostic>,
        !Number.isInteger(limit)||limit<1||limit>256)
         throw Error('Invalid Placement marker sample limit.');
     if(items.length<=limit)return items.slice();
-    const chosen=new Set<number>();
-    for(const p of items){
-        if(chosen.size>=limit)break;
-        if(!items.some((q,i)=>chosen.has(i)&&q.reason===p.reason))
-            chosen.add(items.indexOf(p));
+    const chosen=new Set<number>(),covered=new Set<PlacementReason>();
+    for(let i=0;i<items.length&&chosen.size<limit;i++){
+        if(!covered.has(items[i].reason)){
+            chosen.add(i);
+            covered.add(items[i].reason);
+        }
     }
     const remaining=limit-chosen.size,step=items.length/Math.max(1,remaining);
     for(let i=0;i<remaining;i++)chosen.add(Math.min(items.length-1,Math.floor((i+.5)*step)));
