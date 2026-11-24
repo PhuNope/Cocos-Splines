@@ -196,7 +196,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Bounded, reason-aware marker sample (up to 256 drawn from at most 2048 fully planned candidate positions), optional footprint spheres, revision cache and single-warning handling of invalid preview.
 - [x] Inspector controls, pure/controller/Gizmos mock regression and Vietnamese setup/acceptance docs.
 - [ ] Native Cocos Creator 3.8.8 Editor gizmos/Physics/Undo/Redo/performance smoke tests and visual legend/index labels.
-- [ ] Next: gizmo debug counts/Inspector diagnostics and Phase 4 Procedural Geometry Graph.
+- [x] Phase 3.8d1: exact candidate/reason counters and rejected index examples shown on demand in ObjectController Inspector (read-only).
+- [ ] Next: in-Scene index labels and Phase 4 Procedural Geometry Graph.
 
 ### Phase 3.8d1 — Placement Summary (v2 preview)
 
