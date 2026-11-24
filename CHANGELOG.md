@@ -1,3 +1,11 @@
+# Unreleased — Phase 4.1 Typed Procedural Geometry Graph (V2 Preview)
+
+- Added **SplineGeometryGraphRenderer** with versioned JSON DAG (`spline`, `offset`, `width`, `ribbon`, `output`) and strict typed path/mesh ports; graphs reject cycles, invalid links, orphan nodes, unsafe settings and unregistered operations.
+- Added pure **SplineGeometryGraph** evaluator with per-node value cache, dependency-aware dirty propagation and atomic cache commit, reusing the canonical Road tessellator to produce UV-mapped ribbon/volume meshes.
+- Runtime/Editor renderer samples stable World spline frames into mesh-local geometry and replaces only its owned generated Mesh after parse, graph evaluation and mesh allocation succeed; failed Rebuild preserves previous mesh.
+- Added dedicated JSON Inspector, Rebuild Graph IPC, optional selected-only wireframe Gizmos, V2 documentation and Core/component regression. Visual drag-and-drop node canvas is a future phase; native Creator 3.8.8 validation pending.
+- No tag or release; all work remains on branch `v2`.
+
 # Unreleased — Phase 3.8d1 Placement Reason Statistics (V2 Preview)
 
 - Added on-demand **Analyze Placement** in SplineObjectController Inspector: exact totals, Accepted/Rejected and Surface/Collider/Peer/Exclusion/Density/Spacing counts, with up to three rejected indexes per reason.
