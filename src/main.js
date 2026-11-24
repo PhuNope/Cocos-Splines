@@ -1281,6 +1281,13 @@ const methods={
             return {ok:true};
         }catch(e){return alertError('set-knot-field',e);}
     },
+    async queryPlacementSummary(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn Node chứa SplineObjectController trước.');
+            return await invokeScene('queryPlacementSummary',uuid);
+        }catch(e){return alertError('query-placement-summary',e);}
+    },
     async spawnPrefabs(kind,action){
         try{
             const uuid=selected()[0];if(!uuid)throw Error('Chọn Node chứa component spawn prefab trong Inspector.');
