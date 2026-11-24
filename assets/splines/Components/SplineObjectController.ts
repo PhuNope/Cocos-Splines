@@ -19,7 +19,11 @@ import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
     type FootprintNode} from '../Core/SplinePrefabFootprintMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 import {filterSharedOccupancy,type SharedOccupancyCandidate,type SharedOccupant} from '../Core/SplineSharedOccupancyMath';
-const {ccclass,property,menu,executeInEditMode}=_decorator;
+const {ccclass,property,menu}=_decorator;
+// Offline legacy 'cc' mocks do not all implement this Cocos Editor decorator.
+// The real Creator decorator is always used when available.
+const executeInEditMode=_decorator.executeInEditMode??
+    ((_enabled:boolean):ClassDecorator=>(ctor)=>ctor);
 
 /** Serializable density control point along normalized arc progress. */
 @ccclass('Splines.SplinePopulationDensityKey')
