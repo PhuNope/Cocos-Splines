@@ -84,8 +84,33 @@ export function filterPopulationShapeCandidates(
             throw Error('Population precise candidates must have finite ordered positions.');
         previous=c.index;
     }
-    const r=clearance+footprintRadius,r2=r*r;
-    return candidates.filter(c=>!obstacles.some(obstacle=>{
+    return filterPopulationShapeCandidatesForRadii(candidates,obstacles,clearance,
+        candidates.map(()=>footprintRadius));
+}
+/** Per-candidate prefab sphere radii, aligned to the candidate array.
+ * Validate all positions/radii BEFORE producing the first accepted candidate.
+ */
+export function filterPopulationShapeCandidatesForRadii(
+    candidates:ReadonlyArray<PopulationCandidate>,
+    obstacles:ReadonlyArray<PopulationObstacleShape>,
+    clearance:number,radii:ReadonlyArray<number>,
+):PopulationCandidate[]{
+    if(!Array.isArray(candidates)||!Array.isArray(radii)||radii.length!==candidates.length||
+       !Array.isArray(obstacles)||obstacles.length>64||candidates.length>2048||
+       !finite(clearance)||clearance<0||clearance>10000||
+       !radii.every(n=>finite(n)&&n>=0&&n<=100))
+        throw Error('Invalid per-candidate prefab radii or collision clearance.');
+    for(const obstacle of obstacles)validateObstacle(obstacle);
+    let previous=-1;
+    for(const candidate of candidates){
+        if(!candidate||!Number.isSafeInteger(candidate.index)||candidate.index<=previous||
+           candidate.index>2047||!finite(candidate.progress)||
+           candidate.progress<0||candidate.progress>1||!point(candidate.position))
+            throw Error('Invalid per-candidate population position or candidate index.');
+        previous=candidate.index;
+    }
+    return candidates.filter((c,i)=>!obstacles.some(obstacle=>{
+        const r=clearance+radii[i],r2=r*r;
         if(obstacle.kind==='aabb')return squaredToAabb(c.position,obstacle.bounds)<=r2;
         if(obstacle.kind==='obb')return squaredToObb(c.position,obstacle.box)<=r2;
         if(obstacle.kind==='mesh')return sphereMeshContact(c.position,obstacle.mesh,r);
