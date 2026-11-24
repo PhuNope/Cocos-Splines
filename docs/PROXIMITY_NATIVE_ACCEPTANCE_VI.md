@@ -34,6 +34,17 @@ For each case, compare stationary and moving obstacle scenarios, seek and pause/
 5. Test low and high frame intervals, high scene density, and sudden turn/acceleration. Note that linear prediction is **not** guaranteed under nonlinear motion or unordered client updates.
 6. Disable all opt-in proximity toggles, reopen the scene, and verify that the original behavior is preserved.
 
+### Advanced acceleration and rotation-envelope acceptance (preview)
+
+With both followers explicitly enabling **Proximity Predict Agents**, separately toggle **Proximity Predict Acceleration** and **Proximity Predict Rotation Envelope**. The two advanced fields must remain OFF for existing serialized scenes.
+
+1. Run a straight follower at two controlled speeds over successive frames; check that acceleration is unavailable after the first observed frame, then becomes the delta of World velocity divided by frame seconds. Invalid/out-of-range acceleration must not persist.
+2. Apply acceleration towards and away from a crossing follower, repeat with minimum 2 and maximum 64 sweep samples. For a constant-acceleration path the inflated chord prediction must not miss contact even with two samples; it can report an earlier stop.
+3. Rotate a non-spherical BoxCollider/OBB around its World orientation while a follower passes near its swept area. With rotation-envelope ON, check for conservative bounding-sphere blocking. With OFF, verify the existing narrowphase remains unchanged. This is *not* an exact rotated OBB/Mesh sweep and may cause false positive stops.
+4. Repeat with offset child colliders and dynamically updated MeshCollider geometry. The envelope follows the **registered World shape center** and does not model orbiting a remote pivot exactly; record any observed discrepancy.
+5. Pause, seek, reverse, teleport, disable and switch splines after measuring acceleration/angular speed. Verify registry resets all advanced motion fields. Reload the scene, change opt-in switches at runtime and ensure stale prediction cannot reappear.
+6. Record accelerated candidate and rotational-envelope candidate counts plus prediction horizon in telemetry. Compare Editor Preview and target-platform builds; neither physics authority nor client/server synchronization is implied.
+
 ## 4. Profiling workflow
 
 ### Headless (CI / local Node.js)

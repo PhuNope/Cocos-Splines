@@ -6,7 +6,7 @@
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
 import {SplineProximityProfileSession,type ProximityProfileSummary} from './SplineProximityProfile';
-import {relativePredictionSegment,validPredictionVelocity,validPredictionSeconds,predictionMagnitude,type PredictionPoint} from './SplineProximityPrediction';
+import {relativePredictionSegment,relativeAcceleratedPredictionSegment,validPredictionVelocity,validPredictionAcceleration,validPredictionAngularSpeed,validPredictionSeconds,predictionMagnitude,type PredictionPoint,type PredictionOptions} from './SplineProximityPrediction';
 import {buildProximityTriangleMesh,sweptSphereMeshEntry,type ProximityTriangleMesh} from './SplineProximityMesh';
 import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb,sweptSphereCapsuleEntry,validProximityCapsule,copyProximityCapsule,type ProximityCapsule} from './SplineProximityShapes';
 export interface ProximityPoint {x:number;y:number;z:number}
@@ -18,6 +18,7 @@ export interface ProximityTelemetry {
     /** Per-mesh BVH nodes traversed, including nodes rejected by AABB culling. */
     lastBvhNodes:number;totalBvhNodes:number;
     lastPredictedCandidates:number;lastPredictionSeconds:number;
+    lastAcceleratedCandidates:number;lastRotationEnvelopeCandidates:number;
 }
 export interface ProximityOccupant {
     position:ProximityPoint;radius:number;
@@ -31,6 +32,10 @@ export interface ProximityOccupant {
     mesh?:ProximityTriangleMesh;
     /** Optional measured WORLD linear velocity in units/second. */
     velocity?:PredictionPoint;
+    /** Optional bounded acceleration, WORLD units per second squared. */
+    acceleration?:PredictionPoint;
+    /** Last observed angular rate, radians/second, for optional conservative envelope. */
+    angularSpeed?:number;
 }
 export interface ProximityPlan {
     fraction:number;
@@ -68,11 +73,12 @@ export function planSplineProximity(
     radius:number,safetyGap:number,samples=16,
     metrics?:{segmentTests:number;triangleTests?:number;bvhNodes?:number},
     predictionSeconds=0,
+    options:PredictionOptions={},
 ):ProximityPlan{
     if(!own||typeof points!=='function'||!finite(radius)||radius<=0||radius>100||
        !finite(safetyGap)||safetyGap<0||safetyGap>100||
        !Number.isInteger(samples)||samples<2||samples>64||
-       !validPredictionSeconds(predictionSeconds))
+       !validPredictionSeconds(predictionSeconds)||!options||typeof options!=='object')
         throw Error('Invalid spline proximity sweep.');
     const sampled:ProximityPoint[]=[];
     for(let i=0;i<=samples;i++){
@@ -87,22 +93,37 @@ export function planSplineProximity(
         if(!other||!validPoint(other.position)||!finite(other.radius)||
            other.radius<=0||other.radius>100)continue;
         nearest=Math.min(nearest,Math.sqrt(d2(start,other.position)));
-        const threshold=radius+other.radius+safetyGap;
+        const hasVelocity=predictionSeconds>0&&validPredictionVelocity(other.velocity);
+        const useAcceleration=hasVelocity&&options.acceleration===true&&
+            validPredictionAcceleration(other.acceleration);
+        const useEnvelope=predictionSeconds>0&&options.rotationEnvelope===true&&
+            validPredictionAngularSpeed(other.angularSpeed)&&other.angularSpeed>1e-4&&
+            !!(other.bounds||other.obb||other.capsule||other.mesh);
         let previous=start;
         for(let j=1;j<=samples;j++){
-            const point=sampled[j];
-            const relative=predictionSeconds>0&&validPredictionVelocity(other.velocity)&&
+            const point=sampled[j],t0=(j-1)/samples,t1=j/samples;
+            const accelerated=useAcceleration?
+                relativeAcceleratedPredictionSegment(previous,point,
+                    other.velocity!,other.acceleration!,predictionSeconds,t0,t1):null;
+            const relative=!accelerated&&hasVelocity&&
                 predictionMagnitude(other.velocity)>0?
-                relativePredictionSegment(previous,point,other.velocity,
-                    predictionSeconds,(j-1)/samples,j/samples):null;
-            const from=relative?.start??previous,to=relative?.end??point;
+                relativePredictionSegment(previous,point,other.velocity!,
+                    predictionSeconds,t0,t1):null;
+            const from=accelerated?.start??relative?.start??previous;
+            const to=accelerated?.end??relative?.end??point;
+            // A quadratic curve deviates from its linear chord by at most
+            // |acceleration| * segmentSeconds² / 8. Inflate every shape sweep.
+            const sweepRadius=radius+safetyGap+(accelerated?.maxChordError??0);
+            const threshold=sweepRadius+other.radius;
             if(metrics)metrics.segmentTests++;
-            const meshMetrics=other.mesh?{triangleTests:0,visitedNodes:0}:undefined;
-            const entry=other.mesh?
-                sweptSphereMeshEntry(from,to,other.mesh,radius+safetyGap,meshMetrics):other.capsule?
-                sweptSphereCapsuleEntry(from,to,other.capsule,radius+safetyGap):other.obb?
-                sweptSphereObbEntry(from,to,other.obb,radius+safetyGap):other.bounds?
-                sweptSphereAabbEntry(from,to,other.bounds,radius+safetyGap):
+            const useSphere=useEnvelope||sweepRadius>200;
+            const meshMetrics=!useSphere&&other.mesh?{triangleTests:0,visitedNodes:0}:undefined;
+            const entry=useSphere?
+                segmentEntry(from,to,other.position,threshold):other.mesh?
+                sweptSphereMeshEntry(from,to,other.mesh,sweepRadius,meshMetrics):other.capsule?
+                sweptSphereCapsuleEntry(from,to,other.capsule,sweepRadius):other.obb?
+                sweptSphereObbEntry(from,to,other.obb,sweepRadius):other.bounds?
+                sweptSphereAabbEntry(from,to,other.bounds,sweepRadius):
                 segmentEntry(from,to,other.position,threshold);
             if(meshMetrics&&metrics){
                 if(metrics.triangleTests!==undefined)metrics.triangleTests+=meshMetrics.triangleTests;
@@ -132,6 +153,9 @@ export class SplineProximityRegistry {
     private readonly index=new SplineSpatialHash3D();
     private _maxRadius=0;
     private _maxPredictionSpeed=0;
+    private _maxPredictionAcceleration=0;
+    private _lastAcceleratedCandidates=0;
+    private _lastRotationEnvelopeCandidates=0;
     private _profileClock:(()=>number)|null=null;
     private _profileSession:SplineProximityProfileSession|null=null;
     private _lastPredictedCandidates=0;
@@ -159,6 +183,13 @@ export class SplineProximityRegistry {
         for(const entry of this.occupants.values())
             this._maxPredictionSpeed=Math.max(this._maxPredictionSpeed,
                 predictionMagnitude(entry.velocity));
+    }
+    private recalculateMaxPredictionAcceleration():void{
+        this._maxPredictionAcceleration=0;
+        for(const entry of this.occupants.values())
+            if(validPredictionAcceleration(entry.acceleration))
+                this._maxPredictionAcceleration=Math.max(this._maxPredictionAcceleration,
+                    predictionMagnitude(entry.acceleration));
     }
     /** Opt-in timer injection for actual limit() calls (not whole frame time).
      * Zero timer calls and no extra objects are created until enabled. */
@@ -189,6 +220,8 @@ export class SplineProximityRegistry {
             lastBvhNodes:this._lastBvhNodes,totalBvhNodes:this._totalBvhNodes,
             lastPredictedCandidates:this._lastPredictedCandidates,
             lastPredictionSeconds:this._lastPredictionSeconds,
+            lastAcceleratedCandidates:this._lastAcceleratedCandidates,
+            lastRotationEnvelopeCandidates:this._lastRotationEnvelopeCandidates,
             totalSegmentTests:this._totalSegmentTests};
     }
     public set(owner:object,position:ProximityPoint,radius:number,bounds?:ProximityAabb):void{
@@ -198,7 +231,9 @@ export class SplineProximityRegistry {
         const previous=this.occupants.get(owner);
         this.occupants.set(owner,{position:{x:position.x,y:position.y,z:position.z},radius,
             ...(bounds?{bounds:{min:{...bounds.min},max:{...bounds.max}}}:{}),
-            ...(previous?.velocity?{velocity:{...previous.velocity}}:{})});
+            ...(previous?.velocity?{velocity:{...previous.velocity}}:{}),
+            ...(previous?.acceleration?{acceleration:{...previous.acceleration}}:{}),
+            ...(previous?.angularSpeed!==undefined?{angularSpeed:previous.angularSpeed}:{})});
         this.index.set(owner,position);
         if(radius>this._maxRadius)this._maxRadius=radius;
         else if(previous&&previous.radius>=this._maxRadius&&radius<previous.radius)
@@ -260,18 +295,51 @@ export class SplineProximityRegistry {
         const oldSpeed=predictionMagnitude(occupant.velocity);
         const newSpeed=predictionMagnitude(velocity);
         occupant.velocity={...velocity};
+        const oldAcceleration=predictionMagnitude(occupant.acceleration);
+        delete occupant.acceleration;
+        delete occupant.angularSpeed;
+        if(oldAcceleration>=this._maxPredictionAcceleration&&oldAcceleration>0)
+            this.recalculateMaxPredictionAcceleration();
         if(newSpeed>this._maxPredictionSpeed)this._maxPredictionSpeed=newSpeed;
         else if(oldSpeed>=this._maxPredictionSpeed&&newSpeed<oldSpeed)
             this.recalculateMaxPredictionSpeed();
         return true;
     }
-    /** Clear velocity when prediction is disabled, paused or teleported. */
+    /** Set bounded acceleration after the current frame's setVelocity(). */
+    public setAcceleration(owner:object,acceleration:PredictionPoint):boolean{
+        if(!ownValid(owner)||!validPredictionAcceleration(acceleration))
+            throw Error('Invalid proximity prediction acceleration.');
+        const state=this.occupants.get(owner);
+        if(!state?.velocity)return false;
+        const prior=predictionMagnitude(state.acceleration);
+        const next=predictionMagnitude(acceleration);
+        state.acceleration={...acceleration};
+        if(next>this._maxPredictionAcceleration)this._maxPredictionAcceleration=next;
+        else if(prior>=this._maxPredictionAcceleration&&next<prior)
+            this.recalculateMaxPredictionAcceleration();
+        return true;
+    }
+    /** Angle is used only as the opt-in conservative shape-envelope trigger. */
+    public setAngularSpeed(owner:object,angularSpeed:number):boolean{
+        if(!ownValid(owner)||!validPredictionAngularSpeed(angularSpeed))
+            throw Error('Invalid proximity angular speed.');
+        const state=this.occupants.get(owner);
+        if(!state?.velocity)return false;
+        state.angularSpeed=angularSpeed;
+        return true;
+    }
+    /** Clear all inferred motion when prediction is disabled, paused or teleported. */
     public clearVelocity(owner:object):void{
         const occupant=this.occupants.get(owner);
-        if(!occupant?.velocity)return;
+        if(!occupant)return;
         const old=predictionMagnitude(occupant.velocity);
+        const oldAcceleration=predictionMagnitude(occupant.acceleration);
         delete occupant.velocity;
-        if(old>=this._maxPredictionSpeed)this.recalculateMaxPredictionSpeed();
+        delete occupant.acceleration;
+        delete occupant.angularSpeed;
+        if(old>=this._maxPredictionSpeed&&old>0)this.recalculateMaxPredictionSpeed();
+        if(oldAcceleration>=this._maxPredictionAcceleration&&oldAcceleration>0)
+            this.recalculateMaxPredictionAcceleration();
     }
     public remove(owner:object):void{
         const previous=this.occupants.get(owner);
@@ -281,6 +349,8 @@ export class SplineProximityRegistry {
         if(previous.radius>=this._maxRadius)this.recalculateMaxRadius();
         if(predictionMagnitude(previous.velocity)>=this._maxPredictionSpeed)
             this.recalculateMaxPredictionSpeed();
+        if(predictionMagnitude(previous.acceleration)>=this._maxPredictionAcceleration)
+            this.recalculateMaxPredictionAcceleration();
     }
     public get(owner:object):ProximityOccupant|null{
         const value=this.occupants.get(owner);
@@ -289,15 +359,18 @@ export class SplineProximityRegistry {
             ...(value.obb?{obb:copyProximityObb(value.obb)}:{}),
             ...(value.capsule?{capsule:copyProximityCapsule(value.capsule)}:{}),
             ...(value.mesh?{mesh:value.mesh}:{}),
-            ...(value.velocity?{velocity:{...value.velocity}}:{})}:null;
+            ...(value.velocity?{velocity:{...value.velocity}}:{}),
+            ...(value.acceleration?{acceleration:{...value.acceleration}}:{}),
+            ...(value.angularSpeed!==undefined?{angularSpeed:value.angularSpeed}:{})}:null;
     }
     public get size():number{return this.occupants.size;}
     public limit(owner:object,points:(fraction:number)=>ProximityPoint,
-        radius:number,safetyGap:number,samples=16,predictionSeconds=0):ProximityPlan{
+        radius:number,safetyGap:number,samples=16,predictionSeconds=0,
+        options:PredictionOptions={}):ProximityPlan{
         if(!ownValid(owner)||typeof points!=='function'||!finite(radius)||
            radius<=0||radius>100||!finite(safetyGap)||safetyGap<0||
            safetyGap>100||!Number.isInteger(samples)||samples<2||samples>64||
-           !validPredictionSeconds(predictionSeconds))
+           !validPredictionSeconds(predictionSeconds)||!options||typeof options!=='object')
             throw Error('Invalid spline proximity sweep.');
         const measuredAt=this._profileClock?.();
         // Sample the candidate path ONCE, regardless of the number of nearby
@@ -314,7 +387,9 @@ export class SplineProximityRegistry {
             max.x=Math.max(max.x,pt.x);max.y=Math.max(max.y,pt.y);max.z=Math.max(max.z,pt.z);
         }
         const margin=radius+safetyGap+this._maxRadius+
-            this._maxPredictionSpeed*predictionSeconds;
+            this._maxPredictionSpeed*predictionSeconds+
+            (options.acceleration===true?
+                .5*this._maxPredictionAcceleration*predictionSeconds*predictionSeconds:0);
         const lower={x:min.x-margin,y:min.y-margin,z:min.z-margin};
         const upper={x:max.x+margin,y:max.y+margin,z:max.z+margin};
         const safe=[...Object.values(lower),...Object.values(upper)].every(Number.isFinite);
@@ -333,17 +408,28 @@ export class SplineProximityRegistry {
             }
         }
         const metrics={segmentTests:0,triangleTests:0,bvhNodes:0};
-        let predictedCandidates=0;
-        if(predictionSeconds>0)for(const state of selected.values())
+        let predictedCandidates=0,acceleratedCandidates=0,rotationCandidates=0;
+        if(predictionSeconds>0)for(const state of selected.values()){
             if(predictionMagnitude(state.velocity)>0)predictedCandidates++;
+            if(options.acceleration===true&&validPredictionVelocity(state.velocity)&&
+               validPredictionAcceleration(state.acceleration))
+                acceleratedCandidates++;
+            if(options.rotationEnvelope===true&&
+               validPredictionAngularSpeed(state.angularSpeed)&&
+               state.angularSpeed>1e-4&&
+               !!(state.bounds||state.obb||state.capsule||state.mesh))
+                rotationCandidates++;
+        }
         const report=planSplineProximity(owner,
             fraction=>sampled[Math.min(samples,Math.max(0,Math.round(fraction*samples)))],
-            selected,radius,safetyGap,samples,metrics,predictionSeconds);
+            selected,radius,safetyGap,samples,metrics,predictionSeconds,options);
         this._queries++;
         if(fallback)this._fallbackQueries++;
         this._lastCandidates=selected.size;
         this._lastPredictedCandidates=predictedCandidates;
         this._lastPredictionSeconds=predictionSeconds;
+        this._lastAcceleratedCandidates=acceleratedCandidates;
+        this._lastRotationEnvelopeCandidates=rotationCandidates;
         this._lastSegmentTests=metrics.segmentTests;
         this._lastTriangleTests=metrics.triangleTests;
         this._totalTriangleTests+=metrics.triangleTests;
@@ -365,8 +451,9 @@ export class SplineProximityRegistry {
     }
     public clear():void{
         this.occupants.clear();this.index.clear();this._maxRadius=0;
-        this._maxPredictionSpeed=0;this._lastPredictedCandidates=0;
-        this._lastPredictionSeconds=0;
+        this._maxPredictionSpeed=0;this._maxPredictionAcceleration=0;
+        this._lastPredictedCandidates=0;this._lastPredictionSeconds=0;
+        this._lastAcceleratedCandidates=0;this._lastRotationEnvelopeCandidates=0;
         this._queries=0;this._fallbackQueries=0;this._totalCandidates=0;
         this._totalSegmentTests=0;this._totalTriangleTests=0;this._lastTriangleTests=0;
         this._lastBvhNodes=0;this._totalBvhNodes=0;this._lastCandidates=0;

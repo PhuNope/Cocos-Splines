@@ -11,6 +11,7 @@ import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
+import {measuredPredictionAngularSpeed,validPredictionAcceleration} from '../Core/SplineProximityPrediction';
 import {colliderProximityRadius,colliderWorldObb,colliderWorldCapsule,type ColliderWorldBounds} from '../Core/SplineColliderBounds';
 import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
 import type {ProximityTriangleMesh} from '../Core/SplineProximityMesh';
@@ -137,6 +138,10 @@ export class SplineAnimate extends Component {
     proximityPredictAgents=false;
     @property({min:.01,max:1,tooltip:'Maximum future prediction horizon (seconds, 0.01–1). Actual sweep time and speed are bounded. Default 0.25 s.'})
     proximityPredictionHorizon=.25;
+    @property({tooltip:'Advanced preview, off by default. Predict constant WORLD acceleration from two consecutive measured velocity samples; uses a conservative curvature envelope.'})
+    proximityPredictAcceleration=false;
+    @property({tooltip:'Advanced preview, off by default. A rotating OBB/Capsule/Mesh/AABB is predicted via an enclosing sphere, not an exact rotated geometry sweep. May stop early.'})
+    proximityPredictRotationEnvelope=false;
     @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
@@ -738,10 +743,16 @@ export class SplineAnimate extends Component {
         }
         const target=this.target||this.node,initial=target.worldPosition;
         const start={x:initial.x,y:initial.y,z:initial.z};
+        const previousVelocity=splineProximityRegistry.get(this)?.velocity;
+        const beforeRotation=target.worldRotation;
+        const startRotation={x:beforeRotation.x,y:beforeRotation.y,
+            z:beforeRotation.z,w:beforeRotation.w};
+        const startSpline=spline;
         const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
         const rate=Math.max(0.01,multiplier);
         this.advance(dt*rate,rate);
-        if(!this.playing||!this.enableProximityAvoidance||!this.proximityPredictAgents){
+        if(!this.playing||!this.enableProximityAvoidance||!this.proximityPredictAgents||
+           this.source()!==startSpline){
             splineProximityRegistry.clearVelocity(this);
             return;
         }
@@ -752,7 +763,20 @@ export class SplineAnimate extends Component {
             z:(now.z-start.z)/dt};
         if([velocity.x,velocity.y,velocity.z].every(Number.isFinite)&&
            Math.hypot(velocity.x,velocity.y,velocity.z)<=100){
-            splineProximityRegistry.setVelocity(this,velocity);
+            if(!splineProximityRegistry.setVelocity(this,velocity))return;
+            if(this.proximityPredictAcceleration&&previousVelocity){
+                const acceleration={x:(velocity.x-previousVelocity.x)/dt,
+                    y:(velocity.y-previousVelocity.y)/dt,
+                    z:(velocity.z-previousVelocity.z)/dt};
+                if(validPredictionAcceleration(acceleration))
+                    splineProximityRegistry.setAcceleration(this,acceleration);
+            }
+            if(this.proximityPredictRotationEnvelope){
+                const angularSpeed=measuredPredictionAngularSpeed(
+                    startRotation,target.worldRotation,dt);
+                if(angularSpeed!==null)
+                    splineProximityRegistry.setAngularSpeed(this,angularSpeed);
+            }
         }else splineProximityRegistry.clearVelocity(this);
     }
     /** Preview never dispatches gameplay events and never follows junctions. */
@@ -897,7 +921,10 @@ export class SplineAnimate extends Component {
                 const report=splineProximityRegistry.limit(this,
                     ratio=>this.blendedWorldPosition(spline,from+movement*ratio),
                     this.proximityEffectiveRadius,this.proximitySafetyGap,
-                    this.proximitySweepSamples,seconds);
+                    this.proximitySweepSamples,seconds,{
+                        acceleration:this.proximityPredictAcceleration,
+                        rotationEnvelope:this.proximityPredictRotationEnvelope,
+                    });
                 proximityLimited=report.limited;
                 this.proximityStatus(report.stopped,spline,report.obstacle,
                     report.nearestWorldDistance);

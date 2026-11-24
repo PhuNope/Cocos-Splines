@@ -612,6 +612,40 @@ try {
     assert.equal(splineProximityRegistry.get(predictiveLeader).velocity,undefined);
     predictiveLeader.onDisable();predictiveMover.onDestroy();
     assert.equal(splineProximityRegistry.size,0);
+    // Phase 3.6 advanced prediction: measured acceleration uses two
+    // velocity frames and never leaks through pause, seek or spline switch.
+    const advanced=headFollower(.2);
+    advanced.enableHeadway=false;
+    advanced.enableProximityAvoidance=true;
+    advanced.proximityPredictAgents=true;
+    advanced.proximityPredictAcceleration=true;
+    advanced.proximityPredictRotationEnvelope=true;
+    advanced.proximitySafetyGap=0;
+    assert.equal(advanced.proximityPredictAcceleration,true);
+    advanced.setCurrentSpline(road,.2);
+    assert.equal(splineProximityRegistry.get(advanced).acceleration,undefined);
+    advanced.update(.2);
+    near(splineProximityRegistry.get(advanced).velocity.x,2.5);
+    assert.equal(splineProximityRegistry.get(advanced).acceleration,undefined,
+      'First measured frame has no acceleration history');
+    advanced.duration=2;
+    advanced.update(.2);
+    near(splineProximityRegistry.get(advanced).velocity.x,5);
+    near(splineProximityRegistry.get(advanced).acceleration.x,12.5,.001);
+    near(splineProximityRegistry.get(advanced).angularSpeed,0,.001);
+    advanced.pause();
+    assert.equal(splineProximityRegistry.get(advanced).acceleration,undefined);
+    assert.equal(splineProximityRegistry.get(advanced).angularSpeed,undefined);
+    advanced.play();advanced.update(.1);
+    assert.equal(splineProximityRegistry.get(advanced).acceleration,undefined,
+      'Resume cannot reuse pre-pause acceleration');
+    advanced.seek(.5);
+    assert.equal(splineProximityRegistry.get(advanced).velocity,undefined);
+    advanced.update(.1);
+    advanced.setCurrentSpline(road,.6,-1);
+    assert.equal(splineProximityRegistry.get(advanced).velocity,undefined);
+    advanced.onDisable();
+    assert.equal(splineProximityRegistry.get(advanced),null);
     // Collider.worldBounds radius is conservative and off-center aware.
     const boundsFollower=headFollower(.3);
     boundsFollower.enableHeadway=false;boundsFollower.enableProximityAvoidance=true;

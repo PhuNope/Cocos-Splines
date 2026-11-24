@@ -70,7 +70,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b2b2b2b2b2b2b2a — Opt-in 3D MeshCollider → World triangle BVH adapter, supported triangle-list submeshes and half-float position reader, center + affine transform, worldBounds sanity check, convex/readability fallback, cached BVH on unchanged mesh hash/pose and tests.
 - [x] Phase 3.6b2b2b2b2b2b2b2b2b1 — Opt-in bounded constant-WORLD-velocity prediction for registered follower shapes; relative-space segment sweeps, motion-expanded broadphase, pause/seek/disable lifecycle, telemetry and offline regression tests.
 - [x] Phase 3.6b2b2b2b2b2b2b2b2b2a — Headless profiling harness + deterministic broadphase/BVH complexity gates, opt-in in-runtime limit() sampler (p50/p95, counters), CI JSON artifacts and manual Creator 3.8.8 acceptance checklist. **Native validation NOT executed.**
-- [ ] Phase 3.6b2b2b2b2b2b2b2b2b2 — Acceleration/rotation-aware agents, native Creator 3.8.8 physics backend and profiling validation, physical collision resolution and server-authoritative multiplayer traffic.
+- [x] Phase 3.6b2b2b2b2b2b2b2b2b2b — Opt-in bounded constant-acceleration relative sweeps with per-segment quadratic chord error, acceleration-expanded broadphase and conservative rotation-envelope collision for non-spherical shapes, Inspector + offline tests. Native 3.8.8 validation pending.
+- [ ] Phase 3.6b2b2b2b2b2b2b2b2b2c — Exact rotating geometry narrowphase, native Creator 3.8.8 physics validation/profiling, physical collision resolution and server-authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 
