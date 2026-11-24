@@ -65,7 +65,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 3.6b2b2b2b2b2b1 — Explicit stationary World OBB narrowphase for swept spheres, orthonormal basis validation, conservative registry broadphase radius, immutable snapshots and regression coverage. API-only; native Collider auto-adapter remains pending.
 - [x] Phase 3.6b2b2b2b2b2b2a — Opt-in 3D BoxCollider World OBB preview adapter in SplineAnimate + Inspector, local center/size and orthogonal nonuniform world scale, bounds consistency check, fallback AABB, mock regression.
 - [x] Phase 3.6b2b2b2b2b2b2b1 — Explicit stationary World Capsule narrowphase (swept sphere against cylinder and rounded caps), conservative registry broadphase, copy isolation, regression tests. Fixed BoxCollider Inspector test contract.
-- [ ] Phase 3.6b2b2b2b2b2b2b2 — Native CapsuleCollider adapter, mesh collision, dynamic-agent prediction, native Creator 3.8.8 physics backend and profiling validation, physical collision resolution and server-authoritative multiplayer traffic.
+- [x] Phase 3.6b2b2b2b2b2b2b2a — Opt-in CapsuleCollider adapter, X/Y/Z and uniform world scale, bounds consistency check, AABB fallback, runtime and Inspector mock coverage. Native backend validation pending.
+- [ ] Phase 3.6b2b2b2b2b2b2b2b — Mesh collision, dynamic-agent prediction, native Creator 3.8.8 physics backend and profiling validation, physical collision resolution and server-authoritative multiplayer traffic.
 - [ ] Phase 3.2b2 — Align auto/mirrored/continuous modes via explicit conversion, connector merge graph.
 - [ ] Native Creator Editor 3.8.8 Junction array, Prefab, save/reopen and runtime smoke test.
 

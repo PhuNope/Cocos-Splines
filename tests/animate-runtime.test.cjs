@@ -28,6 +28,7 @@ try {
   class Component {constructor(){this.enabled=true;}getComponent(type){return this.node.getComponent(type);}}
   class Collider extends Component {constructor(){super();this.worldBounds={center:new Vec3(),halfExtents:new Vec3(.5,.5,.5)};}}
   class BoxCollider extends Collider {constructor(){super();this.center=new Vec3();this.size=new Vec3(1,1,1);}}
+  class CapsuleCollider extends Collider {constructor(){super();this.center=new Vec3();this.radius=.5;this.cylinderHeight=1;this.direction=1;}}
   class Node {
     constructor(uuid){this.uuid=uuid;this.isValid=true;this.parent=null;this.worldPosition=new Vec3(4,0,0);this.worldRotation=new Quat();this.events=[];}
     emit(name,payload){this.events.push({name,payload});}
@@ -39,7 +40,7 @@ try {
   class EventHandler { static emitEvents(events,...payload){for(const e of events||[])if(typeof e==='function')e(...payload);else if(typeof e?.handler==='function')e.handler(...payload);handlers.push(...payload);}}
   const env={EDITOR_NOT_IN_PREVIEW:true};
   const cc={_decorator:{ccclass:()=>cls=>cls,property:deco,menu:()=>cls=>cls,executeInEditMode:()=>cls=>cls},
-    Component,Collider,BoxCollider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
+    Component,Collider,BoxCollider,CapsuleCollider,Node,Vec3,Quat,EventHandler,Enum:x=>x};
   const original=Module._load;
   Module._load=function(request,parent,isMain){if(request==='cc')return cc;if(request==='cc/env')return env;return original.call(this,request,parent,isMain);};
   try{
@@ -621,6 +622,28 @@ try {
      assert(splineProximityRegistry.get(boundsFollower).obb);
      boundsFollower.proximityUseBoxObb=false;boundsFollower.update(.001);
      assert(!splineProximityRegistry.get(boundsFollower).obb);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     // CapsuleCollider opt-in and safe AABB fallback.
+     const cap=new CapsuleCollider();cap.node=boundsFollower.target;
+     cap.cylinderHeight=2;cap.radius=.5;cap.direction=0;
+     cap.node.worldMatrix={m00:1,m01:0,m02:0,m04:0,m05:1,m06:0,
+       m08:0,m09:0,m10:1,m12:3,m13:0,m14:0};
+     cap.worldBounds={center:new Vec3(3,0,0),halfExtents:new Vec3(1.5,.5,.5)};
+     boundsFollower.proximityCollider=cap;
+     assert.equal(boundsFollower.proximityUseCapsule,false);
+     boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     boundsFollower.proximityUseCapsule=true;boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).capsule);
+     near(splineProximityRegistry.get(boundsFollower).capsule.a.x,2);
+     near(splineProximityRegistry.get(boundsFollower).capsule.b.x,4);
+     cap.node.worldMatrix.m10=2;boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).capsule);
+     assert(splineProximityRegistry.get(boundsFollower).bounds);
+     cap.node.worldMatrix.m10=1;boundsFollower.update(.001);
+     assert(splineProximityRegistry.get(boundsFollower).capsule);
+     boundsFollower.proximityUseCapsule=false;boundsFollower.update(.001);
+     assert(!splineProximityRegistry.get(boundsFollower).capsule);
      assert(splineProximityRegistry.get(boundsFollower).bounds);
      boundsFollower.proximityUseColliderBounds=false;boundsFollower.onDisable();
      assert.equal(splineProximityRegistry.get(boundsFollower),null);

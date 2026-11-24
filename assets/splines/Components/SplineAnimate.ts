@@ -1,4 +1,4 @@
-import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider, BoxCollider } from 'cc';
+import { _decorator, Component, Enum, EventHandler, Node, Vec3, Quat, Collider, BoxCollider, CapsuleCollider } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer, SplineDimension } from '../Core/SplineContainer';
 import { SplinePositionMode, toNormalizedDistance } from '../Core/SplinePosition';
@@ -11,8 +11,8 @@ import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
 import {splineProximityRegistry} from '../Core/SplineProximity';
-import {colliderProximityRadius,colliderWorldObb} from '../Core/SplineColliderBounds';
-import {aabbFromCenterHalfExtents,type ProximityAabb,type ProximityObb} from '../Core/SplineProximityShapes';
+import {colliderProximityRadius,colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
+import {aabbFromCenterHalfExtents,type ProximityAabb,type ProximityObb,type ProximityCapsule} from '../Core/SplineProximityShapes';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
@@ -121,6 +121,8 @@ export class SplineAnimate extends Component {
     proximityUseColliderBounds=false;
     @property({tooltip:'Preview opt-in: use a stationary World OBB for a valid 3D BoxCollider obstacle. Falls back to World AABB for unsupported transforms or bounds mismatches. Moving follower remains a conservative sphere.'})
     proximityUseBoxObb=false;
+    @property({tooltip:'Preview opt-in: use a stationary World Capsule for a 3D CapsuleCollider with uniform scale and matching world bounds. Unsupported transforms fall back to AABB.'})
+    proximityUseCapsule=false;
     @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child. When blank, reads 3D Collider on the Target node. Collider2D is not supported.'})
     proximityCollider:Collider|null=null;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
@@ -188,7 +190,7 @@ export class SplineAnimate extends Component {
             this.proximityBounds().valid;
     }
     public get proximityEffectiveRadius():number{return this.proximityBounds().radius;}
-    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb;obb?:ProximityObb}{
+    private proximityBounds():{radius:number;valid:boolean;bounds?:ProximityAabb;obb?:ProximityObb;capsule?:ProximityCapsule}{
         const fallback=Number.isFinite(this.proximityRadius)&&this.proximityRadius>0&&
             this.proximityRadius<=100?this.proximityRadius:.5;
         if(!this.proximityUseColliderBounds)return {radius:fallback,valid:false};
@@ -209,8 +211,15 @@ export class SplineAnimate extends Component {
                     collider.node.worldMatrix,bounds);}
                 catch{/* Unsupported backend/transform: keep valid AABB. */}
             }
+            let capsule:ProximityCapsule|null=null;
+            if(aabb&&this.proximityUseCapsule&&typeof CapsuleCollider==='function'&&
+               collider instanceof CapsuleCollider){
+                try{capsule=colliderWorldCapsule(collider.center,collider.radius,
+                    collider.cylinderHeight,collider.direction,collider.node.worldMatrix,bounds);}
+                catch{/* Unsupported native shape: retain AABB. */}
+            }
             return {radius:report.radius,valid:report.valid,
-                ...(aabb?{bounds:aabb}:{}),...(obb?{obb}:{})};
+                ...(aabb?{bounds:aabb}:{}),...(obb?{obb}:{}),...(capsule?{capsule}:{})};
         }catch{
             // A disabled physics world / stale shape never breaks playback.
             return {radius:fallback,valid:false};
@@ -435,12 +444,14 @@ export class SplineAnimate extends Component {
         }else{
             const position=this.blendedWorldPosition(spline!,clamp01(this.currentProgress));
             const collider=this.proximityBounds();
-            if(collider.obb){
+            if(collider.capsule){
+                splineProximityRegistry.setCapsule(this,collider.capsule);
+            }else if(collider.obb){
                 splineProximityRegistry.setObb(this,collider.obb);
             }else{
                 // Opt-in shape mode uses the actual target pose for a valid
                 // world AABB, including between internal progress and apply().
-                const origin=this.proximityUseBoxObb&&collider.bounds?
+                const origin=(this.proximityUseBoxObb||this.proximityUseCapsule)&&collider.bounds?
                     (this.target||this.node).worldPosition:position;
                 splineProximityRegistry.set(this,origin,collider.radius,collider.bounds);
             }

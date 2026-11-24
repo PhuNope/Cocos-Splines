@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),cp=require('node:child_process'),
 const root=path.resolve(__dirname,'..'),out=fs.mkdtempSync(path.join(os.tmpdir(),'spline-collider-bounds-'));
 try{
  cp.execFileSync('tsc',['-p',path.join(root,'tsconfig.runtime.json'),'--noEmit','false','--outDir',out],{stdio:'pipe'});
- const {colliderProximityRadius,colliderWorldObb}=require(path.join(out,'Core/SplineColliderBounds.js'));
+ const {colliderProximityRadius,colliderWorldObb,colliderWorldCapsule}=require(path.join(out,'Core/SplineColliderBounds.js'));
  const p=(x,y=0,z=0)=>({x,y,z});
  const near=(a,b,t=1e-8)=>assert(Math.abs(a-b)<t,a+' != '+b);
  const box={center:p(0),halfExtents:p(1,.5,.25)};
@@ -43,5 +43,23 @@ try{
  assert.equal(colliderWorldObb(local,size,m,{...world,halfExtents:p(1,3,1)}),null,'backend extents mismatch');
  assert.equal(colliderWorldObb(local,p(-2,2,2),m,world),null);
  assert.equal(colliderWorldObb(local,size,{...m,m00:NaN},world),null);
+ const uniform={m00:0,m01:2,m02:0,m04:-2,m05:0,m06:0,
+    m08:0,m09:0,m10:2,m12:10,m13:2,m14:4};
+ const capCenter=p(10,4,4);
+ for(const direction of [0,1,2]){
+    const half=[p(1,3,1),p(3,1,1),p(1,1,3)][direction];
+    const wb={center:capCenter,halfExtents:half};
+    const cap=colliderWorldCapsule(p(1),.5,2,direction,uniform,wb);
+    assert(cap,'axis '+direction);near(cap.radius,1);
+    near(Math.hypot(cap.b.x-cap.a.x,cap.b.y-cap.a.y,cap.b.z-cap.a.z),4);
+    near((cap.a.y+cap.b.y)/2,4);
+    assert.equal(colliderWorldCapsule(p(1),.5,2,direction,{...uniform,m10:3},wb),null);
+    assert.equal(colliderWorldCapsule(p(1),.5,2,direction,{...uniform,m10:-2},wb),null);
+    assert.equal(colliderWorldCapsule(p(1),.5,2,direction,{...uniform,m00:.1},wb),null);
+    assert.equal(colliderWorldCapsule(p(1),.5,2,direction,uniform,{...wb,center:p(0)}),null);
+ }
+ const sphere=colliderWorldCapsule(p(1),.5,0,1,uniform,{center:capCenter,halfExtents:p(1,1,1)});
+ assert(sphere);assert.deepEqual(sphere.a,sphere.b);
+ assert.equal(colliderWorldCapsule(p(1),.5,2,3,uniform,{center:capCenter,halfExtents:p(1,1,1)}),null);
  console.log('COLLIDER BOUNDS PASS: conservative WORLD AABB sphere, off-center shapes, nonuniform scale, disabled/unavailable bounds and safe fallback.');
 }finally{fs.rmSync(out,{recursive:true,force:true});}
