@@ -46,6 +46,29 @@ function query(uuid){
     return {found:true,rootUuid:root.uuid,rootName:root.name,parentUuid:root.parent?.uuid,containerIndex,closed:component.closed,dimension:component.dimension,
       reversed:component.reversed,length,segments,knots};
 }
+/** Exact natural-order resolved cubic control vectors, not raw Inspector handles.
+ * Pure read: SVG export cannot mutate the Scene or an existing Prefab. */
+function querySvgGeometry(rootUuid){
+    const root=resolve(rootUuid);
+    const spline=root?.components.find(c=>classOf(c)==='Splines.SplineContainer');
+    if(!root||containerOf(root)!==root||!spline||spline.enabled===false||
+       typeof spline.getNaturalResolvedKnots!=='function')
+        return {ok:false,error:'Select an active SplineContainer with resolved Knots.'};
+    try{
+        if(spline.dimension!==1&&spline.dimension!==2)
+            throw Error('SVG export requires XY2D or XZ2D. 3D projection is not supported.');
+        const revision=typeof spline.getRevision==='function'?spline.getRevision():null;
+        const resolved=spline.getNaturalResolvedKnots();
+        if(!Array.isArray(resolved)||resolved.length<2||resolved.length>256)
+            throw Error('SVG export supports 2–256 Knots.');
+        const pack=p=>({x:p.x,y:p.y,z:p.z});
+        const knots=resolved.map(k=>({position:pack(k.position),
+            tangentIn:pack(k.tangentIn),tangentOut:pack(k.tangentOut)}));
+        if(revision!==null&&revision!==spline.getRevision())
+            throw Error('Spline changed during SVG export.');
+        return {ok:true,dimension:spline.dimension,closed:!!spline.closed,knots};
+    }catch(error){return {ok:false,error:String(error?.message||error)};}
+}
 function queryKnotEditFrame(rootUuid){
     const root=resolve(rootUuid);
     if(!root||containerOf(root)!==root||
@@ -559,5 +582,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
