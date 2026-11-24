@@ -177,3 +177,16 @@ Trong Inspector `SplineJunction`, tại **Join Across Junctions → New Spline**
 Tiến độ Junction được biểu diễn bằng **normalized arc distance**. Để cắt đúng đường cong, Editor dùng `SplineContainer.tAtProgress(progress)` chuyển sang **Bezier t hình học**, chuyển ngược qua `1 - t` khi `reversed=true`, sau đó cắt các cubic đã resolve bằng **de Casteljau**, không xấp xỉ linear theo arc ratio. Các đoạn bị cắt được nối vào một `(Route Joined)` mới; seam tuân thủ tùy chọn Preserve/G1/C1 (Preserve giữ nguyên các đoạn Bezier trích xuất). Nếu trường hợp có tiến độ rất sát nhau, không đủ đoạn, endpoint lệch World quá `1e-5`, quá 8 nguồn hoặc quá 128 Knot output, planner từ chối trước khi tạo Node.
 
 Một spline không được lặp lại trong cùng tuyến. Các nguồn và Junction không bị sửa. **Chế độ Full mặc định không thay đổi** và các lựa chọn Start/Finish chỉ áp dụng cho Partial mode. Đây là **BFS theo số lần chuyển**, chưa tối ưu tổng chiều dài hay luật traffic. Cần test native Cocos Creator 3.8.8 (Undo/Redo, Prefab, Scene save/reopen).
+
+
+## Cost-aware Join routing (V2 opt-in)
+
+Trong SplineJunction Inspector → Join Across Junctions → New Spline, chọn Route optimization:
+
+- **Fewest switches (default):** BFS hiện có, chọn ít số lần chuyển Junction nhất, không đòi hỏi tính length World. Giữ nguyên hành vi của dự án cũ.
+- **Shortest world distance:** cân tổng chiều dài các phần spline được traversed từ đầu tới cuối (Full) hoặc từ link vào đến link ra (Partial), chọn chi phí World-distance thấp nhất giữa các tuyến hợp lệ.
+- **Distance + switch penalty:** tối ưu estimatedWorldDistance + junctionSwitches * switchPenalty. Giá trị **Switch penalty (world units)** mặc định 10, hợp lệ 0..100000; 0 tương đương Shortest world distance. Đây là chi phí cấu hình ở Editor, không phản ánh runtime traffic.
+
+Với hai mode có tính chiều dài, Scene lấy mẫu World coordinates từ SplineContainer.evaluateWorldPositionAtT với 24 mẫu/Bezier cubic (giới hạn 64–2048 samples/spline), sau đó dùng tAtProgress nội suy vị trí tích lũy trên lookup theo đúng normalized arc progress của Junction. Kết quả là **ước lượng tổng chiều dài hình học** bằng tổng đoạn thẳng nối mẫu; không phải công thức arc-length chính xác tuyệt đối, và không bao gồm chiều dài chuyển tiếp ở Junction (hai điểm link phải trùng World trong sai số). Cả reversed và scale/rotation của node đã được thể hiện trong các mẫu World.
+
+Planner duyệt các tuyến không lặp spline, tối đa 8 source splines, ít nhất 2 Junction khác nhau, có giới hạn 8192 state và 16384 candidate. Khi chi phí bằng nhau, tie-break ổn định theo độ dài, số nhánh và UUID/link. **Full và Partial** đều hỗ trợ lựa chọn chi phí; **G1/C1** thực hiện trên **output mới** như trước. Các source Knot/Junction/Prefab không bị viết; một Editor snapshot khi thành công và rollback trên root mới khi thất bại. Không sử dụng SplineTrafficController signal, capacity, exit-direction hoặc turn restriction: đây là bước tiếp theo. **Chưa xác thực native Cocos Creator 3.8.8 Undo/Redo, Prefab hoặc scene reopen**.

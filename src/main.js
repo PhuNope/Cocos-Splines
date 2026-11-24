@@ -8,6 +8,7 @@ const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
 const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
 const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
 const {validateMultiJunctionPlan,commitMultiJunctionRoute}=require('./SplineJunctionRouteEditor');
+const {validateRouteCost}=require('./SplineJunctionRouteCost');
 const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
@@ -503,12 +504,14 @@ const methods={
      * spline is traversed end-to-end, once, preserving the authored cubics.
      */
     async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,
-        seamMode='preserve',routeMode='full',startSide=0,goalSide=1){
+        seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
+        routeCostMode='switches',junctionPenalty=10){
         if(knotEditBusy)return alertError('join-multi-junction-route',
             Error('Another spline edit is in progress.'));
         knotEditBusy=true;
         try{
             validateSeamMode(seamMode);
+            validateRouteCost(routeCostMode,junctionPenalty);
             if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
                ![0,1].includes(goalSide))
                 throw Error('Invalid partial route mode or entry/exit side.');
@@ -520,11 +523,15 @@ const methods={
             if(!junctionUuid)throw Error('Select an active SplineJunction.');
             await ensureClasses();
             const goal=goalSplineUuid.trim();
-            const plan=await invokeScene('queryMultiJunctionJoinPlan',
-                junctionUuid,anchorIndex,goal,seamMode,routeMode,startSide,goalSide);
+            const args=[junctionUuid,anchorIndex,goal,seamMode,routeMode,
+                startSide,goalSide];
+            // Legacy IPC shape retained for the default minimum-switch mode.
+            if(routeCostMode!=='switches'||junctionPenalty!==10)
+                args.push(routeCostMode,junctionPenalty);
+            const plan=await invokeScene('queryMultiJunctionJoinPlan',...args);
             if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
             validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode,
-                routeMode,startSide,goalSide);
+                routeMode,startSide,goalSide,routeCostMode,junctionPenalty);
             if(plan.junctionUuid!==junctionUuid)
                 throw Error('Multi-Junction planner returned foreign Junction.');
             const check=async()=>{

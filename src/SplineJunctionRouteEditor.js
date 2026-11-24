@@ -3,12 +3,17 @@
  * Components. One snapshot after all knots are written. */
 const finite=v=>!!v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
 function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
-    seamMode='preserve',routeMode='full',startSide=0,goalSide=1){
+    seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
+    routeCostMode='switches',junctionPenalty=10){
  const {validateSeamMode}=require('./SplineJunctionSeamMath');
+ const {validateRouteCost}=require('./SplineJunctionRouteCost');
  validateSeamMode(seamMode);
+ validateRouteCost(routeCostMode,junctionPenalty);
  if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
     ![0,1].includes(goalSide))throw Error('Invalid route mode / sides.');
  if(!plan?.ok||plan.seamMode!==seamMode||
+    (plan.routeCostMode??'switches')!==routeCostMode||
+    (plan.junctionPenalty??10)!==junctionPenalty||
     (plan.routeMode??'full')!==routeMode||
     (routeMode==='partial'&&(plan.startSide!==startSide||
        plan.goalSide!==goalSide))||
@@ -36,6 +41,15 @@ function validateMultiJunctionPlan(plan,anchorIndex,goalSplineUuid,
     plan.knots.some(k=>k?.mode!==4||!finite(k.position)||
       !finite(k.tangentIn)||!finite(k.tangentOut)))
    throw Error('Invalid multi-Junction route Join plan.');
+ if(routeCostMode!=='switches'){
+   const length=plan.estimatedWorldDistance,cost=plan.estimatedRouteCost;
+   const expected=routeCostMode==='balanced'?
+       length+plan.switchCount*junctionPenalty:length;
+   if(!Number.isFinite(length)||length<=0||length>1e10||
+      !Number.isFinite(cost)||cost<0||cost>1e11||
+      Math.abs(expected-cost)>Math.max(1e-5,cost*1e-8))
+     throw Error('Cost-aware route returned inconsistent sampled world costs.');
+ }
  if(routeMode==='partial'){
    for(let i=0;i<plan.chain.length;i++){
      const step=plan.chain[i];
@@ -117,10 +131,16 @@ async function commitMultiJunctionRoute(plan,actions){
    return {ok:true,root,count:plan.count,
      sourceCount:plan.sourceCount,switchCount:plan.switchCount,
      seams:plan.seams,
-     message:'Joined '+plan.sourceCount+' whole splines across '+
+     routeCostMode:plan.routeCostMode||'switches',
+     estimatedWorldDistance:plan.estimatedWorldDistance??null,
+     estimatedRouteCost:plan.estimatedRouteCost??null,
+     message:'Joined '+plan.sourceCount+' source splines across '+
        plan.switchCount+' Junction switches into one independent '+
        plan.count+'-Knot spline. Sources unchanged. Seam mode: '+plan.seamMode+
-       '. Traversal: '+(plan.routeMode||'full')+'.'};
+       '. Traversal: '+(plan.routeMode||'full')+
+       '. Route selection: '+(plan.routeCostMode||'switches')+
+       (Number.isFinite(plan.estimatedWorldDistance)?
+        ', sampled world distance: '+plan.estimatedWorldDistance.toFixed(3):'')+'.'};
  }catch(error){
    let warning='';
    if(root&&!committed){
