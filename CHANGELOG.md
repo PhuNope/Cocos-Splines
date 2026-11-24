@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.8a Deterministic Noise Layers (V2 Preview)
+
+- Added opt-in serialized SplineNoise layers (frequency, octaves, persistence, phase, individual seed, amplitude and open-end fade), with stable hash interpolation, normalized octave weights and exact closed-loop 0/1 seam.
+- ObjectController can explicitly reference SplineNoise for spline-frame population offsets; no Noise reference preserves previous placement, source geometry remains immutable.
+- Added Add Noise Layers menu + SplineContainer button, idempotent component creation, standalone Noise Inspector, runtime type/meta registration, new tests and Vietnamese setup/acceptance guide.
+- Native Creator 3.8.8 smoke tests, Undo/Redo and nested Prefab serialization remain pending. No tag/release.
+
 # Unreleased — Phase 3.7b Versioned JSON Geometry Round-trip (V2 Preview)
 
 - New strictly versioned `cocos-splines/geometry` v1 text serializer/parser with bounded validation, local 3D/XY2D/XZ2D, closed/reversed, samplesPerCurve, root local transform and resolved cubic geometry.
