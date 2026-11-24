@@ -15,6 +15,10 @@ Place the extension at `<project>/extensions/cocos-splines`, enable it from the 
 
 `SplineAnimate.splineOffset` is relative to the current spline frame. `junctionOffsetBlendDistance` (default 1 world unit) preserves world position at a Junction and eases toward the new spline's offset. Set it to `0` for immediate switching. `constantSpeedWithOffset` can be enabled to maintain near-constant world-space speed, including while blending.
 
+### Versioned spline JSON round-trip (v2 preview)
+
+SplineContainer Inspector → **Cocos Splines JSON · Round-trip (V1)** exports exact **resolved** local Bézier controls and root local transform, plus dimension (3D/XY2D/XZ2D), Closed, Reversed, and Samples Per Curve. Import always creates a NEW sibling spline. The original spline/Prefab is not modified; previous Unity JSON import remains separate and unchanged. Converted Knots use **Broken** tangents (geometry remains the same, original tangent authoring modes/handle Nodes are not cloned). Only geometry and root local transform are included—no Road/Junction/Prefab/component references. Same-parent import preserves World placement; cross-parent import is local-relative. See [JSON guide](docs/JSON_INTEROP_V2_VI.md). Native Editor 3.8.8 Undo/Redo and prefab smoke tests still required.
+
 ### SVG path interoperability (v2 preview)
 
 SplineContainer Inspector → **SVG Path · Import / Export (2D)** accepts one SVG `<path>` or plain `d` commands M/L/H/V/C/S/Q/T/Z (absolute or relative). SVG Y-down is converted to Cocos XY2D Y-up. Import generates a **new sibling spline** and never rewrites the source; choose Units per SVG pixel. Export reads the spline’s **resolved natural cubic controls**, producing local-space SVG text for XY2D or XZ2D; no file write is performed. SVG arcs (`A`), `transform`, multiple paths and other SVG shapes are rejected explicitly. Full native Creator 3.8.8 validation is pending. See `docs/SVG_INTEROP_V2_VI.md`.
