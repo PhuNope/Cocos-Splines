@@ -112,16 +112,16 @@ try{
   assert.deepEqual(shown.filter(x=>x.reason==='accepted').map(x=>x.index),[0,2,4]);
   assert.deepEqual(shown.filter(x=>x.reason==='spacing').map(x=>x.index),[1,3,5]);
   c.onDrawGizmosSelected();
-  assert.equal(calls.filter(x=>x.rgb[0]===80).length,3);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.kind==='sphere').length,3);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===4).length,1);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===0).length,1);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===8).length,1);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===2).length,0);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===6).length,0);
-  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.p.x===10).length,0);
-  assert.equal(calls.filter(x=>x.rgb[0]===80).length,3);
-  assert.equal(calls.filter(x=>x.rgb[0]===80).length+calls.filter(x=>x.rgb[0]===80&&x.kind==='line').length,3);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220).length,3);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.kind==='sphere').length,3);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===4).length,1);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===0).length,1);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===8).length,1);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===2).length,0);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===6).length,0);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220&&x.p.x===10).length,0);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220).length,3);
+  assert.equal(calls.filter(x=>x.rgb[0]===80&&x.rgb[1]===220).length,3);
   assert.equal(made.length,0,'Debug drawer never calls instantiate');
   assert.equal(c.respawn(),3);
   assert.deepEqual(c.spawnedRoot.children.map(n=>n.worldPosition.x),[0,4,8],
