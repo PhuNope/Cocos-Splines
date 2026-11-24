@@ -148,7 +148,7 @@ async function applyKnotPlacement(operation,ids,options){
                 options.targetUuid,world,{kind:options.targetKind,height:options.height,maxDrop:options.maxDrop,
                     alignNormal:options.alignNormal===true,
                     smoothNormal:options.alignNormal===true && options.smoothNormal===true,
-                    creaseAngle:options.creaseAngle});
+                    creaseAngle:options.creaseAngle,weldSeams:options.weldSeams===true});
             if(!result?.ok)throw new Error(result?.error||'Surface raycast failed.');
             if(options.alignNormal===true){
                 const rotations=await invokeScene('queryKnotOrientations',info.rootUuid,selectedIds);
@@ -1053,10 +1053,10 @@ const methods={
         }catch(error){return alertError('list-surface-targets',error);}
     },
     async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,
-        alignNormal=false,smoothNormal=false,creaseAngle=60,targetKind='mesh'){
+        alignNormal=false,smoothNormal=false,creaseAngle=60,targetKind='mesh',weldSeams=false){
         try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop,
             alignNormal:alignNormal===true,smoothNormal:smoothNormal===true,
-            creaseAngle,targetKind});}
+            creaseAngle,targetKind,weldSeams:weldSeams===true});}
         catch(error){return alertError('snap-selected-to-surface',error);}
     },
     async snapSelectedKnots(ids,step,space='local'){
