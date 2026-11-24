@@ -1,3 +1,12 @@
+# Unreleased — Phase 4.2b Shared Geometry Graph Assets (V2 Preview)
+
+- Added native Cocos `JsonAsset` reuse for typed Geometry Graphs, with an explicit `Use Graph Asset` opt-in, read-only shared source and independent component-local fallback, output Mesh and layout.
+- Graph revisions track active asset **content**, invalidating downstream DAG nodes on asset change without needless spline frame resampling. Missing/corrupt assets reject rebuild while preserving previous mesh.
+- Added Inspector actions to **Export JSON…**, **Import JSON → Local…**, **Copy Asset to Local** and **Refresh Asset View**; the Visual Graph is read-only when shared mode is active.
+- Bounded, strict graph import/export workflow validates before touching files; export never overwrites existing files or UUID metadata. Import/Copy uses serialized Cocos Scene property writes + one Undo snapshot with rollback on failures.
+- Added offline shared-asset regression, import/export safety tests, docs and native Cocos Creator 3.8.8 acceptance checklist. Native asset reimport, Prefab override and Undo testing remain pending.
+- No tag/release; changes are on branch `v2` only.
+
 # Unreleased — Phase 4.2a Visual Geometry Graph Inspector (V2 Preview)
 
 - Added a scrollable, interactive node canvas directly inside the Geometry Graph Inspector. Cards can be dragged, selected and keyboard-nudged; typed path/mesh sockets support validated reconnection/reordering; Offset/Width nodes can be inserted or removed, and node parameters are editable.
