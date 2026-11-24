@@ -125,7 +125,7 @@ export class SplineGeometryGraphRenderer extends Component {
                 Vec3.transformMat4(tip,tip,inverse);
                 return Vec3.subtract(new Vec3(),tip,local);
             };
-            const frames:RoadFrame[]=[];
+            frames=[];
             let previous:Vec3|null=null,distance=0;
             for(const f of worldFrames.frames){
                 const world=new Vec3(f.position.x,f.position.y,f.position.z);
