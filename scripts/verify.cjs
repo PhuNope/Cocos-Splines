@@ -7,6 +7,15 @@ function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineGeometryGraphVisualModel.js');
+checkRel('dist/SplineGeometryGraphAssetWorkflow.js');
+for(const [name,method] of Object.entries({
+    'query-geometry-graph-asset':'queryGeometryGraphAsset',
+    'import-geometry-graph-asset':'importGeometryGraphAsset',
+    'export-geometry-graph-asset':'exportGeometryGraphAsset',
+    'copy-geometry-graph-to-local':'copyGeometryGraphAssetToLocal',
+})){
+    assert.deepEqual(pkg.contributions.messages[name]?.methods,[method]);
+}
 checkRel('dist/contributions/inspector/GeometryGraph.js');
 checkRel('assets/splines/Core/SplineGeometryGraph.ts');
 checkRel('assets/splines/Core/SplineGeometryGraph.ts.meta');
