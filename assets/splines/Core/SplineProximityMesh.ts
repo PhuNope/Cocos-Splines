@@ -124,6 +124,38 @@ export function buildProximityTriangleMesh(vertices:readonly V[],
     return Object.freeze({root,bounds:Object.freeze({
         min:root.min,max:root.max}),triangleCount:triangles.length});
 }
+/** Static sphere/point contact against the immutable triangle BVH.
+ * Unlike sweptSphereMeshEntry, supports a radius of zero (exact point
+ * contact). The mesh is a double-sided triangle SURFACE, not a solid
+ * volume; completely enclosed spheres may require separate occupancy logic.
+ */
+export function sphereMeshContact(center:V,mesh:ProximityTriangleMesh,radius:number):boolean{
+    if(!point(center)||!mesh?.root||!finite(radius)||radius<0||radius>10100)
+        throw Error('Invalid static sphere/mesh query.');
+    const r2=radius*radius,tolerance=1e-12*Math.max(1,r2);
+    const sphereNear=(lo:V,hi:V):boolean=>{
+        const dx=Math.max(0,lo.x-center.x,center.x-hi.x);
+        const dy=Math.max(0,lo.y-center.y,center.y-hi.y);
+        const dz=Math.max(0,lo.z-center.z,center.z-hi.z);
+        return dx*dx+dy*dy+dz*dz<=r2+tolerance;
+    };
+    if(!sphereNear(mesh.root.min,mesh.root.max))return false;
+    const stack:Node[]=[mesh.root];
+    while(stack.length){
+        const node=stack.pop()!;
+        if(!sphereNear(node.min,node.max))continue;
+        if(node.triangles){
+            for(const tri of node.triangles)
+                if(sphereNear(tri.min,tri.max)&&
+                   triangleDistance2(center,tri.a,tri.b,tri.c)<=r2+tolerance)
+                    return true;
+        }else{
+            if(node.left)stack.push(node.left);
+            if(node.right)stack.push(node.right);
+        }
+    }
+    return false;
+}
 function overlaps(minA:V,maxA:V,minB:V,maxB:V):boolean{
     return minA.x<=maxB.x&&maxA.x>=minB.x&&
         minA.y<=maxB.y&&maxA.y>=minB.y&&
