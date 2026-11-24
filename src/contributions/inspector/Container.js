@@ -3,7 +3,7 @@
 const {style,callEditor}=require('./common');
 const NAME='cocos-splines';
 const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','showGizmosAlways','showTangentGizmos','gizmoSteps','gizmoColor'];
-const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',svg:'.spl-svg',svgImport:'.spl-svg-import',svgExport:'.spl-svg-export',svgScale:'.spl-svg-scale',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle',surfaceWeldSeams:'.spl-surface-weld-seams'};
+const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',nativeJson:'.spl-native-json',nativeJsonImport:'.spl-native-json-import',nativeJsonExport:'.spl-native-json-export',svg:'.spl-svg',svgImport:'.spl-svg-import',svgExport:'.spl-svg-export',svgScale:'.spl-svg-scale',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle',surfaceWeldSeams:'.spl-surface-weld-seams'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
   <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
@@ -66,6 +66,11 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <textarea class="spl-json" rows="5" spellcheck="false" placeholder='{"closed":false,"knots":[...]}'></textarea>
     <div class="spl-btns"><button type="button" class="spl-btn spl-import">Import as new spline</button></div>
   </details>
+  <details class="spl-section"><summary>Cocos Splines JSON · Round-trip (V1)</summary>
+    <p class="spl-note">Versioned Cocos geometry JSON: exact resolved Bezier controls in Container-local coordinates, 3D/XY2D/XZ2D, closed/reversed, samples per curve, and root local transform. Import creates a NEW sibling; original spline/Prefab is untouched. Same parent preserves World placement. This is not Unity JSON and does not clone Road, Junction, Knot rotations or custom components.</p>
+    <textarea class="spl-native-json" rows="6" spellcheck="false" placeholder='{"format":"cocos-splines/geometry","version":1,...}'></textarea>
+    <div class="spl-btns"><button type="button" class="spl-btn spl-native-json-import">Import JSON as new Spline</button><button type="button" class="spl-btn spl-native-json-export">Export selected Spline JSON</button></div>
+  </details>
   <details class="spl-section"><summary>SVG Path · Import / Export (2D)</summary>
     <p class="spl-note">Paste a single SVG &lt;path&gt; or its d attribute. Import creates a NEW sibling XY2D spline; SVG Y-down becomes Cocos Y-up. Supports M/L/H/V/C/S/Q/T/Z (relative/absolute). No transforms, arcs, multiple paths or external SVG resources. Export uses resolved local Bézier curves from XY2D/XZ2D only; use Copy to transfer the text.</p>
     <div class="spl-btns spl-batch-inputs"><label>Units per SVG pixel <input class="spl-svg-scale" type="number" min="0.000001" max="10000" step="0.1" value="1" aria-label="SVG import units per pixel"></label></div>
@@ -75,6 +80,7 @@ const template=`<div class="spl-inspector spl-container-inspector">
 </div>`;
 const ownStyle=style+`
 .spl-info{font-size:11px;opacity:.85;margin:9px 0}
+.spl-native-json{width:100%;box-sizing:border-box;min-height:85px;background:var(--color-normal-fill-emphasis,#202c38);color:inherit;border:1px solid #4b6678;border-radius:4px;padding:7px;resize:vertical}
 .spl-json{width:100%;box-sizing:border-box;min-height:70px;background:var(--color-normal-fill-emphasis,#202c38);color:inherit;border:1px solid #4b6678;border-radius:4px;padding:7px;resize:vertical}
 .spl-knots{display:flex;flex-direction:column;gap:6px;min-width:0}
 .spl-knot{padding:6px 7px;border:1px solid var(--color-border-normal,#415162);background:rgba(60,110,146,.07);border-radius:5px;min-width:0}
@@ -365,6 +371,20 @@ module.exports={
         this.$.refresh.addEventListener('click',async()=>{const r=await callEditor(this,'refresh-preview');if(r?.ok){show(this,'Mesh đã cập nhật.');await refresh(this);}});
         this.$.reverse.addEventListener('click',async()=>{const r=await callEditor(this,'reverse-direction');if(r?.ok)await refresh(this);});
         this.$.import.addEventListener('click',async()=>{const r=await callEditor(this,'import-json',this.$.json.value);if(r?.ok){show(this,`Imported ${r.knots} knots.`);await refresh(this);}});
+        this.$.nativeJsonImport.addEventListener('click',async()=>{
+            const r=await callEditor(this,'import-spline-json',this.$.nativeJson.value);
+            if(r?.ok){show(this,'Imported '+r.knots+' JSON Knots into a new sibling Spline.');
+                await refresh(this);}
+        });
+        this.$.nativeJsonExport.addEventListener('click',async()=>{
+            const r=await callEditor(this,'export-spline-json');
+            if(r?.ok){
+                this.$.nativeJson.value=r.json;
+                this.$.nativeJson.focus();
+                this.$.nativeJson.select();
+                show(this,'Exported '+r.knots+' Knots. JSON text selected for copying.');
+            }
+        });
         this.$.svgImport.addEventListener('click',async()=>{
             const scale=Number(this.$.svgScale.value);
             if(!Number.isFinite(scale)||scale<=0||scale>10000)
