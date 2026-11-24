@@ -5,6 +5,7 @@
  * NOT a rigid-body collision solver or a multiplayer authoritative system.
  */
 import {SplineSpatialHash3D} from './SplineSpatialHash3D';
+import {SplineProximityProfileSession,type ProximityProfileSummary} from './SplineProximityProfile';
 import {relativePredictionSegment,validPredictionVelocity,validPredictionSeconds,predictionMagnitude,type PredictionPoint} from './SplineProximityPrediction';
 import {buildProximityTriangleMesh,sweptSphereMeshEntry,type ProximityTriangleMesh} from './SplineProximityMesh';
 import {sweptSphereAabbEntry,validProximityAabb,sweptSphereObbEntry,validProximityObb,copyProximityObb,type ProximityAabb,type ProximityObb,sweptSphereCapsuleEntry,validProximityCapsule,copyProximityCapsule,type ProximityCapsule} from './SplineProximityShapes';
@@ -14,6 +15,8 @@ export interface ProximityTelemetry {
     lastCandidates:number;lastSegmentTests:number;lastSamplePoints:number;
     lastVisitedCells:number;lastFallback:boolean;totalCandidates:number;
     totalSegmentTests:number;lastTriangleTests:number;totalTriangleTests:number;
+    /** Per-mesh BVH nodes traversed, including nodes rejected by AABB culling. */
+    lastBvhNodes:number;totalBvhNodes:number;
     lastPredictedCandidates:number;lastPredictionSeconds:number;
 }
 export interface ProximityOccupant {
@@ -63,7 +66,7 @@ export function planSplineProximity(
     own:object,points:(fraction:number)=>ProximityPoint,
     occupants:ReadonlyMap<object,ProximityOccupant>,
     radius:number,safetyGap:number,samples=16,
-    metrics?:{segmentTests:number;triangleTests?:number},
+    metrics?:{segmentTests:number;triangleTests?:number;bvhNodes?:number},
     predictionSeconds=0,
 ):ProximityPlan{
     if(!own||typeof points!=='function'||!finite(radius)||radius<=0||radius>100||
@@ -101,8 +104,10 @@ export function planSplineProximity(
                 sweptSphereObbEntry(from,to,other.obb,radius+safetyGap):other.bounds?
                 sweptSphereAabbEntry(from,to,other.bounds,radius+safetyGap):
                 segmentEntry(from,to,other.position,threshold);
-            if(meshMetrics&&metrics&&metrics.triangleTests!==undefined)
-                metrics.triangleTests+=meshMetrics.triangleTests;
+            if(meshMetrics&&metrics){
+                if(metrics.triangleTests!==undefined)metrics.triangleTests+=meshMetrics.triangleTests;
+                if(metrics.bvhNodes!==undefined)metrics.bvhNodes+=meshMetrics.visitedNodes;
+            }
             if(entry!==null){
                 const hit=(j-1+entry)/samples;
                 if(hit<=first){
@@ -127,6 +132,8 @@ export class SplineProximityRegistry {
     private readonly index=new SplineSpatialHash3D();
     private _maxRadius=0;
     private _maxPredictionSpeed=0;
+    private _profileClock:(()=>number)|null=null;
+    private _profileSession:SplineProximityProfileSession|null=null;
     private _lastPredictedCandidates=0;
     private _lastPredictionSeconds=0;
     private _queries=0;
@@ -137,6 +144,8 @@ export class SplineProximityRegistry {
     private _lastSegmentTests=0;
     private _lastTriangleTests=0;
     private _totalTriangleTests=0;
+    private _lastBvhNodes=0;
+    private _totalBvhNodes=0;
     private _lastSamplePoints=0;
     private _lastVisitedCells=0;
     private _lastFallback=false;
@@ -151,6 +160,22 @@ export class SplineProximityRegistry {
             this._maxPredictionSpeed=Math.max(this._maxPredictionSpeed,
                 predictionMagnitude(entry.velocity));
     }
+    /** Opt-in timer injection for actual limit() calls (not whole frame time).
+     * Zero timer calls and no extra objects are created until enabled. */
+    public startProfiling(now:()=>number,capacity=2048):void{
+        if(typeof now!=='function')throw Error('Invalid proximity profile clock.');
+        const session=new SplineProximityProfileSession(capacity);
+        this._profileSession=session;
+        this._profileClock=now;
+    }
+    public getProfilingSummary():ProximityProfileSummary|null{
+        return this._profileSession?.summary()??null;
+    }
+    public stopProfiling():ProximityProfileSummary|null{
+        const summary=this._profileSession?.summary()??null;
+        this._profileSession=null;this._profileClock=null;
+        return summary;
+    }
     /** Read-only telemetry. No global Scene scan or instrumentation objects
      * created for every follower when the feature is disabled.
      */
@@ -161,6 +186,7 @@ export class SplineProximityRegistry {
             lastSamplePoints:this._lastSamplePoints,lastVisitedCells:this._lastVisitedCells,
             lastFallback:this._lastFallback,totalCandidates:this._totalCandidates,
             lastTriangleTests:this._lastTriangleTests,totalTriangleTests:this._totalTriangleTests,
+            lastBvhNodes:this._lastBvhNodes,totalBvhNodes:this._totalBvhNodes,
             lastPredictedCandidates:this._lastPredictedCandidates,
             lastPredictionSeconds:this._lastPredictionSeconds,
             totalSegmentTests:this._totalSegmentTests};
@@ -273,6 +299,7 @@ export class SplineProximityRegistry {
            safetyGap>100||!Number.isInteger(samples)||samples<2||samples>64||
            !validPredictionSeconds(predictionSeconds))
             throw Error('Invalid spline proximity sweep.');
+        const measuredAt=this._profileClock?.();
         // Sample the candidate path ONCE, regardless of the number of nearby
         // followers. A swept AABB encloses the whole sampled polyline, not
         // just its endpoints (which would miss U-shaped/hairpin paths).
@@ -305,7 +332,7 @@ export class SplineProximityRegistry {
                 if(state)selected.set(id,state);
             }
         }
-        const metrics={segmentTests:0,triangleTests:0};
+        const metrics={segmentTests:0,triangleTests:0,bvhNodes:0};
         let predictedCandidates=0;
         if(predictionSeconds>0)for(const state of selected.values())
             if(predictionMagnitude(state.velocity)>0)predictedCandidates++;
@@ -320,11 +347,20 @@ export class SplineProximityRegistry {
         this._lastSegmentTests=metrics.segmentTests;
         this._lastTriangleTests=metrics.triangleTests;
         this._totalTriangleTests+=metrics.triangleTests;
+        this._lastBvhNodes=metrics.bvhNodes;
+        this._totalBvhNodes+=metrics.bvhNodes;
         this._lastSamplePoints=sampled.length;
         this._lastVisitedCells=query?.visitedCells??0;
         this._lastFallback=fallback;
         this._totalCandidates+=selected.size;
         this._totalSegmentTests+=metrics.segmentTests;
+        // Profiling is explicitly opt-in; sampled duration excludes external
+        // Cocos Component, renderer and physics-backend work.
+        if(measuredAt!==undefined&&this._profileClock&&this._profileSession){
+            const elapsed=this._profileClock()-measuredAt;
+            if(Number.isFinite(elapsed)&&elapsed>=0&&elapsed<=60000)
+                this._profileSession.record(elapsed,this.getTelemetry());
+        }
         return report;
     }
     public clear():void{
@@ -332,9 +368,11 @@ export class SplineProximityRegistry {
         this._maxPredictionSpeed=0;this._lastPredictedCandidates=0;
         this._lastPredictionSeconds=0;
         this._queries=0;this._fallbackQueries=0;this._totalCandidates=0;
-        this._totalSegmentTests=0;this._totalTriangleTests=0;this._lastTriangleTests=0;this._lastCandidates=0;
+        this._totalSegmentTests=0;this._totalTriangleTests=0;this._lastTriangleTests=0;
+        this._lastBvhNodes=0;this._totalBvhNodes=0;this._lastCandidates=0;
         this._lastSegmentTests=0;this._lastSamplePoints=0;
         this._lastVisitedCells=0;this._lastFallback=false;
+        this._profileSession?.reset();
     }
 }
 export const splineProximityRegistry=new SplineProximityRegistry();

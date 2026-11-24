@@ -377,3 +377,19 @@ Static meshes benefit most. A *moving* MeshCollider causes the World BVH to rebu
 SplineAnimate > 3D proximity sweep: enable Proximity Avoidance, then enable **Proximity Predict Agents**. Adjust **Proximity Prediction Horizon** (0.01–1 seconds; default 0.25). Both moving followers should opt in: each publishes its last measured WORLD linear velocity, while the querying follower optionally predicts nearby registered shapes. Existing static behavior remains the default. The estimate uses per-update Target World displacement divided by frame seconds, capped at 100 World units/second. Pause, seek, manual spline switching, disable, destroy, invalid/teleport-like movement and runtime opt-out clear stale velocities.
 
 The engine-independent solver transforms each moving query segment into the relative frame of a linearly translating obstacle, covering Sphere, AABB, OBB, Capsule and Mesh BVH without moving or rebuilding the shapes. Broadphase expands by the maximum registered speed multiplied by the bounded query horizon to avoid missing agents outside the initial search volume. `SplineProximityRegistry.limit(owner,path,radius,gap,samples,predictionSeconds)` and `planSplineProximity(...,metrics,predictionSeconds)` keep old defaults. Public APIs include `setVelocity(owner,{x,y,z})` and `clearVelocity(owner)`; telemetry includes `lastPredictedCandidates` and `lastPredictionSeconds`. Prediction covers linear translation only. It cannot guarantee safety with acceleration, turning, mismatched update order, networking or rigid-body dynamics. Verify native Cocos Creator 3.8.8 physics and frame pacing before production.
+
+### Opt-in proximity performance profiling (V2 preview)
+
+CI runs `npm run profile:proximity`. This creates `builds/proximity-profile-v2.json` containing **headless Node.js** timing observations for sparse (1025), predictive (601), dense mesh (2049 triangles) and intentionally oversized/fallback scenarios. All *pass/fail* criteria are deterministic candidate, BVH node and triangle-test counts, NOT wall-clock timing thresholds (runner performance varies). `SplineProximityRegistry.getTelemetry()` now also exposes `lastBvhNodes` and `totalBvhNodes`.
+
+To measure actual runtime **proximity query cost** in Creator 3.8.8, opt in explicitly:
+
+```ts
+import {splineProximityRegistry} from './SplineProximity'; // use your project-relative path
+splineProximityRegistry.startProfiling(() => performance.now(), 2048);
+// Play your representative scene, then:
+const report = splineProximityRegistry.stopProfiling();
+console.log(report);
+```
+
+`getProfilingSummary()` returns a rolling report while active. The profile captures only `registry.limit()`, not renderer, Rigidbody, Cocos Collider transforms, World BVH rebuilds, other traffic components, or total frame time. The sampler is bounded (2048 queries by default) and default **OFF** with no timer calls. Summary includes p50/p95/max/mean latency, mean/p95 candidates, estimated candidate pruning, segment/triangle/BVH work, prediction queries and fallback count. Use the native Cocos Profiler for whole-frame CPU/GPU and memory observations. See `docs/PROXIMITY_NATIVE_ACCEPTANCE_VI.md` for manual backend scenarios; headless CI cannot certify Creator physics behavior.

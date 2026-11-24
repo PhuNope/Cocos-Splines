@@ -33,11 +33,21 @@ jobs:
         run: npm run verify
       - name: Run regression tests
         run: npm test
+      - name: Profile proximity complexity (headless, no native performance thresholds)
+        run: npm run profile:proximity
       - name: Package V2 preview (no tag or release)
         if: github.ref == 'refs/heads/v2'
         env:
           BUILD_SHA: ${{ github.sha }}
         run: npm run package:preview
+      - name: Upload V2 proximity profiling report
+        if: github.ref == 'refs/heads/v2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cocos-splines-proximity-profile-${{ github.sha }}
+          path: builds/proximity-profile-v2.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Upload downloadable V2 preview
         if: github.ref == 'refs/heads/v2'
         uses: actions/upload-artifact@v4
