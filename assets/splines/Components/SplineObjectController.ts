@@ -15,6 +15,7 @@ import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
     prefabSphereRadius,prefabCapsuleRadius,parentLinearStretch,scaledPrefabFootprint,
     type FootprintNode} from '../Core/SplinePrefabFootprintMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
+import {filterSharedOccupancy,type SharedOccupancyCandidate,type SharedOccupant} from '../Core/SplineSharedOccupancyMath';
 const {ccclass,property,menu}=_decorator;
 
 /** Serializable density control point along normalized arc progress. */
@@ -69,6 +70,16 @@ export class SplineObjectController extends Component {
     exclusions:SplinePopulationExclusion[]=[];
     @property({min:0,max:10000,tooltip:'Optional minimum WORLD distance between final placed prefab centers, after all jitter/noise (0 disables). Not collider overlap.'})
     minWorldSpacing=0;
+    @property({tooltip:'Opt-in shared occupancy: reject candidates touching ALREADY SPAWNED instances from explicitly assigned lower-priority controllers. No other controller is respawned.'})
+    avoidPeerPopulation=false;
+    @property({type:[Node],tooltip:'Explicit peer Nodes with SplineObjectController. Maximum 16, must be in the same Scene and have strictly lower Occupancy Priority.'})
+    occupancyPeerNodes:Node[]=[];
+    @property({min:0,max:32767,step:1,tooltip:'Explicit numeric order. Spawn smaller priorities first; referenced peer must have strictly lower priority. Prevents mutual dependency cycles.'})
+    occupancyPriority=0;
+    @property({min:0,max:100,tooltip:'Published conservative World-space sphere radius of EVERY spawned instance, read by higher-priority peer controllers even after Save/Reopen. Use >= actual geometry radius.'})
+    sharedOccupancyRadius=0;
+    @property({min:0,max:10000,tooltip:'Extra World-unit clearance from selected peer prefab footprints. Does not include physics Collider shape.'})
+    peerOccupancyClearance=0;
     @property({tooltip:'Opt-in explicit Collider avoidance using conservative World AABB bounds. No physics simulation / auto-scene discovery.'})
     avoidObstacleColliders=false;
     @property({type:[Collider],tooltip:'Only these assigned active Colliders are considered (max 64). Not a Physics overlap query.'})
@@ -272,6 +283,60 @@ export class SplineObjectController extends Component {
         }
         return shapes;
     }
+    /** Snapshot only explicitly selected, already spawned and lower-priority peers.
+     * Strict monotonic priority gives a DAG (never mutual auto-respawn).
+     * Read generated children from Scene so saved/reopened peer populations work.
+     * Does not modify, clear or generate peers.
+     */
+    private peerOccupants():SharedOccupant[]{
+        const refs=this.occupancyPeerNodes;
+        if(!Array.isArray(refs)||refs.length<1||refs.length>16||
+           !Number.isInteger(this.occupancyPriority)||
+           this.occupancyPriority<0||this.occupancyPriority>32767||
+           !Number.isFinite(this.sharedOccupancyRadius)||
+           this.sharedOccupancyRadius<0||this.sharedOccupancyRadius>100||
+           !Number.isFinite(this.peerOccupancyClearance)||
+           this.peerOccupancyClearance<0||this.peerOccupancyClearance>10000)
+            throw Error('Shared Occupancy needs 1–16 peers and valid priority/radius/clearance.');
+        const rootOf=(node:Node):Node=>{
+            let cursor=node,depth=0;
+            const seen=new Set<Node>();
+            while(cursor?.parent){
+                if(seen.has(cursor)||++depth>128)throw Error('Cyclic/invalid Scene hierarchy.');
+                seen.add(cursor);cursor=cursor.parent;
+            }
+            if(!cursor)throw Error('Unloaded peer Scene.');
+            return cursor;
+        };
+        const sceneRoot=rootOf(this.node),seen=new Set<Node>();
+        const entries:SharedOccupant[]=[];
+        for(const peerNode of refs){
+            if(!peerNode||seen.has(peerNode)||peerNode===this.node||
+               peerNode.isValid===false||peerNode.activeInHierarchy===false||
+               rootOf(peerNode)!==sceneRoot)
+                throw Error('Shared Occupancy peer must be a distinct, active Node in the same Scene.');
+            seen.add(peerNode);
+            const peer=peerNode.getComponent(SplineObjectController);
+            if(!peer||peer===this||peer.enabled===false||
+               !Number.isInteger(peer.occupancyPriority)||
+               peer.occupancyPriority<0||peer.occupancyPriority>=this.occupancyPriority||
+               !Number.isFinite(peer.sharedOccupancyRadius)||
+               peer.sharedOccupancyRadius<0||peer.sharedOccupancyRadius>100)
+                throw Error('Shared Occupancy peer must have valid, strictly LOWER priority and footprint radius.');
+            const generated=peer.spawnedRoot;
+            if(!generated?.isValid||rootOf(generated)!==sceneRoot||
+               !Array.isArray(generated.children)||generated.children.length>2048)
+                throw Error('Peer population must already exist in the same Scene; spawn lower priority first.');
+            for(const instance of generated.children){
+                if(!instance||instance.isValid===false)
+                    throw Error('Peer population contains an invalid generated Node.');
+                const p=instance.worldPosition;
+                entries.push({position:{x:p?.x,y:p?.y,z:p?.z},
+                    radius:peer.sharedOccupancyRadius});
+            }
+        }
+        return entries;
+    }
     private signature():string{
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),
@@ -307,6 +372,16 @@ export class SplineObjectController extends Component {
                                     c.convex,c.center]:null];
                     }),
                 ]:null,
+            ]:null,this.avoidPeerPopulation,this.avoidPeerPopulation?[
+                this.occupancyPriority,this.sharedOccupancyRadius,
+                this.peerOccupancyClearance,
+                this.occupancyPeerNodes.map(node=>{
+                    const peer=node?.getComponent(SplineObjectController);
+                    return [node?.uuid,peer?.occupancyPriority,
+                        peer?.sharedOccupancyRadius,peer?.spawnedRoot?.uuid,
+                        peer?.spawnedRoot?.children.map(child=>[
+                            child.uuid,child.worldPosition])];
+                }),
             ]:null,this.conformToSurface,this.conformToSurface?[
                 this.surfaceRayHeight,this.surfaceRayDepth,this.surfaceOffset,
                 this.minSurfaceNormalY,this.skipMissingSurface,this.alignToSurfaceNormal,
@@ -369,7 +444,7 @@ export class SplineObjectController extends Component {
         // The legacy (opt-out) path below is otherwise unchanged.
         let accepted:Set<number>|null=null;
         const surfacePlan=new Map<number,PopulationSurfacePlacement>();
-        if(this.enablePopulationRules||this.avoidObstacleColliders||this.conformToSurface){
+        if(this.enablePopulationRules||this.avoidObstacleColliders||this.conformToSurface||this.avoidPeerPopulation){
             const policy:PopulationPolicy=this.enablePopulationRules?{
                 seed:this.seed,closed:spline.closed===true,density:this.density,
                 densityKeys:this.densityKeys,exclusions:this.exclusions,
@@ -427,7 +502,13 @@ export class SplineObjectController extends Component {
                             this.obstacleClearance,this.placementFootprintRadius)):
                     filterObstacleCandidates(projected,this.obstacleBounds(),this.obstacleClearance)):
                 projected;
-            accepted=new Set(planPopulation(viable,policy));
+            const shared=this.avoidPeerPopulation?
+                filterSharedOccupancy(viable.map((candidate):SharedOccupancyCandidate=>{
+                    const automatic=candidateRadii.get(candidate.index);
+                    return {...candidate,radius:Math.max(this.sharedOccupancyRadius,automatic??0)};
+                }),this.peerOccupants(),this.peerOccupancyClearance):viable;
+            // Peer-rejected candidates never reserve a Min World Spacing cell.
+            accepted=new Set(planPopulation(shared,policy));
         }
         this.clear();
         for(let i=0;i<total;i++){
