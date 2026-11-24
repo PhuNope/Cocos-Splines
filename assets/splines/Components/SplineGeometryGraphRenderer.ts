@@ -1,5 +1,5 @@
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {_decorator,Component,MeshRenderer,Mesh,Material,Vec3,Mat4,utils} from 'cc';
+import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils} from 'cc';
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
@@ -30,6 +30,23 @@ export class SplineGeometryGraphRenderer extends Component {
      */
     @property({tooltip:'Visual Graph layout only (positions JSON); does not change generated geometry.'})
     graphLayoutJson='{}';
+    @property({tooltip:'Opt-in: use a shared Cocos JsonAsset graph instead of local graphJson. Asset is never modified by this renderer.'})
+    useGraphAsset=false;
+    @property({type:JsonAsset,tooltip:'Drag a .json graph from Assets. Shared and read-only for all referencing renderers.'})
+    graphAsset:JsonAsset|null=null;
+    /** Active V1 graph text for read-only export and rebuilding.
+     * Serializing the asset is a content-based revision: updating its JSON
+     * changes dependent renderers even when the asset UUID stays the same.
+     */
+    public activeGraphJson():string{
+        if(!this.useGraphAsset)return this.graphJson;
+        if(!this.graphAsset||!this.graphAsset.json)
+            throw Error('Geometry Graph asset mode needs an assigned JsonAsset.');
+        const payload=JSON.stringify(this.graphAsset.json);
+        if(typeof payload!=='string'||payload.length<2||payload.length>16384)
+            throw Error('Geometry Graph JsonAsset exceeds the supported v1 JSON limit.');
+        return payload;
+    }
     @property({min:2,max:64,step:1,tooltip:'Sample resolution per Bezier segment. Full graph is evaluated on Rebuild.'})
     samplesPerCurve=12;
     @property({type:Material,tooltip:'Optional shared material; otherwise respects a manually assigned MeshRenderer material.'})
@@ -69,7 +86,7 @@ export class SplineGeometryGraphRenderer extends Component {
         ]);
     }
     private signature():string {
-        return JSON.stringify([this.frameSignature(),this.graphJson,this.gizmoEdgeLimit]);
+        return JSON.stringify([this.frameSignature(),this.activeGraphJson(),this.gizmoEdgeLimit]);
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
@@ -113,7 +130,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const source=this.source(),renderer=this.getComponent(MeshRenderer);
         if(!source||source.count<2||source.segmentCount<1||!renderer)
             throw Error('Geometry Graph requires an active SplineContainer (2+ knots) and MeshRenderer.');
-        const plan=parseGeometryGraph(this.graphJson);
+        const plan=parseGeometryGraph(this.activeGraphJson());
         const frameRevision=this.frameSignature();
         let frames:RoadFrame[];
         if(this._frameCache&&this._frameRevision===frameRevision){
