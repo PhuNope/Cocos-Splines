@@ -1,3 +1,10 @@
+# Unreleased — Phase 3.8c2b2b2 Shared Occupancy (V2 Preview)
+
+- Added opt-in **Avoid Peer Population** with explicit Node references to earlier-priority SplineObjectControllers, a published conservative sphere radius per controller and optional World-space peer clearance.
+- New pure spatial-hash filter operates on previously spawned peer-root children, preserves stable original candidate indexes and runs before Density/Min World Spacing. Priority must strictly increase to avoid mutual dependency cycles; peers are never mutated or spawned.
+- Strict same-Scene, active peer, duplicate/self, priority, finite radius and generated-root preflight occurs before deleting own instances. Rebuild On Change tracks peer World positions and published radius only while enabled.
+- Added Inspector controls, strict math/component mock regression and Vietnamese setup/Editor checklist. Auto batch scheduling and precise persisted per-instance occupancy remain future work; native Cocos 3.8.8 validation pending. No tag/release.
+
 # Unreleased — Phase 3.8c2b2b1 Auto Prefab Footprint (V2 Preview)
 
 - Added opt-in automatic conservative prefab sphere footprint from serialized `Prefab.data` static MeshRenderer bounds / Box-, Sphere-, Capsule- and MeshCollider bounds across nested Node hierarchies. No temporary instantiate, changes to prefab assets or source Knot data.
