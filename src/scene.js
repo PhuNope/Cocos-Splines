@@ -578,6 +578,28 @@ function executeTool(uuid,kind,action){
     }
     return {ok:false,error:'Unknown tool action'};
 }
+/** Read-only, exact placement reason histogram for the selected Object
+ * Controller. Never Respawns, instantiates, snapshots or edits source Nodes.
+ * All physics/peer/geometry validation is delegated to previewPlacement().
+ */
+function queryPlacementSummary(uuid){
+    const node=resolve(uuid);
+    if(!node||node.isValid===false)
+        return {ok:false,error:'Select an active SplineObjectController Node.'};
+    const comp=node.components.find(c=>classOf(c)==='Splines.SplineObjectController');
+    if(!comp||comp.enabled===false||typeof comp.summarizePlacement!=='function')
+        return {ok:false,error:'Selected Node has no active SplineObjectController.'};
+    try{
+        const summary=comp.summarizePlacement();
+        if(!summary||!Number.isInteger(summary.total)||summary.total<0||
+           summary.total>2048||!Number.isInteger(summary.accepted)||
+           summary.accepted<0||summary.accepted>summary.total)
+            throw Error('Placement summary returned an invalid result.');
+        return {ok:true,summary};
+    }catch(error){
+        return {ok:false,error:String(error instanceof Error?error.message:error)};
+    }
+}
 function spawnPrefabs(uuid,kind,action){
     const node=resolve(uuid);
     if(!node)return {ok:false,error:'Node not found.'};
@@ -609,5 +631,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
