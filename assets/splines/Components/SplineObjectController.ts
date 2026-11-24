@@ -4,7 +4,10 @@ import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
 import { SplineNoise } from './SplineNoise';
 import { InstantiateMethod } from './SplineInstantiate';
-import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,planPopulation} from '../Core/SplinePopulationMath';
+import {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationPolicy,PopulationRejectReason,planPopulation} from '../Core/SplinePopulationMath';
+import {PlacementDiagnostic,attributePlacementDiagnostics} from '../Core/SplinePlacementDiagnostics';
+import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
+import {SplinePlacementGizmos} from '../Editor/SplinePlacementGizmos';
 import {PopulationWorldAabb,filterObstacleCandidates,validatePrefabWeights,selectWeightedPrefab} from '../Core/SplinePopulationPlacementMath';
 import {colliderWorldObb,colliderWorldCapsule} from '../Core/SplineColliderBounds';
 import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
@@ -16,7 +19,7 @@ import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
     type FootprintNode} from '../Core/SplinePrefabFootprintMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 import {filterSharedOccupancy,type SharedOccupancyCandidate,type SharedOccupant} from '../Core/SplineSharedOccupancyMath';
-const {ccclass,property,menu}=_decorator;
+const {ccclass,property,menu,executeInEditMode}=_decorator;
 
 /** Serializable density control point along normalized arc progress. */
 @ccclass('Splines.SplinePopulationDensityKey')
@@ -37,7 +40,9 @@ export class SplinePopulationExclusion implements PopulationExclusion {
  * on disable; manually saved instances remain intact.
  */
 @ccclass('Splines.SplineObjectController')
+@registerGizmos(SplinePlacementGizmos)
 @menu('Splines/Spline Object Controller')
+@executeInEditMode(true)
 export class SplineObjectController extends Component {
     @property({type:SplineContainer}) spline:SplineContainer|null=null;
     @property({type:[Prefab],tooltip:'Prefab variations. Selection is deterministic for the seed.'}) prefabs:Prefab[]=[];
@@ -114,6 +119,14 @@ export class SplineObjectController extends Component {
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
     @property({tooltip:'Spawn at Play only when the scene has no manually spawned instances.'}) spawnOnStart=true;
+    @property({tooltip:'Draw non-destructive accepted/rejected placement markers only when selected in Scene. Requires Cocos-Gizmos v3.'})
+    showPlacementGizmos=false;
+    @property({min:8,max:256,step:1,tooltip:'Maximum markers drawn; complete planning is evaluated before sampling.'})
+    placementGizmoLimit=96;
+    @property({min:0.02,max:2,tooltip:'World-space visualization marker radius.'})
+    placementGizmoSize=.12;
+    @property({tooltip:'Draw estimated prefab sphere footprints in Scene view, when available.'})
+    showPlacementFootprints=false;
     @property({type:Node,visible:false}) spawnedRoot:Node|null=null;
     private _runtimeSpawned=false;
     private _generated:Node[]=[];
@@ -400,14 +413,21 @@ export class SplineObjectController extends Component {
         if(this.spawnedRoot?.isValid&&this.spawnedRoot.children.length){this._signature=this.signature();return 0;}
         return this.respawn();
     }
-    /** Replace only the instances owned by this component. */
-    public respawn():number{
+    /** Authoritative preflight for both read-only preview and Respawn. */
+    public previewPlacement():PlacementDiagnostic[]{
+        return this.preparePlacement(true)?.diagnostics??[];
+    }
+    public placementPreviewRevision():string{
+        return JSON.stringify([this.signature(),this.showPlacementGizmos,
+            this.placementGizmoLimit,this.placementGizmoSize,this.showPlacementFootprints]);
+    }
+    private preparePlacement(trace:boolean){
         // Reject malformed noise configs BEFORE destroying previously spawned objects.
         if(this.noise)this.noise.sample(0);
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         const variants=this.prefabs.filter((p):p is Prefab=>!!p);
         if(!spline||spline.count<2||!variants.length){
-            this.clear();this._signature=this.signature();return 0;
+            return null;
         }
         // The opt-in weighted picker uses the SAME deterministic prefab RNG channel 0.
         // Validate before clear(); source null slots never consume a positive weight.
@@ -419,7 +439,7 @@ export class SplineObjectController extends Component {
             validatePrefabWeights(weights,variants.length);
         }
         const start=Math.max(0,Math.min(1,this.startProgress)),end=Math.max(0,Math.min(1,this.endProgress));
-        if(end<start){this.clear();this._signature=this.signature();return 0;}
+        if(end<start){return null;}
         const range=end-start;
         const closedLoop=spline.closed&&range>=1-1e-6;
         const span=spline.length*range;
@@ -443,8 +463,9 @@ export class SplineObjectController extends Component {
         // Nodes. Strict policy errors cannot destroy a valid existing population.
         // The legacy (opt-out) path below is otherwise unchanged.
         let accepted:Set<number>|null=null;
+        let diagnostics:PlacementDiagnostic[]=[];
         const surfacePlan=new Map<number,PopulationSurfacePlacement>();
-        if(this.enablePopulationRules||this.avoidObstacleColliders||this.conformToSurface||this.avoidPeerPopulation){
+        if(this.enablePopulationRules||this.avoidObstacleColliders||this.conformToSurface||this.avoidPeerPopulation||trace){
             const policy:PopulationPolicy=this.enablePopulationRules?{
                 seed:this.seed,closed:spline.closed===true,density:this.density,
                 densityKeys:this.densityKeys,exclusions:this.exclusions,
@@ -508,8 +529,25 @@ export class SplineObjectController extends Component {
                     return {...candidate,radius:Math.max(this.sharedOccupancyRadius,automatic??0)};
                 }),this.peerOccupants(),this.peerOccupancyClearance):viable;
             // Peer-rejected candidates never reserve a Min World Spacing cell.
-            accepted=new Set(planPopulation(shared,policy));
+            const finalRejections:{index:number;reason:PopulationRejectReason}[]=[];
+            const indices=planPopulation(shared,policy,trace?
+                (index,reason)=>finalRejections.push({index,reason}):undefined);
+            accepted=new Set(indices);
+            if(trace)diagnostics=attributePlacementDiagnostics({
+                planned:candidates,projected,obstacle:viable,peers:shared,
+                accepted:indices,finalRejections,radii:candidateRadii,
+                defaultRadius:this.avoidObstacleColliders&&this.usePreciseObstacleShapes?
+                    this.placementFootprintRadius:0,
+            });
         }
+        return {spline,variants,weights,start,closedLoop,span,steps,total,accepted,
+            surfacePlan,diagnostics};
+    }
+    /** Only clear old generated instances AFTER all placement validation. */
+    public respawn():number{
+        const prepared=this.preparePlacement(false);
+        if(!prepared){this.clear();this._signature=this.signature();return 0;}
+        const {spline,variants,weights,start,closedLoop,span,steps,total,accepted,surfacePlan}=prepared;
         this.clear();
         for(let i=0;i<total;i++){
             const d=this.method===InstantiateMethod.Distance?Math.min(span,i*steps):
