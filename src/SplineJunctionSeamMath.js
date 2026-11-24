@@ -39,7 +39,8 @@ function smoothJunctionSeam(inward,outward,mode='preserve'){
  // new output changes, never the original source or other output handles.
  const targetLength=mode==='c1'?inLength:outLength;
  const factor=-targetLength/inLength;
- const tangentOut={x:inward.x*factor,y:inward.y*factor,z:inward.z*factor};
+ const scaled=n=>{const value=n*factor;return value===0?0:value;};
+ const tangentOut={x:scaled(inward.x),y:scaled(inward.y),z:scaled(inward.z)};
  if(!finite(tangentOut)||magnitude(tangentOut)>1e7)
    throw Error('Join G1/C1 tangent correction exceeds bounds.');
  const angleDeg=seamAngle(inward,tangentOut);
