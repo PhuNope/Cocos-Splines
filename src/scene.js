@@ -434,6 +434,27 @@ function refreshPreview(uuid){
  * Spline/Knots or recording a Scene snapshot. A failed validation leaves its
  * previous generated Mesh intact; the component owns its own transient mesh.
  */
+/** Read-only graph exchange preflight. Never modifies either JsonAsset or Node.
+ * Scene supplies the serialized Component index for Editor native property writes.
+ */
+function queryGeometryGraphAsset(uuid){
+    const node=resolve(uuid);
+    if(!node||node.isValid===false)return {ok:false,error:'Select a Geometry Graph Node.'};
+    const componentIndex=node.components.findIndex(c=>
+        classOf(c)==='Splines.SplineGeometryGraphRenderer');
+    if(componentIndex<0)return {ok:false,error:'Selected Node has no Geometry Graph Renderer.'};
+    const comp=node.components[componentIndex];
+    if(comp.enabled===false||typeof comp.activeGraphJson!=='function')
+        return {ok:false,error:'Geometry Graph component is disabled or unavailable.'};
+    try{
+        const graphJson=comp.activeGraphJson();
+        // Do not rely on `JSON.stringify(undefined)` when JsonAsset is missing.
+        if(typeof graphJson!=='string'||graphJson.length>16384)
+            throw Error('Invalid or oversized Geometry Graph content.');
+        return {ok:true,componentIndex,graphJson,assetMode:!!comp.useGraphAsset,
+            assetName:comp.graphAsset?.name||null};
+    }catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
+}
 function rebuildGeometryGraph(uuid){
     const node=resolve(uuid);
     if(!node||node.isValid===false)return {ok:false,error:'Select an active Geometry Graph Renderer Node.'};
@@ -648,5 +669,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,rebuildGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryGeometryGraphAsset,rebuildGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};
