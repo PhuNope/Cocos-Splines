@@ -44,6 +44,7 @@ function junction(id,entries){
  const node={uuid:id,parent:scene,isValid:true,components:[],children:[]};
  const connections=entries.map(([s,p])=>({
    spline:s,progress:p,positionMode:0,distance:0,exitDirection:0,
+   trafficSignal:0,
    getProgress(){return this.progress;},
  }));
  const j={kind:'Splines.SplineJunction',node,enabled:true,connections};
@@ -54,6 +55,7 @@ const J1=junction('j1',[[A,1],[B,0],[C,0]]);
 const J2=junction('j2',[[B,1],[D,0]]);
 const J3=junction('j3',[[C,1],[E,0]]);
 const J4=junction('j4',[[E,1],[D,1]]);
+J4.connections[1].exitDirection=2; // Backward required for D progress 1.
 const sceneApi=createJunctionScene({
  resolve:id=>registry.get(id)||null,
  classOf:x=>x.kind,
@@ -78,6 +80,25 @@ assert.equal(plan.count,9);
 near(plan.estimatedWorldDistance,20);
 near(plan.estimatedRouteCost,20);
 near(plan.knots[plan.count-1].position.x,20);
+assert(sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
+const policyPlan=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'distance',10,'direction');
+assert(policyPlan.ok,policyPlan.error);
+assert.deepEqual(names(policyPlan),['a','c','e','d']);
+assert.equal(policyPlan.routePolicy,'direction');
+J1.connections[1].trafficSignal=1; // Red: block shortest-switch B transfer.
+const green=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'direction-green');
+assert(green.ok,green.error);
+assert.deepEqual(names(green),['a','c','e','d']);
+assert.equal(green.routePolicy,'direction-green');
+assert(!sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok,
+ 'Changing a traffic signal must invalidate a planned route lease');
+J1.connections[2].trafficSignal=2;
+assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'switches',10,'direction-green').ok);
+J1.connections[1].trafficSignal=0;
+J1.connections[2].trafficSignal=0;
 assert(sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
 let balanced=sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
  'preserve','full',0,1,'balanced',10);
@@ -117,5 +138,7 @@ assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
  'preserve','full',0,1,'balanced',-1).ok);
 assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
  'preserve','full',0,1,'bad',10).ok);
+assert(!sceneApi.queryMultiJunctionJoinPlan('j1',0,'d',
+ 'preserve','full',0,1,'distance',10,'unsupported').ok);
 assert(sceneApi.queryMultiJunctionJoinValid('j1',plan.guard).ok);
 console.log('JUNCTION COST SCENE PASS: legacy BFS, 2-vs-3 switches, sampled world path length, Full/Partial, C1, source lease.');

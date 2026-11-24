@@ -78,7 +78,7 @@ function makeInspector(type){
     }
     if(type==='junction'){
         groups+=`<details class="spl-section"><summary>Connector validation / endpoint snap</summary>
-          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents and does not preserve extra Knot components. Choose Preserve (exact source cubic segments), G1 (align outgoing only, keep its magnitude) or C1 (align outgoing and match incoming magnitude); smoothing changes only the NEW output segment, not source splines. Degenerate seam tangents reject optional smoothing. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Across Junctions chooses a deterministic minimum-switch route between a selected Anchor link and a destination Spline Node UUID (at least two distinct Junctions). Full mode (default) preserves earlier endpoint-only behavior; opt-in Partial mode slices exact Bezier portions at mid-spline Junction links, with explicit start/finish sides, preserving source splines. Requires physically coincident link points. Route optimization defaults to fewest switches; optional shortest World-distance or distance plus a custom penalty per Junction switch uses bounded geometric sampling (not traffic rules). Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
+          <p class="spl-note">Check geometry in world units. Snap moves a target endpoint position only. Join creates a NEW independent spline from two exact open-spline endpoints (Snap first if separated); sources are not changed. Join uses resolved source tangents and does not preserve extra Knot components. Choose Preserve (exact source cubic segments), G1 (align outgoing only, keep its magnitude) or C1 (align outgoing and match incoming magnitude); smoothing changes only the NEW output segment, not source splines. Degenerate seam tangents reject optional smoothing. Fan-out makes a separate independent Joined Spline per exit; a Junction with branches cannot be represented by one Bezier chain without duplicate backtracks. Across Junctions chooses a deterministic minimum-switch route between a selected Anchor link and a destination Spline Node UUID (at least two distinct Junctions). Full mode (default) preserves earlier endpoint-only behavior; opt-in Partial mode slices exact Bezier portions at mid-spline Junction links, with explicit start/finish sides, preserving source splines. Requires physically coincident link points. Route optimization defaults to fewest switches; optional shortest World-distance or distance plus a custom penalty per Junction switch uses bounded geometric sampling. Optional route exit policy can respect Junction Exit Direction and currently Green signals (Editor snapshot only, no capacity/traffic forecasts). Align Tangent (G1/C1) changes only a Broken-mode target tangent. Interior links and closed splines cannot Join.</p>
           <div class="spl-btns"><button type="button" class="spl-btn spl-check-connections">Check Connectors</button></div>
           <div class="spl-btns">
             <label>Join seam treatment
@@ -139,6 +139,15 @@ function makeInspector(type){
             </label>
           </div>
           <div class="spl-btns">
+            <label>Route exit policy
+              <select class="spl-index-input spl-route-policy" style="width:235px">
+                <option value="ignore">Ignore exit restrictions (default)</option>
+                <option value="direction">Respect Preserve / Forward / Backward</option>
+                <option value="direction-green">Respect direction + Green signal only</option>
+              </select>
+            </label>
+          </div>
+          <div class="spl-btns">
             <label>Tangent <select class="spl-index-input spl-tangent-mode" style="max-width:120px;width:120px"><option value="g1">G1 · direction</option><option value="c1">C1 · magnitude</option></select></label>
             <label>Forward <select class="spl-index-input spl-tangent-direction" style="max-width:125px;width:125px"><option value="same">Same</option><option value="opposed">Opposed</option></select></label>
             <button type="button" class="spl-btn spl-convert-connector-mode">Convert Target → Broken</button>
@@ -159,6 +168,7 @@ function makeInspector(type){
         selectors.routeStartSide='.spl-route-start-side';
         selectors.routeGoalSide='.spl-route-goal-side';
         selectors.routeCostMode='.spl-route-cost-mode';
+        selectors.routePolicy='.spl-route-policy';
         selectors.routeSwitchPenalty='.spl-route-switch-penalty';
         selectors.joinSeamMode='.spl-join-seam-mode';
         selectors.alignConnector='.spl-align-connector';
@@ -342,7 +352,8 @@ function makeInspector(type){
                     this.$.routeDestination.value.trim(),this.$.joinSeamMode.value,
                     this.$.routeMode.value,Number(this.$.routeStartSide.value),
                     Number(this.$.routeGoalSide.value),this.$.routeCostMode.value,
-                    Number(this.$.routeSwitchPenalty.value)));
+                    Number(this.$.routeSwitchPenalty.value),
+                    this.$.routePolicy.value));
                 this.$.joinFanout.addEventListener('click',()=>void callEditor(this,
                     'join-junction-fanout',Number(this.$.connectorAnchor.value),
                     this.$.fanoutTargets.value,this.$.joinSeamMode.value));

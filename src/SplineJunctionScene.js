@@ -12,7 +12,7 @@ const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {planEndpointJunctionChain,planMultiJunctionGeometry,
   planPartialJunctionChain,planPartialJunctionGeometry}=require('./SplineJunctionRouteMath');
 const {captureContainerAppearance}=require('./SplineTopologyCopyPolicy');
-const {validateRouteCost,measureSplineWorldArc,costRoute}=
+const {validateRouteCost,validateRoutePolicy,measureSplineWorldArc,costRoute}=
   require('./SplineJunctionRouteCost');
 function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRoot}){
  function junctionAt(uuid){
@@ -65,7 +65,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
      return [e.index,spline.node.uuid,spline.node.parent?.uuid||null,
        spline.enabled,spline.closed,spline.reversed,spline.dimension,
        spline.samplesPerCurve,link.positionMode,link.progress,link.distance,
-       link.exitDirection,e.worldMatrix,knots];
+       link.exitDirection,link.trafficSignal,e.worldMatrix,knots];
    });
    return JSON.stringify([scene,junction.node.uuid,junction.node.parent?.uuid||null,
      junction.enabled,junction.connections.length,state]);
@@ -245,10 +245,11 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
  }
  function queryMultiJunctionJoinPlan(uuid,anchorIndex,goalSplineUuid,
    seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
-   costMode='switches',switchPenalty=10){
+   costMode='switches',switchPenalty=10,routePolicy='ignore'){
    try{
      validateSeamMode(seamMode);
      validateRouteCost(costMode,switchPenalty);
+     validateRoutePolicy(routePolicy);
      if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
         ![0,1].includes(goalSide))
        throw Error('Invalid Join route mode or partial traversal direction.');
@@ -276,13 +277,15 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
            throw Error('Duplicate SplineContainer Node UUID.');
          bySpline.set(splineId,e.spline);
          links.push({junctionId:junction.node.uuid,linkIndex:e.index,
-           splineId,progress:e.progress,world:e.position});
+           splineId,progress:e.progress,world:e.position,
+           exitDirection:e.link.exitDirection,
+           trafficSignal:e.link.trafficSignal});
        }
      }
      if(links.length>1024)
        throw Error('More than 1024 Junction links in Scene.');
      let chain;
-     if(costMode==='switches'){
+     if(costMode==='switches'&&routePolicy==='ignore'){
        // Preserve original BFS exactly for all existing projects.
        chain=routeMode==='partial'?
          planPartialJunctionChain(links,{junctionId:uuid,linkIndex:anchorIndex},
@@ -304,7 +307,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
        }
        chain=costRoute(costLinks,{junctionId:uuid,linkIndex:anchorIndex},
          goalSplineUuid,{mode:costMode,penalty:switchPenalty,
-           routeMode,startSide,goalSide});
+           routeMode,startSide,goalSide,policy:routePolicy});
      }
      const descriptors=chain.path.map(entry=>{
        const spline=bySpline.get(entry.splineId);
@@ -363,7 +366,7 @@ function createJunctionScene({resolve,classOf,queryKnotEditFrame,sceneId,sceneRo
         samplesPerCurve>256)
        throw Error('Invalid route sampling density.');
      return {ok:true,...result,routeMode,startSide,goalSide,
-       routeCostMode:costMode,junctionPenalty:switchPenalty,
+       routeCostMode:costMode,junctionPenalty:switchPenalty,routePolicy,
        estimatedWorldDistance:chain.estimatedWorldDistance??null,
        estimatedRouteCost:chain.estimatedRouteCost??null,
        junctionUuid:uuid,anchorIndex,goalSplineUuid,

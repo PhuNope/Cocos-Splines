@@ -6,6 +6,24 @@
  * Legacy minimum-switch BFS remains the default in SplineJunctionRouteMath.
  */
 const MODES=Object.freeze(['switches','distance','balanced']);
+const POLICIES=Object.freeze(['ignore','direction','direction-green']);
+function validateRoutePolicy(policy='ignore'){
+ if(!POLICIES.includes(policy))throw Error('Invalid Join route policy.');
+ return policy;
+}
+/** Match SplineAnimate.commitJunctionSwitch: Preserve uses incoming
+ * normalized-progress direction; Forward/Backward override to ±1.
+ * Never infer traffic admission from this read-only Editor check.
+ */
+function exitPermits(target,incomingDirection,nextDirection,policy){
+ if(policy==='ignore')return true;
+ if(![0,1,2].includes(target.exitDirection))
+   throw Error('Invalid Junction exitDirection in route snapshot.');
+ if(policy==='direction-green'&&target.trafficSignal!==0)return false;
+ const selected=target.exitDirection===1?1:
+   target.exitDirection===2?-1:incomingDirection;
+ return selected===nextDirection;
+}
 const finite=p=>!!p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 function validateRouteCost(mode='switches',penalty=10){
@@ -63,7 +81,8 @@ const compareLink=(a,b)=>a.junctionId.localeCompare(b.junctionId)||
  a.linkIndex-b.linkIndex||a.splineId.localeCompare(b.splineId);
 function costRoute(links,anchor,goalSplineId,options={}){
  const {mode='distance',penalty=10,routeMode='full',
-   startSide=0,goalSide=1,maxGap=1e-5}=options;
+   startSide=0,goalSide=1,maxGap=1e-5,policy='ignore'}=options;
+ validateRoutePolicy(policy);
  validateRouteCost(mode,penalty);
  if(!['full','partial'].includes(routeMode)||
     ![0,1].includes(startSide)||![0,1].includes(goalSide)||
@@ -82,7 +101,9 @@ function costRoute(links,anchor,goalSplineId,options={}){
       !finite(l.world)||!Number.isFinite(l.worldArc)||
       !Number.isFinite(l.worldTotal)||l.worldTotal<=1e-6||
       l.worldTotal>1e9||l.worldArc<0||
-      l.worldArc>l.worldTotal+1e-5)
+      l.worldArc>l.worldTotal+1e-5||
+      (policy!=='ignore'&&![0,1,2].includes(l.exitDirection))||
+      (policy==='direction-green'&&![0,1,2].includes(l.trafficSignal)))
      throw Error('Cost-aware routes require finite sampled world arc lengths for all links.');
    const key=JSON.stringify([l.junctionId,l.linkIndex]);
    if(seen.has(key))throw Error('Duplicate Junction link index.');
@@ -121,6 +142,8 @@ function costRoute(links,anchor,goalSplineId,options={}){
    p.linkIndex+':'+(p.toProgress??'')).join('|');
  const queue=[{exit:start,path:[first],worldDistance:firstLength,
     score:score(mode,penalty,firstLength,0),finished:false,
+    travelDirection:routeMode==='full'?(start.progress===1?1:-1):
+      (start.progress>startSide?1:-1),
     routeKey:keyFor([first])}];
  function order(a,b){
    const d=a.score-b.score;
@@ -140,7 +163,7 @@ function costRoute(links,anchor,goalSplineId,options={}){
        switchCount:path.length-1,
        junctionIds:path.slice(1).map(p=>p.junctionId),
        ...(routeMode==='partial'?{routeMode:'partial',startSide,goalSide}:{}),
-       costMode:mode,switchPenalty:penalty,
+       costMode:mode,switchPenalty:penalty,routePolicy:policy,
        estimatedWorldDistance:state.worldDistance,
        estimatedRouteCost:state.score};
    }
@@ -161,8 +184,11 @@ function costRoute(links,anchor,goalSplineId,options={}){
          continue;
        const leg=routeMode==='full'?target.worldTotal:
          Math.abs(target.worldArc-(goalSide===0?0:target.worldTotal));
-       if(leg>1e-6)available.push({
-         finished:true,exit:target,length:leg,
+       const nextDirection=routeMode==='full'?(target.progress===0?1:-1):
+         (goalSide>target.progress?1:-1);
+       if(leg>1e-6&&exitPermits(target,state.travelDirection,
+          nextDirection,policy))available.push({
+         finished:true,exit:target,length:leg,direction:nextDirection,
          step:routeMode==='partial'?{...base,toProgress:goalSide}:base,
        });
      }else if(state.path.length<7){
@@ -173,8 +199,12 @@ function costRoute(links,anchor,goalSplineId,options={}){
             Math.abs(exit.progress-target.progress)<1e-5)continue;
          const leg=routeMode==='full'?target.worldTotal:
            Math.abs(exit.worldArc-target.worldArc);
-         if(leg<=1e-6)continue;
+         const nextDirection=routeMode==='full'?(target.progress===0?1:-1):
+           (exit.progress>target.progress?1:-1);
+         if(leg<=1e-6||!exitPermits(target,state.travelDirection,
+           nextDirection,policy))continue;
          available.push({finished:false,exit,length:leg,
+           direction:nextDirection,
            step:routeMode==='partial'?
              {...base,toProgress:exit.progress}:base});
        }
@@ -188,6 +218,7 @@ function costRoute(links,anchor,goalSplineId,options={}){
        const switches=path.length-1;
        if(!Number.isFinite(length)||length>1e10)continue;
        queue.push({exit:next.exit,path,finished:next.finished,
+         travelDirection:next.direction,
          worldDistance:length,score:score(mode,penalty,length,switches),
          routeKey:keyFor(path)});
        if(queue.length>16384)
@@ -197,4 +228,5 @@ function costRoute(links,anchor,goalSplineId,options={}){
  }
  throw Error('No cost-aware Junction route found. Check snapped links, open splines and destination.');
 }
-module.exports={validateRouteCost,measureSplineWorldArc,costRoute};
+module.exports={validateRouteCost,validateRoutePolicy,
+  exitPermits,measureSplineWorldArc,costRoute};

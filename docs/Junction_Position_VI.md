@@ -190,3 +190,14 @@ Trong SplineJunction Inspector → Join Across Junctions → New Spline, chọn 
 Với hai mode có tính chiều dài, Scene lấy mẫu World coordinates từ SplineContainer.evaluateWorldPositionAtT với 24 mẫu/Bezier cubic (giới hạn 64–2048 samples/spline), sau đó dùng tAtProgress nội suy vị trí tích lũy trên lookup theo đúng normalized arc progress của Junction. Kết quả là **ước lượng tổng chiều dài hình học** bằng tổng đoạn thẳng nối mẫu; không phải công thức arc-length chính xác tuyệt đối, và không bao gồm chiều dài chuyển tiếp ở Junction (hai điểm link phải trùng World trong sai số). Cả reversed và scale/rotation của node đã được thể hiện trong các mẫu World.
 
 Planner duyệt các tuyến không lặp spline, tối đa 8 source splines, ít nhất 2 Junction khác nhau, có giới hạn 8192 state và 16384 candidate. Khi chi phí bằng nhau, tie-break ổn định theo độ dài, số nhánh và UUID/link. **Full và Partial** đều hỗ trợ lựa chọn chi phí; **G1/C1** thực hiện trên **output mới** như trước. Các source Knot/Junction/Prefab không bị viết; một Editor snapshot khi thành công và rollback trên root mới khi thất bại. Không sử dụng SplineTrafficController signal, capacity, exit-direction hoặc turn restriction: đây là bước tiếp theo. **Chưa xác thực native Cocos Creator 3.8.8 Undo/Redo, Prefab hoặc scene reopen**.
+
+
+## Direction-aware / Green-only route policy (V2 opt-in)
+
+Trong `SplineJunction Inspector → Join Across Junctions`, chọn `Route exit policy`:
+
+- **Ignore exit restrictions (default)**: giữ nguyên hoàn toàn đường đi BFS/cost routing của các bản trước.
+- **Respect Preserve / Forward / Backward**: khi chuyển Junction, kiểm tra `SplineJunctionLink.exitDirection` của **exit đích** giống hành vi `SplineAnimate.commitJunctionSwitch`. Preserve giữ chiều normalized progress từ spline vào; Forward yêu cầu đi từ 0→1; Backward yêu cầu đi 1→0. Nếu đoạn tiếp theo cần đi ngược với hướng này, planner bỏ tuyến đó.
+- **Respect direction + Green signal only**: ngoài hướng đi, chỉ xét exit đích có `trafficSignal=Green` tại thời điểm chạy Join. Red/Yellow không được chọn (Yellow cũng là no-entry). Đây là **Scene snapshot**, không dự đoán thời điểm đổi pha, không giữ chỗ cho follower hoặc bảo đảm passage trong runtime.
+
+Tính năng dùng được với Full / Partial, các lựa chọn Fewest switches / Shortest distance / Balanced, và Preserve/G1/C1 smoothing; khi bật filter, ngay cả Fewest switches sẽ dùng cost-aware planner để áp điều kiện. Chỉ ghi spline kết quả, không sửa source. Fingerprint toàn Scene nay bao gồm exitDirection và trafficSignal: nếu tín hiệu bị sửa sau khi lập plan thì transaction từ chối thay vì dùng snapshot cũ. Đây là static planning, **không** kiểm tra `maxFollowers`, queue/capacity, controller phases hoặc quyền chuyển động theo clock. Chưa kiểm tra native Undo/Redo/Prefab Cocos Creator 3.8.8.

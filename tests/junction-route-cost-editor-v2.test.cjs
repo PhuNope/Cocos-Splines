@@ -72,8 +72,9 @@ const request=async(channel,method,arg)=>{
  if(method==='execute-scene-script'){
    if(arg.method==='queryMultiJunctionJoinPlan'){
      invocations.push(arg.args);
-     const mode=arg.args[7]||'switches',penalty=arg.args[8]??10;
-     const output=plan(mode,penalty);
+     const mode=arg.args[7]||'switches',penalty=arg.args[8]??10,
+       policy=arg.args[9]||'ignore';
+     const output={...plan(mode,penalty),routePolicy:policy};
      return badResponse?{...output,estimatedWorldDistance:-3}:output;
    }
    if(arg.method==='queryMultiJunctionJoinValid')
@@ -151,6 +152,14 @@ const {methods}=require('../dist/main.js');
  assert.equal(result.routeCostMode,'switches');
  assert.equal(result.estimatedWorldDistance,null);
  assert.equal(snapshots,3);
+ selected=['j1'];
+ result=await methods.joinMultiJunctionRoute(0,'d','preserve',
+ 'full',0,1,'distance',10,'direction-green');
+ assert(result.ok,result.error);
+ assert.equal(result.routePolicy,'direction-green');
+ assert.equal(snapshots,4);
+ assert.deepEqual(invocations.at(-1),
+ ['j1',0,'d','preserve','full',0,1,'distance',10,'direction-green']);
  const count=created.length,oldSnapshots=snapshots;
  selected=['j1'];badResponse=true;
  result=await methods.joinMultiJunctionRoute(0,'d','preserve',
@@ -175,6 +184,10 @@ const {methods}=require('../dist/main.js');
  'full',0,1,'balanced',-1);
  assert(!result.ok&&/switch penalty/.test(result.error));
  assert.equal(created.length,count+2,'Rejected cost values create no new nodes');
+ result=await methods.joinMultiJunctionRoute(0,'d','preserve',
+ 'full',0,1,'distance',10,'bad-policy');
+ assert(!result.ok&&/route policy/.test(result.error));
+ assert.equal(created.length,count+2);
  assert.deepEqual([...nodes.entries()].filter(([id])=>
    ['a','b','c','d','e'].includes(id)),JSON.parse(sources));
  const inspector=require('../dist/contributions/inspector/Junction');
@@ -183,5 +196,9 @@ const {methods}=require('../dist/main.js');
  assert(inspector.template.includes('value="distance"'));
  assert(inspector.template.includes('value="balanced"'));
  assert(inspector.template.includes('spl-route-switch-penalty'));
+ assert(inspector.template.includes('spl-route-policy'));
+ assert(inspector.template.includes('value="ignore"'));
+ assert(inspector.template.includes('value="direction"'));
+ assert(inspector.template.includes('value="direction-green"'));
  console.log('JUNCTION COST EDITOR PASS: legacy IPC, distance/balanced modes, cost validation, one snapshot, source isolation, stale lease and rollback.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
