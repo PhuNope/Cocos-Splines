@@ -70,6 +70,7 @@ const $={...base.$,
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
   vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout'};
 function status(panel,message,isError=false){
+  panel._vgStatusError=!!isError;
   if(!panel.$?.vgStatus)return;
   panel.$.vgStatus.textContent=message;
   panel.$.vgStatus.classList?.toggle?.('error',isError);
@@ -263,7 +264,11 @@ const inspector={
         status(this,'Editing a temporary shared draft. Save requires confirmation and changes the source JSON file.');
       }catch(error){
         if(token===this._vgRequestToken)status(this,String(error?.message||error),true);
-      }finally{this._vgSharedBusy=false;render(this);}
+      }finally{
+        const message=this.$?.vgStatus?.textContent,wasError=this._vgStatusError;
+        this._vgSharedBusy=false;render(this);
+        if(message)status(this,message,wasError);
+      }
     })());
     this.$?.vgSaveShared?.addEventListener('click',()=>void (async()=>{
       const draft=this._vgSharedDraft;
@@ -285,7 +290,11 @@ const inspector={
       }catch(error){
         if(token===this._vgRequestToken&&this._vgSharedDraft===draft)
           status(this,String(error?.message||error),true);
-      }finally{this._vgSharedBusy=false;render(this);}
+      }finally{
+        const message=this.$?.vgStatus?.textContent,wasError=this._vgStatusError;
+        this._vgSharedBusy=false;render(this);
+        if(message)status(this,message,wasError);
+      }
     })());
     this.$?.vgDiscardShared?.addEventListener('click',()=>{
       if(!this._vgSharedDraft||this._vgSharedBusy)return;
