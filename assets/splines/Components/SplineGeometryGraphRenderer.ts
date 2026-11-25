@@ -4,8 +4,10 @@ import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
-import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile}
+import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext}
     from '../Core/SplineGeometryGraph';
+import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
+    from '../Core/SplineGraphMeshAssetReader';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
 
@@ -40,6 +42,11 @@ export class SplineGeometryGraphRenderer extends Component {
      */
     @property({tooltip:'V2 graph: optional Output Node ID (e.g. outputBranch). Empty uses graph default.'})
     outputId='';
+    /** Input slot for optional typed graph meshAsset nodes. This is a native
+     * project Mesh reference, never raw vertex data in graph JSON.
+     */
+    @property({type:Mesh,tooltip:'Optional readable Mesh Asset used by meshAsset → meshDeform. Enable Allow Data Access. One submesh, <=4096 vertices.'})
+    sourceMesh:Mesh|null=null;
     /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON
      * changes dependent renderers even when the asset UUID stays the same.
@@ -96,7 +103,8 @@ export class SplineGeometryGraphRenderer extends Component {
         const selected=typeof this.outputId==='string'?this.outputId.trim():'';
         const runner=new GeometryGraphRunner();
         runner.setProfilingEnabled(true);
-        const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision};
+        const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
+            ...this.graphMeshContext(plan)};
         runner.evaluate(plan,context,selected||undefined);
         const cold=runner.profile!;
         runner.evaluate(plan,context,selected||undefined);
@@ -122,7 +130,16 @@ export class SplineGeometryGraphRenderer extends Component {
         ]);
     }
     private signature():string {
-        return JSON.stringify([this.frameSignature(),this.activeGraphJson(),this.outputId,this.gizmoEdgeLimit]);
+        const json=this.activeGraphJson();
+        const assetRevision=json.includes('"meshAsset"')?
+            graphMeshDataFingerprint(this.sourceMesh):'';
+        return JSON.stringify([this.frameSignature(),json,this.outputId,assetRevision,this.gizmoEdgeLimit]);
+    }
+    private graphMeshContext(plan:GeometryGraphPlan):
+        Pick<GeometryGraphContext,'meshSource'|'meshRevision'>{
+        if(!plan.nodes.some(n=>n.type==='meshAsset'))return {};
+        const data=readGraphSourceMeshAsset(this.sourceMesh);
+        return {meshSource:data.geometry,meshRevision:data.revision};
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
@@ -203,6 +220,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const geometry=this._runner.evaluate(plan,{
             frames,closed:source.closed,revision:frameRevision,
+            ...this.graphMeshContext(plan),
         },selection||undefined);
         const wire=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({
