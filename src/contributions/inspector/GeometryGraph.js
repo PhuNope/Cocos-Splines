@@ -323,8 +323,9 @@ const inspector={
     const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
     const rendererOutputId=dump?.value?.outputId?.value??'';
+    const changedOutput=this._vgProfileOutputId!==rendererOutputId;
     if(changedShared||(!shared&&this._vgGraphJson!==graphJson)||
-       this._vgProfileOutputId!==rendererOutputId){
+       changedOutput){
       this._vgProfile=null;
       this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
     }
@@ -335,7 +336,7 @@ const inspector={
       this._vgRequestToken=(this._vgRequestToken||0)+1;
     }
     const changed=this._vgGraphJson!==graphJson||
-      this._vgLayoutJson!==layoutJson||changedShared;
+      this._vgLayoutJson!==layoutJson||changedShared||changedOutput;
     this._vgShared=shared;this._vgAssetIdentity=assetIdentity;
     this._vgLayoutJson=layoutJson;
     if(!shared)this._vgGraphJson=graphJson;
@@ -404,6 +405,8 @@ const inspector={
         graph.parseGraph(info.graphJson);
         this._vgSharedDraft={nodeUuid:info.nodeUuid,assetUuid:info.assetUuid,
           sha256:info.sha256,initialGraphJson:info.graphJson,graphJson:info.graphJson};
+        this._vgProfile=null;
+        this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
         this._vgSharedReview=null;
         this._vgGraphJson=info.graphJson;this._vgSelected=null;this._vgPending=null;
         render(this);
