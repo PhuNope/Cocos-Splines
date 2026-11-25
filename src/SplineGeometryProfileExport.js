@@ -30,6 +30,10 @@ function planProfileExport(file,assetsRoot,profile,{filesystem=fs}={}){
   if(!info.isDirectory()||info.isSymbolicLink())
    throw Error('Profile export directories must be existing real directories.');
  }
+ // An orphan .meta file may retain a UUID from a deleted asset. Never
+ // adopt it silently when creating a new project-owned Profile JsonAsset.
+ if(filesystem.existsSync(target+'.meta'))
+  throw Error('Profile export destination already has an existing .meta file.');
  const content=formatProfile(profile);
  const bytes=Buffer.byteLength(content,'utf8');
  if(bytes<2||bytes>MAX_BYTES)
