@@ -15,7 +15,7 @@ const TYPES=Object.freeze({
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   extrude:{input:'path',output:'mesh',params:['width','height','profileShape','uvMetersPerRepeat','capEnds']},
-  meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','uvMetersPerRepeat']},
+  meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 const LIMITS=Object.freeze({
@@ -25,10 +25,11 @@ const LIMITS=Object.freeze({
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
   height:[.05,100,1],profileShape:[0,2,0],
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
+  repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','deformShape','axis','slot','segments','repeats']);
+  'height','profileShape','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -68,10 +69,13 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','deformShape','axis','slot','segments','repeats'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
+    if(node.type==='meshDeform'&&node.tileLength!==undefined&&
+       node.tileLength>0&&node.tileLength<.01)
+      throw Error('Graph tileLength must be 0 or >= 0.01.');
     map.set(node.id,node);
   }
   if(sources!==1||meshAssets>3||(graph.version===1&&outputs!==1)||
@@ -276,9 +280,11 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','deformShape','segments','repeats'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
+    if(key==='tileLength'&&value>0&&value<.01)
+      throw Error('tileLength must be 0 or >= 0.01.');
     target[key]=value;
   }else throw Error('Unknown Graph operation.');
   validateGraph(next);
@@ -367,6 +373,14 @@ function renderNodeParameters(graphJson,id){
        .map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+
          escapeHtml(name)+'</option>').join('')+
       '</select></label>';
+    if(key==='repeatLayout'||key==='uvMode')return '<label>'+escapeHtml(key)+
+      ' <select data-graph-param="'+key+'">'+
+      (key==='repeatLayout'?
+       ['Count (stretch per section)','Source Length (trim last tile)']:
+       ['Original UV atlas','Continuous repeat UV','Spline distance UV'])
+        .map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+
+          escapeHtml(name)+'</option>').join('')+
+      '</select></label>';
     if(key==='deformShape')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       ['Strip','Box Shell'].map((name,i)=>
@@ -386,6 +400,12 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
+    (n.type==='meshDeform'?'<div class="spl-vg-note">'+
+      ((n.repeatLayout??0)===1?
+       'Source Length: 0 tileLength uses mesh axis bounds; last tile is clipped, not stretched.'+
+       ' Maximum 256 tiles and bounded mesh output.':
+       'Count: repeat count is stretched across the full spline.')+
+      '</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':
       (n.type==='meshAsset'?'':'<div class="spl-vg-note">No editable properties.</div>'))+
     (n.type==='meshAsset'?'<div class="spl-vg-note">'+
