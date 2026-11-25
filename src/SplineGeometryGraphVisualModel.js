@@ -9,13 +9,13 @@
  */
 const TYPES=Object.freeze({
   spline:{input:null,output:'path',params:[]},
-  meshAsset:{input:null,output:'meshSource',params:[]},
+  meshAsset:{input:null,output:'meshSource',params:['slot']},
   offset:{input:'path',output:'path',params:['right','up']},
   width:{input:'path',output:'path',params:['multiplier']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   extrude:{input:'path',output:'mesh',params:['width','height','profileShape','uvMetersPerRepeat','capEnds']},
-  meshDeform:{input:'path',output:'mesh',params:['width','height','deformShape','segments','repeats','uvMetersPerRepeat']},
+  meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','uvMetersPerRepeat']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 const LIMITS=Object.freeze({
@@ -24,11 +24,11 @@ const LIMITS=Object.freeze({
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
   height:[.05,100,1],profileShape:[0,2,0],
-  deformShape:[0,1,0],segments:[2,64,12],repeats:[1,16,1],
+  deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','deformShape','segments','repeats']);
+  'height','profileShape','deformShape','axis','slot','segments','repeats']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -42,6 +42,7 @@ function validateGraph(graph) {
     throw Error('Graph V1 requires 3–32 nodes, version=1 and a valid output.');
   const map=new Map();
   let sources=0,outputs=0,meshAssets=0;
+  const occupiedSlots=new Set();
   for(const node of graph.nodes){
     if(!object(node)||!safeId(node.id)||!Object.hasOwn(TYPES,node.type)||
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
@@ -51,7 +52,13 @@ function validateGraph(graph) {
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
     if(node.type==='spline')sources++;
-    if(node.type==='meshAsset')meshAssets++;
+    if(node.type==='meshAsset'){
+      meshAssets++;
+      const slot=node.slot??0;
+      if(!Number.isInteger(slot)||slot<0||slot>2||occupiedSlots.has(slot))
+        throw Error('Mesh Asset slot must be a unique integer 0–2.');
+      occupiedSlots.add(slot);
+    }
     if(node.type==='output')outputs++;
     for(const key of info.params){
       const value=node[key];
@@ -61,13 +68,13 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','deformShape','segments','repeats'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','deformShape','axis','slot','segments','repeats'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
     map.set(node.id,node);
   }
-  if(sources!==1||meshAssets>1||(graph.version===1&&outputs!==1)||
+  if(sources!==1||meshAssets>3||(graph.version===1&&outputs!==1)||
      (graph.version===2&&(outputs<2||outputs>4))||
      map.get(graph.output)?.type!=='output')
     throw Error('Graph requires one Spline and one v1 Output or 2–4 v2 Outputs.');
@@ -127,12 +134,12 @@ function applyGraphEdit(json,action,details={}) {
     if(!target||target.type!=='meshDeform')
       throw Error('Select a Mesh Deform node to attach a Mesh Asset.');
     if(target.meshInput)return json;
-    let source=next.nodes.find(n=>n.type==='meshAsset');
-    if(!source){
-      if(next.nodes.length>=32)throw Error('Graph node limit reached.');
-      source={id:unique('meshAsset'),type:'meshAsset'};
-      next.nodes.push(source);
-    }
+    const taken=new Set(next.nodes.filter(n=>n.type==='meshAsset').map(n=>n.slot??0));
+    const slot=[0,1,2].find(i=>!taken.has(i));
+    if(slot===undefined)throw Error('All three Mesh Asset slots are used. Connect an existing source socket instead.');
+    if(next.nodes.length>=32)throw Error('Graph node limit reached.');
+    const source={id:unique('meshAsset'),type:'meshAsset',...(slot?{slot}:{})};
+    next.nodes.push(source);
     target.meshInput=source.id;
   }else if(action==='detach-mesh-asset'){
     const target=find(details.id);
@@ -209,7 +216,11 @@ function applyGraphEdit(json,action,details={}) {
     if(TYPES[source.type].output==='meshSource'){
       if(target.type!=='meshDeform')
         throw Error('Mesh Asset may connect only to meshDeform meshInput.');
+      const previous=target.meshInput;
       target.meshInput=source.id;
+      if(previous&&previous!==source.id&&
+         !next.nodes.some(n=>n.meshInput===previous))
+        next.nodes=next.nodes.filter(n=>n.id!==previous);
     }else{
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
@@ -350,6 +361,12 @@ function renderNodeParameters(graphJson,id){
       return '<label>'+escapeHtml(key)+' <input type="checkbox" data-graph-param="'+key+'"'+
         (value?' checked':'')+'></label>';
     const [min,max]=LIMITS[key];
+    if(key==='axis'||key==='slot')return '<label>'+escapeHtml(key)+
+      ' <select data-graph-param="'+key+'">'+
+      (key==='axis'?['X','Y','Z']:['A (Source Mesh)','B (Source Mesh B)','C (Source Mesh C)'])
+       .map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+
+         escapeHtml(name)+'</option>').join('')+
+      '</select></label>';
     if(key==='deformShape')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       ['Strip','Box Shell'].map((name,i)=>
