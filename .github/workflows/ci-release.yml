@@ -65,6 +65,15 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 6
+      - name: Download preview artifact for install-layout smoke test
+        if: github.ref == 'refs/heads/v2'
+        uses: actions/download-artifact@v4
+        with:
+          name: cocos-splines-v2-${{ github.sha }}
+          path: builds/artifact-smoke
+      - name: Verify downloaded ZIP extracts directly into an extension
+        if: github.ref == 'refs/heads/v2'
+        run: node tests/preview-artifact-roundtrip-v2.test.cjs
 
 # Release publishing is intentionally disabled. No tag or GitHub Release may
 # be created without the owner's explicit approval. CI only validates pushes.

@@ -50,3 +50,5 @@ Builds reject further serialized Scene writes/snapshots/rollback once the origin
 ### Phase 2.19 preview acceptance
 
 Resample Spline creates a separate sibling spline; source/Prefab topology remains untouched. Test Count/Spacing and Local/World metrics, low-error refusal, closed/reversed curves, native one-step Undo for creation and save/reopen. The math reports a sampled deviation estimate, not a certified continuous bound. Only geometry/Container settings are copied — individual Knot rotation and associated generators are not cloned. The existing Gizmos v3 preview is sufficient; no tag/Release.
+
+- CI còn **tải xuống artifact vừa upload bằng `actions/download-artifact@v4` và kiểm tra lại**: giải nén ZIP GitHub đúng một lần thấy ngay `package.json` ở root, không có ZIP phụ hoặc thư mục extension lồng thêm.
