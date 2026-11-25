@@ -44,6 +44,7 @@ These scripts demonstrate serialized-component workflows where you provide refer
 - **Population/PrefabSpawningSetup.ts** — bind actual project .prefab assets to a seeded, runtime-only spline population.
 - **GeometryGraph/BasicRibbonGraph.json** — complete typed v1 graph connecting Spline → Offset → Width → Ribbon → Output. Add `Splines.SplineGeometryGraphRenderer` to a Node with MeshRenderer, assign an existing SplineContainer, copy this JSON into `Graph Json`, then press **Rebuild Graph**.
 - **GeometryGraph/BasicTubeGraph.json** — alternative typed v1 graph connecting Spline → Offset → Width → Tube → Output. Radius 0.75, 16 radial segments, caps for open splines and repeatable UVs; attach it as a Shared JsonAsset or copy its content to local `graphJson`. The installer never overwrites either example file.
+- **GeometryGraph/BasicProfileExtrudeGraph.json** — typed Extrude graph using a concave U Channel profile (width 1.5, height 1, capped ends). Add a Geometry Graph Renderer and assign the JSON as a Shared Graph Asset or copy it into local Graph JSON. The installer skips existing files, preserving edited profiles.
 
 The Gallery's MeshDeform and PrefabSpawning modes use **temporary runtime-only assets**. For production-like meshes and prefab distribution, assign your imported mesh and authored prefab assets with the new setup scripts. Advanced cases (Collider backends, Noise and full Traffic validation) still require Editor and backend checks. Read the extension documentation for full configuration.
 
