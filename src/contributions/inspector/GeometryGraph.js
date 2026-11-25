@@ -9,7 +9,7 @@ const {formatGeometryGraphProfile}=require('../../SplineGeometryGraphProfileRepo
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
- '<div class="spl-note">Drag node headers. Click an output socket then a compatible input socket to connect. All edits use native Inspector property commits.</div>',
+ '<div class="spl-note">Drag node headers. Click an output socket then a compatible input socket to connect. All edits use native Inspector property commits. For Mesh Deform imported geometry, attach Mesh Asset Input and assign Source Mesh on the Renderer.</div>',
  '<div class="spl-vg-toolbar spl-vg-asset-toolbar">',
  '<button type="button" class="spl-btn spl-vg-export">Export JSON…</button>',
  '<button type="button" class="spl-btn spl-vg-import">Import JSON → Local…</button>',
@@ -31,6 +31,8 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-use-extrude">Use Extrude Profile</button>',
  '<button type="button" class="spl-btn spl-vg-use-deform">Use Mesh Deform</button>',
+ '<button type="button" class="spl-btn spl-vg-attach-mesh">＋ Mesh Asset Input</button>',
+ '<button type="button" class="spl-btn spl-vg-detach-mesh">✕ Mesh Asset Input</button>',
  '<button type="button" class="spl-btn spl-vg-add-output">＋ Output Branch</button>',
  '<button type="button" class="spl-btn spl-vg-default-output">Set Default Output</button>',
  '<button type="button" class="spl-btn spl-vg-remove-output">✕ Remove Output</button>',
@@ -64,6 +66,8 @@ const style=base.style+[
 '.spl-vg-socket{position:absolute;bottom:5px;line-height:15px;height:20px;border:1px solid #53728a;border-radius:4px;background:#1d3041;color:#e1f2f8;font-size:10px;cursor:pointer;padding:1px 4px}',
 '.spl-vg-socket.in{left:3px}.spl-vg-socket.out{right:3px}',
 '.spl-vg-socket.mesh{border-color:#a68b63;color:#ffc98b}',
+'.spl-vg-socket.meshSource{border-color:#8fb18c;color:#b7edba}',
+'.spl-vg-socket.mesh-in{bottom:29px;left:3px}',
 '.spl-vg-socket:hover{filter:brightness(1.3)}',
 '.spl-vg-properties{margin:8px 0;padding:7px;border:1px solid #3b576b;border-radius:6px;font-size:11px}',
 '.spl-vg-source,.spl-vg-note{font-size:10px;color:#b0c4d0;margin:4px 0}',
@@ -91,6 +95,7 @@ const $={...base.$,
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
+  vgAttachMesh:'.spl-vg-attach-mesh',vgDetachMesh:'.spl-vg-detach-mesh',
   vgAddOutput:'.spl-vg-add-output',
   vgDefaultOutput:'.spl-vg-default-output',
   vgRemoveOutput:'.spl-vg-remove-output',
@@ -140,7 +145,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -175,6 +180,13 @@ function render(panel){
     if(panel.$?.vgUseDeform)
       panel.$.vgUseDeform.disabled=sharedLocked||busy||
         !['ribbon','tube','extrude'].includes(finalGenerator?.type);
+    const selectedDeform=view.map.get(panel._vgSelected);
+    if(panel.$?.vgAttachMesh)
+      panel.$.vgAttachMesh.disabled=sharedLocked||busy||
+        selectedDeform?.type!=='meshDeform'||!!selectedDeform.meshInput;
+    if(panel.$?.vgDetachMesh)
+      panel.$.vgDetachMesh.disabled=sharedLocked||busy||
+        selectedDeform?.type!=='meshDeform'||!selectedDeform.meshInput;
     const selectedOutput=view.map.get(panel._vgSelected)?.type==='output'?
       panel._vgSelected:null;
     if(panel.$?.vgAddOutput)
@@ -532,6 +544,14 @@ const inspector={
       editGraph(this,'replace-generator',{
         type:'extrude',outputId:activeOutputId(view,this._vgSelected),
       });
+    });
+    this.$?.vgAttachMesh?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      editGraph(this,'attach-mesh-asset',{id:this._vgSelected});
+    });
+    this.$?.vgDetachMesh?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      editGraph(this,'detach-mesh-asset',{id:this._vgSelected});
     });
     this.$?.vgUseDeform?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
