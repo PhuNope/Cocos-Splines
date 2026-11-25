@@ -1,5 +1,49 @@
 'use strict';
 const NAME='cocos-splines';
+const {parseSvg,exportSvg}=require('./SplineSvgConverter');
+const {parseSplineJSON,serializeSplineJSON}=require('./SplineJsonInterop');
+const {installSplineExamples}=require('./SplineExampleInstaller');
+const path=require('node:path');
+const {canonicalGraphJSON,readGraphFile,writeGraphFile,readSharedGraphSnapshot,
+    saveSharedGraphIfUnchanged}=require('./SplineGeometryGraphAssetWorkflow');
+const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
+const {formatProfile}=require('./SplineGeometryProfileEditor');
+const {readProfileSnapshot,saveProfileIfUnchanged}=require('./SplineGeometryProfileAssetWorkflow');
+const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
+const {commitKnotEdits}=require('./SplineBatchEditTransaction');
+const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
+const {commitJunctionBrokenConversion}=require('./SplineJunctionConversionTransaction');
+const {parseFanoutTargets,validateFanoutPlan,commitJunctionFanout}=require('./SplineJunctionFanoutEditor');
+const {validateMultiJunctionPlan,commitMultiJunctionRoute}=require('./SplineJunctionRouteEditor');
+const {validateRouteCost,validateRoutePolicy}=require('./SplineJunctionRouteCost');
+const {validateRouteAdmission}=require('./SplineRouteAdmission');
+const {validateSeamMode}=require('./SplineJunctionSeamMath');
+const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
+const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
+let sharedGraphSaveBusy=false;
+let profileAssetSaveBusy=false;
+function singleGraphSelection(){
+    const ids=selected();
+    if(ids.length!==1||!ids[0])throw Error('Select exactly one Geometry Graph Renderer Node.');
+    return ids[0];
+}
+function requiredGraphAssetUuid(info){
+    if(!info?.ok||!info.assetMode||typeof info.assetUuid!=='string'||!info.assetUuid)
+        throw Error(info?.error||'Select an active renderer using a native shared JsonAsset.');
+    return info.assetUuid;
+}
+async function resolveSharedGraphSource(assetUuid){
+    const project=Editor.Project?.path;
+    if(typeof project!=='string'||!path.isAbsolute(project))
+        throw Error('Project root unavailable.');
+    const url=await Editor.Message.request('asset-db','query-url',assetUuid);
+    if(typeof url!=='string'||!url.startsWith('db://assets/')||
+       url.includes('\\')||url.includes('?')||url.includes('#'))
+        throw Error('Shared graph source is not a project Assets JsonAsset.');
+    const file=await Editor.Message.request('asset-db','query-path',assetUuid);
+    if(typeof file!=='string')throw Error('Cannot resolve the shared Graph asset on disk.');
+    return {url,file,root:path.join(project,'assets')};
+}
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -24,12 +68,25 @@ async function position(node,xyz){
         uuid:node,path:'position',dump:{type:'cc.Vec3',value:{x:xyz[0],y:xyz[1],z:xyz[2]}},record:false});
     if(ok===false)throw new Error(`Cannot set position of ${node}`);
 }
-async function property(root,index,key,value,type){
+async function property(root,index,key,value,type,record=true){
     const result=await Editor.Message.request('scene','set-property',{
-        uuid:root,path:`__comps__.${index}.${key}`,dump:{type,value},record:true});
-    if(result===false)throw new Error(`set-property failed for ${key}`);
+        uuid:root,path:`__comps__.${index}.${key}`,dump:{type,value},record});
+    if(result===false||(result&&result.ok===false))throw new Error(`set-property failed for ${key}`);
 }
-async function snapshot(){await Editor.Message.request('scene','snapshot');}
+async function snapshot(){
+    const result=await Editor.Message.request('scene','snapshot');
+    if(result===false||(result&&typeof result==='object'&&result.ok===false))
+        throw Error('Scene snapshot was rejected.');
+    return result;
+}
+/** Author a genuine Node serialized field; never use computed Gizmo ports. */
+async function setNodeSerialized(uuid,path,type,value){
+    const response=await Editor.Message.request('scene','set-property',{
+        uuid,path,dump:{type,value},record:false,
+    });
+    if(response===false||(response&&response.ok===false))
+        throw Error('Cannot serialize '+path+' for '+uuid);
+}
 async function setKnotValue(uuid,key,value,fallbackType,record=false){
     const dump=await Editor.Message.request('scene','query-node',uuid);
     const comps=dump?.__comps__||[];
@@ -39,7 +96,7 @@ async function setKnotValue(uuid,key,value,fallbackType,record=false){
     const result=await Editor.Message.request('scene','set-property',{
         uuid,path:`__comps__.${idx}.${key}`,dump:{type:prop?.type||fallbackType,value},record,
     });
-    if(result===false)throw new Error(`Cannot set ${key}`);
+    if(result===false||(result&&result.ok===false))throw new Error(`Cannot set ${key}`);
 }
 function vec(x){
     if(!Array.isArray(x)||x.length!==3||!x.every(v=>typeof v==='number'&&Number.isFinite(v)))throw new Error('Vec3 phải là [x,y,z] hữu hạn.');
@@ -68,7 +125,175 @@ async function selectedSpline(){
     return invokeScene('querySpline',ids[0]);
 }
 function alertError(action,e){console.error(`[Cocos Splines] ${action}:`,e);return {ok:false,error:String(e?.message||e)};}
+
+let knotEditBusy=false;
+/** Selection is ordered by sibling index, not by click order, for deterministic align. */
+function selectedKnotIds(info,explicit){
+    const ids=explicit===undefined
+        ?selected().filter(id=>id!==info.rootUuid)
+        :explicit;
+    return validatedKnots(info.knots,ids).map(k=>k.uuid);
+}
+async function writeKnotPosition(uuid,value){
+    const result=await Editor.Message.request('scene','set-property',{
+        uuid,path:'position',dump:{type:'cc.Vec3',value:{x:value.x,y:value.y,z:value.z}},record:false,
+    });
+    if(result===false)throw new Error('Failed to set knot position: '+uuid);
+}
+async function writeKnotRotation(uuid,rotation){
+    const result=await Editor.Message.request('scene','set-property',{
+        uuid,path:'rotation',dump:{type:'cc.Quat',
+            value:{x:rotation.x,y:rotation.y,z:rotation.z,w:rotation.w}},record:false,
+    });
+    if(result===false)throw new Error('Failed to set knot rotation: '+uuid);
+}
+async function applyKnotPlacement(operation,ids,options){
+    if(knotEditBusy)throw new Error('Another knot edit is in progress.');
+    knotEditBusy=true;
+    try {
+        const info=await selectedSpline();
+        if(!info?.found)throw new Error(info?.message||'Select a SplineContainer or Knot.');
+        const selectedIds=selectedKnotIds(info,ids);
+        let edits,arcRevision;
+        if(operation==='distribute-arc'){
+            const result=await invokeScene('queryArcDistribution',info.rootUuid,selectedIds,options.space);
+            if(!result?.ok||!Array.isArray(result.edits)||typeof result.revision!=='string')
+                throw Error(result?.error||'Cannot plan arc distribution.');
+            if(result.edits.some(edit=>!selectedIds.includes(edit.uuid)))
+                throw Error('Arc distribution returned a foreign Knot.');
+            edits=result.edits;
+            arcRevision=result.revision;
+        }else if(operation==='surface'){
+            if(info.dimension!==0)throw new Error('Mesh surface snapping supports 3D splines only.');
+            if(selectedIds.length>64)throw new Error('Surface snap supports at most 64 Knots per batch.');
+            if(typeof options.targetUuid!=='string'||!options.targetUuid)
+                throw new Error('Choose a MeshRenderer target before snapping.');
+            const matrixResult=await invokeScene('queryKnotEditFrame',info.rootUuid);
+            if(!matrixResult?.ok)throw new Error(matrixResult?.error||'Cannot read spline world transform.');
+            const frame=transformFrame(matrixResult.matrix);
+            const world=selectedIds.map(uuid=>{
+                const knot=info.knots.find(k=>k.uuid===uuid);
+                return {uuid,position:frame.toWorld(knot.position)};
+            });
+            const result=await invokeScene('snapToSurfaceTarget',info.rootUuid,
+                options.targetUuid,world,{kind:options.targetKind,height:options.height,maxDrop:options.maxDrop,
+                    alignNormal:options.alignNormal===true,
+                    smoothNormal:options.alignNormal===true && options.smoothNormal===true,
+                    creaseAngle:options.creaseAngle,weldSeams:options.weldSeams===true});
+            if(!result?.ok)throw new Error(result?.error||'Surface raycast failed.');
+            if(options.alignNormal===true){
+                const rotations=await invokeScene('queryKnotOrientations',info.rootUuid,selectedIds);
+                if(!rotations?.ok)throw new Error(rotations?.error||'Cannot read Knot rotations.');
+                const rotationMap=new Map(rotations.rotations.map(entry=>[entry.uuid,entry.rotation]));
+                const withRotation=info.knots.map(knot=>({
+                    ...knot,rotation:rotationMap.get(knot.uuid),
+                }));
+                edits=planSurfaceKnotPositions(withRotation,selectedIds,result.hits,
+                    matrixResult.matrix,true,rotations.parentRotation);
+            }else edits=planSurfaceKnotPositions(info.knots,selectedIds,result.hits,matrixResult.matrix);
+        }else{
+            let frame=null;
+            if(options.space==='world'){
+                const result=await invokeScene('queryKnotEditFrame',info.rootUuid);
+                if(!result?.ok)throw new Error(result?.error||'Cannot read spline world transform.');
+                frame=result.matrix;
+            }
+            edits=planKnotPositions(info.knots,selectedIds,operation,options,info.dimension,frame);
+        }
+        if(!edits.length)return {ok:true,changed:false,count:0,message:'Knots are already in place.'};
+        let initialRead=true;
+        await commitKnotEdits(edits,{
+            read:uuids=>{
+                const revision=initialRead?arcRevision:undefined;
+                initialRead=false;
+                return revision===undefined?invokeScene('queryKnotBatchState',info.rootUuid,uuids):
+                    invokeScene('queryKnotBatchState',info.rootUuid,uuids,revision,options.space);
+            },
+            writePosition:writeKnotPosition,
+            writeRotation:writeKnotRotation,
+            snapshot,
+        });
+        let warning;
+        try{await invokeScene('refreshPreview',info.rootUuid);}
+        catch(error){warning='Positions saved, but preview refresh failed: '+String(error);}
+        return {ok:true,changed:true,count:edits.length,warning,
+            message:operation==='surface'?'Snapped '+edits.length+' knot(s) to mesh surface.':
+                operation==='snap'?'Snapped '+edits.length+' knot(s) to grid.':
+                operation==='align'?'Aligned '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
+                operation==='distribute'?'Distributed '+edits.length+' knot(s) along '+options.axis.toUpperCase()+'.':
+                operation==='distribute-arc'?'Distributed '+edits.length+' knot(s) on the original '+options.space+' spline arc.':
+                'Moved '+edits.length+' knot(s) together.'};
+    }finally{knotEditBusy=false;}
+}
+/** Transactional JSON property commit: one native Scene snapshot after all
+ * serializable properties were written. Rollback on rejection, preserving the
+ * original shared JsonAsset reference and previous graph contents.
+ */
+async function commitGraphCopy(uuid,before,content){
+    if(!before?.ok||!Number.isInteger(before.componentIndex)||
+       before.componentIndex<0||before.componentIndex>1024||
+       typeof before.localGraphJson!=='string')
+        throw Error('Graph component preflight is incomplete.');
+    const normalized=canonicalGraphJSON(content);
+    const changed=normalized!==before.localGraphJson||before.assetMode;
+    if(!changed)return false;
+    try{
+        await property(uuid,before.componentIndex,'graphJson',normalized,'String',false);
+        if(before.assetMode)await property(uuid,before.componentIndex,
+            'useGraphAsset',false,'Boolean',false);
+        await snapshot();
+    }catch(error){
+        try{
+            await property(uuid,before.componentIndex,'graphJson',
+                before.localGraphJson,'String',false);
+            if(before.assetMode)await property(uuid,before.componentIndex,
+                'useGraphAsset',true,'Boolean',false);
+        }catch(rollback){throw Error('Graph import failed and rollback was rejected: '+String(rollback));}
+        throw error;
+    }
+    return true;
+}
 const methods={
+    /** Installs bundled project-owned examples only after explicit menu action. */
+    async installExamples(){
+        try{
+            const result=installSplineExamples({projectPath:Editor.Project?.path});
+            let refreshWarning='';
+            try{
+                // Creator 3.x asset DB rescans the project assets mount.
+                // Deliberately not awaited: Editor versions may delay folder refresh.
+                if(typeof Editor.Message?.send==='function')
+                    Editor.Message.send('asset-db','refresh-asset','db://assets');
+                else refreshWarning='Asset DB refresh message unavailable; refresh Assets manually.';
+            }catch(e){refreshWarning='Refresh Assets manually: '+String(e?.message||e);}
+            const message='Install Examples: '+result.installed+' new, '+
+                result.skipped+' existing preserved in '+result.assetUrl+'.'+
+                (refreshWarning?' '+refreshWarning:'');
+            console.log('[Cocos Splines] '+message);
+            return {ok:true,...result,message,refreshWarning};
+        }catch(e){return alertError('install-examples',e);}
+    },
+    /** Create the gallery in the CURRENT open Scene through native Scene
+     * messages; the user saves the .scene using Creator. */
+    async createExampleGallery(){
+        try {
+            const result=await createExampleGalleryWorkflow({
+                query:()=>invokeScene('queryExampleGallery'),
+                scriptReady:kind=>Editor.Message.request('scene','query-component-has-script',kind),
+                createNode:name=>makeNode(undefined,name),
+                addComponent:(uuid,kind)=>Editor.Message.request('scene','create-component',{
+                    uuid,component:kind,
+                }),
+                snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',{
+                    uuid,snapshot:false,
+                }),
+                select:uuid=>selectOnly(uuid),
+            });
+            console.log('[Cocos Splines] '+result.message);
+            return result;
+        }catch(e){return alertError('create-example-gallery',e);}
+    },
     async create2DSpline(){
         try{
             await ensureClasses();
@@ -163,6 +388,20 @@ const methods={
         }catch(e){return alertError('create-tangent-handles',e);}
     },
 
+    async createNoiseLayers(){try{
+        await ensureClasses();
+        const compiled=await Editor.Message.request('scene','query-component-has-script','Splines.SplineNoise');
+        if(!compiled)throw Error('SplineNoise script is not compiled. Refresh Asset DB before adding Noise Layers.');
+        const info=await selectedSpline();
+        if(!info?.found)throw Error('Select a SplineContainer.');
+        const dump=await Editor.Message.request('scene','query-node',info.rootUuid);
+        if(!Array.isArray(dump?.__comps__))throw Error('Cannot verify existing Spline Noise components.');
+        if(dump.__comps__.some(c=>c.type==='Splines.SplineNoise'))
+            return {ok:true,changed:false,message:'Spline Noise Layers already exists on this Container.'};
+        await component(info.rootUuid,'Splines.SplineNoise');
+        await snapshot();selectOnly(info.rootUuid);
+        return {ok:true,changed:true,message:'Noise Layers attached to Container. Add Layers in Inspector, then assign Noise to an Object Controller.'};
+    }catch(e){return alertError('create-noise-layers',e);}},
     async createModifiers(){try{
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
         await component(info.rootUuid,'Splines.SplineModifiers');await snapshot();selectOnly(info.rootUuid);
@@ -172,7 +411,7 @@ const methods={
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
         const id=await makeNode(info.rootUuid,'Spline Object Controller');
         await component(id,'Splines.SplineObjectController');await snapshot();selectOnly(id);
-        return {ok:true,message:'Object Controller created. Assign spline, Prefabs and optional Modifiers.'};
+        return {ok:true,message:'Object Controller created. Assign spline, Prefabs, optional Modifiers and Noise Layers.'};
     }catch(e){return alertError('create-object-controller',e);}},
     async createMorph(){try{
         await ensureClasses();const info=await selectedSpline();if(!info?.found)throw Error('Chọn SplineContainer trước.');
@@ -246,6 +485,387 @@ const methods={
             return {ok:true,uuid:id,message:'Trigger đã tạo. Chỉnh Progress / Direction / On Cross trong Inspector.'};
         }catch(e){return alertError('create-trigger',e);}
     },
+    /** Read-only geometric conflict warnings from the selected Traffic Controller.
+     * Preserves serialized Conflict Pairs/Phases, no snapshot or Scene edit.
+     */
+    async checkTrafficConflicts(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select SplineTrafficController Node in Hierarchy.');
+            const result=await invokeScene('queryTrafficConflicts',uuid);
+            if(!result?.ok)throw Error(result?.error||'Cannot inspect traffic exits.');
+            const pairs=Array.isArray(result.candidates)?result.candidates:[];
+            const missing=Array.isArray(result.missingPairs)?result.missingPairs:[];
+            const skipped=Array.isArray(result.skipped)?result.skipped:[];
+            const unsafe=Array.isArray(result.unsafePhases)?result.unsafePhases:[];
+            const preview=missing.slice(0,4).map(x=>
+                x.firstExit+'↔'+x.secondExit+' ('+x.distance.toFixed(3)+' world units)').join(', ');
+            return {ok:true,...result,message:'Traffic conflict probe: '+
+                pairs.length+' possible pairs, '+missing.length+' missing declared conflicts; '+
+                unsafe.length+' phases contain possible simultaneous-Green pairs. '+
+                skipped.length+' exits skipped. '+
+                (preview?'Candidates: '+preview+'. ':'')+
+                'Warnings only; check in Scene before editing Conflict Pairs.'};
+        }catch(error){return alertError('check-traffic-conflicts',error);}
+    },
+    /** Read-only continuity diagnostics. Link indices are serialized indices,
+     * not the ordinal of nonempty links. No Scene mutation or snapshot.
+     */
+    async checkJunctionConnections(positionTolerance=.1,angleTolerance=15){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select a SplineJunction in Hierarchy.');
+            const result=await invokeScene('queryJunctionConnections',uuid,positionTolerance,angleTolerance);
+            if(!result?.ok)throw Error(result?.error||'Cannot inspect Junction.');
+            const worst=result.pairs.slice().sort((a,b)=>b.gap-a.gap)[0];
+            const details=worst?' Worst link pair '+worst.from+'→'+worst.to+
+                ': gap '+worst.gap.toFixed(4)+
+                ', axis angle '+(worst.axisAngleDeg===null?'undefined':worst.axisAngleDeg.toFixed(1)+'°')+'.':'';
+            return {ok:true,...result,message:'Junction: '+result.validLinks+' valid links, '+
+                result.pairCount+' pairs. '+result.positionFailures+' position gaps > '+
+                positionTolerance+', '+result.tangentFailures+' tangent-axis mismatches > '+
+                angleTolerance+'°. '+details+' No changes made.'};
+        }catch(e){return alertError('check-junction-connections',e);}
+    },
+    /** Moves only a selected open spline endpoint to another Junction link.
+     * No tangent or arbitrary child component is touched. Guards are checked
+     * both before and after the silent Node.position write.
+     */
+    async snapJunctionEndpoint(anchorIndex,targetIndex){
+        if(knotEditBusy)return alertError('snap-junction-endpoint',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select a SplineJunction.');
+            const plan=await invokeScene('queryJunctionSnapPlan',uuid,anchorIndex,targetIndex);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan endpoint snap.');
+            const validPoint=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            if(plan.junctionUuid!==uuid||!plan.guard||!plan.targetKnotUuid||
+                !plan.targetSplineUuid||!validPoint(plan.before)||!validPoint(plan.after)||
+                plan.anchorIndex!==anchorIndex||plan.targetIndex!==targetIndex)
+                throw Error('Invalid connector snap plan returned from Scene.');
+            if(!plan.changed)return {ok:true,changed:false,message:'Target endpoint already aligned. No snapshot.'};
+            const check=async()=>{
+                const valid=await invokeScene('queryJunctionSnapValid',
+                    plan.junctionUuid,plan.guard,plan.targetKnotUuid);
+                if(!valid?.ok)throw Error(valid?.error||'Connector Scene changed while editing.');
+            };
+            await check();
+            await commitKnotEdits([{uuid:plan.targetKnotUuid,
+                before:plan.before,after:plan.after,positionChanged:true}],{
+                read:async ids=>{
+                    await check();
+                    return invokeScene('queryKnotBatchState',plan.targetSplineUuid,ids);
+                },
+                writePosition:async (id,p)=>{
+                    await check();
+                    await writeKnotPosition(id,p);
+                },
+                writeRotation:writeKnotRotation,snapshot,
+            });
+            try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+            catch(error){console.warn('[Cocos Splines] Connector snap preview refresh failed:',error);}
+            return {ok:true,changed:true,targetKnotUuid:plan.targetKnotUuid,
+                message:'Snapped Junction link '+targetIndex+' endpoint to link '+anchorIndex+
+                    ' (previous world gap '+plan.gapBefore.toFixed(4)+').'+
+                    ' One Scene snapshot; tangent angles unchanged.'};
+        }catch(e){return alertError('snap-junction-endpoint',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Join a shortest endpoint-only chain across two or more Junctions.
+     * The destination is an existing SplineContainer Node UUID. Each source
+     * spline is traversed end-to-end, once, preserving the authored cubics.
+     */
+    async joinMultiJunctionRoute(anchorIndex,goalSplineUuid,
+        seamMode='preserve',routeMode='full',startSide=0,goalSide=1,
+        routeCostMode='switches',junctionPenalty=10,
+        routePolicy='ignore',admissionMode='ignore',requiredFollowers=1){
+        if(knotEditBusy)return alertError('join-multi-junction-route',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        try{
+            validateSeamMode(seamMode);
+            validateRouteCost(routeCostMode,junctionPenalty);
+            validateRoutePolicy(routePolicy);
+            validateRouteAdmission(admissionMode,requiredFollowers);
+            if(!['full','partial'].includes(routeMode)||![0,1].includes(startSide)||
+               ![0,1].includes(goalSide))
+                throw Error('Invalid partial route mode or entry/exit side.');
+            if(!Number.isInteger(anchorIndex)||anchorIndex<0||anchorIndex>63||
+               typeof goalSplineUuid!=='string'||!goalSplineUuid.trim()||
+               goalSplineUuid.length>128)
+                throw Error('Enter a valid anchor link and destination Spline UUID.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select an active SplineJunction.');
+            await ensureClasses();
+            const goal=goalSplineUuid.trim();
+            const args=[junctionUuid,anchorIndex,goal,seamMode,routeMode,
+                startSide,goalSide];
+            // Legacy IPC shape retained for the default minimum-switch mode.
+            if(admissionMode!=='ignore'||requiredFollowers!==1)
+                args.push(routeCostMode,junctionPenalty,routePolicy,
+                    admissionMode,requiredFollowers);
+            else if(routePolicy!=='ignore')
+                args.push(routeCostMode,junctionPenalty,routePolicy);
+            else if(routeCostMode!=='switches'||junctionPenalty!==10)
+                args.push(routeCostMode,junctionPenalty);
+            const plan=await invokeScene('queryMultiJunctionJoinPlan',...args);
+            if(!plan?.ok)throw Error(plan?.error||'No valid multi-Junction route.');
+            validateMultiJunctionPlan(plan,anchorIndex,goal,seamMode,
+                routeMode,startSide,goalSide,routeCostMode,junctionPenalty,
+                routePolicy,admissionMode,requiredFollowers);
+            if(plan.junctionUuid!==junctionUuid)
+                throw Error('Multi-Junction planner returned foreign Junction.');
+            const check=async()=>{
+                const live=await invokeScene('queryMultiJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!live?.ok)throw Error(live?.error||
+                    'Multi-Junction route or Scene changed during Join.');
+            };
+            return await commitMultiJunctionRoute(plan,{
+                check,createNode:makeNode,component,
+                nodeProperty:setNodeSerialized,containerProperty:property,
+                appearanceWrites,position,setKnot:setKnotValue,snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',
+                    {uuid,snapshot:false}),
+                select:selectOnly,
+                refresh:uuid=>invokeScene('refreshPreview',uuid),
+            });
+        }catch(e){return alertError('join-multi-junction-route',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Preserve Junction fan-out branches as separate independent splines
+     * under ONE new scene group, rather than flattening them into a path
+     * that would traverse a middle spoke twice.
+     */
+    async joinJunctionFanout(anchorIndex,targetsText,seamMode='preserve'){
+        if(knotEditBusy)return alertError('join-junction-fanout',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        try{
+            validateSeamMode(seamMode);
+            const targets=parseFanoutTargets(targetsText);
+            if(!Number.isInteger(anchorIndex)||anchorIndex<0||
+               anchorIndex>63||targets.includes(anchorIndex))
+                throw Error('Choose an anchor link distinct from all targets.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select a SplineJunction first.');
+            await ensureClasses();
+            const plan=await invokeScene('queryJunctionFanoutPlan',
+                junctionUuid,anchorIndex,targets,seamMode);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan Junction fan-out.');
+            validateFanoutPlan(plan,anchorIndex,targets,seamMode);
+            if(plan.junctionUuid!==junctionUuid)
+                throw Error('Junction fan-out planner returned a foreign Scene Junction.');
+            const check=async()=>{
+                const live=await invokeScene('queryJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!live?.ok)throw Error(live?.error||
+                    'Junction source or Scene changed during fan-out.');
+            };
+            return await commitJunctionFanout(plan,{
+                check,createNode:makeNode,component,
+                nodeProperty:setNodeSerialized,containerProperty:property,
+                appearanceWrites,position,setKnot:setKnotValue,snapshot,
+                removeNode:uuid=>Editor.Message.request('scene','remove-node',
+                    {uuid,snapshot:false}),
+                select:selectOnly,
+                refresh:uuid=>invokeScene('refreshPreview',uuid),
+            });
+        }catch(e){return alertError('join-junction-fanout',e);}
+        finally{knotEditBusy=false;}
+    },
+    /** Make a NEW independent spline from two open Junction endpoint links.
+     * Unlike a destructive Unity spline merge, this operation never reparents
+     * or edits source knots, Junction connections or Prefab instances.
+     */
+    async joinJunctionLinks(anchorIndex,targetIndex,seamMode='preserve'){
+        if(knotEditBusy)return alertError('join-junction-links',
+            Error('Another spline edit is in progress.'));
+        knotEditBusy=true;
+        let created=null,committed=false,plan=null;
+        try{
+            validateSeamMode(seamMode);
+            if(!Number.isInteger(anchorIndex)||!Number.isInteger(targetIndex)||
+               anchorIndex<0||targetIndex<0||anchorIndex===targetIndex)
+                throw Error('Select two different Junction link indices.');
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select a SplineJunction first.');
+            await ensureClasses();
+            plan=await invokeScene('queryJunctionJoinPlan',junctionUuid,
+                anchorIndex,targetIndex,seamMode);
+            if(!plan?.ok)throw Error(plan?.error||'Junction Join planner failed.');
+            const finiteVec=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            const finiteQuat=q=>finiteVec(q)&&Number.isFinite(q.w);
+            if(plan.junctionUuid!==junctionUuid||plan.seamMode!==seamMode||
+               plan.anchorIndex!==anchorIndex||
+               plan.targetIndex!==targetIndex||!plan.anchorSplineUuid||
+               !plan.targetSplineUuid||plan.anchorSplineUuid===plan.targetSplineUuid||
+               typeof plan.guard!=='string'||!plan.guard||
+               typeof plan.parentUuid!=='string'||!plan.parentUuid||
+               !Number.isInteger(plan.count)||plan.count<3||plan.count>128||
+               !Array.isArray(plan.knots)||plan.knots.length!==plan.count||
+               plan.closed!==false||plan.reversed!==false||
+               ![0,1,2].includes(plan.dimension)||
+               !Number.isInteger(plan.samplesPerCurve)||
+               plan.samplesPerCurve<4||plan.samplesPerCurve>256||
+               !Number.isFinite(plan.gap)||plan.gap<0||plan.gap>1e-5||
+               !finiteVec(plan.rootTransform?.position)||
+               !finiteVec(plan.rootTransform?.scale)||
+               !finiteQuat(plan.rootTransform?.rotation)||
+               plan.knots.some(k=>!finiteVec(k?.position)||
+                   !finiteVec(k?.tangentIn)||!finiteVec(k?.tangentOut)||
+                   k.mode!==4))
+                throw Error('Invalid Junction Join plan returned from Scene.');
+            const appearance=appearanceWrites(plan.containerAppearance||{});
+            const assertSource=async()=>{
+                const check=await invokeScene('queryJunctionJoinValid',
+                    plan.junctionUuid,plan.guard);
+                if(!check?.ok)throw Error(check?.error||
+                    'Junction source geometry changed during Join.');
+            };
+            await assertSource();
+            created=await makeNode(plan.parentUuid,
+                String(plan.sourceName||'Spline').slice(0,60)+' (Joined)');
+            await component(created,'Splines.SplineContainer');
+            await setNodeSerialized(created,'position','cc.Vec3',plan.rootTransform.position);
+            await setNodeSerialized(created,'rotation','cc.Quat',plan.rootTransform.rotation);
+            await setNodeSerialized(created,'scale','cc.Vec3',plan.rootTransform.scale);
+            await property(created,0,'closed',false,'Boolean',false);
+            await property(created,0,'reversed',false,'Boolean',false);
+            await property(created,0,'dimension',plan.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',plan.samplesPerCurve,'Integer',false);
+            for(const setting of appearance)
+                await property(created,0,setting.key,setting.value,setting.type,false);
+            for(let i=0;i<plan.count;i++){
+                if(i%8===0)await assertSource();
+                const k=plan.knots[i];
+                const node=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(node,'Splines.SplineKnot');
+                await position(node,[k.position.x,k.position.y,k.position.z]);
+                await setKnotValue(node,'mode',4,'Enum');
+                await setKnotValue(node,'tangentIn',k.tangentIn,'cc.Vec3');
+                await setKnotValue(node,'tangentOut',k.tangentOut,'cc.Vec3');
+            }
+            await assertSource();
+            await snapshot();
+            committed=true;
+            try{selectOnly(created);}catch(e){console.warn('[Cocos Splines] Join selection failed:',e);}
+            try{await invokeScene('refreshPreview',created);}
+            catch(e){console.warn('[Cocos Splines] Join preview refresh failed:',e);}
+            return {ok:true,root:created,count:plan.count,
+                gap:plan.gap,angleDeg:plan.angleDeg,continuousC1:plan.continuousC1,
+                message:'Created new independent Joined spline ('+plan.count+
+                    ' Knots) with one welded seam. Source splines and Junction unchanged. '+
+                    'Seam '+plan.seamMode+' angle: '+(plan.angleDeg===null?'undefined':plan.angleDeg.toFixed(2)+'°')+
+                    '. One Scene snapshot; new Knot tangents are Broken.'};
+        }catch(error){
+            let warning='';
+            if(created&&!committed&&plan?.junctionUuid&&plan?.guard){
+                try{
+                    const check=await invokeScene('queryJunctionJoinValid',
+                        plan.junctionUuid,plan.guard);
+                    if(check?.ok){
+                        const removed=await Editor.Message.request('scene','remove-node',
+                            {uuid:created,snapshot:false});
+                        if(removed===false||(removed&&removed.ok===false))
+                            throw Error('Editor rejected Join cleanup.');
+                    }else warning='; source/Scene changed — cleanup skipped';
+                }catch(e){warning='; cleanup failed: '+String(e?.message||e);}
+            }
+            return alertError('join-junction-links',
+                Error(String(error?.message||error)+warning));
+        }finally{knotEditBusy=false;}
+    },
+    /** Explicit conversion of a Junction target endpoint to Broken mode,
+     * preserving the currently resolved curve with one undo snapshot.
+     */
+    async convertJunctionTargetToBroken(targetIndex){
+        if(knotEditBusy)return alertError('convert-junction-tangent-mode',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const junctionUuid=selected()[0];
+            if(!junctionUuid)throw Error('Select an enabled SplineJunction.');
+            const plan=await invokeScene('queryJunctionConversionPlan',
+                junctionUuid,targetIndex);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan tangent mode conversion.');
+            if(!plan.changed)return {ok:true,changed:false,
+                message:'Target Knot is already Broken. No snapshot.'};
+            if(plan.junctionUuid!==junctionUuid||plan.targetIndex!==targetIndex||
+               !plan.targetKnotUuid||!plan.targetSplineUuid||!plan.guard||
+               plan.afterMode!==4||!Array.isArray(plan.writes))
+                throw Error('Invalid Junction tangent conversion plan from Scene.');
+            const read=()=>invokeScene('queryJunctionConversionState',
+                plan.junctionUuid,plan.guard,plan.targetKnotUuid);
+            const write=async(w,value)=>{
+                const check=await read();
+                if(!check?.ok)throw Error(check?.error||'Conversion Scene changed.');
+                const response=await Editor.Message.request('scene','set-property',{
+                    uuid:w.uuid,path:w.path,dump:{type:w.type,value},record:false,
+                });
+                if(response===false||(response&&response.ok===false))
+                    throw Error('Scene rejected Knot tangent conversion write.');
+            };
+            const result=await commitJunctionBrokenConversion(plan,{read,write,snapshot});
+            if(result.changed){
+                try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+                catch(error){console.warn('[Cocos Splines] Knot mode conversion refresh failed:',error);}
+            }
+            return {ok:true,changed:result.changed,targetKnotUuid:plan.targetKnotUuid,
+                message:'Converted target link '+targetIndex+' from mode '+
+                    plan.sourceMode+' to Broken, preserving resolved curve tangents. '+
+                    'One Scene snapshot. You may now Align G1/C1.'};
+        }catch(error){return alertError('convert-junction-tangent-mode',error);}
+        finally{knotEditBusy=false;}
+    },
+    /** Adjust exactly one Broken-mode endpoint tangent to connect two
+     * existing world-coincident Junction links. G1 keeps target handle length,
+     * C1 matches anchor handle magnitude under their world transforms.
+     */
+    async alignJunctionTangent(anchorIndex,targetIndex,mode='g1',orientation='same'){
+        if(knotEditBusy)return alertError('align-junction-tangent',
+            Error('Another spline edit is already in progress.'));
+        knotEditBusy=true;
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Select an enabled SplineJunction.');
+            const plan=await invokeScene('queryJunctionTangentPlan',
+                uuid,anchorIndex,targetIndex,mode,orientation);
+            if(!plan?.ok)throw Error(plan?.error||'Cannot plan endpoint tangent alignment.');
+            const finite=v=>v&&['x','y','z'].every(k=>Number.isFinite(v[k]));
+            if(plan.junctionUuid!==uuid||!plan.guard||!plan.targetKnotUuid||
+                !plan.targetSplineUuid||!plan.writeUuid||!plan.writePath||
+                plan.anchorIndex!==anchorIndex||plan.targetIndex!==targetIndex||
+                plan.mode!==mode||plan.orientation!==orientation||
+                !finite(plan.before)||!finite(plan.after))
+                throw Error('Invalid G1/C1 plan returned by Scene.');
+            const read=()=>invokeScene('queryJunctionTangentState',
+                plan.junctionUuid,plan.guard,plan.targetKnotUuid,plan.side);
+            const write=async value=>{
+                const check=await read();
+                if(!check?.ok)throw Error(check?.error||'Scene changed during tangent write.');
+                const result=await Editor.Message.request('scene','set-property',{
+                    uuid:plan.writeUuid,path:plan.writePath,
+                    dump:{type:'cc.Vec3',value},record:false,
+                });
+                if(result===false||(result&&result.ok===false))
+                    throw Error('Scene rejected G1/C1 tangent write.');
+            };
+            const result=await commitJunctionTangent(plan,{read,write,snapshot});
+            if(!result.changed)return {ok:true,changed:false,
+                message:'Junction tangent is already aligned. No snapshot.'};
+            try{await invokeScene('refreshPreview',plan.targetSplineUuid);}
+            catch(error){console.warn('[Cocos Splines] Junction tangent refresh failed:',error);}
+            return {ok:true,changed:true,targetKnotUuid:plan.targetKnotUuid,
+                message:'Aligned link '+targetIndex+' to '+anchorIndex+
+                    ' ('+mode.toUpperCase()+', '+orientation+
+                    ', world derivative control length '+plan.targetWorldLength.toFixed(4)+
+                    '). One Scene snapshot; positions and source spline unchanged.'};
+        }catch(e){return alertError('align-junction-tangent',e);}
+        finally{knotEditBusy=false;}
+    },
     async createJunction(){
         try{
             await ensureClasses();
@@ -257,6 +877,238 @@ const methods={
             await snapshot();selectOnly(id);
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
+    },
+    /** Open an existing native Profile JsonAsset as a temporary Inspector draft.
+     * A Profile is scoped to a selected renderer + exact slot + asset UUID.
+     */
+    async beginGeometryProfileEdit(slot){
+        try{
+            const nodeUuid=singleGraphSelection();
+            if(!Number.isInteger(slot)||slot<0||slot>2)
+                throw Error('Profile editor requires slot A/B/C (0–2).');
+            const info=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!info?.ok||!info.assetUuid)
+                throw Error(info?.error||'Assign a Profile Asset JsonAsset to the selected slot first.');
+            const source=await resolveSharedGraphSource(info.assetUuid);
+            const snapshot=readProfileSnapshot(source.file,source.root);
+            return {ok:true,nodeUuid,slot,assetUuid:info.assetUuid,
+                assetName:info.assetName,assetUrl:source.url,
+                profileJson:snapshot.profileJson,sha256:snapshot.sha256};
+        }catch(error){return alertError('begin-geometry-profile-edit',error);}
+    },
+    /** Explicit confirmation + optimistic checksum; never writes scene props.
+     * Do not delete the user's draft on conflict/Cancel/failed AssetDB refresh.
+     */
+    async saveGeometryProfileEdit(draft){
+        if(profileAssetSaveBusy)return {ok:false,error:'Another Profile Asset save is pending.'};
+        profileAssetSaveBusy=true;
+        try{
+            if(!draft||typeof draft!=='object')throw Error('Missing Profile Asset draft.');
+            const {nodeUuid,slot,assetUuid,sha256,profileJson}=draft;
+            if(typeof nodeUuid!=='string'||!nodeUuid||
+               !Number.isInteger(slot)||slot<0||slot>2||
+               typeof assetUuid!=='string'||!assetUuid)
+                throw Error('Profile selection, slot or native asset UUID is invalid.');
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Selected renderer changed; reopen the Profile draft.');
+            const info=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!info?.ok||info.assetUuid!==assetUuid)
+                throw Error('Profile Asset reference changed; reopen the draft.');
+            const canonical=formatProfile(profileJson);
+            let source=await resolveSharedGraphSource(assetUuid);
+            const snapshot=readProfileSnapshot(source.file,source.root);
+            if(snapshot.sha256!==sha256)
+                return {ok:false,conflict:true,
+                    error:'Profile Asset changed on disk. Discard/reopen draft to avoid overwriting new content.'};
+            if(snapshot.profileJson===canonical)
+                return {ok:true,changed:false,profileJson:canonical,sha256,
+                    message:'Profile unchanged; no asset or Scene changes.'};
+            if(typeof Editor.Dialog?.info!=='function')
+                throw Error('Native confirmation unavailable; Profile Asset will not be written.');
+            const answer=await Editor.Dialog.info('Save authored Profile JsonAsset?',{
+                title:'Save Profile Asset',
+                detail:source.url+'\nThis changes every renderer referencing the same Profile JsonAsset. Scene Undo cannot restore external file writes.',
+                buttons:['Save Profile JSON','Cancel'],default:1,cancel:1});
+            if(answer?.response!==0)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Renderer selection changed during confirmation.');
+            const latest=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!latest?.ok||latest.assetUuid!==assetUuid)
+                throw Error('Profile Asset changed during confirmation.');
+            const fresh=await resolveSharedGraphSource(assetUuid);
+            if(fresh.url!==source.url||fresh.file!==source.file)
+                throw Error('Profile file was moved during confirmation.');
+            source=fresh;
+            const saved=saveProfileIfUnchanged(
+                source.file,source.root,canonical,sha256);
+            if(!saved.changed)
+                return {ok:true,changed:false,profileJson:canonical,sha256:saved.sha256};
+            try{
+                const result=await Editor.Message.request('asset-db','refresh-asset',source.url);
+                if(result===false)throw Error('AssetDB refresh returned false.');
+                return {ok:true,changed:true,sha256:saved.sha256,
+                    profileJson:canonical,assetUrl:source.url,
+                    message:'Profile saved; AssetDB refreshed. Scene Undo does not restore the old Profile file.'};
+            }catch(error){
+                return {ok:true,changed:true,refreshPending:true,
+                    sha256:saved.sha256,profileJson:canonical,assetUrl:source.url,
+                    message:'Profile saved but AssetDB refresh failed: '+
+                        String(error?.message||error)+'. Refresh manually before preview.'};
+            }
+        }catch(error){return alertError('save-geometry-profile-edit',error);}
+        finally{profileAssetSaveBusy=false;}
+    },
+    /** Start an explicit, non-serialized shared JsonAsset edit. The Inspector
+     * owns the draft; no change reaches Scene properties or disk until Save.
+     */
+    async beginSharedGeometryGraphEdit(){
+        try{
+            const nodeUuid=singleGraphSelection();
+            const info=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            const assetUuid=requiredGraphAssetUuid(info);
+            const source=await resolveSharedGraphSource(assetUuid);
+            const snapshot=readSharedGraphSnapshot(source.file,source.root);
+            return {ok:true,nodeUuid,assetUuid,assetName:info.assetName,
+                assetUrl:source.url,graphJson:snapshot.graphJson,sha256:snapshot.sha256};
+        }catch(error){return alertError('begin-shared-geometry-graph-edit',error);}
+    },
+    /** Only an explicit confirmed Save may overwrite a native shared JSON.
+     * A user warning is separate from the optimistic disk hash conflict guard.
+     * No Scene snapshot is created for an external file edit.
+     */
+    async saveSharedGeometryGraphEdit(draft){
+        if(sharedGraphSaveBusy)return {ok:false,error:'Another shared graph save is pending.'};
+        sharedGraphSaveBusy=true;
+        try{
+            if(!draft||typeof draft!=='object')throw Error('Missing shared graph draft.');
+            const {nodeUuid,assetUuid,sha256,graphJson}=draft;
+            if(typeof nodeUuid!=='string'||typeof assetUuid!=='string')
+                throw Error('Missing shared graph selection or asset identity.');
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Graph selection changed; discard or reopen the shared draft.');
+            const info=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            if(requiredGraphAssetUuid(info)!==assetUuid)
+                throw Error('Graph Asset reference changed; discard or reopen the draft.');
+            const canonical=canonicalGraphJSON(graphJson);
+            let source=await resolveSharedGraphSource(assetUuid);
+            let snapshot=readSharedGraphSnapshot(source.file,source.root);
+            if(snapshot.sha256!==sha256)return {ok:false,conflict:true,error:'Shared graph changed on disk; compare source changes before retrying.'};
+            if(snapshot.graphJson===canonical)
+                return {ok:true,changed:false,graphJson:canonical,
+                    message:'Shared graph unchanged; no file write or Scene history created.'};
+            if(typeof Editor.Dialog?.info!=='function')
+                throw Error('Native confirmation dialog is unavailable; shared asset will not be written.');
+            const answer=await Editor.Dialog.info(
+                'Overwrite the shared Geometry Graph JSON asset?',
+                {title:'Save Shared Geometry Graph',
+                    detail:source.url+'\\nThis updates every renderer referencing the same JsonAsset. This file edit is not part of Scene Undo/Redo.',
+                    buttons:['Save shared JSON','Cancel'],default:1,cancel:1});
+            if(answer?.response!==0)return {ok:false,canceled:true};
+            // The dialog may have changed selection, scene or asset mapping.
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Graph selection changed while confirming save.');
+            const latest=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            if(requiredGraphAssetUuid(latest)!==assetUuid)
+                throw Error('Graph Asset changed while confirming save.');
+            const fresh=await resolveSharedGraphSource(assetUuid);
+            if(fresh.url!==source.url||fresh.file!==source.file)
+                throw Error('Graph asset was moved while confirming save.');
+            source=fresh;
+            const saved=saveSharedGraphIfUnchanged(source.file,source.root,canonical,sha256);
+            if(!saved.changed)return {ok:true,changed:false,graphJson:canonical};
+            try{
+                const imported=await Editor.Message.request('asset-db','refresh-asset',source.url);
+                if(imported===false)throw Error('AssetDB refresh returned false.');
+                return {ok:true,changed:true,assetUrl:source.url,
+                    graphJson:canonical,sha256:saved.sha256,
+                    message:'Shared graph saved; Cocos AssetDB refresh requested. Scene Undo does not revert JSON file writes.'};
+            }catch(refreshError){
+                return {ok:true,changed:true,refreshPending:true,
+                    assetUrl:source.url,graphJson:canonical,sha256:saved.sha256,
+                    message:'Shared JSON saved, but AssetDB refresh failed: '+String(refreshError?.message||refreshError)+
+                        '. Refresh the asset manually in Creator; do not assume Scene Undo will restore it.'};
+            }
+        }catch(error){return alertError('save-shared-geometry-graph-edit',error);}
+        finally{sharedGraphSaveBusy=false;}
+    },
+    async queryGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer.');
+            return await invokeScene('queryGeometryGraphAsset',uuid);
+        }catch(error){return alertError('query-geometry-graph-asset',error);}
+    },
+    /** Export the active graph (shared JsonAsset or local override) to a new
+     * JSON file. Saving under project Assets lets Creator import a native
+     * JsonAsset automatically. Exclusive writes protect existing user files.
+     */
+    async exportGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer để export.');
+            const info=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!info?.ok)throw Error(info?.error||'Graph is unavailable.');
+            const text=canonicalGraphJSON(info.graphJson);
+            const result=await Editor.Dialog.save({
+                title:'Export Geometry Graph to a NEW JSON file',
+                path:Editor.Project?.path,
+                filters:[{name:'Geometry Graph JSON',extensions:['json']}],
+            });
+            if(result?.canceled||!result?.filePath)return {ok:false,canceled:true};
+            const saved=writeGraphFile(result.filePath,text);
+            return {ok:true,...saved,message:'Graph exported to '+saved.file};
+        }catch(error){return alertError('export-geometry-graph-asset',error);}
+    },
+    /** Copy an external JSON file into the current component's local graph.
+     * Source assets are NEVER mutated. Restore old properties on any failure.
+     */
+    async importGeometryGraphAsset(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer để import.');
+            const before=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!before?.ok)throw Error(before?.error||'Graph is unavailable.');
+            const result=await Editor.Dialog.select({
+                title:'Import Geometry Graph JSON (local copy)',
+                path:Editor.Project?.path,
+                filters:[{name:'Geometry Graph JSON',extensions:['json']}],
+            });
+            if(result?.canceled||!result?.filePaths?.[0])return {ok:false,canceled:true};
+            const content=readGraphFile(result.filePaths[0]);
+            await commitGraphCopy(uuid,before,content);
+            return {ok:true,graphJson:content,message:'Valid graph imported as local copy.'};
+        }catch(error){return alertError('import-geometry-graph-asset',error);}
+    },
+    /** Explicitly detach a graph instance from its shared JsonAsset: make a
+     * local copy through native serialized property writes and one Undo snapshot.
+     */
+    async copyGeometryGraphAssetToLocal(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn SplineGeometryGraphRenderer.');
+            const before=await invokeScene('queryGeometryGraphAsset',uuid);
+            if(!before?.ok)throw Error(before?.error||'Graph is unavailable.');
+            if(!before.assetMode)return {ok:true,changed:false,message:'Already using local graph.'};
+            const content=canonicalGraphJSON(before.graphJson);
+            await commitGraphCopy(uuid,before,content);
+            return {ok:true,changed:true,graphJson:content,
+                message:'Shared graph copied to local override; original JsonAsset unchanged.'};
+        }catch(error){return alertError('copy-geometry-graph-to-local',error);}
+    },
+    async rebuildGeometryGraph(){
+        try{
+            const id=selected()[0];
+            if(!id)throw Error('Chọn Node chứa SplineGeometryGraphRenderer.');
+            return await invokeScene('rebuildGeometryGraph',id);
+        }catch(error){return alertError('rebuild-geometry-graph',error);}
+    },
+    async profileGeometryGraph(){
+        try{
+            const ids=selected();
+            if(ids.length!==1||!ids[0])
+                throw Error('Select exactly one Geometry Graph Renderer Node to profile.');
+            return await invokeScene('profileGeometryGraph',ids[0]);
+        }catch(error){return alertError('profile-geometry-graph',error);}
     },
     async rebuildRoad(){
         try{
@@ -321,6 +1173,109 @@ const methods={
             return {ok:true,root,knots:data.knots.length};
         }catch(e){return alertError('import',e);}
     },
+    /** SVG import always creates a NEW sibling XY2D Spline. On partial failure,
+     * remove only the nodes created by this operation (never touch source). */
+    async importSVG(input,unitsPerPixel=1){
+        let created=null,committed=false;
+        try{
+            const data=parseSvg(input,unitsPerPixel);
+            await ensureClasses();
+            const current=selected()[0];
+            const active=current?await invokeScene('querySpline',current):null;
+            const parent=active?.found?active.parentUuid:current;
+            created=await makeNode(parent,'Imported SVG Spline');
+            await component(created,'Splines.SplineContainer');
+            await property(created,0,'dimension',1,'Enum',false);
+            for(let i=0;i<data.knots.length;i++){
+                const knot=data.knots[i],id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(id,'Splines.SplineKnot');
+                await position(id,[knot.position.x,knot.position.y,0]);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',knot.tangentIn,'cc.Vec3');
+                await setKnotValue(id,'tangentOut',knot.tangentOut,'cc.Vec3');
+                await setKnotValue(id,'tangentsInKnotSpace',false,'Boolean');
+            }
+            if(data.closed)await property(created,0,'closed',true,'Boolean',false);
+            await snapshot();committed=true;
+            selectOnly(created);
+            try{await invokeScene('refreshPreview',created);}
+            catch(refreshError){console.warn('[Cocos Splines] SVG preview refresh skipped:',refreshError);}
+            return {ok:true,root:created,knots:data.knots.length,closed:data.closed};
+        }catch(error){
+            if(created&&!committed){
+                try{await Editor.Message.request('scene','remove-node',{uuid:created,snapshot:false});}
+                catch(cleanupError){console.error('[Cocos Splines] SVG import cleanup failed:',cleanupError);}
+            }
+            return alertError('import-svg',error);
+        }
+    },
+    async exportSVG(){
+        try{
+            const spline=await selectedSpline();
+            if(!spline?.found)throw Error(spline?.message||'Select a spline to export.');
+            const data=await invokeScene('querySvgGeometry',spline.rootUuid);
+            if(!data?.ok)throw Error(data?.error||'Cannot resolve exact spline cubic controls.');
+            return {ok:true,svg:exportSvg(data),knots:data.knots.length};
+        }catch(error){return alertError('export-svg',error);}
+    },
+    /** Versioned geometry JSON import. Legacy Unity JSON importer is untouched.
+     * The original spline and its Prefab overrides are never modified. */
+    async importSplineJSON(input){
+        let created=null,committed=false;
+        try{
+            const data=parseSplineJSON(input);
+            await ensureClasses();
+            const current=selected()[0];
+            const active=current?await invokeScene('querySpline',current):null;
+            const parent=active?.found?active.parentUuid:current;
+            created=await makeNode(parent,'Imported JSON Spline');
+            await component(created,'Splines.SplineContainer');
+            const transform=data.localTransform;
+            const xyz=arr=>({x:arr[0],y:arr[1],z:arr[2]});
+            await setNodeSerialized(created,'position','cc.Vec3',xyz(transform.position));
+            await setNodeSerialized(created,'rotation','cc.Quat',{
+                x:transform.rotation[0],y:transform.rotation[1],
+                z:transform.rotation[2],w:transform.rotation[3],
+            });
+            await setNodeSerialized(created,'scale','cc.Vec3',xyz(transform.scale));
+            await property(created,0,'dimension',data.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',data.samplesPerCurve,'Integer',false);
+            for(let i=0;i<data.knots.length;i++){
+                const k=data.knots[i];
+                const id=await makeNode(created,'Knot '+String(i).padStart(3,'0'));
+                await component(id,'Splines.SplineKnot');
+                await position(id,k.position);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',xyz(k.tangentIn),'cc.Vec3');
+                await setKnotValue(id,'tangentOut',xyz(k.tangentOut),'cc.Vec3');
+                await setKnotValue(id,'tangentsInKnotSpace',false,'Boolean');
+            }
+            await property(created,0,'closed',data.closed,'Boolean',false);
+            await property(created,0,'reversed',data.reversed,'Boolean',false);
+            await snapshot();
+            committed=true;
+            selectOnly(created);
+            try{await invokeScene('refreshPreview',created);}
+            catch(error){console.warn('[Cocos Splines] JSON preview refresh skipped:',error);}
+            return {ok:true,root:created,knots:data.knots.length,dimension:data.dimension,
+                closed:data.closed,reversed:data.reversed};
+        }catch(error){
+            if(created&&!committed){
+                try{await Editor.Message.request('scene','remove-node',{uuid:created,snapshot:false});}
+                catch(cleanupError){console.error('[Cocos Splines] JSON import cleanup failed:',cleanupError);}
+            }
+            return alertError('import-spline-json',error);
+        }
+    },
+    async exportSplineJSON(){
+        try{
+            const selected=await selectedSpline();
+            if(!selected?.found)throw Error(selected?.message||'Select a spline to export.');
+            const geometry=await invokeScene('queryJsonGeometry',selected.rootUuid);
+            if(!geometry?.ok)throw Error(geometry?.error||'Cannot read spline geometry.');
+            return {ok:true,json:serializeSplineJSON(geometry),knots:geometry.knots.length};
+        }catch(error){return alertError('export-spline-json',error);}
+    },
     async createSpline(){
         try{
             await ensureClasses();
@@ -335,6 +1290,133 @@ const methods={
             }
             await snapshot();selectOnly(root);await invokeScene('refreshPreview',root);return {ok:true,root};
         }catch(e){return alertError('create',e);}
+    },
+    /**
+     * Resample as a NEW sibling spline. The original, including Prefab
+     * instance children, remains unchanged. No destructive delete/reorder
+     * is attempted. The entire generated sibling uses one final snapshot.
+     */
+    async resampleSelectedSpline(mode,target,tolerance,space='local'){
+        if(knotEditBusy)return alertError('resample-spline',Error('Another Knot edit is in progress.'));
+        knotEditBusy=true;
+        let created=null,sourceUuid=null,revision=null;
+        try{
+            if(!['count','spacing','simplify'].includes(mode))throw Error('Choose Count, Spacing or Simplify.');
+            if(space!=='local'&&space!=='world')throw Error('Resample metric must be Local or World.');
+            if(!Number.isFinite(target)||!Number.isFinite(tolerance))
+                throw Error('Resample target/tolerance must be finite numbers.');
+            await ensureClasses();
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a SplineContainer.');
+            const plan=await invokeScene('queryResamplePlan',info.rootUuid,
+                {mode,target,tolerance,space});
+            if(!plan?.ok)throw Error(plan?.error||'Resample planner failed.');
+            sourceUuid=info.rootUuid;revision=plan.revision;
+            const finiteVec=p=>p&&['x','y','z'].every(k=>Number.isFinite(p[k]));
+            const finiteQuat=q=>finiteVec(q)&&Number.isFinite(q.w);
+            if(plan.rootUuid!==sourceUuid||typeof revision!=='string'||!revision||
+                !Number.isInteger(plan.count)||plan.count<2||plan.count>128||
+                !Array.isArray(plan.knots)||plan.knots.length!==plan.count||
+                !Number.isFinite(plan.estimatedMaxError)||
+                plan.estimatedMaxError>tolerance||
+                !finiteVec(plan.rootTransform?.position)||
+                !finiteVec(plan.rootTransform?.scale)||
+                !finiteQuat(plan.rootTransform?.rotation)||
+                plan.knots.some(k=>!finiteVec(k.position)||!finiteVec(k.tangentIn)||
+                    !finiteVec(k.tangentOut)||k.mode!==4)||
+                 (mode==='simplify'&&(!Array.isArray(plan.retainedKnots)||
+                     plan.retainedKnots.length!==plan.count||
+                     plan.retainedKnots.some(k=>typeof k?.name!=='string'||
+                         k.name.length>72||!validCopyQuat(k.rotation)||
+                         !['handleIn','handleOut','tangentsInKnotSpace','editTangentHandles'].every(field=>typeof k[field]==='boolean')||
+                         !Number.isFinite(k.tension)||k.tension<0||k.tension>1000))))
+                throw Error('Invalid or stale resample result from Scene.');
+            const assertOriginal=async()=>{
+                const check=await invokeScene('queryResampleValid',sourceUuid,revision);
+                if(!check?.ok)throw Error(check?.error||'Original spline changed during resample.');
+            };
+            // Reject malformed metadata BEFORE any Scene Node is allocated.
+            const appearance=appearanceWrites(plan.containerAppearance||{});
+            const skipped=mode==='simplify'?plan.omittedData:null;
+            if(skipped&&(['extraRootComponents','extraKnotComponents','extraKnotChildren'].some(
+                key=>!Number.isInteger(skipped[key])||skipped[key]<0||skipped[key]>100000)))
+                throw Error('Invalid source omission report.');
+            await assertOriginal();
+            created=await makeNode(plan.parentUuid,
+                String(plan.sourceName||'Spline').slice(0,72)+(mode==='simplify'?' (Simplified)':' (Resampled)'));
+            await component(created,'Splines.SplineContainer');
+            await setNodeSerialized(created,'position','cc.Vec3',plan.rootTransform.position);
+            await setNodeSerialized(created,'rotation','cc.Quat',plan.rootTransform.rotation);
+            await setNodeSerialized(created,'scale','cc.Vec3',plan.rootTransform.scale);
+            // Source collect() is in evaluator order (possibly reversed).
+            // New Knot hierarchy follows this order with reversed=false.
+            await property(created,0,'closed',plan.closed,'Boolean',false);
+            await property(created,0,'reversed',false,'Boolean',false);
+            await property(created,0,'dimension',plan.dimension,'Enum',false);
+            await property(created,0,'samplesPerCurve',plan.samplesPerCurve,'Integer',false);
+            for(const setting of appearance)
+                await property(created,0,setting.key,setting.value,setting.type,false);
+            for(let i=0;i<plan.knots.length;i++){
+                if(i%8===0)await assertOriginal();
+                const k=plan.knots[i];
+                const originalKnot=mode==='simplify'?plan.retainedKnots[i]:null;
+                // Build a fresh Knot from immutable geometry. No source
+                // component/Node identifiers enter the new sibling.
+                const copied=originalKnot?planCopiedKnot(k,originalKnot):null;
+                const id=await makeNode(created,originalKnot?.name||'Knot '+String(i).padStart(3,'0'));
+                if(originalKnot)await setNodeSerialized(id,'rotation','cc.Quat',originalKnot.rotation);
+                await component(id,'Splines.SplineKnot');
+                await position(id,[k.position.x,k.position.y,k.position.z]);
+                await setKnotValue(id,'mode',4,'Enum');
+                await setKnotValue(id,'tangentIn',copied?.tangentIn||k.tangentIn,'cc.Vec3');
+                await setKnotValue(id,'tangentOut',copied?.tangentOut||k.tangentOut,'cc.Vec3');
+                if(copied){
+                    await setKnotValue(id,'tension',copied.tension,'Float');
+                    if(copied.tangentsInKnotSpace)
+                        await setKnotValue(id,'tangentsInKnotSpace',true,'Boolean');
+                    // Recreate only standard tangent handles as independent
+                    // child nodes; source Prefab Node references are never used.
+                    for(const [which,enabled] of [['In',copied.handleIn],['Out',copied.handleOut]]){
+                        if(!enabled)continue;
+                        const tangent=which==='In'?copied.tangentIn:copied.tangentOut;
+                        const handle=await makeNode(id,'Tangent '+which);
+                        await position(handle,[tangent.x,tangent.y,tangent.z]);
+                        await setKnotValue(id,'tangent'+which+'Handle',handle,'cc.Node');
+                    }
+                    if(copied.editTangentHandles)
+                        await setKnotValue(id,'editTangentHandles',true,'Boolean');
+                }
+            }
+            await assertOriginal();
+            await snapshot();
+            selectOnly(created);
+            return {ok:true,root:created,count:plan.count,
+                estimatedMaxError:plan.estimatedMaxError,
+                message:'Created a separate '+(mode==='simplify'?'simplified':'resampled')+' spline with '+plan.count+
+                    ' Knots; estimated '+space+' deviation '+
+                    plan.estimatedMaxError.toFixed(5)+'. Original preserved.'+
+                    (mode==='simplify'?(' Fresh tangent handles. Skipped '+
+                        (skipped?.extraRootComponents||0)+' other Container components, '+
+                        (skipped?.extraKnotComponents||0)+' retained Knot components and '+
+                        (skipped?.extraKnotChildren||0)+' non-handle child nodes.'):'')};
+        }catch(error){
+            let cleanupWarning='';
+            if(created&&sourceUuid&&revision){
+                try{
+                    // Do not send remove-node to a different Scene after unload.
+                    const check=await invokeScene('queryResampleValid',sourceUuid,revision);
+                    if(check?.ok){
+                        const removed=await Editor.Message.request('scene','remove-node',{
+                            uuid:created,snapshot:false,
+                        });
+                        if(removed===false||(removed&&removed.ok===false))
+                            throw Error('Editor rejected generated-spline cleanup.');
+                    }else cleanupWarning='; old Scene changed — cleanup skipped';
+                }catch(cleanupError){cleanupWarning='; cleanup failed: '+String(cleanupError);}
+            }
+            return alertError('resample-spline',
+                Error(String(error?.message||error)+cleanupWarning));
+        }finally{knotEditBusy=false;}
     },
     async addKnot(){
         try{
@@ -358,6 +1440,52 @@ const methods={
             if(!s?.found||!s.knots.some(k=>k.uuid===uuid))throw Error('Knot không thuộc spline đang chọn.');
             selectOnly(uuid);return {ok:true};}
         catch(e){return alertError('select-knot-id',e);}
+    },
+    async selectKnotIds(ids){
+        try{
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a spline.');
+            const knots=selectedKnotIds(info,ids);
+            Editor.Selection.clear('node');
+            for(const uuid of knots)Editor.Selection.select('node',uuid);
+            return {ok:true,count:knots.length,message:'Selected '+knots.length+' Knot(s) in Scene.'};
+        }catch(error){return alertError('select-knot-ids',error);}
+    },
+    async listSurfaceTargets(){
+        try{
+            const info=await selectedSpline();
+            if(!info?.found)throw Error(info?.message||'Select a spline.');
+            const response=await invokeScene('listSurfaceTargets',info.rootUuid);
+            if(!response?.ok)throw Error(response?.error||'Could not list scene mesh surfaces.');
+            return response;
+        }catch(error){return alertError('list-surface-targets',error);}
+    },
+    async snapSelectedToSurface(ids,targetUuid,height=10,maxDrop=100,
+        alignNormal=false,smoothNormal=false,creaseAngle=60,targetKind='mesh',weldSeams=false){
+        try{return await applyKnotPlacement('surface',ids,{targetUuid,height,maxDrop,
+            alignNormal:alignNormal===true,smoothNormal:smoothNormal===true,
+            creaseAngle,targetKind,weldSeams:weldSeams===true});}
+        catch(error){return alertError('snap-selected-to-surface',error);}
+    },
+    async snapSelectedKnots(ids,step,space='local'){
+        try{return await applyKnotPlacement('snap',ids,{step,space});}
+        catch(error){return alertError('snap-selected-knots',error);}
+    },
+    async alignSelectedKnots(ids,axis,space='local'){
+        try{return await applyKnotPlacement('align',ids,{axis,space});}
+        catch(error){return alertError('align-selected-knots',error);}
+    },
+    async distributeSelectedKnots(ids,axis,space='local'){
+        try{return await applyKnotPlacement('distribute',ids,{axis,space});}
+        catch(error){return alertError('distribute-selected-knots',error);}
+    },
+    async distributeSelectedKnotsByArc(ids,space='local'){
+        try{return await applyKnotPlacement('distribute-arc',ids,{space});}
+        catch(error){return alertError('distribute-selected-knots-by-arc',error);}
+    },
+    async moveSelectedKnots(ids,delta,space='local'){
+        try{return await applyKnotPlacement('move',ids,{delta,space});}
+        catch(error){return alertError('move-selected-knots',error);}
     },
     async deleteKnotId(uuid){
         try {const s=await selectedSpline();
@@ -441,6 +1569,13 @@ const methods={
             await invokeScene('refreshPreview',s.rootUuid);
             return {ok:true};
         }catch(e){return alertError('set-knot-field',e);}
+    },
+    async queryPlacementSummary(){
+        try{
+            const uuid=selected()[0];
+            if(!uuid)throw Error('Chọn Node chứa SplineObjectController trước.');
+            return await invokeScene('queryPlacementSummary',uuid);
+        }catch(e){return alertError('query-placement-summary',e);}
     },
     async spawnPrefabs(kind,action){
         try{

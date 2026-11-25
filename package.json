@@ -468,6 +468,16 @@
           "joinMultiJunctionRoute"
         ]
       },
+      "begin-geometry-profile-edit": {
+        "methods": [
+          "beginGeometryProfileEdit"
+        ]
+      },
+      "save-geometry-profile-edit": {
+        "methods": [
+          "saveGeometryProfileEdit"
+        ]
+      },
       "begin-shared-geometry-graph-edit": {
         "methods": [
           "beginSharedGeometryGraphEdit"

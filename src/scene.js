@@ -456,6 +456,24 @@ function queryGeometryGraphAsset(uuid){
             assetUuid:typeof comp.graphAsset?.uuid==='string'?comp.graphAsset.uuid:null};
     }catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
+/** Read native Profile Asset binding on the selected Graph renderer.
+ * Never modifies any Scene fields or source JsonAssets.
+ */
+function queryGeometryProfileAsset(uuid,slot){
+    if(!Number.isInteger(slot)||slot<0||slot>2)
+        return {ok:false,error:'Profile Slot must be A/B/C (0–2).'};
+    const node=resolve(uuid);
+    if(!node||node.isValid===false)
+        return {ok:false,error:'Select one Geometry Graph Renderer Node.'};
+    const comp=node.components.find(c=>
+        classOf(c)==='Splines.SplineGeometryGraphRenderer');
+    if(!comp||comp.enabled===false)
+        return {ok:false,error:'Selected Node has no active Geometry Graph Renderer.'};
+    const asset=[comp.profileAssetA,comp.profileAssetB,comp.profileAssetC][slot];
+    if(!asset||typeof asset.uuid!=='string'||!asset.uuid)
+        return {ok:false,error:'Assign a native Profile JsonAsset to Slot '+['A','B','C'][slot]+'.'};
+    return {ok:true,slot,assetUuid:asset.uuid,assetName:asset.name||null};
+}
 /** Read-only diagnostic: no Scene snapshot and no local/asset graph write.
  * If source frames are stale the component may perform its ordinary atomic
  * rebuild first; cold/warm profiling itself uses a separate CPU runner.
@@ -685,5 +703,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryGeometryGraphAsset,rebuildGeometryGraph,profileGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,queryGeometryGraphAsset,queryGeometryProfileAsset,rebuildGeometryGraph,profileGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

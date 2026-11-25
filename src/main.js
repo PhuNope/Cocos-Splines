@@ -7,6 +7,8 @@ const path=require('node:path');
 const {canonicalGraphJSON,readGraphFile,writeGraphFile,readSharedGraphSnapshot,
     saveSharedGraphIfUnchanged}=require('./SplineGeometryGraphAssetWorkflow');
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
+const {formatProfile}=require('./SplineGeometryProfileEditor');
+const {readProfileSnapshot,saveProfileIfUnchanged}=require('./SplineGeometryProfileAssetWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -19,6 +21,7 @@ const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 let sharedGraphSaveBusy=false;
+let profileAssetSaveBusy=false;
 function singleGraphSelection(){
     const ids=selected();
     if(ids.length!==1||!ids[0])throw Error('Select exactly one Geometry Graph Renderer Node.');
@@ -874,6 +877,86 @@ const methods={
             await snapshot();selectOnly(id);
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
+    },
+    /** Open an existing native Profile JsonAsset as a temporary Inspector draft.
+     * A Profile is scoped to a selected renderer + exact slot + asset UUID.
+     */
+    async beginGeometryProfileEdit(slot){
+        try{
+            const nodeUuid=singleGraphSelection();
+            if(!Number.isInteger(slot)||slot<0||slot>2)
+                throw Error('Profile editor requires slot A/B/C (0–2).');
+            const info=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!info?.ok||!info.assetUuid)
+                throw Error(info?.error||'Assign a Profile Asset JsonAsset to the selected slot first.');
+            const source=await resolveSharedGraphSource(info.assetUuid);
+            const snapshot=readProfileSnapshot(source.file,source.root);
+            return {ok:true,nodeUuid,slot,assetUuid:info.assetUuid,
+                assetName:info.assetName,assetUrl:source.url,
+                profileJson:snapshot.profileJson,sha256:snapshot.sha256};
+        }catch(error){return alertError('begin-geometry-profile-edit',error);}
+    },
+    /** Explicit confirmation + optimistic checksum; never writes scene props.
+     * Do not delete the user's draft on conflict/Cancel/failed AssetDB refresh.
+     */
+    async saveGeometryProfileEdit(draft){
+        if(profileAssetSaveBusy)return {ok:false,error:'Another Profile Asset save is pending.'};
+        profileAssetSaveBusy=true;
+        try{
+            if(!draft||typeof draft!=='object')throw Error('Missing Profile Asset draft.');
+            const {nodeUuid,slot,assetUuid,sha256,profileJson}=draft;
+            if(typeof nodeUuid!=='string'||!nodeUuid||
+               !Number.isInteger(slot)||slot<0||slot>2||
+               typeof assetUuid!=='string'||!assetUuid)
+                throw Error('Profile selection, slot or native asset UUID is invalid.');
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Selected renderer changed; reopen the Profile draft.');
+            const info=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!info?.ok||info.assetUuid!==assetUuid)
+                throw Error('Profile Asset reference changed; reopen the draft.');
+            const canonical=formatProfile(profileJson);
+            let source=await resolveSharedGraphSource(assetUuid);
+            const snapshot=readProfileSnapshot(source.file,source.root);
+            if(snapshot.sha256!==sha256)
+                return {ok:false,conflict:true,
+                    error:'Profile Asset changed on disk. Discard/reopen draft to avoid overwriting new content.'};
+            if(snapshot.profileJson===canonical)
+                return {ok:true,changed:false,profileJson:canonical,sha256,
+                    message:'Profile unchanged; no asset or Scene changes.'};
+            if(typeof Editor.Dialog?.info!=='function')
+                throw Error('Native confirmation unavailable; Profile Asset will not be written.');
+            const answer=await Editor.Dialog.info('Save authored Profile JsonAsset?',{
+                title:'Save Profile Asset',
+                detail:source.url+'\nThis changes every renderer referencing the same Profile JsonAsset. Scene Undo cannot restore external file writes.',
+                buttons:['Save Profile JSON','Cancel'],default:1,cancel:1});
+            if(answer?.response!==0)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Renderer selection changed during confirmation.');
+            const latest=await invokeScene('queryGeometryProfileAsset',nodeUuid,slot);
+            if(!latest?.ok||latest.assetUuid!==assetUuid)
+                throw Error('Profile Asset changed during confirmation.');
+            const fresh=await resolveSharedGraphSource(assetUuid);
+            if(fresh.url!==source.url||fresh.file!==source.file)
+                throw Error('Profile file was moved during confirmation.');
+            source=fresh;
+            const saved=saveProfileIfUnchanged(
+                source.file,source.root,canonical,sha256);
+            if(!saved.changed)
+                return {ok:true,changed:false,profileJson:canonical,sha256:saved.sha256};
+            try{
+                const result=await Editor.Message.request('asset-db','refresh-asset',source.url);
+                if(result===false)throw Error('AssetDB refresh returned false.');
+                return {ok:true,changed:true,sha256:saved.sha256,
+                    profileJson:canonical,assetUrl:source.url,
+                    message:'Profile saved; AssetDB refreshed. Scene Undo does not restore the old Profile file.'};
+            }catch(error){
+                return {ok:true,changed:true,refreshPending:true,
+                    sha256:saved.sha256,profileJson:canonical,assetUrl:source.url,
+                    message:'Profile saved but AssetDB refresh failed: '+
+                        String(error?.message||error)+'. Refresh manually before preview.'};
+            }
+        }catch(error){return alertError('save-geometry-profile-edit',error);}
+        finally{profileAssetSaveBusy=false;}
     },
     /** Start an explicit, non-serialized shared JsonAsset edit. The Inspector
      * owns the draft; no change reaches Scene properties or disk until Save.
