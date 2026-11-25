@@ -175,3 +175,44 @@ Cài bằng **Install Examples** sẽ có `assets/CocosSplinesExamples/GeometryG
 - [ ] Mesh Deform generator, Multi-output và profiling theo node: Phase 4.3c trở đi.
 
 Cả source spline, Knot, Mesh asset và vật liệu người dùng đều không được chỉnh sửa bởi generator. Không tạo Collider/NavMesh hoặc hình học Boolean tại giao nhau. Chỉ nhánh `v2`, không tag / GitHub Release.
+
+## Phase 4.3c — Bounded Mesh Deform Generator (preview, 2026-11-25)
+
+Đã nối CPU deformation kernel `SplineMeshDeformMath.deformMesh` vào typed Geometry Graph V1 qua node **`meshDeform`** (`path` → `mesh`). Graph mặc định Ribbon và phiên bản JSON `version:1` giữ nguyên. Node sử dụng **preset mesh được tạo nội bộ** thay vì tham chiếu asset nhập từ Project, vì typed Graph V1 mới có một cổng input `path`; Imported Mesh input/đa cổng sẽ cần thiết kế schema v2 riêng.
+
+- `deformShape` (nguyên 0 hoặc 1): **Strip** — ribbon mặt phẳng, **Box Shell** — hộp bốn mặt cạnh sắc, không nắp hai đầu.
+- `segments` (nguyên 2–64, mặc định 12): số phân đoạn dọc của mỗi mesh nguồn để đủ vertex uốn theo spline. Giá trị cao giúp bớt gãy tại khúc cua nhưng tốn CPU hơn.
+- `repeats` (nguyên 1–16, mặc định 1): lặp mesh nguồn trên toàn chiều dài spline, phân bố theo **khoảng cách**. Khác với Repeat physical tile-length của component `SplineMeshDeform` standalone.
+- `width` và `height` (0.05–100, mặc định 1): kích thước mesh nguồn; `height` tác động Box Shell; Width Node upstream nhân đều kích thước biến dạng.
+- `uvMetersPerRepeat` (0.01–10000, mặc định 5): UV V theo quãng đường trong hệ local output frame.
+
+Các frame của SplineContainer được biến đổi thành output-local bởi Graph Renderer hiện tại. Deform sử dụng nội suy giữa frame theo **sampled arc-length distance**, bảo toàn nguồn, hỗ trợ offset, widthFactor và xử lý hệ trục phản chiếu bằng đảo winding. Core/Inspector từ chối graph invalid, dữ liệu quá giới hạn hoặc frame degenerate. Runner giữ cache và Mesh cuối hợp lệ nếu evaluate thất bại, không sửa Prefab, Knot hoặc imported Mesh asset.
+
+### Ví dụ
+
+```json
+{
+  "version": 1,
+  "nodes": [
+    {"id": "source", "type": "spline"},
+    {"id": "meshDeform", "type": "meshDeform", "input": "source",
+      "deformShape": 1, "segments": 16, "repeats": 4,
+      "width": 1.5, "height": 0.6, "uvMetersPerRepeat": 3},
+    {"id": "output", "type": "output", "input": "meshDeform"}
+  ],
+  "output": "output"
+}
+```
+
+**Inspector**: Nhấn **Use Mesh Deform**, chọn node để chỉnh Preset Shape, Segments và Repeats. Nút **Switch to Tube**/Use Extrude Profile có thể đổi generator trở lại. Shared JsonAsset chỉ được thay khi bấm Edit Shared Asset → Save, vẫn có checksum conflict review và xác nhận riêng.
+
+**Install Examples** thêm `assets/CocosSplinesExamples/GeometryGraph/BasicMeshDeformGraph.json` cho project khi yêu cầu, không ghi đè file đã có.
+
+### Kiểm thử / Hạn chế
+
+- [x] Headless regression cho mesh nguồn strip và box, repeat count, UV distance, mirrored / nonuniform output frames, input widthFactor, frame distance lookup, graph validator, cache invalidation/rollback, local Inspector và Shared draft, Install Examples.
+- [ ] Cocos Creator **3.8.8 native**: góc cua gắt, spline kín, scale âm/nonuniform, normals/culling, material, Undo/Prefab overrides, Save/Reload JsonAsset, performance 1.025 source frames.
+- [ ] **Chưa** hỗ trợ imported Mesh Asset làm đầu vào của graph, physical-repeat trimming, automatic cap geometry trên Box Shell, collision/navmesh hoặc deform lồng nhiều mesh. Các tác vụ này cần schema và native AssetDB/renderer QA riêng.
+- [ ] Phase 4.3d+: Multi-output Mesh Graph, per-node profiling, custom authored mesh/profile bindings.
+
+**Lưu ý:** Mesh Deform Node khác với `SplineMeshDeform` standalone (đã hỗ trợ FBX/Mesh được import). Đây là preset demo an toàn để tái sử dụng cùng kernel trong Geometry Graph trước khi thêm `Mesh Asset` input port. Không có tag / Release, chỉ nhánh `v2`.
