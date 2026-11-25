@@ -25,6 +25,22 @@ export function graphMeshDataFingerprint(mesh:Mesh|null):string{
     }
     return String(mesh.uuid||'unknown')+':'+size+':'+hash.toString(16);
 }
+/** Secondary revision for native builds that do not expose mesh.data.
+ * A manual Rebuild after reimport still invalidates meshSource cache, even
+ * when UUID and byteLength are unchanged.
+ */
+function decodedGeometryHash(mesh:MeshGeometry):string{
+    let h=2166136261>>>0;
+    const bytes=new ArrayBuffer(4),view=new DataView(bytes);
+    for(const values of [mesh.positions,mesh.indices,mesh.uvs||[],mesh.normals||[]]){
+        h=Math.imul(h^(values.length>>>0),16777619)>>>0;
+        for(const v of values){
+            view.setFloat32(0,v,true);
+            h=Math.imul((h^view.getUint32(0,true))>>>0,16777619)>>>0;
+        }
+    }
+    return h.toString(16);
+}
 export function readGraphSourceMeshAsset(mesh:Mesh|null):GraphSourceMeshRead {
     if(!mesh)throw Error('Geometry Graph meshAsset requires Source Mesh on the Renderer.');
     if(mesh.allowDataAccess!==true)
@@ -58,5 +74,5 @@ export function readGraphSourceMeshAsset(mesh:Mesh|null):GraphSourceMeshRead {
        geometry.indices.some(i=>!Number.isInteger(i)||i<0||i>=vertices)||
        (uvs&&uvs.length!==vertices*2))
         throw Error('Graph Source Mesh indices or UV count are invalid.');
-    return {geometry,revision};
+    return {geometry,revision:revision+':'+decodedGeometryHash(geometry)};
 }
