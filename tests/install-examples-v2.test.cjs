@@ -63,6 +63,14 @@ try {
  assert.deepEqual(dual.nodes.filter(n=>n.type==='meshDeform').map(n=>n.axis),[0,1]);
  assert.deepEqual(dual.nodes.filter(n=>n.type==='output').map(n=>n.id),
    ['outputA','outputB']);
+ const trim=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/SourceLengthTrimGraph.json'),'utf8'));
+ assert.equal(trim.version,1);
+ const trimNode=trim.nodes.find(n=>n.type==='meshDeform');
+ assert.equal(trimNode.repeatLayout,1);
+ assert.equal(trimNode.tileLength,0);
+ assert.equal(trimNode.uvMode,0);
+ assert.equal(trimNode.meshInput,'meshAsset');
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
