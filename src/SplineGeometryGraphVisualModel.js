@@ -35,7 +35,7 @@ const clone=v=>JSON.parse(JSON.stringify(v));
 const escapeHtml=text=>String(text).replace(/[&<>"']/g,
   ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 function validateGraph(graph) {
-  if(!object(graph)||graph.version!==1||!Array.isArray(graph.nodes)||
+  if(!object(graph)||![1,2].includes(graph.version)||!Array.isArray(graph.nodes)||
     graph.nodes.length<3||graph.nodes.length>32||!safeId(graph.output)||
     Object.keys(graph).some(k=>!['version','nodes','output'].includes(k)))
     throw Error('Graph V1 requires 3–32 nodes, version=1 and a valid output.');
@@ -64,8 +64,10 @@ function validateGraph(graph) {
     }
     map.set(node.id,node);
   }
-  if(sources!==1||outputs!==1||map.get(graph.output)?.type!=='output')
-    throw Error('Graph requires exactly one Spline and one selected Output.');
+  if(sources!==1||(graph.version===1&&outputs!==1)||
+     (graph.version===2&&(outputs<2||outputs>4))||
+     map.get(graph.output)?.type!=='output')
+    throw Error('Graph requires one Spline and one v1 Output or 2–4 v2 Outputs.');
   for(const node of map.values()){
     const info=TYPES[node.type];
     if(info.input===null){if(node.input!==undefined)throw Error('Spline source must have no input.');}
@@ -87,9 +89,11 @@ function validateGraph(graph) {
     state.set(id,2);ordered.push(node);
   }
   visit(graph.output);
+  const outputs=graph.nodes.filter(n=>n.type==='output').map(n=>n.id).sort();
+  if(graph.version===2)for(const id of outputs)visit(id);
   if(ordered.length!==map.size)
     throw Error('Graph contains disconnected nodes. Remove or reconnect them.');
-  return {graph,ordered,map};
+  return {graph,ordered,map,outputs};
 }
 function parseGraph(json){
   if(typeof json!=='string'||json.length<2||json.length>16384)
@@ -103,7 +107,55 @@ function applyGraphEdit(json,action,details={}) {
   const {graph,map}=parseGraph(json);
   const next=clone(graph);
   const find=id=>next.nodes.find(n=>n.id===id);
-  if(action==='insert'){
+  const unique=prefix=>{
+    let id=prefix,i=1;
+    while(find(id))id=prefix+String(i++);
+    if(i>100)throw Error('Graph node ID limit reached.');
+    return id;
+  };
+  if(action==='add-output'){
+    const existing=next.nodes.filter(n=>n.type==='output');
+    if(existing.length>=4||next.nodes.length>30)
+      throw Error('Multi-output Graph requires at most four outputs and 32 nodes.');
+    const target=find(details.fromOutputId||next.output);
+    if(!target||target.type!=='output')
+      throw Error('Select an existing output to branch from.');
+    const producer=find(target.input);
+    if(!producer||!['ribbon','tube','extrude','meshDeform'].includes(producer.type))
+      throw Error('Output must be connected to a mesh generator.');
+    const meshId=unique(producer.type+'Branch');
+    const outputId=unique('outputBranch');
+    next.nodes.push({...producer,id:meshId},
+      {id:outputId,type:'output',input:meshId});
+    next.version=2;
+  }else if(action==='remove-output'){
+    if(next.version!==2||details.id===next.output)
+      throw Error('Cannot remove the default output. Select another default first.');
+    const target=find(details.id);
+    if(!target||target.type!=='output')
+      throw Error('Select a non-default Output Node.');
+    next.nodes=next.nodes.filter(n=>n.id!==target.id);
+    // Remove dead private generator/path nodes without mutating any shared
+    // upstream node still referenced by another output.
+    const live=new Set();
+    const mark=id=>{
+      if(live.has(id))return;
+      const node=find(id);
+      if(!node)throw Error('Output branch dependency is missing.');
+      live.add(id);
+      if(node.input)mark(node.input);
+    };
+    for(const node of next.nodes)if(node.type==='output')mark(node.id);
+    next.nodes=next.nodes.filter(n=>live.has(n.id));
+    if(next.nodes.filter(n=>n.type==='output').length===1)next.version=1;
+  }else if(action==='set-default-output'){
+    const target=find(details.id);
+    if(!target||target.type!=='output')
+      throw Error('Default output must refer to an Output Node.');
+    if(next.output===target.id)return json;
+    if(next.version!==2)throw Error('Graph v1 has one immutable default output.');
+    next.output=target.id;
+  }else if(action==='insert'){
     const type=details.type,target=find(details.before||'ribbon');
     if(!['offset','width'].includes(type)||!target||!target.input||
        TYPES[target.type].input!=='path')
@@ -142,8 +194,9 @@ function applyGraphEdit(json,action,details={}) {
     const kind=details.type;
     if(!['ribbon','tube','extrude','meshDeform'].includes(kind))
       throw Error('Only Ribbon, Tube, Extrude and Mesh Deform generators can be selected.');
-    const output=find(next.output);
-    const current=find(output?.input);
+    const output=find(details.outputId||next.output);
+    if(output?.type!=='output')throw Error('Selected branch is not an Output Node.');
+    const current=find(output.input);
     if(!current||!['ribbon','tube','extrude','meshDeform'].includes(current.type))
       throw Error('Output must connect to an existing mesh generator.');
     if(current.type===kind)return json;
@@ -157,7 +210,12 @@ function applyGraphEdit(json,action,details={}) {
        typeof current.width==='number')replacement.width=current.width;
     if(['extrude','meshDeform'].includes(kind)&&
        typeof current.height==='number')replacement.height=current.height;
-    next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
+    // Multi-output may share a producer. Preserve it if another output uses
+    // that mesh; otherwise replace in place without orphaning the graph.
+    const shared=next.nodes.some(n=>n.id!==output.id&&n.input===current.id);
+    if(shared)next.nodes.push(replacement);
+    else next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
+    if(next.nodes.length>32)throw Error('Graph node limit reached.');
     output.input=name;
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
