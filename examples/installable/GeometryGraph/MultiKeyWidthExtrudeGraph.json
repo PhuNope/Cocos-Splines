@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "widthCurve",
+      "type": "width",
+      "input": "source",
+      "taperMode": 1,
+      "widthKeys": [
+        {
+          "progress": 0,
+          "multiplier": 1
+        },
+        {
+          "progress": 0.2,
+          "multiplier": 1.8
+        },
+        {
+          "progress": 0.55,
+          "multiplier": 0.65
+        },
+        {
+          "progress": 0.8,
+          "multiplier": 1.4
+        },
+        {
+          "progress": 1,
+          "multiplier": 1
+        }
+      ]
+    },
+    {
+      "id": "extrude",
+      "type": "extrude",
+      "input": "widthCurve",
+      "width": 2,
+      "height": 1,
+      "profileShape": 0,
+      "uvMetersPerRepeat": 3,
+      "capEnds": true
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "extrude"
+    }
+  ],
+  "output": "output"
+}

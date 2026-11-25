@@ -140,5 +140,75 @@ try{
  assert.equal(JSON.stringify(frames),originalFrames);
  assert(require(root+'/package.json').scripts.test.includes(
   'geometry-graph-width-taper-v2.test.cjs'));
+
+ // Arbitrarily spaced keys are evaluated over physical arc distance.
+ const multi=JSON.parse(JSON.stringify(graph));
+ const widthNode=multi.nodes.find(n=>n.id==='widthB');
+ delete widthNode.multiplier;
+ widthNode.widthKeys=[{progress:0,multiplier:2},
+  {progress:.25,multiplier:3},{progress:.75,multiplier:.5},
+  {progress:1,multiplier:2}];
+ widthNode.taperMode=0;
+ const multiRunner=new GeometryGraphRunner();
+ const multiResult=multiRunner.evaluateOutputs(compileGeometryGraph(multi),ctx);
+ [2,2.5,1.75,.5,2].forEach((scale,i)=>{
+  eq(multiResult.outputB.positions[6*i],-scale);
+  eq(multiResult.outputB.uvs[4*i+2],2*scale);
+ });
+ const multiClosed=multiRunner.evaluateOutputs(
+  compileGeometryGraph(multi),{...ctx,closed:true});
+ eq(multiClosed.outputB.positions[0],multiClosed.outputB.positions[24]);
+ const legacyConverted=model.applyGraphEdit(JSON.stringify(taper),
+  'width-keys-enable',{id:'widthB'});
+ const converted=model.parseGraph(legacyConverted).map.get('widthB');
+ assert.equal(converted.multiplier,undefined);
+ assert.deepEqual(converted.widthKeys,[
+  {progress:0,multiplier:2},{progress:.5,multiplier:.5},
+  {progress:1,multiplier:1.5}]);
+ const legacyResult=new GeometryGraphRunner().evaluateOutputs(
+  compileGeometryGraph(taper),ctx);
+ const convertedResult=new GeometryGraphRunner().evaluateOutputs(
+  compileGeometryGraph(JSON.parse(legacyConverted)),ctx);
+ assert.deepEqual(convertedResult,legacyResult,
+  'Legacy Start/Mid/End conversion preserves generated vertices/UVs');
+ let edit=model.applyGraphEdit(JSON.stringify(multi),
+  'width-key-add',{id:'widthB'});
+ assert.equal(model.parseGraph(edit).map.get('widthB').widthKeys.length,5);
+ edit=model.applyGraphEdit(edit,'width-key-set',{
+  id:'widthB',index:1,progress:.2,multiplier:4});
+ assert.equal(model.parseGraph(edit).map.get('widthB').widthKeys[1].multiplier,4);
+ assert.match(model.renderNodeParameters(edit,'widthB'),/data-width-key="1"/);
+ assert.match(model.renderNodeParameters(edit,'widthB'),/data-width-field="progress"/);
+ edit=model.applyGraphEdit(edit,'width-key-remove',{id:'widthB',index:1});
+ assert.equal(model.parseGraph(edit).map.get('widthB').widthKeys.length,4);
+ assert.throws(()=>model.applyGraphEdit(edit,'width-key-remove',{
+  id:'widthB',index:0}),/endpoint/);
+ assert.throws(()=>model.applyGraphEdit(edit,'width-key-set',{
+  id:'widthB',index:1,progress:1,multiplier:4}),/Invalid Width keys/);
+ for(const keys of [
+  [{progress:0,multiplier:1}],
+  [{progress:.1,multiplier:1},{progress:1,multiplier:1}],
+  [{progress:0,multiplier:1},{progress:0,multiplier:2},{progress:1,multiplier:1}],
+  [{progress:0,multiplier:1},{progress:1,multiplier:21}],
+  [{progress:0,multiplier:1,extra:0},{progress:1,multiplier:1}],
+  [{progress:0,multiplier:1},null],
+  Array.from({length:17},(_,i)=>({progress:i/16,multiplier:1})),
+ ]){
+  const bad=JSON.parse(JSON.stringify(multi));
+  bad.nodes.find(n=>n.id==='widthB').widthKeys=keys;
+  assert.throws(()=>compileGeometryGraph(bad));
+  assert.throws(()=>model.validateGraph(bad));
+ }
+ const mixed=JSON.parse(JSON.stringify(multi));
+ mixed.nodes.find(n=>n.id==='widthB').midMultiplier=1;
+ assert.throws(()=>compileGeometryGraph(mixed),/cannot mix/);
+ assert.throws(()=>model.validateGraph(mixed),/cannot mix/);
+ const seamBad=JSON.parse(JSON.stringify(multi));
+ seamBad.nodes.find(n=>n.id==='widthB').widthKeys[3].multiplier=3;
+ assert.throws(()=>multiRunner.evaluateOutputs(
+  compileGeometryGraph(seamBad),{...ctx,closed:true}),/closed spline Width curve/);
+ const zeroLength={...ctx,frames:frames.map(f=>({...f,distance:0}))};
+ assert.throws(()=>new GeometryGraphRunner().evaluateOutputs(
+  compileGeometryGraph(multi),zeroLength),/nonzero spline length/);
  console.log('GRAPH WIDTH CURVE V2 PASS: physical-distance linear/smoothstep taper, local UV0, legacy widths, closed seam, isolated cache and strict Visual/runtime parity.');
 }finally{fs.rmSync(temp,{recursive:true,force:true});}

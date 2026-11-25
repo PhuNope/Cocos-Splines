@@ -29,13 +29,29 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','midMultiplier','endMultiplier','taperMode','width',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
 const clone=v=>JSON.parse(JSON.stringify(v));
+function validateWidthKeys(keys){
+  if(!Array.isArray(keys)||keys.length<2||keys.length>16)
+    throw Error('Width curve requires 2–16 ordered keys.');
+  let prev=-1;
+  keys.forEach((key,i)=>{
+    if(!object(key)||Object.keys(key).length!==2||
+      Object.keys(key).some(k=>k!=='progress'&&k!=='multiplier')||
+      !finite(key.progress)||key.progress<0||key.progress>1||
+      !finite(key.multiplier)||key.multiplier<.01||key.multiplier>20||
+      (i===0&&key.progress!==0)||
+      (i===keys.length-1&&key.progress!==1)||
+      (i>0&&key.progress-prev<.001-1e-9))
+      throw Error('Invalid Width keys: endpoints 0/1, 0.001 minimum gap, multiplier .01–20.');
+    prev=key.progress;
+  });
+}
 const escapeHtml=text=>String(text).replace(/[&<>"']/g,
   ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 function validateGraph(graph) {
@@ -51,7 +67,8 @@ function validateGraph(graph) {
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
     const info=TYPES[node.type];
     const allowed=new Set(['id','type',...(info.input?['input']:[]),
-      ...(node.type==='meshDeform'?['meshInput']:[]),...info.params]);
+      ...(node.type==='meshDeform'?['meshInput']:[]),
+      ...(node.type==='width'?['widthKeys']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
     if(node.type==='spline')sources++;
@@ -74,6 +91,11 @@ function validateGraph(graph) {
           (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
+    }
+    if(node.type==='width'&&node.widthKeys!==undefined){
+      if(['multiplier','midMultiplier','endMultiplier'].some(k=>node[k]!==undefined))
+        throw Error('Width keys cannot mix with legacy multipliers.');
+      validateWidthKeys(node.widthKeys);
     }
     if(node.type==='meshDeform'&&node.tileLength!==undefined&&
        node.tileLength>0&&node.tileLength<.01)
@@ -273,9 +295,45 @@ function applyGraphEdit(json,action,details={}) {
     if(current.type==='meshDeform'&&current.meshInput&&
        !next.nodes.some(n=>n.meshInput===current.meshInput))
       next.nodes=next.nodes.filter(n=>n.id!==current.meshInput);
+  }else if(action==='width-keys-enable'){
+    const target=find(details.id);
+    if(!target||target.type!=='width')throw Error('Select a Width node.');
+    if(!target.widthKeys){
+      const start=target.multiplier??1,end=target.endMultiplier??start;
+      const middle=target.midMultiplier??(start+end)/2;
+      target.widthKeys=[{progress:0,multiplier:start},
+        {progress:.5,multiplier:middle},{progress:1,multiplier:end}];
+      delete target.multiplier;delete target.midMultiplier;delete target.endMultiplier;
+    }
+  }else if(['width-key-add','width-key-remove','width-key-set'].includes(action)){
+    const target=find(details.id);
+    if(!target||target.type!=='width'||!Array.isArray(target.widthKeys))
+      throw Error('Enable multi-key Width editing first.');
+    const keys=target.widthKeys;
+    if(action==='width-key-add'){
+      if(keys.length>=16)throw Error('Width curve maximum is 16 keys.');
+      let largest=-1,index=1;
+      for(let i=1;i<keys.length;i++){
+        const gap=keys[i].progress-keys[i-1].progress;
+        if(gap>largest){largest=gap;index=i;}
+      }
+      keys.splice(index,0,{progress:(keys[index-1].progress+keys[index].progress)/2,
+        multiplier:(keys[index-1].multiplier+keys[index].multiplier)/2});
+    }else{
+      const index=details.index;
+      if(!Number.isInteger(index)||index<0||index>=keys.length)
+        throw Error('Invalid Width key index.');
+      if(action==='width-key-remove'){
+        if(index===0||index===keys.length-1)
+          throw Error('Width endpoint keys cannot be removed.');
+        keys.splice(index,1);
+      }else keys[index]={progress:details.progress,multiplier:details.multiplier};
+    }
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
-    if(!target||!TYPES[target.type].params.includes(key))
+    if(!target||!TYPES[target.type].params.includes(key)||
+      target.type==='width'&&target.widthKeys&&
+      ['multiplier','midMultiplier','endMultiplier'].includes(key))
       throw Error('Selected node does not support '+key+'.');
     let value=details.value;
     if(target.type==='width'&&['midMultiplier','endMultiplier'].includes(key)&&
@@ -370,11 +428,43 @@ function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
   return '<svg class="spl-vg-wires" width="'+STAGE.width+'" height="'+STAGE.height+
     '" viewBox="0 0 '+STAGE.width+' '+STAGE.height+'" aria-hidden="true">'+links+'</svg>'+nodes;
 }
+function renderWidthKeyControls(n){
+  if(!n.widthKeys)return '<button type="button" data-width-action="enable">'+
+    'Enable Multi-key Width Curve (2–16 keys)</button>';
+  const keys=n.widthKeys;
+  const px=k=>(20+k.progress*280).toFixed(3);
+  const py=k=>(124-(k.multiplier-.01)/19.99*100).toFixed(3);
+  const points=keys.map(k=>px(k)+','+py(k)).join(' ');
+  return '<div class="spl-vg-width-keys">'+
+    '<div class="spl-vg-note">Multi-key Width: normalized physical arc progress (0–1), '+
+      'scale 0.01–20. Drag handles to preview; release commits one native Inspector edit. '+
+      'End keys remain fixed at 0 and 1. Closed splines require matching end scales.</div>'+
+    '<svg class="spl-vg-width-svg" viewBox="0 0 320 140" width="320" height="140" '+
+      'role="img" aria-label="Width curve key editor">'+
+    '<path d="M20 12V124H300" fill="none" stroke="#647c8b"/>'+
+    '<polyline data-width-line="1" points="'+points+'" fill="none" stroke="#72c8e9" stroke-width="2"/>'+
+    keys.map((k,i)=>'<circle data-width-key="'+i+'" cx="'+px(k)+'" cy="'+py(k)+
+      '" r="6" fill="#e7bf7f" stroke="#233640" stroke-width="2"/>').join('')+
+    '</svg>'+
+    '<div class="spl-vg-width-table">'+keys.map((k,i)=>
+      '<div class="spl-vg-width-row"><span>Key '+(i+1)+'</span>'+
+      '<label>Progress <input type="number" data-width-field="progress" data-width-index="'+i+
+      '" min="0" max="1" step="0.001" value="'+k.progress+'"'+
+      (i===0||i===keys.length-1?' disabled':'')+'></label>'+
+      '<label>Scale <input type="number" data-width-field="multiplier" data-width-index="'+i+
+      '" min="0.01" max="20" step="any" value="'+k.multiplier+'"></label>'+
+      '<button type="button" data-width-action="remove" data-width-index="'+i+'"'+
+      (i===0||i===keys.length-1?' disabled':'')+'>×</button></div>'
+    ).join('')+'</div>'+
+    '<button type="button" data-width-action="add"'+(keys.length>=16?' disabled':'')+
+      '>＋ Insert key in largest interval</button></div>';
+}
 function renderNodeParameters(graphJson,id){
   const {map}=parseGraph(graphJson),n=map.get(id);
   if(!n)return '<div>Select a node to edit its parameters.</div>';
   const info=TYPES[n.type];
-  const rows=info.params.map(key=>{
+  const rows=info.params.filter(key=>!(n.type==='width'&&n.widthKeys&&
+    ['multiplier','midMultiplier','endMultiplier'].includes(key))).map(key=>{
     const value=n[key]??(key==='capEnds'?false:LIMITS[key][2]);
     if(key==='capEnds')
       return '<label>'+escapeHtml(key)+' <input type="checkbox" data-graph-param="'+key+'"'+
@@ -429,7 +519,7 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
-    (n.type==='width'?'<div class="spl-vg-note">'+
+    (n.type==='width'&&!n.widthKeys?'<div class="spl-vg-note">'+
       'Multiplier = Start scale. Optional Mid/End make a distance-based taper curve; '+
       'blank Mid = average, blank End = Start (uniform). Smoothstep eases at control points. '+
       'For closed splines, Start and End must match to avoid a seam jump.'+
@@ -447,6 +537,7 @@ function renderNodeParameters(graphJson,id){
       '</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':
       (n.type==='meshAsset'?'':'<div class="spl-vg-note">No editable properties.</div>'))+
+    (n.type==='width'?renderWidthKeyControls(n):'')+
     (n.type==='meshAsset'?'<div class="spl-vg-note">'+
       'Source Mesh is assigned on each Renderer (native Mesh Asset field). '+
       'Use Slot A/B/C to select Source Mesh, Source Mesh B or Source Mesh C.'+

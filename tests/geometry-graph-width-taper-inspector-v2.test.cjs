@@ -84,6 +84,59 @@ try{
  panel.update.call(ui,dump);
  assert.deepEqual(model.parseGraph(ui._vgGraphJson).ordered.map(n=>n.id),
   ['source','ribbon','output']);
+
+ // Multi-key graph edits commit only serialized graphJson, never its layout.
+ dump.value.graphJson.value=valid;
+ panel.update.call(ui,dump);
+ ui.$.vgStage.events.click({target:card('width1')});
+ const widthButton=(action,index)=>({disabled:false,
+   dataset:{widthAction:action,widthIndex:String(index??0)},
+   closest(sel){return sel==='[data-width-action]'?this:null;}});
+ const clickWidth=(action,index)=>ui.$.vgProperties.events.click({
+   target:widthButton(action,index)});
+ const changeWidth=(field,index,value)=>ui.$.vgProperties.events.change({target:{
+   dataset:{widthField:field,widthIndex:String(index)},value,
+   closest(sel){return sel==='[data-width-field]'?this:null;},
+ }});
+ const keyCommitStart=commits.length;
+ clickWidth('enable');
+ let keys=model.parseGraph(dump.value.graphJson.value).map.get('width1').widthKeys;
+ assert.deepEqual(keys.map(k=>k.progress),[0,.5,1]);
+ assert.match(ui.$.vgProperties.innerHTML,/data-width-key="1"/);
+ clickWidth('add');
+ keys=model.parseGraph(dump.value.graphJson.value).map.get('width1').widthKeys;
+ assert.equal(keys.length,4);
+ changeWidth('multiplier',1,'4');
+ keys=model.parseGraph(dump.value.graphJson.value).map.get('width1').widthKeys;
+ assert.equal(keys[1].multiplier,4);
+ const snapshot=dump.value.graphJson.value,commitCount=commits.length;
+ changeWidth('progress',1,'0.6'); // Must not cross the next key at 0.5.
+ assert.equal(dump.value.graphJson.value,snapshot);
+ changeWidth('multiplier',1,'');
+ assert.equal(dump.value.graphJson.value,snapshot);
+ assert.equal(commits.length,commitCount);
+ // SVG pointermove is preview only; one pointerup produces exactly one commit.
+ const attributes={};
+ const circle={setAttribute(k,v){attributes[k]=v;}};
+ const line={setAttribute(k,v){attributes[k]=v;}};
+ const svg={getBoundingClientRect(){return {left:0,top:0,width:320,height:140};},
+   querySelector(sel){return sel.includes('data-width-line')?line:circle;}};
+ ui.$.vgProperties.querySelector=sel=>sel==='.spl-vg-width-svg'?svg:null;
+ const target={dataset:{widthKey:'1'},
+   closest(sel){return sel==='[data-width-key]'?this:null;}};
+ ui.$.vgProperties.events.pointerdown({target,button:0,pointerId:5,
+   preventDefault(){}});
+ ui.$.vgProperties.events.pointermove({pointerId:5,clientX:90,clientY:100});
+ assert.equal(commits.length,commitCount,'No native writes during handle drag');
+ assert(attributes.cy);
+ ui.$.vgProperties.events.pointerup({pointerId:5,type:'pointerup'});
+ assert.equal(commits.length,commitCount+1);
+ assert.notEqual(dump.value.graphJson.value,snapshot);
+ clickWidth('remove',1);
+ keys=model.parseGraph(dump.value.graphJson.value).map.get('width1').widthKeys;
+ assert.equal(keys.length,3);
+ assert(commits.slice(keyCommitStart).every(c=>c.key==='graphJson'));
+ assert.equal(dump.value.graphLayoutJson.value,'{}');
  panel.close.call(ui);
  assert(require(root+'/package.json').scripts.test.includes(
   'geometry-graph-width-taper-inspector-v2.test.cjs'));

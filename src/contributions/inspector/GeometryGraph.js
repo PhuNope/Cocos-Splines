@@ -118,6 +118,15 @@ const style=base.style+[
 '.spl-vg-source,.spl-vg-note{font-size:10px;color:#b0c4d0;margin:4px 0}',
 '.spl-vg-params{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:6px}',
 '.spl-vg-params label{display:flex;flex-direction:column;gap:2px}',
+'.spl-vg-width-keys{margin-top:9px;border-top:1px solid #476277;padding-top:6px}',
+'.spl-vg-width-svg{display:block;max-width:100%;height:auto;margin:6px 0;background:#142a38;touch-action:none;border:1px solid #45687d;border-radius:5px}',
+'.spl-vg-width-svg circle{cursor:grab;touch-action:none}',
+'.spl-vg-width-svg circle:active{cursor:grabbing}',
+'.spl-vg-width-row{display:grid;grid-template-columns:48px 1fr 1fr 25px;gap:6px;align-items:end;margin:4px 0}',
+'.spl-vg-width-row label{display:flex;flex-direction:column;font-size:10px}',
+'.spl-vg-width-row input{width:100%;min-width:0;box-sizing:border-box;background:#1b3544;color:inherit;border:1px solid #53728a}',
+'.spl-vg-width-row button,.spl-vg-width-keys>button{background:#28485c;color:inherit;border:1px solid #53728a;border-radius:4px;cursor:pointer}',
+'.spl-vg-width-row button:disabled,.spl-vg-width-keys>button:disabled{opacity:.4;cursor:default}',
 '.spl-vg-params input:not([type=checkbox]),.spl-vg-params select{min-width:0;width:100%;box-sizing:border-box;border:1px solid #546b78;border-radius:4px;background:rgba(22,37,51,.9);color:inherit;padding:4px}',
 '.spl-vg-params input[type=checkbox]{align-self:flex-start}',
 '.spl-vg-status{font-size:11px;white-space:pre-wrap;color:#9ad6c9;min-height:15px}',
@@ -1105,15 +1114,96 @@ const inspector={
       const card=closest(event.target,'.spl-vg-card');
       if(card){this._vgSelected=card.dataset.node;render(this);}
     });
+    this.$.vgProperties.addEventListener('click',event=>{
+      const button=closest(event.target,'[data-width-action]');
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||
+         !button||!this._vgSelected||button.disabled)return;
+      const kind=button.dataset.widthAction;
+      if(kind==='enable')editGraph(this,'width-keys-enable',{id:this._vgSelected});
+      else if(kind==='add')editGraph(this,'width-key-add',{id:this._vgSelected});
+      else if(kind==='remove')editGraph(this,'width-key-remove',{
+        id:this._vgSelected,index:Number(button.dataset.widthIndex)});
+    });
     this.$.vgProperties.addEventListener('change',event=>{
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!this._vgSelected)return;
+      const widthInput=closest(event.target,'[data-width-field]');
+      if(widthInput){
+        const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.widthKeys;
+        const index=Number(widthInput.dataset.widthIndex);
+        const field=widthInput.dataset.widthField;
+        if(!keys||!Number.isInteger(index)||!keys[index]||
+           !['progress','multiplier'].includes(field)||widthInput.value===''||
+           !Number.isFinite(Number(widthInput.value))){
+          status(this,'Invalid Width key input.',true);return;
+        }
+        const next={...keys[index],[field]:Number(widthInput.value)};
+        editGraph(this,'width-key-set',{id:this._vgSelected,index,...next});
+        return;
+      }
       const input=closest(event.target,'[data-graph-param]');
-      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!input||!this._vgSelected)return;
+      if(!input)return;
       const key=input.dataset.graphParam;
       const optionalTaper=key==='midMultiplier'||key==='endMultiplier';
+      if(input.value===''&&!optionalTaper&&key!=='capEnds'){
+        status(this,'Graph parameter cannot be empty.',true);return;
+      }
       editGraph(this,'param',{id:this._vgSelected,key,
         value:key==='capEnds'?!!input.checked:
           (optionalTaper&&input.value==='')?null:Number(input.value)});
     });
+    this.$.vgProperties.addEventListener('pointerdown',event=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft||
+         event.button!==0||!this._vgSelected)return;
+      const handle=closest(event.target,'[data-width-key]');
+      if(!handle)return;
+      const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.widthKeys;
+      const index=Number(handle.dataset.widthKey);
+      if(!keys||!Number.isInteger(index)||!keys[index])return;
+      this._vgWidthDrag={id:this._vgSelected,index,keys,base:this._vgGraphJson,
+        pointerId:event.pointerId,preview:null};
+      this.$.vgProperties.setPointerCapture?.(event.pointerId);
+      event.preventDefault?.();
+    });
+    this.$.vgProperties.addEventListener('pointermove',event=>{
+      const drag=this._vgWidthDrag;
+      if(!drag||drag.pointerId!==event.pointerId)return;
+      const svg=this.$.vgProperties.querySelector?.('.spl-vg-width-svg');
+      const rect=svg?.getBoundingClientRect?.();
+      if(!rect||rect.width<=0||rect.height<=0)return;
+      const rawProgress=Math.max(0,Math.min(1,
+        ((event.clientX-rect.left)/rect.width*320-20)/280));
+      const rawScale=.01+(124-(event.clientY-rect.top)/rect.height*140)/100*19.99;
+      const scale=Math.max(.01,Math.min(20,
+        Math.round(rawScale*1000)/1000));
+      const i=drag.index,keys=drag.keys;
+      const progress=i===0?0:i===keys.length-1?1:Math.max(
+        keys[i-1].progress+.001,Math.min(keys[i+1].progress-.001,
+          Math.round(rawProgress*1000)/1000));
+      if(!Number.isFinite(progress)||!Number.isFinite(scale))return;
+      drag.preview={progress,multiplier:scale};
+      const positions=keys.map((k,j)=>j===i?drag.preview:k);
+      const px=k=>(20+k.progress*280).toFixed(3);
+      const py=k=>(124-(k.multiplier-.01)/19.99*100).toFixed(3);
+      const circle=svg.querySelector?.('[data-width-key="'+i+'"]');
+      circle?.setAttribute?.('cx',px(drag.preview));
+      circle?.setAttribute?.('cy',py(drag.preview));
+      svg.querySelector?.('[data-width-line]')?.setAttribute?.('points',
+        positions.map(k=>px(k)+','+py(k)).join(' '));
+    });
+    const finishWidthDrag=event=>{
+      const drag=this._vgWidthDrag;
+      if(!drag||drag.pointerId!==event.pointerId)return;
+      this._vgWidthDrag=null;
+      this.$.vgProperties.releasePointerCapture?.(event.pointerId);
+      const value=drag.preview,old=drag.keys[drag.index];
+      if(event.type==='pointerup'&&value&&drag.base===this._vgGraphJson&&
+         drag.id===this._vgSelected&&
+         (value.progress!==old.progress||value.multiplier!==old.multiplier))
+        editGraph(this,'width-key-set',{id:drag.id,index:drag.index,...value});
+      else render(this);
+    };
+    this.$.vgProperties.addEventListener('pointerup',finishWidthDrag);
+    this.$.vgProperties.addEventListener('pointercancel',finishWidthDrag);
     this.$.vgStage.addEventListener('pointerdown',event=>{
       const handle=closest(event.target,'[data-drag]');
       if(this._vgShared||!handle||event.button!==0)return;
@@ -1172,7 +1262,7 @@ const inspector={
     base.close.call(this);
     this._vgGraphJson=null;this._vgLayoutJson=null;
     this._vgPreviewLayout=null;this._vgSelected=null;
-    this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
+    this._vgPending=null;this._vgDrag=null;this._vgWidthDrag=null;this._vgRendered=false;
     this._vgShared=false;this._vgAssetIdentity=null;
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgProfile=null;this._vgProfileBusy=false;

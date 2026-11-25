@@ -21,6 +21,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
 },null,2);
 export type GeometryNodeType='spline'|'meshAsset'|'offset'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
+export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
     id:string;type:GeometryNodeType;
     input?:string;
@@ -37,6 +38,8 @@ export interface GeometryGraphNode {
      * taperMode 0=linear, 1=smoothstep.
      */
     midMultiplier?:number;endMultiplier?:number;taperMode?:number;
+    /** Optional strictly ordered physical-distance keys; legacy Start/Mid/End unchanged if absent. */
+    widthKeys?:GeometryWidthKey[];
     width?:number;endWidth?:number;uvMetersPerRepeat?:number;
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
@@ -92,6 +95,26 @@ const bound=(x:unknown,min:number,max:number,name:string):number=>{
     if(!finite(x)||x<min||x>max)throw Error('Geometry Graph '+name+' must be between '+min+' and '+max+'.');
     return x;
 };
+function validateWidthKeys(value:unknown):GeometryWidthKey[]{
+    if(!Array.isArray(value)||value.length<2||value.length>16)
+        throw Error('Geometry Graph Width curve requires 2–16 ordered keys.');
+    let previous=-1;
+    value.forEach((raw,index)=>{
+        if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+           Object.keys(raw).some(k=>k!=='progress'&&k!=='multiplier')||
+           Object.keys(raw).length!==2)
+            throw Error('Geometry Graph Width key must contain only progress and multiplier.');
+        const key=raw as GeometryWidthKey;
+        bound(key.progress,0,1,'Width key progress');
+        bound(key.multiplier,.01,20,'Width key multiplier');
+        if((index===0&&key.progress!==0)||
+           (index===value.length-1&&key.progress!==1)||
+           (index>0&&key.progress-previous<.001-1e-9))
+            throw Error('Geometry Graph Width keys require endpoints 0/1 and gaps >= 0.001.');
+        previous=key.progress;
+    });
+    return value as GeometryWidthKey[];
+}
 const onlyKeys=(object:Record<string,unknown>,keys:ReadonlyArray<string>):void=>{
     if(Object.keys(object).some(k=>!keys.includes(k)))throw Error('Unknown Geometry Graph node property.');
 };
@@ -152,7 +175,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
-            node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode']:
+            node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
             node.type==='extrude'?['input','width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
@@ -173,6 +196,12 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             bound(node.up??0,-1000,1000,'offset up');
         }
         if(node.type==='width'){
+            if(node.widthKeys!==undefined){
+                if(node.multiplier!==undefined||node.midMultiplier!==undefined||
+                   node.endMultiplier!==undefined)
+                    throw Error('Geometry Graph Width keys cannot mix with legacy multipliers.');
+                validateWidthKeys(node.widthKeys);
+            }
             bound(node.multiplier??1,.01,20,'width multiplier');
             if(node.midMultiplier!==undefined)
                 bound(node.midMultiplier,.01,20,'width mid multiplier');
@@ -422,8 +451,9 @@ export class GeometryGraphRunner {
                     }))};
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
-                    const start=node.multiplier??1;
-                    const end=node.endMultiplier??start;
+                    const keys=node.widthKeys;
+                    const start=keys?keys[0].multiplier:node.multiplier??1;
+                    const end=keys?keys[keys.length-1].multiplier:node.endMultiplier??start;
                     const middle=node.midMultiplier??(start+end)/2;
                     const eased=node.taperMode===1;
                     if(source.closed&&Math.abs(start-end)>1e-8)
@@ -431,17 +461,29 @@ export class GeometryGraphRunner {
                     const frames=source.frames;
                     const first=frames[0].distance,last=frames[frames.length-1].distance;
                     const span=last-first;
-                    if(span<1e-8&&(Math.abs(start-middle)>1e-8||
-                       Math.abs(middle-end)>1e-8))
+                    if(span<1e-8&&(keys?
+                        keys.some(key=>Math.abs(key.multiplier-start)>1e-8):
+                        Math.abs(start-middle)>1e-8||Math.abs(middle-end)>1e-8))
                         throw Error('Geometry Graph Width curve needs nonzero spline length.');
                     const smooth=(t:number):number=>eased?t*t*(3-2*t):t;
                     value={kind:'path',closed:source.closed,frames:frames.map(f=>{
                         const t=span>1e-8?
                             Math.min(1,Math.max(0,(f.distance-first)/span)):0;
-                        const part=t<=.5?smooth(t*2):smooth((t-.5)*2);
-                        const taper=t<=.5?
-                            start+(middle-start)*part:
-                            middle+(end-middle)*part;
+                        let taper:number;
+                        if(keys){
+                            let nextIndex=1;
+                            while(nextIndex<keys.length-1&&t>keys[nextIndex].progress)
+                                nextIndex++;
+                            const before=keys[nextIndex-1],after=keys[nextIndex];
+                            const local=(t-before.progress)/(after.progress-before.progress);
+                            taper=before.multiplier+(after.multiplier-before.multiplier)*
+                                smooth(Math.min(1,Math.max(0,local)));
+                        }else{
+                            const part=t<=.5?smooth(t*2):smooth((t-.5)*2);
+                            taper=t<=.5?
+                                start+(middle-start)*part:
+                                middle+(end-middle)*part;
+                        }
                         const widthFactor=f.widthFactor*taper;
                         if(!Number.isFinite(widthFactor)||
                            widthFactor<1e-4||widthFactor>1000)
