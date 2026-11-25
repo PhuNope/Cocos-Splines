@@ -467,6 +467,16 @@
         "methods": [
           "joinMultiJunctionRoute"
         ]
+      },
+      "begin-shared-geometry-graph-edit": {
+        "methods": [
+          "beginSharedGeometryGraphEdit"
+        ]
+      },
+      "save-shared-geometry-graph-edit": {
+        "methods": [
+          "saveSharedGeometryGraphEdit"
+        ]
       }
     },
     "inspector": {
