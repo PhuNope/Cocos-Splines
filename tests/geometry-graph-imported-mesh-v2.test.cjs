@@ -50,8 +50,7 @@ try {
  assert.deepEqual(runner.metrics,{computed:3,reused:1,nodes:4},
   'Asset changes dirty only meshAsset + downstream deform/output; path cache is reused');
  const stable=JSON.stringify(change);
- assert.throws(()=>runner.evaluate(plan,context(undefined,'no-mesh')),/Mesh/i);
- // default mesh in context() is valid; explicitly pass a missing asset
+ // Explicitly pass a missing asset; the context factory normally supplies one.
  assert.throws(()=>runner.evaluate(plan,{...context(),meshSource:undefined,
   meshRevision:'missing'}),/readable imported Mesh/);
  assert.equal(JSON.stringify(runner.evaluate(plan,context(updated,'asset-b'))),stable,
