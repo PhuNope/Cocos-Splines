@@ -71,6 +71,12 @@ try {
  assert.equal(trimNode.tileLength,0);
  assert.equal(trimNode.uvMode,0);
  assert.equal(trimNode.meshInput,'meshAsset');
+ const submeshGraph=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/SubMeshSelectionGraph.json'),'utf8'));
+ assert.equal(submeshGraph.version,2);
+ assert.deepEqual(submeshGraph.nodes.filter(n=>n.type==='meshAsset').map(n=>n.slot),[0,1]);
+ assert.deepEqual(submeshGraph.nodes.filter(n=>n.type==='output').map(n=>n.id),
+   ['outputA','outputB']);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
