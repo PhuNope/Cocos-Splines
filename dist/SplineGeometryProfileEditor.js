@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -68,13 +68,19 @@ function parseProfile(value){
    throw Error('Profile UV uMetersPerRepeat must be within [0.01,10000].');
   uv.uMetersPerRepeat=raw.uMetersPerRepeat;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'uFollowFrameScale')){
+  if(typeof raw.uFollowFrameScale!=='boolean'||
+     (raw.uFollowFrameScale&&uv.uMetersPerRepeat===undefined))
+   throw Error('Profile UV uFollowFrameScale requires boolean and metric Side U meters/repeat when enabled.');
+  uv.uFollowFrameScale=raw.uFollowFrameScale;
+ }
  return {format:FORMAT,version:1,points,uv};
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -106,6 +112,17 @@ function applyProfileEdit(value,action,params={}){
  }else if(action==='clear-u-meters-per-repeat'){
   if(profile.uv){
    delete profile.uv.uMetersPerRepeat;
+   delete profile.uv.uFollowFrameScale;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
+  }
+ }else if(action==='set-u-follow-frame-scale'){
+  if(typeof params.enabled!=='boolean')
+   throw Error('Profile UV Follow Frame Scale requires a boolean.');
+  if(params.enabled&&!profile.uv?.uMetersPerRepeat)
+   throw Error('Profile UV Follow Frame Scale requires Side U meters/repeat.');
+  if(params.enabled)profile.uv.uFollowFrameScale=true;
+  else if(profile.uv){
+   delete profile.uv.uFollowFrameScale;
    if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-uv-seam'){
@@ -207,7 +224,8 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
     'Custom mapping · seam edge #'+((profile.uv.seamEdge??0)+1))+
    ' · selected edge #'+(selectedEdge===null?'—':selectedEdge+1)+
    ' · U mode: '+(profile.uv?.uMetersPerRepeat===undefined?
-    'Normalized perimeter':'Nominal meters, repeat every '+profile.uv.uMetersPerRepeat+' m')+
+    'Normalized perimeter':(profile.uv?.uFollowFrameScale?'Frame-local':'Nominal')+
+     ' meters, repeat every '+profile.uv.uMetersPerRepeat+' m')+
    '</div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
@@ -215,7 +233,12 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    (profile.uv?.uMetersPerRepeat??'')+'"></label>'+
   '<button type="button" class="spl-btn spl-profile-clear-uv-meters"'+
    (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
-   '>Use Normalized U</button></div>'+
+   '>Use Normalized U</button>'+
+  '<label title="Uses current frame widthFactor and right/up scale. Node world scale is not included.">'+
+   '<input type="checkbox" class="spl-profile-uv-follow-frame"'+
+   (profile.uv?.uFollowFrameScale===true?' checked':'')+
+   (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
+   '> Follow taper / frame scale</label></div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Edge UV weight <input type="number" class="spl-profile-uv-weight" '+
    'min="0.25" max="4" step="0.05" value="'+
