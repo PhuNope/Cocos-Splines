@@ -119,6 +119,41 @@ async function run(){
   assert.equal(ui._vgAuthoredDraft.redo.length,0);
   assert.equal(ui.$.vgProfileUndo.disabled,true);
   assert.equal(ui.$.vgProfileSave.disabled,true);
+  // UV0 seam/edge weights extend the same draft-only Undo/Redo and native
+  // confirmed-save workflow without changing the renderer's Scene dump.
+  ui.$.vgProfileCanvas.events.pointerdown(pointer('edge',0,120,192.8,6));
+  ui.$.vgProfileCanvas.events.pointerup({pointerId:6});
+  ui.$.vgProfileCanvas.events.click({target:button('spl-profile-set-uv-seam')});
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.seamEdge,0);
+  assert.equal(ui._vgAuthoredDraft.undo.length,1);
+  ui.$.vgProfileCanvas.events.change({target:{
+   value:'2.5',classList:{contains:cls=>cls==='spl-profile-uv-weight'},
+  }});
+  const uvDraft=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(uvDraft).uv.edgeWeights[0],2.5);
+  assert.equal(ui._vgAuthoredDraft.undo.length,2);
+  ui.$.vgProfileCanvas.events.change({target:{
+   value:'5',classList:{contains:cls=>cls==='spl-profile-uv-weight'},
+  }});
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvDraft,
+   'Invalid UV weight rejects without affecting last-good draft');
+  assert.equal(ui._vgAuthoredDraft.undo.length,2);
+  ui.$.vgProfileUndo.events.click();
+  assert.deepEqual(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv,
+   {seamEdge:0});
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvDraft);
+  ui.$.vgProfileCanvas.events.click({target:button('spl-profile-reset-uv')});
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv,undefined);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvDraft);
+  assert.equal(dump.value.graphJson.value,graph);
+  assert.equal(dump.value.profileAssetA.value.uuid,'profile-1');
+  ui.$.vgProfileSave.events.click();await tick();
+  assert.equal(writes,2);
+  assert.equal(savedProfile,uvDraft);
+  assert.equal(ui._vgAuthoredDraft.undo.length,0);
+  assert.equal(ui.$.vgProfileSave.disabled,true);
   ui.$.vgProfileDiscard.events.click();
   assert.equal(ui._vgAuthoredDraft,null);
   panel.close.call(ui);

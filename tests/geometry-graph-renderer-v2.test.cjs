@@ -624,6 +624,21 @@ async function run(){
    assert.deepEqual(renderer.getRenderedOutputIds(),['outputA','outputB']);
    assert.equal(out.mesh.struct.primitives.length,2);
    assert.equal(frameBuilds,authoredFrameBuilds);
+   // UV-only Profile edits dirty only dependent Extrude + Output, never
+   // source spline frames or the other authored branch.
+   const uvBaseline=out.mesh;
+   squareProfile.uv={seamEdge:2,edgeWeights:[1,2,1,1]};
+   renderer.update();
+   assert.notEqual(out.mesh,uvBaseline,'Hot Profile UV change rebuilds output');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5});
+   assert.equal(frameBuilds,authoredFrameBuilds);
+   const uvLastGood=out.mesh;
+   squareProfile.uv.edgeWeights[0]=5;
+   assert.throws(()=>renderer.rebuild(),/Graph Profile Asset UV/);
+   assert.equal(out.mesh,uvLastGood,'Invalid authored UV retains last-good Mesh');
+   assert.equal(uvLastGood.destroyed,false);
+   squareProfile.uv.edgeWeights[0]=1;
+   renderer.rebuild();
    const authoredFirst=out.mesh;
    renderer.profileAssetC={json:{format:'bad'}};
    renderer.update();
