@@ -37,6 +37,18 @@ try {
  assert.deepEqual(extrude.nodes.map(n=>n.type),
    ['spline','offset','width','extrude','output']);
  assert.equal(extrude.nodes.find(n=>n.type==='extrude').profileShape,2);
+ const authored=JSON.parse(fs.readFileSync(
+  path.join(first.folder,'GeometryGraph/AuthoredProfileExtrudeGraph.json'),'utf8'));
+ assert.equal(authored.version,2);
+ assert.deepEqual(authored.nodes.filter(n=>n.type==='extrude').map(n=>n.profileSlot),
+  [0,1]);
+ for(const file of ['LProfile','OctagonProfile']){
+  const source=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/Profiles/'+file+'.json'),'utf8'));
+  assert.equal(source.format,'cocos-splines/profile');
+  assert.equal(source.version,1);
+  assert(source.points.length>=3&&source.points.length<=16);
+ }
  const deform=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicMeshDeformGraph.json'),'utf8'));
  assert.equal(deform.version,1);
