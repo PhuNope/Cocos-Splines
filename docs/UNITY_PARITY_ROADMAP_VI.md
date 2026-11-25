@@ -232,7 +232,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3f2a: 3 native imported Mesh Asset slots (A/B/C), typed slot mapping and isolated cache signatures; Mesh Deform axis X/Y/Z for imported/preset meshes; Visual Graph slot/axis selectors, multi-source example and headless regressions.
 - [x] Phase 4.3f2b: opt-in Mesh Deform Source Length repeat/trim (physical tile length or 0=source axis bounds), clipped final triangles, Original/Continuous/Distance UV, graph/Inspector bounds and installable example; legacy Count remains default.
 - [x] Phase 4.3g1: opt-in selection of imported FBX submesh 0–3 per native Source Mesh A/B/C slot; indexed read-only Mesh adapter, unique submesh revisions, renderer cache invalidation/rollback, independent multi-output routing and installable example. Still one output mesh / material slot per renderer.
-- [ ] Phase 4.3g2+: generated mesh with multiple material/submesh primitives in one MeshRenderer, authored profile asset bindings, grouped output slots, and native Creator 3.8.8 validation for FBX material assignment and multi-output rendering.
+- [x] Phase 4.3g2a: opt-in Render All Outputs for V2 typed graph (2–4 branches), one transient Cocos 3.8 Mesh with distinct submesh primitives and sorted Output Node ↔ Material A/B/C/D slots, native renderer properties, atomic ownership, bounded CPU packing and installable example.
+- [ ] Phase 4.3g2b+: flexible material/Output IDs ordering UI, material import binding and authored profile asset presets; Cocos Creator 3.8.8 native multi-material rendering, Undo/Prefab overrides, FBX and GPU acceptance.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
