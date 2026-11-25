@@ -281,7 +281,7 @@ Graph V1/V2 hỗ trợ **`meshAsset` → `meshDeform.meshInput`**, bên cạnh �
 
 **Giới hạn an toàn:** tối đa 1 meshAsset node mỗi graph, 4.096 source vertices, 24.576 indices, 4 MiB backing buffer, một submesh, graph tổng 32 nodes. Adapter dùng `SplineMeshRead` để đọc POSITION, UV0, normals (nếu có) và index từ Cocos Creator 3.8, sao chép mọi dữ liệu. Mesh nguồn không bị sửa. Source không thể thay thế cổng path. Graph cache tách meshAsset revision khỏi spline; data fingerprint đọc raw bytes khi Cocos cung cấp, còn thay đổi buffer không quan sát được phải bấm **Rebuild**. Invalid/missing asset hoặc unsupported format giữ nguyên MeshRenderer cuối hợp lệ. Shared Graph Compare/Rebase xem `meshInput` là thay đổi cấu trúc và không tự gộp.
 
-**Chưa hỗ trợ:** nhiều Mesh Asset slots, trục deform X/Y, automatic subdivision cho FBX ít vertices, source-length physical repeat trim, submesh nhiều material, skinned mesh, multi-slot output cùng renderer. Hỗ trợ normals/UV nhập phụ thuộc format readable hiện có.
+**Giới hạn ở thời điểm Phase 4.3f1:** chưa có nhiều Mesh Asset slots, trục X/Y, source-length trim, skinned mesh hoặc multi-slot output. Slots, axis và Source Length đã được bổ sung ở Phase 4.3f2a/b dưới đây; multi-material/submesh và skinned mesh vẫn chưa hỗ trợ.
 
 **QA còn cần trên Cocos Creator 3.8.8:** FBX readable/half-float, reimport & hot reload, material and culling, mirrored/nonuniform scale, Undo/Redo, Prefab override, Source Mesh cùng graph khác renderer, Scene save/reopen và performance. Regression headless bao phủ typed ports, immutable mesh, cache invalidation, bounds và draft workflow.
 
@@ -301,4 +301,32 @@ Ví dụ `Install Examples → GeometryGraph/DualMeshAxisGraph.json` chứa hai 
 
 **Test headless:** 3-slot validation/port typing, preset X/Y/Z winding/normal parity, imported axis mapping, cold/warm cache per-source, shared source linking, conflict handling, native renderer dual-source revision/rollback, example installer.
 
-**Hạng mục chưa làm:** nguồn imported >3 slots, source-length tile trimming, imported mesh X/Y interpolation improvements, renderer xuất đồng thời nhiều mesh/material slot trong *cùng một Node* (hiện mỗi Renderer có một output), authored profile asset UI và Cocos Creator 3.8.8 native smoke (Undo/Redo, Prefab, FBX, hot reimport và mesh culling). Không tag/Release, chỉ push `v2`.
+**Hạng mục còn lại sau Phase 4.3f2a:** nguồn imported >3 slots, renderer xuất đồng thời nhiều mesh/material slot trong *cùng một Node*, authored profile asset UI và Creator 3.8.8 native smoke. Source Length được triển khai ở Phase 4.3f2b dưới đây. Không tag/Release.
+
+## Phase 4.3f2b — Source Length Repeat / Trim (2026-11-25)
+
+Graph `meshDeform` đã dùng lại cơ chế **physical-length repeat** của standalone `SplineMeshDeformMath`. Tính năng là opt-in, vẫn hỗ trợ graph JSON `version:1` và `version:2`; **không migration**, không thêm field native lên component Renderer.
+
+| Tham số | Giá trị | Mặc định | Ý nghĩa |
+|---|---|---|---|
+| `repeatLayout` | 0 Count, 1 Source Length | 0 | Count giữ cách stretch các tile trên toàn Spline. Source Length lặp theo chiều dài thật |
+| `tileLength` | 0 hoặc 0.01–10.000 | 0 | 0 = chiều dài bounds của mesh theo axis; giá trị dương override chiều dài một tile theo đơn vị local của Renderer |
+| `uvMode` | 0 Original, 1 Continuous, 2 Distance | 2 | Original giữ UV0/atlas gốc; Continuous cộng số tile vào V; Distance dùng chiều dài Spline chia `uvMetersPerRepeat` |
+| `repeats` | 1–16 | 1 | Chỉ tác dụng trong Count; Source Length tự tính `ceil(pathLength/tileLength)` |
+| `axis` | X=0, Y=1, Z=2 | Z | Chiều dọc mesh nguồn (cả preset và imported) |
+
+### Cách dùng
+
+1. Trong **Install Examples** chọn `GeometryGraph/SourceLengthTrimGraph.json`, gán FBX/Mesh readable (một submesh, Allow Data Access) vào **Source Mesh**.
+2. Trong Visual Graph chọn `meshDeform`, đặt **Repeat Layout = Source Length (trim last tile)**. Dùng **Tile Length = 0** nếu đơn vị và chiều dọc của asset nguồn đã đúng; nhập giá trị local-unit dương để hiệu chỉnh do import scale. Chọn Axis X/Y/Z theo chiều dài mesh.
+3. **UV Mode = Original UV atlas** dùng cho prefab đường ray, tà vẹt hoặc track có UV islands. Chọn Continuous nếu muốn UV V cộng một đơn vị/tile, Distance nếu dùng texture lặp theo mét/đơn vị đường.
+4. Khi path không chia hết tile, tam giác ở **tile cuối được cắt tại mặt phẳng dọc** và nội suy vertex/UV/normal; đoạn dư **không bị kéo dãn**. Mesh asset nguồn được giữ nguyên; không tự tạo cap, collider, submesh hoặc MeshRenderer.
+5. Chuyển lại `repeatLayout = 0` để khôi phục Count; Scene/Prefab/Shared JsonAsset vẫn theo workflow Undo, Save, checksum và draft như cũ.
+
+**Giới hạn**: tối đa 256 tile physical theo từng node, 65.536 output vertices, 393.216 indices; compiler từ chối `tileLength` âm, nhỏ hơn 0,01 mà khác 0, lớn hơn 10.000, UV mode/layout ngoài phạm vi. Kernel preflight kích thước trước khi cấp phát mesh nhiều tile; mesh bị cắt vượt budget cũng bị từ chối. Một nguồn với axis bounds bằng 0 không thể dùng Source Length mặc định. Các path dùng quãng đường của frame ở hệ local renderer, không phải phép đo World chính xác khi scale không đồng đều; nhập Tile Length theo cùng hệ đơn vị đó.
+
+**Cache và rollback**: đổi `tileLength`, `uvMode` hay `repeatLayout` chỉ làm dirty node `meshDeform` và những output phụ thuộc; upstream path và meshAsset cache được reuse. Evaluation và MeshRenderer sử dụng two-phase commit; không sửa Mesh asset khi lỗi. Một Shared JsonAsset dùng trên nhiều renderer được xử lý theo Output ID và Source Mesh riêng.
+
+**QA**: headless regression kiểm tra repeat vật lý dài 2 trên path 5 (2 tile nguyên + tile cuối 1), UV0 tại mặt cắt, đường UV liên tục/distance, tileLength override, đường ngắn hơn tile, preset, path closed không sinh cap, giới hạn đồ thị và rollback. **Cần xác nhận native trên Creator 3.8.8**: FBX có UV atlas, ngược winding/mirrored scale, đường kín nối seam, vật liệu transparent, undo/reimport hot reload, Prefab overrides và thời gian xử lý mesh nhiều tile.
+
+**Chưa bao gồm:** nhiều material/submesh trong cùng mesh imported, tự gắn end caps, source-axis resampling, lặp tile có offset phase, multi-renderer slot output trên cùng Node. Tiếp theo là 4.3g và native QA. Chỉ nhánh `v2`, không tag hoặc GitHub Release.
