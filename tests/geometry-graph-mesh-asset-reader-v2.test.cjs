@@ -36,7 +36,12 @@ try{
   assert.deepEqual(source.geometry.uvs,Array.from(uvs));
   assert.deepEqual(source.geometry.indices,Array.from(indices));
   assert.equal(source.geometry.normals,undefined);
-  assert.equal(source.revision,graphMeshDataFingerprint(mesh));
+  assert(source.revision.startsWith(graphMeshDataFingerprint(mesh)+':'));
+  const decodedRevision=source.revision;
+  pos[0]=-2;
+  assert.notEqual(readGraphSourceMeshAsset(mesh).revision,decodedRevision,
+   'Explicit Rebuild detects source geometry changes without raw backing byte changes');
+  pos[0]=-1;
   const before=JSON.stringify(source.geometry);
   source.geometry.positions[0]=999;
   assert.equal(pos[0],-1,'Readonly adapter never returns an imported Mesh buffer');
