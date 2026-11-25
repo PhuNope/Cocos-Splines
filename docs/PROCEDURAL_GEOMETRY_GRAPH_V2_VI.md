@@ -352,3 +352,34 @@ Cocos Creator 3.8 cho phép một imported FBX/Mesh có nhiều submesh. Trong P
 **Chưa hỗ trợ ở Phase 4.3g1:** gộp nhiều submeshes thành một generated Mesh chứa các primitive/material slots trên cùng MeshRenderer, source Mesh nhiều hơn bốn submesh, auto-material từ FBX, skinned source, biên tập UV island, tự chọn material slot theo submesh. Đây là mục Phase 4.3g2 và cần Cocos Creator 3.8.8 native smoke trước khi xác nhận.
 
 **Native QA còn cần:** import FBX có 2–4 submesh với VertexBundle khác nhau; chọn Source Submesh A/B/C và đổi khi Scene đang mở; test Material, culling, UV0/normal, reimport hot reload, Prefab overrides và Undo/Redo; đo profiling trên mesh dài có Source Length. Chỉ push `v2`, không tag/Release.
+
+## Phase 4.3g2a — Render All Outputs on one MeshRenderer (2026-11-25)
+
+**Opt-in**: bật `renderAllOutputs` / **Render All Outputs** trên `SplineGeometryGraphRenderer` đã tham chiếu Graph JSON v2 với 2–4 `output` node. Trong chế độ này, **chỉ có một native Mesh và một MeshRenderer trên Node**; các output được tạo thành nhiều **submesh primitives** trong một Cocos `Mesh`, mỗi primitive dùng một slot material khác nhau. **Không tự tạo child, MeshRenderer, Prefab, JsonAsset hoặc Scene node mới.**
+
+Với `renderAllOutputs=false` (mặc định), component giữ đúng behavior cũ: `outputId` chọn một nhánh và `utils.createMesh` tạo single mesh. Trong chế độ Render All Outputs, `outputId` được bỏ qua; toàn bộ các nhánh của V2 DAG đều được validate và dựng. V1 / graph có ít hơn 2 hoặc nhiều hơn 4 output bị từ chối, và **mesh thành công cuối cùng vẫn được giữ nguyên**.
+
+### Thứ tự output và material
+
+Cocos Creator 3.8 quy định mỗi primitive của MeshRenderer tương ứng một material slot. Extension sắp xếp các Output Node ID **theo thứ tự chữ cái**; material slots được gán theo thứ tự này, bất kể thứ tự khai báo trong JSON. Hãy dùng `getRenderedOutputIds()` (bản sao danh sách sau commit) để kiểm tra thứ tự thực tế. Các trường native:
+
+- `material` (Material A) → primitive 0, Output ID đầu tiên.
+- `materialB` → primitive 1, Output ID thứ hai.
+- `materialC` → primitive 2, Output ID thứ ba.
+- `materialD` → primitive 3, Output ID thứ tư.
+
+Trường Material nào null thì **giữ material đã gán thủ công trên MeshRenderer**, nếu có; nếu không, dùng fallback unlit do component quản lý. Extension không đọc/gán material import từ FBX vào các slot khác và không xóa manual material khi đổi chế độ. Khi destroy, chỉ dọn generated Mesh và fallback do component sở hữu.
+
+**Ví dụ Install Examples:** `GeometryGraph/MultiMaterialOutputsGraph.json`, có `outputExtrude`, `outputRoad` và `outputTube`. Sau khi gán JsonAsset này vào Graph Renderer, bật **Render All Outputs** rồi chọn `Material`, `Material B`, `Material C`. Theo thứ tự sort, Slot 0 = Extrude, Slot 1 = Road, Slot 2 = Tube. Một Node sẽ render cả ba mesh bằng một MeshRenderer, dùng ba submodels/material slots của Cocos. `Output ID` không được dùng khi mode này bật.
+
+### Kiến trúc
+
+- `GeometryGraphRunner.evaluateOutputs` validate/compute tất cả nhánh v2 trên chung world frames và node cache, clone geometry riêng. Những node upstream dùng chung không bị tính hai lần; node bị sửa chỉ dirty nhánh phụ thuộc.
+- `SplineGeometryGraphMultiMesh` đóng gói mảng vertex POSITION XYZ + NORMAL XYZ + UV0 (32 bytes/vertex), index `uint16`, và một vertexBundle/indexView/primitive mỗi output. Dùng Cocos Engine **v3.8.8 `Mesh.reset({struct,data})`** vì `utils.createMesh` chỉ tạo một primitive. Bounds tính trên toàn bộ nhánh, giúp renderer culling chính xác.
+- An toàn: tối đa 4 output, tổng ≤65.536 vertices, ≤393.216 indices, ≤8 MiB buffer, mọi index phải nội bộ primitive và dưới giới hạn 16-bit. Mọi nhánh được validate **trước khi** tạo transient Mesh; lỗi render không thay đổi MeshRenderer.mesh hiện tại. Scene không ghi bất cứ dữ liệu mesh nào; chỉ serializes các property config native.
+- Gizmos wireframe (khi bật) kết hợp các output với index offset; dữ liệu đó là preview, không phải geometry hiển thị/một nhóm vật liệu mới. Renderer thực vẫn dùng submesh primitives độc lập.
+- Nếu `Mesh.reset`/MeshRenderer assignment lỗi, MeshRenderer giữ mesh trước đó và mesh tạm được destroy. Nếu thành công, mesh cũ do component sở hữu được destroy; mesh asset/renderer bên ngoài không bị destroy.
+
+**QA cần kiểm thử trong Cocos Creator 3.8.8:** ba materials trên Road/Tube/Extrude, culling bounds, shadows/PBR và normal, đổi Output ID ↔ Render All Outputs, Undo/Redo, Prefab overrides, Scene reopen, shared JsonAsset reimport, chọn mesh import nhiều submesh và profiling. CI headless chỉ xác nhận packing, typed DAG và ownership/mock API; không thay thế visual QA/GPU inspection.
+
+**Chưa có:** manual Output ID → material slot reorder, imported material auto-binding, gộp nhiều đồ thị không cùng Spline, skinned mesh/collider per material, baking multi-submesh thành project-owned Mesh asset. Tiếp theo Phase 4.3g2b và native acceptance. Vẫn chỉ push `v2`, không tag/Release.
