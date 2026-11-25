@@ -37,6 +37,12 @@ try {
  assert.deepEqual(extrude.nodes.map(n=>n.type),
    ['spline','offset','width','extrude','output']);
  assert.equal(extrude.nodes.find(n=>n.type==='extrude').profileShape,2);
+ const deform=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/BasicMeshDeformGraph.json'),'utf8'));
+ assert.equal(deform.version,1);
+ assert.deepEqual(deform.nodes.map(n=>n.type),
+   ['spline','offset','width','meshDeform','output']);
+ assert.equal(deform.nodes.find(n=>n.type==='meshDeform').repeats,4);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
