@@ -26,7 +26,7 @@ assert.equal(parse(json).map.get('pipe').axis,1);
 for(const invalid of [3,-1,1.5]){
  assert.throws(()=>model.applyGraphEdit(json,'param',{
   id:'road',key:'axis',value:invalid
- }),/parameter/);
+ }),/out of range|parameter/);
 }
 assert.match(model.renderNodeParameters(json,'road'),/data-graph-param="axis"/);
 assert.match(model.renderNodeParameters(json,'pipe'),/>Y</);
