@@ -19,6 +19,7 @@ const FILES=Object.freeze([
  ['Population/PrefabSpawningSetup.ts','examples/installable/Population/PrefabSpawningSetup.ts'],
  ['GeometryGraph/BasicRibbonGraph.json','examples/installable/GeometryGraph/BasicRibbonGraph.json'],
  ['GeometryGraph/BasicTubeGraph.json','examples/installable/GeometryGraph/BasicTubeGraph.json'],
+ ['GeometryGraph/BasicProfileExtrudeGraph.json','examples/installable/GeometryGraph/BasicProfileExtrudeGraph.json'],
 ]);
 function directory(fsApi,location,create=false){
  if(create&&!fsApi.existsSync(location))fsApi.mkdirSync(location);
