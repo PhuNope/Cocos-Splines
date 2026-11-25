@@ -639,6 +639,21 @@ async function run(){
    assert.equal(uvLastGood.destroyed,false);
    squareProfile.uv.edgeWeights[0]=1;
    renderer.rebuild();
+   // Opt-in metric U tiling on Profile B changes UV only, not Path or A.
+   const normalizedUvMesh=out.mesh;
+   squareProfile.uv.uMetersPerRepeat=1.5;
+   renderer.update();
+   assert.notEqual(out.mesh,normalizedUvMesh,'Metric U changes output mesh');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5});
+   assert.equal(frameBuilds,authoredFrameBuilds,
+    'Metric UV uses previous Spline frame samples');
+   const lastMetricMesh=out.mesh;
+   squareProfile.uv.uMetersPerRepeat=0;
+   assert.throws(()=>renderer.rebuild(),/Graph Profile Asset UV/);
+   assert.equal(out.mesh,lastMetricMesh,'Invalid metric UV keeps last-good Mesh');
+   assert.equal(lastMetricMesh.destroyed,false);
+   squareProfile.uv.uMetersPerRepeat=1.5;
+   renderer.rebuild();
    const authoredFirst=out.mesh;
    renderer.profileAssetC={json:{format:'bad'}};
    renderer.update();

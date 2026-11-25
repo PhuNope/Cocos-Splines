@@ -154,6 +154,43 @@ async function run(){
   assert.equal(savedProfile,uvDraft);
   assert.equal(ui._vgAuthoredDraft.undo.length,0);
   assert.equal(ui.$.vgProfileSave.disabled,true);
+  // Physical U tile length is a separate optional UV metadata property.
+  // Editing numeric UI must be draft-only and participate in Undo/Redo.
+  ui.$.vgProfileCanvas.events.change({target:{
+   value:'1.5',classList:{contains:cls=>cls==='spl-profile-uv-meters'},
+  }});
+  const metricDraft=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(metricDraft).uv.uMetersPerRepeat,1.5);
+  assert.equal(ui._vgAuthoredDraft.undo.length,1);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/Side U meters\/repeat/);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/Nominal meters/);
+  ui.$.vgProfileCanvas.events.change({target:{
+   value:'0',classList:{contains:cls=>cls==='spl-profile-uv-meters'},
+  }});
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  assert.equal(ui._vgAuthoredDraft.undo.length,1);
+  ui.$.vgProfileCanvas.events.change({target:{
+   value:'invalid',classList:{contains:cls=>cls==='spl-profile-uv-meters'},
+  }});
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  assert.equal(ui._vgAuthoredDraft.undo.length,1);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvDraft);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  ui.$.vgProfileCanvas.events.click({target:button('spl-profile-clear-uv-meters')});
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvDraft);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  assert.equal(dump.value.graphJson.value,graph);
+  assert.equal(dump.value.profileAssetA.value.uuid,'profile-1');
+  assert.equal(writes,2,'Metric draft edits cannot save without confirmation');
+  ui.$.vgProfileSave.events.click();await tick();
+  assert.equal(writes,3);
+  assert.equal(savedProfile,metricDraft);
+  assert.equal(model.parseProfile(savedProfile).uv.uMetersPerRepeat,1.5);
+  assert.equal(ui._vgAuthoredDraft.undo.length,0);
+  assert.equal(ui.$.vgProfileSave.disabled,true);
   ui.$.vgProfileDiscard.events.click();
   assert.equal(ui._vgAuthoredDraft,null);
   panel.close.call(ui);
