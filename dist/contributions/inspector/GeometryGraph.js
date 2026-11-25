@@ -6,6 +6,7 @@ const base=require('./common').makeInspector('geometryGraph');
 const graph=require('../../SplineGeometryGraphVisualModel');
 const conflict=require('../../SplineGeometryGraphConflict');
 const {formatGeometryGraphProfile}=require('../../SplineGeometryGraphProfileReport');
+const authored=require('../../SplineGeometryProfileEditor');
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
@@ -29,6 +30,18 @@ const template=base.template+[
  '<div class="spl-note">Output IDs in Material A/B/C/D slots on THIS renderer. Use arrows to reorder without editing a shared graph.</div>',
  '<div class="spl-vg-order-list" role="group" aria-label="Output material slot order"></div>',
  '<button type="button" class="spl-btn spl-vg-order-reset">Reset alphabetical order</button>',
+ '</details>',
+ '<details class="spl-section spl-profile-editor" open>',
+ '<summary>Authored Profile Editor · JsonAsset drafts</summary>',
+ '<div class="spl-note">Pick Profile Asset A/B/C on this renderer first. Edit points here without touching the source file; Save requires an explicit confirmation. External file writes are not part of Scene Undo.</div>',
+ '<div class="spl-vg-toolbar">',
+ '<label>Profile Slot <select class="spl-profile-slot"><option value="0">A</option><option value="1">B</option><option value="2">C</option></select></label>',
+ '<button type="button" class="spl-btn spl-profile-open">Edit Profile Asset…</button>',
+ '<button type="button" class="spl-btn spl-profile-save">Save Profile JSON…</button>',
+ '<button type="button" class="spl-btn spl-profile-discard">Discard Profile Draft</button>',
+ '</div>',
+ '<div class="spl-profile-status" role="status" aria-live="polite">Select an authored Profile Asset slot to begin.</div>',
+ '<div class="spl-profile-canvas"></div>',
  '</details>',
  '<div class="spl-vg-conflict" role="status" aria-live="polite"></div>',
  '<div class="spl-vg-toolbar">',
@@ -61,6 +74,12 @@ const style=base.style+[
 '.spl-vg-order-row{display:flex;align-items:center;gap:5px;margin:3px 0;font-size:11px}',
 '.spl-vg-order-id{flex:1;min-width:0;overflow-wrap:anywhere}',
 '.spl-vg-order-row .spl-btn{padding:2px 7px}',
+'.spl-profile-canvas{margin:8px 0;font-size:11px}',
+'.spl-profile-coordinates{display:flex;gap:10px;margin:8px 0}',
+'.spl-profile-coordinates input{width:90px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
+'.spl-profile-slot{width:60px;color:inherit;background:#1b3544}',
+'.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
+'.spl-profile-count{margin:6px 0;color:#b6d4df}',
 '.spl-vg-viewport{overflow:auto;max-width:100%;height:360px;border:1px solid #3c6172;border-radius:6px;background:rgba(18,26,36,.65);touch-action:pan-x pan-y}',
 '.spl-vg-stage{position:relative;width:860px;height:410px;min-width:860px;min-height:410px}',
 '.spl-vg-wires{position:absolute;inset:0;pointer-events:none}',
@@ -97,6 +116,9 @@ const $={...base.$,
   vgReviewShared:'.spl-vg-review-shared',
   vgRebaseShared:'.spl-vg-rebase-shared',
   vgConflict:'.spl-vg-conflict',
+  vgProfileSlot:'.spl-profile-slot',vgProfileOpen:'.spl-profile-open',
+  vgProfileSave:'.spl-profile-save',vgProfileDiscard:'.spl-profile-discard',
+  vgProfileStatus:'.spl-profile-status',vgProfileCanvas:'.spl-profile-canvas',
   vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
   vgOrderSection:'.spl-vg-order-section',
@@ -154,7 +176,55 @@ function readOutputOrder(ids,value){
     throw Error('Output Order must list every Output Node ID exactly once.');
   return order;
 }
+function profileStatus(panel,message,isError=false){
+  if(!panel.$?.vgProfileStatus)return;
+  panel.$.vgProfileStatus.textContent=message;
+  panel.$.vgProfileStatus.classList?.toggle?.('error',isError);
+}
+function renderAuthoredProfile(panel){
+  const draft=panel._vgAuthoredDraft;
+  const blocked=!!panel._vgAuthoredBusy||!!panel._vgSharedBusy||
+    !!panel._vgSharedDraft;
+  if(panel.$?.vgProfileSlot)panel.$.vgProfileSlot.disabled=!!draft||blocked;
+  if(panel.$?.vgProfileOpen)
+    panel.$.vgProfileOpen.disabled=!!draft||blocked;
+  if(panel.$?.vgProfileSave)
+    panel.$.vgProfileSave.disabled=!draft||blocked||
+      draft.profileJson===draft.initialProfileJson;
+  if(panel.$?.vgProfileDiscard)
+    panel.$.vgProfileDiscard.disabled=!draft||blocked;
+  if(!panel.$?.vgProfileCanvas)return;
+  if(!draft){
+    panel.$.vgProfileCanvas.textContent='';
+    return;
+  }
+  try{
+    panel.$.vgProfileCanvas.innerHTML=
+      authored.renderProfileControls(draft.profileJson,panel._vgAuthoredSelected||0);
+  }catch(error){
+    panel.$.vgProfileCanvas.textContent=String(error?.message||error);
+  }
+}
+function applyAuthoredEdit(panel,action,details){
+  const draft=panel._vgAuthoredDraft;
+  if(!draft||panel._vgAuthoredBusy)return;
+  try{
+    const next=authored.applyProfileEdit(draft.profileJson,action,
+      {index:panel._vgAuthoredSelected,...details});
+    if(next!==draft.profileJson){
+      draft.profileJson=next;
+      if(action==='insert')panel._vgAuthoredSelected++;
+      else if(action==='remove')panel._vgAuthoredSelected=Math.min(
+        panel._vgAuthoredSelected,authored.parseProfile(next).points.length-1);
+    }
+    renderAuthoredProfile(panel);
+    profileStatus(panel,'Unsaved Profile draft: '+draft.assetName+
+      ' · '+authored.parseProfile(draft.profileJson).points.length+
+      ' validated points. Save explicitly to update JsonAsset.');
+  }catch(error){profileStatus(panel,String(error?.message||error),true);}
+}
 function render(panel){
+  renderAuthoredProfile(panel);
   const draft=panel._vgSharedDraft;
   const reviewText=summarizeReview(panel);
   const sharedLocked=!!panel._vgShared&&!draft;
@@ -400,6 +470,16 @@ const inspector={
       status(this,'Both graphJson and graphLayoutJson are required.',true);return;
     }
     if(this._vgDrag)return;
+    const profileIdentity=JSON.stringify(['profileAssetA','profileAssetB','profileAssetC']
+      .map(key=>dump?.value?.[key]?.value??null));
+    if(this._vgProfileAssetIdentity!==undefined&&
+       this._vgProfileAssetIdentity!==profileIdentity){
+      this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
+      this._vgAuthoredToken=(this._vgAuthoredToken||0)+1;
+      if(this._vgAuthoredBusy)this._vgAuthoredBusy=false;
+      profileStatus(this,'Profile Asset binding changed. Previous draft closed to prevent stale writes.');
+    }
+    this._vgProfileAssetIdentity=profileIdentity;
     const shared=dump?.value?.useGraphAsset?.value===true;
     const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
@@ -441,6 +521,131 @@ const inspector={
     this._vgProfile=null;this._vgProfileBusy=false;
     this._vgProfileRequestToken=0;this._vgProfileOutputId='';
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
+    this._vgAuthoredDraft=null;this._vgAuthoredBusy=false;
+    this._vgAuthoredToken=0;this._vgAuthoredSelected=0;
+    this._vgProfileAssetIdentity=undefined;this._vgAuthoredDrag=null;
+    this.$?.vgProfileSlot?.addEventListener('change',event=>{
+      const slot=Number(event.target?.value);
+      if(!Number.isInteger(slot)||slot<0||slot>2)return;
+      this._vgAuthoredSlot=slot;
+    });
+    this.$?.vgProfileOpen?.addEventListener('click',()=>void (async()=>{
+      if(this._vgAuthoredDraft||this._vgAuthoredBusy||this._vgSharedBusy||
+         this._vgSharedDraft)return;
+      const slot=Number(this.$?.vgProfileSlot?.value??this._vgAuthoredSlot??0);
+      if(!Number.isInteger(slot)||slot<0||slot>2)return;
+      const token=++this._vgAuthoredToken;
+      this._vgAuthoredBusy=true;render(this);
+      try{
+        const result=await Editor.Message.request('cocos-splines',
+          'begin-geometry-profile-edit',slot);
+        if(token!==this._vgAuthoredToken)return;
+        if(!result?.ok)throw Error(result?.error||'Cannot open Profile Asset.');
+        const canonical=authored.formatProfile(result.profileJson);
+        this._vgAuthoredDraft={nodeUuid:result.nodeUuid,assetUuid:result.assetUuid,
+          slot,assetName:result.assetName||'Profile',sha256:result.sha256,
+          profileJson:canonical,initialProfileJson:canonical};
+        this._vgAuthoredSelected=0;
+        profileStatus(this,'Editing '+this._vgAuthoredDraft.assetName+
+          ' in memory; no file/Scene changes until Save.');
+      }catch(error){
+        if(token===this._vgAuthoredToken)
+          profileStatus(this,String(error?.message||error),true);
+      }finally{
+        if(token===this._vgAuthoredToken){
+          this._vgAuthoredBusy=false;render(this);
+        }
+      }
+    })());
+    this.$?.vgProfileSave?.addEventListener('click',()=>void (async()=>{
+      const draft=this._vgAuthoredDraft;
+      if(!draft||this._vgAuthoredBusy||this._vgSharedBusy)return;
+      if(draft.profileJson===draft.initialProfileJson)return;
+      const token=this._vgAuthoredToken;
+      this._vgAuthoredBusy=true;render(this);
+      try{
+        const response=await Editor.Message.request('cocos-splines',
+          'save-geometry-profile-edit',{nodeUuid:draft.nodeUuid,
+          slot:draft.slot,assetUuid:draft.assetUuid,sha256:draft.sha256,
+          profileJson:draft.profileJson});
+        if(token!==this._vgAuthoredToken||draft!==this._vgAuthoredDraft)return;
+        if(response?.canceled){
+          profileStatus(this,'Save canceled. Profile draft remains editable.');
+          return;
+        }
+        if(!response?.ok)
+          throw Error(response?.error||'Profile save failed. Draft retained.');
+        draft.sha256=response.sha256||draft.sha256;
+        draft.profileJson=authored.formatProfile(response.profileJson||draft.profileJson);
+        draft.initialProfileJson=draft.profileJson;
+        profileStatus(this,response.message||'Profile saved.',!!response.refreshPending);
+      }catch(error){
+        if(token===this._vgAuthoredToken&&draft===this._vgAuthoredDraft)
+          profileStatus(this,String(error?.message||error),true);
+      }finally{
+        if(token===this._vgAuthoredToken){this._vgAuthoredBusy=false;render(this);}
+      }
+    })());
+    this.$?.vgProfileDiscard?.addEventListener('click',()=>{
+      if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
+      this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
+      this._vgAuthoredToken++;
+      render(this);profileStatus(this,'Profile draft discarded. Source JsonAsset unchanged.');
+    });
+    this.$?.vgProfileCanvas?.addEventListener('click',event=>{
+      const el=closest(event.target,'button');
+      if(!el||!this._vgAuthoredDraft)return;
+      if(el.classList?.contains('spl-profile-insert'))
+        applyAuthoredEdit(this,'insert',{});
+      else if(el.classList?.contains('spl-profile-remove'))
+        applyAuthoredEdit(this,'remove',{});
+    });
+    this.$?.vgProfileCanvas?.addEventListener('change',event=>{
+      if(!this._vgAuthoredDraft||!event.target)return;
+      const cls=event.target.classList;
+      if(!cls?.contains('spl-profile-x')&&!cls?.contains('spl-profile-y'))return;
+      const pt=authored.parseProfile(this._vgAuthoredDraft.profileJson)
+        .points[this._vgAuthoredSelected];
+      const value=Number(event.target.value);
+      if(event.target.value===''||!Number.isFinite(value)){
+        profileStatus(this,'Profile point coordinate must be finite.',true);return;
+      }
+      applyAuthoredEdit(this,'move',{
+        x:cls.contains('spl-profile-x')?value:pt.x,
+        y:cls.contains('spl-profile-y')?value:pt.y,
+      });
+    });
+    this.$?.vgProfileCanvas?.addEventListener('pointerdown',event=>{
+      if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
+      const circle=closest(event.target,'[data-profile-point]');
+      const index=Number(circle?.dataset?.profilePoint);
+      if(!circle||!Number.isInteger(index)||index<0)return;
+      this._vgAuthoredSelected=index;
+      this._vgAuthoredDrag={pointerId:event.pointerId,index};
+      this.$.vgProfileCanvas.setPointerCapture?.(event.pointerId);
+      event.preventDefault?.();
+      renderAuthoredProfile(this);
+    });
+    this.$?.vgProfileCanvas?.addEventListener('pointermove',event=>{
+      const drag=this._vgAuthoredDrag;
+      if(!drag||drag.pointerId!==event.pointerId||!this._vgAuthoredDraft)return;
+      const svg=this.$.vgProfileCanvas.querySelector?.('svg');
+      const rect=svg?.getBoundingClientRect?.();
+      if(!rect||rect.width<=0||rect.height<=0)return;
+      const x=Math.max(-1,Math.min(1,
+        ((event.clientX-rect.left)/rect.width*240-120)/104));
+      const y=Math.max(-1,Math.min(1,
+        (120-(event.clientY-rect.top)/rect.height*240)/104));
+      applyAuthoredEdit(this,'move',{index:drag.index,x,y});
+    });
+    const finishProfileDrag=event=>{
+      const drag=this._vgAuthoredDrag;
+      if(!drag||drag.pointerId!==event.pointerId)return;
+      this._vgAuthoredDrag=null;
+      this.$.vgProfileCanvas.releasePointerCapture?.(event.pointerId);
+    };
+    this.$?.vgProfileCanvas?.addEventListener('pointerup',finishProfileDrag);
+    this.$?.vgProfileCanvas?.addEventListener('pointercancel',finishProfileDrag);
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
@@ -769,6 +974,9 @@ const inspector={
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgProfile=null;this._vgProfileBusy=false;
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
+    this._vgAuthoredToken=(this._vgAuthoredToken||0)+1;
+    this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
+    this._vgAuthoredBusy=false;this._vgProfileAssetIdentity=undefined;
     this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
