@@ -4,7 +4,7 @@ import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
-import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph}
+import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile}
     from '../Core/SplineGeometryGraph';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
@@ -76,6 +76,36 @@ export class SplineGeometryGraphRenderer extends Component {
     public getMeshGizmoGeometry():MeshGizmoLines|null{return this._gizmo;}
     public getGraphMetrics():{computed:number;reused:number;nodes:number}{
         return this._runner.metrics;
+    }
+    /** Explicit cold/warm diagnostic without adding serialized Scene properties.
+     * The isolated profiling runner never changes the live graph cache or
+     * owned MeshRenderer; a stale spline frame cache is refreshed through the
+     * regular atomic rebuild first.
+     */
+    public profileGraph():{
+        cold:GeometryGraphProfile;warm:GeometryGraphProfile;
+        graphVersion:number;outputId:string;sampledFrames:number;
+    }{
+        const source=this.source();
+        if(!source||source.count<2||source.segmentCount<1)
+            throw Error('Profile Graph requires an active SplineContainer with 2+ knots.');
+        const frameRevision=this.frameSignature();
+        if(!this._frameCache||this._frameRevision!==frameRevision)
+            this.rebuild();
+        const plan=parseGeometryGraph(this.activeGraphJson());
+        const selected=typeof this.outputId==='string'?this.outputId.trim():'';
+        const runner=new GeometryGraphRunner();
+        runner.setProfilingEnabled(true);
+        const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision};
+        runner.evaluate(plan,context,selected||undefined);
+        const cold=runner.profile!;
+        runner.evaluate(plan,context,selected||undefined);
+        const warm=runner.profile!;
+        return {
+            cold,warm,graphVersion:plan.version??1,
+            outputId:selected||plan.output,
+            sampledFrames:context.frames.length,
+        };
     }
     private source():SplineContainer|null{
         return this.spline||this.getComponent(SplineContainer);
