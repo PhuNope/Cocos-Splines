@@ -103,6 +103,14 @@ export function buildGraphMeshDeformGeometry(
             if(axis===0){source.positions[i+2]=source.positions[i];source.positions[i]=z;}
             else{source.positions[i+2]=source.positions[i+1];source.positions[i+1]=z;}
         }
+        // The kernel automatically reverses X/Y-axis source winding.
+        // Presets are authored for Z, so counter-reverse the copied
+        // triangles to preserve their +Y/top and outward surface normals.
+        for(let i=0;i<source.indices.length;i+=3){
+            const b=source.indices[i+1];
+            source.indices[i+1]=source.indices[i+2];
+            source.indices[i+2]=b;
+        }
     }
     if(imported){
         const count=source.positions.length/3;
