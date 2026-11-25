@@ -183,6 +183,60 @@ async function run(){
    assert.equal(renderer.graphJson,localSaved);
    renderer.rebuild();
    assert.notEqual(out.mesh,validShared,'Return to local override restores local graph');
+   // Opt-in Graph V2: independent MeshRenderers may consume distinct branches
+   // of the same JsonAsset, with no extra children or source mutations.
+   const multiShared={name:'RoadAndPipe',json:{
+    version:2,nodes:[
+     {id:'source',type:'spline'},
+     {id:'road',type:'ribbon',input:'source',width:3},
+     {id:'pipe',type:'tube',input:'source',radius:1,radialSegments:8},
+     {id:'outputRoad',type:'output',input:'road'},
+     {id:'outputPipe',type:'output',input:'pipe'},
+    ],output:'outputRoad',
+   }};
+   renderer.useGraphAsset=true;renderer.graphAsset=multiShared;renderer.outputId='';
+   renderer.rebuild();
+   const primary=out.mesh;
+   assert.equal(renderer.getGraphMetrics().nodes,5);
+   const peerNode=new Node('geometryPeer'),peerMesh=new MeshRenderer();
+   peerMesh.node=peerNode;peerNode.components=[peerMesh];
+   const peer=new SplineGeometryGraphRenderer();
+   peer.node=peerNode;peerNode.components.push(peer);
+   peer.spline=renderer.spline;
+   peer.graphAsset=multiShared;peer.useGraphAsset=true;peer.outputId='outputPipe';
+   peer.rebuild();
+   assert(peerMesh.mesh);
+   assert(peerMesh.mesh.data.positions.length>primary.data.positions.length,
+    'Different output IDs select different typed meshes from the shared graph');
+   assert.equal(peer.getGraphMetrics().nodes,5);
+   const priorPipe=peerMesh.mesh;
+   const sharedBefore=JSON.stringify(multiShared.json);
+   renderer.outputId='outputPipe';
+   renderer.rebuild();
+   assert.equal(out.mesh.data.positions.length,priorPipe.data.positions.length,
+    'Switching output ID reuses sampled path and chooses pipe output');
+   assert.equal(renderer.getGraphMetrics().reused,5,
+    'Changing selection does not dirty the cached graph');
+   renderer.outputId='doesNotExist';
+   const beforeInvalid=out.mesh;
+   assert.throws(()=>renderer.rebuild(),/selected Output Node/);
+   assert.equal(out.mesh,beforeInvalid,'Unknown output retains previous mesh');
+   assert.equal(beforeInvalid.destroyed,false);
+   renderer.outputId='outputRoad';
+   renderer.rebuild();
+   multiShared.json.nodes.find(n=>n.id==='pipe').radius=2;
+   peer.update();
+   assert.notEqual(peerMesh.mesh,priorPipe,'Shared graph branch parameter hot update');
+   assert.equal(JSON.stringify(multiShared.json)===sharedBefore,false);
+   renderer.rebuild();
+   assert.equal(renderer.getGraphMetrics().computed,2,
+    'Only changed pipe branch recomputes, while road output remains cached');
+   assert.equal(JSON.stringify(renderer.graphJson),JSON.stringify(localSaved),
+    'Shared V2 must not mutate local graphJson');
+   peer.onDestroy();
+   assert(peerMesh.mesh===null,'Peer releases only its own transient generated Mesh');
+   renderer.useGraphAsset=false;renderer.graphAsset=null;renderer.outputId='';
+   renderer.rebuild();
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
