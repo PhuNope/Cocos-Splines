@@ -51,6 +51,11 @@ try {
    ['outputRoad','outputPipe']);
  assert.deepEqual(multi.nodes.filter(n=>['ribbon','tube'].includes(n.type)).map(n=>n.type),
    ['ribbon','tube']);
+ const imported=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/ImportedMeshDeformGraph.json'),'utf8'));
+ assert.equal(imported.version,1);
+ assert.equal(imported.nodes.find(n=>n.type==='meshDeform').meshInput,'meshAsset');
+ assert.equal(imported.nodes.find(n=>n.type==='meshAsset').id,'meshAsset');
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
