@@ -26,6 +26,10 @@ export interface GeometryGraphNode {
     input?:string;
     /** Optional typed meshSource input on meshDeform; absent means preset. */
     meshInput?:string;
+    /** Slot 0–2 for meshAsset nodes; omitted means original Source Mesh slot 0. */
+    slot?:number;
+    /** Longitudinal X / Y / Z axis for Mesh Deform; default Z. */
+    axis?:number;
     right?:number;up?:number;
     multiplier?:number;
     width?:number;endWidth?:number;uvMetersPerRepeat?:number;
@@ -49,6 +53,9 @@ export interface GeometryGraphContext {
     meshSource?:Readonly<MeshGeometry>;
     /** Changes when imported MeshAsset content changes; part of graph cache. */
     meshRevision?:string;
+    /** Three native mesh slots. Falls back to legacy slot zero fields. */
+    meshSources?:ReadonlyArray<Readonly<MeshGeometry>|undefined>;
+    meshRevisions?:ReadonlyArray<string|undefined>;
 }
 export interface GeometryGraphPlan {
     nodes:GeometryGraphNode[];
@@ -121,21 +128,29 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         throw Error('Unsupported Geometry Graph root property.');
     const table=new Map<string,GeometryGraphNode>();
     let sources=0,outputs=0,meshAssets=0;
+    const occupiedMeshSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
            !['spline','meshAsset','offset','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
+            node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
             node.type==='width'?['input','multiplier']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
             node.type==='extrude'?['input','width','height','profileShape','uvMetersPerRepeat','capEnds']:
-            node.type==='meshDeform'?['input','meshInput','width','height','deformShape','segments','repeats','uvMetersPerRepeat']:
+            node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','uvMetersPerRepeat']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
         if(node.type==='spline')sources++;
-        if(node.type==='meshAsset')meshAssets++;
+        if(node.type==='meshAsset'){
+            meshAssets++;
+            const slot=bound(node.slot??0,0,2,'Mesh Asset slot');
+            if(!Number.isInteger(slot)||occupiedMeshSlots.has(slot))
+                throw Error('Geometry Graph Mesh Asset slot must be an unused integer 0–2.');
+            occupiedMeshSlots.add(slot);
+        }
         if(node.type==='output')outputs++;
         if(node.type==='offset'){
             bound(node.right??0,-1000,1000,'offset right');
@@ -172,6 +187,8 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph Extrude capEnds must be a boolean.');
         }
         if(node.type==='meshDeform'){
+            const axis=bound(node.axis??2,0,2,'Mesh Deform axis');
+            if(!Number.isInteger(axis))throw Error('Geometry Graph Mesh Deform axis must be X, Y, or Z.');
             bound(node.width??1,.05,100,'Mesh Deform width');
             bound(node.height??1,.05,100,'Mesh Deform height');
             const preset=bound(node.deformShape??0,0,1,'Mesh Deform shape');
@@ -183,7 +200,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         }
         table.set(node.id,{...node});
     }
-    if(sources!==1||meshAssets>1||(!multi&&outputs!==1)||
+    if(sources!==1||meshAssets>3||(!multi&&outputs!==1)||
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
         throw Error('Geometry Graph requires one spline source, one v1 output or 2–4 v2 outputs, and a valid default output.');
     for(const node of table.values()){
@@ -321,7 +338,9 @@ export class GeometryGraphRunner {
                     node,
                     node.type==='spline'?context.revision:null,
                     node.type==='spline'?context.closed:null,
-                    node.type==='meshAsset'?context.meshRevision??null:null,
+                    node.type==='meshAsset'?
+                        (context.meshRevisions?.[node.slot??0]??
+                         ((node.slot??0)===0?context.meshRevision:null)):null,
                     input?.version??null,
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                 ]);
@@ -337,14 +356,18 @@ export class GeometryGraphRunner {
                 if(node.type==='spline'){
                     value={kind:'path',frames:deepCopyFrames(context.frames),closed:context.closed};
                 }else if(node.type==='meshAsset'){
-                    if(typeof context.meshRevision!=='string'||!context.meshRevision||
-                       context.meshRevision.length>256)
-                        throw Error('Graph meshAsset requires a bounded mesh revision.');
-                    validateImportedMesh(context.meshSource);
-                    const imported=context.meshSource!;
+                    const slot=node.slot??0;
+                    const revision=context.meshRevisions?.[slot]??
+                        (slot===0?context.meshRevision:undefined);
+                    if(typeof revision!=='string'||!revision||revision.length>256)
+                        throw Error('Graph meshAsset slot '+slot+' requires a bounded mesh revision.');
+                    const imported=context.meshSources?.[slot]??
+                        (slot===0?context.meshSource:undefined);
+                    validateImportedMesh(imported);
+                    const data=imported!;
                     value={kind:'meshSource',geometry:{
-                        positions:imported.positions.slice(),indices:imported.indices.slice(),
-                        uvs:imported.uvs?.slice(),normals:imported.normals?.slice(),
+                        positions:data.positions.slice(),indices:data.indices.slice(),
+                        uvs:data.uvs?.slice(),normals:data.normals?.slice(),
                     }};
                 }else if(node.type==='offset'){
                     if(source?.kind!=='path')throw Error('Geometry Graph offset input is not a path.');
@@ -406,6 +429,7 @@ export class GeometryGraphRunner {
                         width:node.width??1,
                         height:node.height??1,
                         deformShape:node.deformShape??0,
+                        axis:node.axis??2,
                         segments:node.segments??12,
                         repeats:node.repeats??1,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
