@@ -6,6 +6,7 @@
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
 import {buildProfileExtrudeGeometry,GraphProfileShape} from './SplineProfileExtrudeMath';
+import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 
 export const GEOMETRY_GRAPH_VERSION=1;
 export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
@@ -15,7 +16,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'offset'|'width'|'ribbon'|'tube'|'extrude'|'output';
+export type GeometryNodeType='spline'|'offset'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh';
 export interface GeometryGraphNode {
     id:string;type:GeometryNodeType;
@@ -26,6 +27,7 @@ export interface GeometryGraphNode {
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
     height?:number;profileShape?:number;
+    deformShape?:number;segments?:number;repeats?:number;
 }
 export interface GeometryGraph {
     version:number;
@@ -69,7 +71,7 @@ const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     ringCount:data.ringCount,
 });
 const nodePort=(type:GeometryNodeType):GeometryPortType=>
-    type==='ribbon'||type==='tube'||type==='extrude'||type==='output'?'mesh':'path';
+    type==='ribbon'||type==='tube'||type==='extrude'||type==='meshDeform'||type==='output'?'mesh':'path';
 const needInput=(type:GeometryNodeType):GeometryPortType|null=>
     type==='spline'?null:type==='output'?'mesh':'path';
 /** Validate structure AND numeric settings before any evaluation or cache write.
@@ -86,7 +88,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     let sources=0,outputs=0;
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','offset','width','ribbon','tube','extrude','output'].includes(node.type)||table.has(node.id))
+           !['spline','offset','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='offset'?['input','right','up']:
@@ -94,6 +96,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
             node.type==='extrude'?['input','width','height','profileShape','uvMetersPerRepeat','capEnds']:
+            node.type==='meshDeform'?['input','width','height','deformShape','segments','repeats','uvMetersPerRepeat']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
         if(node.type==='spline')sources++;
@@ -131,6 +134,16 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             bound(node.uvMetersPerRepeat??5,.01,10000,'Extrude UV length');
             if(node.capEnds!==undefined&&typeof node.capEnds!=='boolean')
                 throw Error('Geometry Graph Extrude capEnds must be a boolean.');
+        }
+        if(node.type==='meshDeform'){
+            bound(node.width??1,.05,100,'Mesh Deform width');
+            bound(node.height??1,.05,100,'Mesh Deform height');
+            const preset=bound(node.deformShape??0,0,1,'Mesh Deform shape');
+            const segments=bound(node.segments??12,2,64,'Mesh Deform segments');
+            const repeats=bound(node.repeats??1,1,16,'Mesh Deform repeats');
+            if(!Number.isInteger(preset)||!Number.isInteger(segments)||!Number.isInteger(repeats))
+                throw Error('Geometry Graph Mesh Deform preset, segments and repeats must be integers.');
+            bound(node.uvMetersPerRepeat??5,.01,10000,'Mesh Deform UV length');
         }
         table.set(node.id,{...node});
     }
@@ -282,6 +295,18 @@ export class GeometryGraphRunner {
                         profileShape:(node.profileShape??0) as GraphProfileShape,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
+                    },source.closed);
+                    validateMesh(geometry);
+                    value={kind:'mesh',geometry};
+                }else if(node.type==='meshDeform'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Mesh Deform input is not a path.');
+                    const geometry=buildGraphMeshDeformGeometry(source.frames,{
+                        width:node.width??1,
+                        height:node.height??1,
+                        deformShape:node.deformShape??0,
+                        segments:node.segments??12,
+                        repeats:node.repeats??1,
+                        uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                     },source.closed);
                     validateMesh(geometry);
                     value={kind:'mesh',geometry};
