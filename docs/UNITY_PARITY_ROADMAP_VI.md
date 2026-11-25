@@ -227,7 +227,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3b: bounded Profile Extrude generator (Rectangle/Beveled/U Channel preset), concave cap triangulation, hard-edge normals, mirrored/nonuniform winding, UV, typed Inspector selection and installable example JSON; headless regression tests.
 - [x] Phase 4.3c: bounded `meshDeform` generator uses standalone CPU deformation kernel with generated Strip/Box Shell presets, arc-distance frame lookup, mirrored winding, typed Inspector and installable example. Imported source Mesh assets remain future work.
 - [x] Phase 4.3d: opt-in Geometry Graph V2 with 2–4 typed mesh output branches, per-renderer Output ID selection, shared JsonAsset multi-renderer usage, branch add/default/remove, V1 fallback, atomic per-node cache, headless regression.
-- [ ] Phase 4.3e+: Mesh Asset input port, profile asset customization, per-node CPU profiling, multi-slot renderer output and native Cocos Creator 3.8.8 acceptance for Tube/Extrude/MeshDeform/Multi-output.
+- [x] Phase 4.3e: opt-in cold/warm per-node CPU profiler for Geometry Graph v1/v2, isolated diagnostic runner, bounded Inspector report, deterministic timing regressions and safe Scene IPC.
+- [ ] Phase 4.3f+: imported Mesh Asset input port, profile asset customization, multi-slot renderer output and native Cocos Creator 3.8.8 acceptance for Tube/Extrude/MeshDeform/Multi-output/profiling.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
