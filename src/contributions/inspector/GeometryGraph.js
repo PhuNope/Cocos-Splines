@@ -104,7 +104,7 @@ function summarizeReview(panel){
         'Conflicting fields: '+changeSummary(analysis.conflicts)+'. Rebase blocked.':
         'No overlapping parameter changes. Rebase Safe Changes keeps your draft edits.',
     'This comparison does NOT save or replace either version.',
-  ].join('\\n');
+  ].join('\n');
 }
 function render(panel){
   const draft=panel._vgSharedDraft;
