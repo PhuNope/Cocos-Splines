@@ -26,6 +26,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/DualMeshAxisGraph.json','examples/installable/GeometryGraph/DualMeshAxisGraph.json'],
  ['GeometryGraph/SourceLengthTrimGraph.json','examples/installable/GeometryGraph/SourceLengthTrimGraph.json'],
  ['GeometryGraph/SubMeshSelectionGraph.json','examples/installable/GeometryGraph/SubMeshSelectionGraph.json'],
+ ['GeometryGraph/MultiMaterialOutputsGraph.json','examples/installable/GeometryGraph/MultiMaterialOutputsGraph.json'],
 ]);
 function directory(fsApi,location,create=false){
  if(create&&!fsApi.existsSync(location))fsApi.mkdirSync(location);
