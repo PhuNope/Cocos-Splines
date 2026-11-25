@@ -32,6 +32,11 @@ export interface GeometryGraphNode {
     axis?:number;
     right?:number;up?:number;
     multiplier?:number;
+    /** Optional Width scale across normalized physical distance.
+     * Unspecified middle = mean of start/end; unspecified end = start.
+     * taperMode 0=linear, 1=smoothstep.
+     */
+    midMultiplier?:number;endMultiplier?:number;taperMode?:number;
     width?:number;endWidth?:number;uvMetersPerRepeat?:number;
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
@@ -147,7 +152,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
-            node.type==='width'?['input','multiplier']:
+            node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
             node.type==='extrude'?['input','width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
@@ -167,7 +172,18 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             bound(node.right??0,-1000,1000,'offset right');
             bound(node.up??0,-1000,1000,'offset up');
         }
-        if(node.type==='width')bound(node.multiplier??1,.01,20,'width multiplier');
+        if(node.type==='width'){
+            bound(node.multiplier??1,.01,20,'width multiplier');
+            if(node.midMultiplier!==undefined)
+                bound(node.midMultiplier,.01,20,'width mid multiplier');
+            if(node.endMultiplier!==undefined)
+                bound(node.endMultiplier,.01,20,'width end multiplier');
+            if(node.taperMode!==undefined){
+                const mode=bound(node.taperMode,0,1,'width taper mode');
+                if(!Number.isInteger(mode))
+                    throw Error('Geometry Graph width taperMode must be an integer 0 or 1.');
+            }
+        }
         if(node.type==='ribbon'){
             bound(node.width??4,.05,100,'ribbon width');
             bound(node.endWidth??0,0,100,'ribbon end width');
@@ -406,9 +422,32 @@ export class GeometryGraphRunner {
                     }))};
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
-                    value={kind:'path',closed:source.closed,frames:source.frames.map(f=>({
-                        ...f,widthFactor:f.widthFactor*(node.multiplier??1),
-                    }))};
+                    const start=node.multiplier??1;
+                    const end=node.endMultiplier??start;
+                    const middle=node.midMultiplier??(start+end)/2;
+                    const eased=node.taperMode===1;
+                    if(source.closed&&Math.abs(start-end)>1e-8)
+                        throw Error('Geometry Graph closed spline Width curve requires equal Start and End multipliers.');
+                    const frames=source.frames;
+                    const first=frames[0].distance,last=frames[frames.length-1].distance;
+                    const span=last-first;
+                    if(span<1e-8&&(Math.abs(start-middle)>1e-8||
+                       Math.abs(middle-end)>1e-8))
+                        throw Error('Geometry Graph Width curve needs nonzero spline length.');
+                    const smooth=t=>eased?t*t*(3-2*t):t;
+                    value={kind:'path',closed:source.closed,frames:frames.map(f=>{
+                        const t=span>1e-8?
+                            Math.min(1,Math.max(0,(f.distance-first)/span)):0;
+                        const part=t<=.5?smooth(t*2):smooth((t-.5)*2);
+                        const taper=t<=.5?
+                            start+(middle-start)*part:
+                            middle+(end-middle)*part;
+                        const widthFactor=f.widthFactor*taper;
+                        if(!Number.isFinite(widthFactor)||
+                           widthFactor<1e-4||widthFactor>1000)
+                            throw Error('Geometry Graph Width curve produced invalid frame scale.');
+                        return {...f,widthFactor};
+                    })};
                 }else if(node.type==='ribbon'){
                     if(source?.kind!=='path')throw Error('Geometry Graph ribbon input is not a path.');
                     const width=node.width??4,thickness=node.thickness??0;
