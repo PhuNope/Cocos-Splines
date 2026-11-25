@@ -11,7 +11,10 @@ let selected='graph-node',mode=true,assetUuid='asset-1',confirm={response:1};
 let refreshed=0,snapshots=0,queries=[],failedRefresh=false;
 const ccGraph={kind:'Splines.SplineGeometryGraphRenderer',enabled:true,useGraphAsset:true,
  graphJson:JSON.stringify(graph(2)),graphAsset:{name:'Graph',uuid:'asset-1',json:graph(4)},
- activeGraphJson(){return JSON.stringify(this.graphAsset.json);}};
+ activeGraphJson(){return JSON.stringify(this.graphAsset.json);},
+ profileGraph(){return {graphVersion:1,outputId:'output',sampledFrames:4,
+  cold:{totalMs:1,computed:3,reused:0,nodes:[]},
+  warm:{totalMs:0,computed:0,reused:3,nodes:[]}};}};
 const sceneRoot={uuid:'scene',components:[],children:[],isValid:true};
 const graphNode={uuid:'graph-node',components:[ccGraph],children:[],parent:sceneRoot,isValid:true};
 sceneRoot.children.push(graphNode);
@@ -51,6 +54,18 @@ async function run(){
    }}
   };
   const ext=require(root+'/dist/main.js');
+  // Read-only CPU profiling bridges Inspector -> main -> Scene, without
+  // modifying shared JSON, local component properties or scene history.
+  const profiled=await ext.methods.profileGeometryGraph();
+  assert.equal(profiled.ok,true);
+  assert.equal(profiled.profile.cold.computed,3);
+  assert.equal(profiled.profile.outputId,'output');
+  assert.equal(refreshed,0);
+  assert.equal(snapshots,0);
+  assert.equal(queries.some(x=>x[1]==='set-property'),false);
+  selected='different-node';
+  assert.equal((await ext.methods.profileGeometryGraph()).ok,false);
+  selected='graph-node';
   const first=await ext.methods.beginSharedGeometryGraphEdit();
   assert.equal(first.ok,true);
   assert.equal(first.assetUuid,'asset-1');
@@ -103,6 +118,8 @@ async function run(){
    ['beginSharedGeometryGraphEdit']);
   assert.deepEqual(pkg.contributions.messages['save-shared-geometry-graph-edit'].methods,
    ['saveSharedGeometryGraphEdit']);
+  assert.deepEqual(pkg.contributions.messages['profile-geometry-graph'].methods,
+   ['profileGeometryGraph']);
   assert(pkg.scripts.test.includes('geometry-graph-shared-edit-v2.test.cjs'));
   console.log('SHARED GRAPH EDIT V2 PASS: staged draft, confirmation, selection/mode guards, CAS conflict, refresh and no Scene mutations.');
  }finally{
