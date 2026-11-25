@@ -8,7 +8,7 @@ async function run(){
  try{
   cp.execFileSync('tsc',['-p',root+'/tsconfig.runtime.json',
    '--noEmit','false','--outDir',temp],{stdio:'pipe'});
-  let index=0,failCreate=false,frameBuilds=0;
+  let index=0,failCreate=false,failBind=false,frameBuilds=0;
   class Vec3{
    constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
    clone(){return new Vec3(this.x,this.y,this.z);}
@@ -40,19 +40,26 @@ async function run(){
    destroy(){this.destroyed=true;}
   }
   class Mesh{
-   constructor(data){this.data=data;this.destroyed=false;this.id=++index;}
+   constructor(data){this.data=data;this.destroyed=false;this.id=++index;this.struct=null;}
+   reset(info){if(failCreate)throw Error('Injected mesh reset failure');
+    this.struct=info.struct;this.data=info.data;}
    destroy(){this.destroyed=true;}
   }
   class MeshRenderer extends Component{
-   constructor(){super();this.mesh=null;this.material=null;}
-   getSharedMaterial(){return this.material;}
-   setSharedMaterial(m){this.material=m;}
+   constructor(){super();this.mesh=null;this.material=null;this.materials=[];}
+   get mesh(){return this._mesh;}
+   set mesh(value){if(failBind)throw Error('Injected renderer mesh bind failure');
+    this._mesh=value;}
+   getSharedMaterial(i=0){return this.materials[i]??null;}
+   setSharedMaterial(m,i=0){this.materials[i]=m;this.material=this.materials[0]??null;}
   }
   const cc={_decorator:{
     ccclass:()=>x=>x,property:()=>{},menu:()=>x=>x,
     executeInEditMode:()=>x=>x,requireComponent:()=>x=>x,
    },Component,MeshRenderer,Mesh,Material,Vec3,Mat4,
-   gfx:{AttributeName:{ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',ATTR_NORMAL:'a_normal'},Format:{RGB32F:1,RG32F:2}},
+   gfx:{Attribute:class Attribute{constructor(name,format){Object.assign(this,{name,format});}},
+    AttributeName:{ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',ATTR_NORMAL:'a_normal'},
+    Format:{RGB32F:1,RG32F:2},PrimitiveMode:{TRIANGLE_LIST:4}},
    Color:class Color{constructor(r,g,b,a){Object.assign(this,{r,g,b,a});}},
    utils:{createMesh:options=>{
     if(failCreate)throw Error('Injected mesh allocation failure');
@@ -236,6 +243,57 @@ async function run(){
     'Shared V2 must not mutate local graphJson');
    peer.onDestroy();
    assert(peerMesh.mesh===null,'Peer releases only its own transient generated Mesh');
+   // Phase 4.3g2 opt-in: one MeshRenderer hosts distinct material primitives
+   // from both V2 outputs. Lexical Output ID order maps to material slots.
+   const oldOnly=out.mesh,sourceChildren=node.components.length;
+   const matPipe=new Material(),matRoad=new Material();
+   renderer.material=matPipe;renderer.materialB=matRoad;
+   renderer.renderAllOutputs=true;renderer.outputId='nonsense-is-ignored';
+   renderer.rebuild();
+   const multiMesh=out.mesh;
+   assert.notEqual(multiMesh,oldOnly);
+   assert(oldOnly.destroyed);
+   assert.equal(multiMesh.struct.primitives.length,2);
+   assert.equal(multiMesh.struct.vertexBundles.length,2);
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputPipe','outputRoad']);
+   assert.equal(out.getSharedMaterial(0),matPipe);
+   assert.equal(out.getSharedMaterial(1),matRoad);
+   assert.equal(renderer.getGraphMetrics().reused,5,
+    'All outputs are reused from the same typechecked graph cache');
+   assert.equal(node.components.length,sourceChildren,
+    'Multi-output cannot create extra renderers, children or nodes');
+   assert(renderer.getMeshGizmoGeometry()?.edgePairs.length>0);
+   const prevCombined=multiMesh;
+   multiShared.json.nodes.find(n=>n.id==='road').width=7;
+   renderer.update();
+   assert.notEqual(out.mesh,prevCombined,'Modifying one output rebuilds combined Mesh');
+   assert.equal(renderer.getGraphMetrics().computed,2,
+    'Only modified ribbon and its Output are recalculated');
+   assert.equal(out.mesh.struct.primitives.length,2);
+   const lastGood=out.mesh,lastOutputIds=renderer.getRenderedOutputIds();
+   failCreate=true;
+   assert.throws(()=>renderer.rebuild(),/mesh reset failure/);
+   failCreate=false;
+   assert.equal(out.mesh,lastGood,'Mesh.reset failure keeps last good multi-primitive Mesh');
+   assert.equal(lastGood.destroyed,false);
+   assert.deepEqual(renderer.getRenderedOutputIds(),lastOutputIds);
+   failBind=true;
+   assert.throws(()=>renderer.rebuild(),/mesh bind failure/);
+   failBind=false;
+   assert.equal(out.mesh,lastGood,'Binding failure does not overwrite previous Mesh');
+   assert.equal(lastGood.destroyed,false);
+   renderer.graphAsset=null;
+   assert.throws(()=>renderer.rebuild(),/assigned JsonAsset/);
+   assert.equal(out.mesh,lastGood);
+   renderer.graphAsset=multiShared;
+   renderer.renderAllOutputs=false;renderer.outputId='';
+   renderer.material=null;renderer.materialB=null;
+   renderer.rebuild();
+   assert.equal(out.mesh.struct,null,
+    'Disabled multi-output uses the original single-primitive utils.createMesh path');
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputRoad']);
+   assert(lastGood.destroyed,'Switching modes releases only the former generated Mesh');
+   assert.equal(node.components.length,sourceChildren);
    const beforeProfileMesh=out.mesh,profileFrameBuilds=frameBuilds;
    const oldGraphMetrics=renderer.getGraphMetrics();
    const profile=renderer.profileGraph();
