@@ -86,6 +86,26 @@ try{
  third.nodes.push({id:'assetC',type:'meshAsset',slot:2});
  third.nodes.find(n=>n.id==='deformB').meshInput='assetC';
  assert.throws(()=>compileGeometryGraph(third),/disconnected/i);
+ const triple=graph();
+ triple.nodes.push(
+  {id:'assetC',type:'meshAsset',slot:2},
+  {id:'deformC',type:'meshDeform',input:'source',meshInput:'assetC',axis:1},
+  {id:'outputC',type:'output',input:'deformC'});
+ const runner3=new GeometryGraphRunner();
+ const geomC={...mesh,positions:mesh.positions.map((v,i)=>i%3===0?v*.75:v)};
+ const plan3=compileGeometryGraph(triple);
+ const res3=runner3.evaluateOutputs(plan3,{
+  ...ctx(),meshSources:[mesh,updatedB,geomC],meshRevisions:['A','B','C']});
+ assert.equal(Object.keys(res3).length,3);
+ assert.deepEqual(runner3.metrics,{computed:10,reused:0,nodes:10});
+ const changedC={...geomC,positions:geomC.positions.map((v,i)=>i%3===0?v*.5:v)};
+ const res3b=runner3.evaluateOutputs(plan3,{
+  ...ctx(),meshSources:[mesh,updatedB,changedC],meshRevisions:['A','B','C2']});
+ assert.deepEqual(runner3.metrics,{computed:3,reused:7,nodes:10},
+  'Reimport at slot C must recompute only the C branch');
+ assert.deepEqual(res3b.outputA,res3.outputA);
+ assert.deepEqual(res3b.outputB,res3.outputB);
+ assert.notDeepEqual(res3b.outputC,res3.outputC);
  const simple=compileGeometryGraph({version:1,nodes:[
   {id:'source',type:'spline'},{id:'deform',type:'meshDeform',input:'source'},
   {id:'output',type:'output',input:'deform'}],output:'output'});
