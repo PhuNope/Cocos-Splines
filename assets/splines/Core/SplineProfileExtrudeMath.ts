@@ -38,7 +38,6 @@ const cross=(a:V3,b:V3):V3=>({
 });
 const dot=(a:V3,b:V3)=>a.x*b.x+a.y*b.y+a.z*b.z;
 const length=(a:V3)=>Math.hypot(a.x,a.y,a.z);
-const distance=(a:P2,b:P2)=>Math.hypot(b.x-a.x,b.y-a.y);
 const cross2=(a:P2,b:P2,c:P2)=>
     (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
 const isFinite3=(v:V3)=>!!v&&[v.x,v.y,v.z].every(Number.isFinite);
@@ -90,8 +89,10 @@ export function buildProfileExtrudeGeometry(
         throw Error('Geometry Graph Extrude settings or frame count are invalid.');
     const profile=PROFILES[profileShape],bands=profile.length;
     const triangles=capEnds&&!closed?profileTriangles(profile):[];
-    const perimeterLengths=profile.map((p,i)=>
-        distance(p,profile[(i+1)%bands]));
+    const perimeterLengths=profile.map((p,i)=>{
+        const next=profile[(i+1)%bands];
+        return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
+    });
     const perimeter=perimeterLengths.reduce((total,l)=>total+l,0);
     const uvStart:number[]=[],uvEnd:number[]=[];
     let cumulative=0;
