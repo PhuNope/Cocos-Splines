@@ -90,7 +90,11 @@ try{
   {id:'outB',type:'output',input:'b'},
  ],output:'outA'};
  const runner=new GeometryGraphRunner(),compiled=compileGeometryGraph(graph);
- const ctx={frames,closed:false,revision:'base',
+ // Graph source currently normalizes widthFactor to 1; use a changing
+ // frame right basis to exercise *native Graph* per-frame UV cache effects.
+ // The pure Extrude tests above separately prove variable widthFactor taper.
+ const ctx={frames:[frames[0],{...frames[1],right:vec(2,0,0)}],
+  closed:false,revision:'base',
   profileSources:[points,points],profileUVs:[source.uv,source.uv],
   profileRevisions:[JSON.stringify(source),JSON.stringify(source)]};
  const first=runner.evaluateOutputs(compiled,ctx);
