@@ -52,6 +52,7 @@ async function run(){
     ccclass:()=>x=>x,property:()=>{},menu:()=>x=>x,
     executeInEditMode:()=>x=>x,requireComponent:()=>x=>x,
    },Component,MeshRenderer,Mesh,Material,Vec3,Mat4,
+   gfx:{AttributeName:{ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',ATTR_NORMAL:'a_normal'},Format:{RGB32F:1,RG32F:2}},
    Color:class Color{constructor(r,g,b,a){Object.assign(this,{r,g,b,a});}},
    utils:{createMesh:options=>{
     if(failCreate)throw Error('Injected mesh allocation failure');
@@ -262,6 +263,51 @@ async function run(){
    assert.throws(()=>renderer.profileGraph(),/syntax/i);
    assert.equal(out.mesh,localMesh,'Invalid profiling graph retains last Mesh');
    renderer.graphJson=localSaved;
+   // Native Mesh Asset reference belongs to the renderer, not the Graph JSON.
+   const importedPos=new Float32Array([-1,0,0,1,0,0,-1,0,1,1,0,1]);
+   const importedUV=new Float32Array([0,0,1,0,0,1,1,1]);
+   const importedIndices=new Uint16Array([0,2,1,1,2,3]);
+   const bytes=new ArrayBuffer(16),byteView=new Uint8Array(bytes);
+   const imported={uuid:'readable-asset',data:bytes,allowDataAccess:true,
+    struct:{primitives:[{vertexBundelIndices:[0]}],vertexBundles:[{attributes:[
+      {name:'a_position',format:1},{name:'a_texCoord',format:2}]}]},
+    readAttribute(_i,name){return name==='a_position'?importedPos:
+      name==='a_texCoord'?importedUV:null;},
+    readAttributeFormat(_i,name){return name==='a_position'?{name:'RGB32F'}:
+      name==='a_texCoord'?{name:'RG32F'}:null;},
+    readIndices(){return importedIndices;},
+   };
+   renderer.graphJson=JSON.stringify({version:1,nodes:[
+    {id:'source',type:'spline'},{id:'sourceAsset',type:'meshAsset'},
+    {id:'deform',type:'meshDeform',input:'source',meshInput:'sourceAsset',
+     width:1,height:1,repeats:2},
+    {id:'output',type:'output',input:'deform'},
+   ],output:'output'});
+   renderer.sourceMesh=imported;
+   const beforeAsset=Array.from(importedPos),frameCountBeforeImport=frameBuilds;
+   renderer.rebuild();
+   assert.equal(renderer.getGraphMetrics().nodes,4);
+   assert.equal(out.mesh.data.positions.length/3,8);
+   assert.equal(frameBuilds,frameCountBeforeImport,'Mesh Asset change must reuse sampled spline frames');
+   assert.deepEqual(Array.from(importedPos),beforeAsset,'Imported source buffer must remain unchanged');
+   const graphMesh=out.mesh,previousAssetOutput=JSON.stringify(graphMesh.data);
+   renderer.rebuild();
+   assert.equal(renderer.getGraphMetrics().reused,4);
+   importedPos[0]=-2;byteView[0]=24;
+   renderer.update();
+   assert.notEqual(out.mesh,graphMesh,'Reimport with same byte length invalidates graph output');
+   assert.notEqual(JSON.stringify(out.mesh.data),previousAssetOutput);
+   assert.equal(renderer.getGraphMetrics().computed,3);
+   const goodAssetOutput=out.mesh;
+   renderer.sourceMesh={...imported,allowDataAccess:false};
+   assert.throws(()=>renderer.rebuild(),/Allow Data Access/);
+   assert.equal(out.mesh,goodAssetOutput,'Invalid imported asset must not overwrite last Mesh');
+   renderer.sourceMesh=imported;
+   const cpuImport=renderer.profileGraph();
+   assert(cpuImport.cold.nodes.some(n=>n.type==='meshAsset'));
+   assert(cpuImport.warm.nodes.every(n=>n.cached));
+   assert.equal(out.mesh,goodAssetOutput,'Profiler must not replace generated imported mesh');
+   renderer.sourceMesh=null;
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
