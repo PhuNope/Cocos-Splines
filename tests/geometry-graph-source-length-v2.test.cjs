@@ -34,8 +34,10 @@ try{
  const model=require(root+'/dist/SplineGeometryGraphVisualModel.js');
  const saved=JSON.stringify(mesh);
  const physical=buildGraphMeshDeformGeometry(frames,settings(),false,mesh);
- assert.equal(physical.positions.length/3,12);
- assert.equal(physical.indices.length,18);
+ assert.equal(physical.positions.length/3,13,
+  'Cut triangle edges introduce an extra shared diagonal intersection');
+ assert.equal(physical.indices.length,21,
+  'Partial quad is re-triangulated into three triangles');
  approx(Math.min(...physical.positions.filter((_,i)=>i%3===2)),0);
  approx(Math.max(...physical.positions.filter((_,i)=>i%3===2)),5);
  // Every full imported module is exactly 2 local units long, including the
@@ -47,7 +49,10 @@ try{
   'Final clipping interpolates authored UV0 at half a tile.');
  assert.equal(JSON.stringify(mesh),saved,'Imported mesh source must be immutable');
  const legacy=buildGraphMeshDeformGeometry(frames,settings({repeatLayout:0}),false,mesh);
- assert.equal(legacy.positions.length,physical.positions.length);
+ assert.equal(legacy.positions.length/3,12,
+  'Legacy Count duplicates full tiles without clip intersections');
+ assert(physical.positions.length>legacy.positions.length,
+  'Clipped source geometry preserves needed edge intersections');
  assert(legacy.positions.some((v,i)=>i%3===2&&Math.abs(v-5/3)<1e-5),
   'Legacy Count mode stretches each section to one third of the spline');
  assert(!physical.positions.some((v,i)=>i%3===2&&Math.abs(v-5/3)<1e-5));
@@ -57,11 +62,11 @@ try{
  approx(Math.max(...distance.uvs.filter((_,i)=>i%2===1)),2.5);
  const override=buildGraphMeshDeformGeometry(frames,
   settings({tileLength:3}),false,mesh);
- assert.equal(override.positions.length/3,8,'Override 3m length produces 2 modules');
+ assert.equal(override.positions.length/3,9,'Override 3m length produces 1 full and 1 clipped module');
  assert(override.positions.some((v,i)=>i%3===2&&Math.abs(v-3)<1e-5));
  approx(Math.max(...override.positions.filter((_,i)=>i%3===2)),5);
  const one=buildGraphMeshDeformGeometry(frames,settings({tileLength:10}),false,mesh);
- assert.equal(one.positions.length/3,4,'One partial tile fits a shorter route');
+ assert.equal(one.positions.length/3,5,'One partial tile keeps the cut diagonal intersection');
  approx(Math.max(...one.positions.filter((_,i)=>i%3===2)),5);
  const preset=createDeformPresetMesh(settings());
  assert.equal(preset.positions.length/3,10);
