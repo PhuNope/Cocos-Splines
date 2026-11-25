@@ -216,3 +216,38 @@ Các frame của SplineContainer được biến đổi thành output-local bở
 - [ ] Phase 4.3d+: Multi-output Mesh Graph, per-node profiling, custom authored mesh/profile bindings.
 
 **Lưu ý:** Mesh Deform Node khác với `SplineMeshDeform` standalone (đã hỗ trợ FBX/Mesh được import). Đây là preset demo an toàn để tái sử dụng cùng kernel trong Geometry Graph trước khi thêm `Mesh Asset` input port. Không có tag / Release, chỉ nhánh `v2`.
+
+## Phase 4.3d — Multi-output Geometry Graph V2 (preview, 2026-11-25)
+
+**Opt-in schema `version:2`** hỗ trợ từ **2–4 node `output`**, một `output` mặc định (root field vẫn là một Output ID), tối đa 32 node và đúng một `spline` source. V1 (`version:1`) vẫn chỉ có đúng một output, giữ nguyên JSON mặc định và tương thích với Scene/JsonAsset cũ; không migration ngầm. Không chấp nhận disconnected node/cycle, cả hai version đều có giới hạn 16 KiB.
+
+**Cách dùng:** Visual Geometry Graph Inspector có ba nút **＋ Output Branch**, **Set Default Output**, **✕ Remove Output**:
+- Add Output Branch nhân bản mesh generator hiện tại và nối nhánh mới vào cùng upstream path. Không nhân đôi Knot/source/mesh asset. Khi tạo nhánh đầu tiên, graph tự chuyển V1→V2; tối đa 4 outputs. Bạn có thể chọn từng Output Node rồi chỉnh generator/Offset/Width/parameter độc lập.
+- Set Default Output chọn output được dùng khi renderer chưa gán Output ID.
+- Remove Output chỉ xóa nhánh **không phải default**, đồng thời dọn các node không còn nằm trên nhánh output nào; khi còn một output, graph quay về V1 (có thể giữ ID output khác `output`). Không xóa default mà không chọn default khác trước.
+- Thuộc tính mới **Output ID** trên `SplineGeometryGraphRenderer` (mặc định chuỗi rỗng): mỗi Renderer hiển thị đúng **một** output mesh. Bỏ trống để dùng graph `output`; nhập `outputPipe` hay output ID khác để chọn nhánh. Một `JsonAsset` dùng chung có thể gán cho nhiều Renderer, mỗi Renderer có Output ID riêng. Không tự tạo child node hay MeshRenderer.
+- Khi dùng Shared JsonAsset, các thao tác vẫn read-only cho đến khi mở **Edit Shared Asset**. Save phải xác nhận, đối chiếu SHA-256; Compare/Rebase không ghi file. Inspector dùng native ui-prop dump cho Local Graph, Output ID và Prefab overrides.
+- Runner biên dịch **toàn bộ output DAG** theo thứ tự phụ thuộc, tái sử dụng upstream và cache từng node. `evaluate(plan,context,selectedOutputId?)` trả một mesh clone cho output được chọn; `evaluateOutputs(plan,context)` trả bản clone của mọi output. Tất cả nhánh được validate/evaluate trước khi commit cache, do đó lỗi ở nhánh phụ cũng ngăn cập nhật, giữ mesh cũ. Thay `Output ID` không cần resample spline nếu revision world transform/source không đổi.
+
+Ví dụ được cài qua **Install Examples**: `GeometryGraph/MultiOutputRoadTubeGraph.json`.
+
+```json
+{
+  "version": 2,
+  "nodes": [
+    {"id": "source", "type": "spline"},
+    {"id": "road", "type": "ribbon", "input": "source", "width": 4},
+    {"id": "pipe", "type": "tube", "input": "source", "radius": 0.6},
+    {"id": "outputRoad", "type": "output", "input": "road"},
+    {"id": "outputPipe", "type": "output", "input": "pipe"}
+  ],
+  "output": "outputRoad"
+}
+```
+
+**QA:**
+- [x] Headless runtime/Inspector regression: V1 vẫn chạy, V2 compile/typing/cycle/reachability, đổi Output ID, branch-parameter dirty propagation, clone mesh và atomic cache rollback, thêm/xóa branch, đổi default/downgrade V2→V1, Shared JsonAsset review/rebase.
+- [ ] Native Creator 3.8.8: gán **hai renderer nodes** cho cùng JsonAsset (mỗi renderer trỏ Output ID khác), Save/Reopen, Undo/Redo, Prefab overrides, hot reload asset-db, material/culling/wireframe và mesh ownership.
+- [ ] Output slots trên cùng một Renderer (nhiều MeshRenderer/Materials), multi-input nodes, imported Mesh Asset port, custom output names/aliases, branching auto-layout và per-node CPU timing chưa có. Chúng cần API/serializer và native smoke riêng.
+
+Chỉ push `v2`; không tạo tag hoặc GitHub Release.
