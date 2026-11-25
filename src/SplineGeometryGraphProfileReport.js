@@ -4,7 +4,7 @@
  * property bags. Node timing excludes Spline sampling/GPU mesh allocation.
  */
 const idPattern=/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/;
-const types=new Set(['spline','offset','width','ribbon','tube',
+const types=new Set(['spline','meshAsset','offset','width','ribbon','tube',
   'extrude','meshDeform','output']);
 function validTiming(t){
   return t&&typeof t==='object'&&typeof t.id==='string'&&idPattern.test(t.id)&&
