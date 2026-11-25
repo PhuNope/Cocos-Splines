@@ -45,12 +45,22 @@ export class SplineGeometryGraphRenderer extends Component {
     /** Input slot for optional typed graph meshAsset nodes. This is a native
      * project Mesh reference, never raw vertex data in graph JSON.
      */
-    @property({type:Mesh,tooltip:'Optional readable Mesh Asset used by meshAsset → meshDeform. Enable Allow Data Access. One submesh, <=4096 vertices.'})
+    @property({type:Mesh,tooltip:'Readable Mesh Asset for slot A. Select one of up to four imported submeshes with Source Submesh; <=4096 vertices per selected submesh.'})
     sourceMesh:Mesh|null=null;
     @property({type:Mesh,tooltip:'Mesh Asset slot 1, for meshAsset node with Slot B (1).'})
     sourceMeshB:Mesh|null=null;
     @property({type:Mesh,tooltip:'Mesh Asset slot 2, for meshAsset node with Slot C (2).'})
     sourceMeshC:Mesh|null=null;
+    /** Opt-in submesh selectors for readable imported models with 1–4 submeshes.
+     * Each source slot still creates one mesh output per renderer; no changes to
+     * Cocos Material slots or child Nodes are made automatically.
+     */
+    @property({min:0,max:3,step:1,tooltip:'Source Mesh A: imported submesh index 0–3. Requires Allow Data Access. 0 keeps legacy behavior.'})
+    sourceSubMesh=0;
+    @property({min:0,max:3,step:1,tooltip:'Source Mesh B: imported submesh index 0–3. Must exist in the assigned Mesh.'})
+    sourceSubMeshB=0;
+    @property({min:0,max:3,step:1,tooltip:'Source Mesh C: imported submesh index 0–3. Must exist in the assigned Mesh.'})
+    sourceSubMeshC=0;
     /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON
      * changes dependent renderers even when the asset UUID stays the same.
@@ -136,12 +146,16 @@ export class SplineGeometryGraphRenderer extends Component {
     private slotMesh(slot:number):Mesh|null{
         return slot===0?this.sourceMesh:slot===1?this.sourceMeshB:this.sourceMeshC;
     }
+    private slotSubMesh(slot:number):number{
+        return slot===0?this.sourceSubMesh:
+            slot===1?this.sourceSubMeshB:this.sourceSubMeshC;
+    }
     private signature():string {
         const json=this.activeGraphJson();
         const slots=json.includes('"meshAsset"')?
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
-        const assets=slots.map(slot=>[slot,graphMeshDataFingerprint(this.slotMesh(slot))]);
+        const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
         return JSON.stringify([this.frameSignature(),json,this.outputId,assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
@@ -152,7 +166,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const meshSources:NonNullable<GeometryGraphContext['meshSources']>[number][]=[];
         const meshRevisions:(string|undefined)[]=[];
         for(const slot of slots){
-            const data=readGraphSourceMeshAsset(this.slotMesh(slot));
+            const data=readGraphSourceMeshAsset(this.slotMesh(slot),this.slotSubMesh(slot));
             meshSources[slot]=data.geometry;
             meshRevisions[slot]=data.revision;
         }
