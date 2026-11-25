@@ -5,6 +5,7 @@
 const base=require('./common').makeInspector('geometryGraph');
 const graph=require('../../SplineGeometryGraphVisualModel');
 const conflict=require('../../SplineGeometryGraphConflict');
+const {formatGeometryGraphProfile}=require('../../SplineGeometryGraphProfileReport');
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
@@ -40,6 +41,10 @@ const template=base.template+[
  '<div class="spl-vg-stage" role="group" aria-label="Geometry graph nodes"></div>',
  '</div>',
  '<div class="spl-vg-properties" aria-live="polite">Select a node to edit its parameters.</div>',
+ '<div class="spl-vg-toolbar">',
+ '<button type="button" class="spl-btn spl-vg-profile">Profile CPU · Cold / Warm</button>',
+ '</div>',
+ '<pre class="spl-vg-profile-report" role="status" aria-live="polite">Run Profile CPU to measure individual graph nodes.</pre>',
  '<div class="spl-vg-status" role="status">Ready.</div>',
  '</details>'
 ].join('');
@@ -68,7 +73,8 @@ const style=base.style+[
 '.spl-vg-params input[type=checkbox]{align-self:flex-start}',
 '.spl-vg-status{font-size:11px;white-space:pre-wrap;color:#9ad6c9;min-height:15px}',
 '.spl-vg-status.error{color:#f7b2a9}',
-'.spl-vg-conflict{font-size:11px;white-space:pre-wrap;color:#eacb97;margin:6px 0}'
+'.spl-vg-conflict{font-size:11px;white-space:pre-wrap;color:#eacb97;margin:6px 0}',
+'.spl-vg-profile-report{font:11px/1.6 ui-monospace,monospace;white-space:pre;overflow:auto;max-height:440px;margin:6px 0;padding:7px;border:1px solid #3b576b;border-radius:6px;color:#a9d8db;background:rgba(14,26,36,.5)}'
 ].join('\n');
 const $={...base.$,
   vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',
@@ -78,6 +84,7 @@ const $={...base.$,
   vgReviewShared:'.spl-vg-review-shared',
   vgRebaseShared:'.spl-vg-rebase-shared',
   vgConflict:'.spl-vg-conflict',
+  vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
@@ -122,6 +129,12 @@ function render(panel){
   const reviewText=summarizeReview(panel);
   const sharedLocked=!!panel._vgShared&&!draft;
   const busy=!!panel._vgSharedBusy;
+  if(panel.$?.vgProfile)
+    panel.$.vgProfile.disabled=busy||!!draft||!!panel._vgProfileBusy;
+  if(panel.$?.vgProfileReport)
+    panel.$.vgProfileReport.textContent=panel._vgProfile?
+      formatGeometryGraphProfile(panel._vgProfile):
+      'Run Profile CPU to measure individual graph nodes. No Scene or JsonAsset changes.';
   if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=draft?
     'Shared JsonAsset · UNSAVED DRAFT. Graph edits are temporary; node layout stays locked.':
     panel._vgShared?
@@ -201,6 +214,7 @@ function commitProperty(panel,key,nextValue){
     if(key!=='graphJson')throw Error('Shared asset layout is component-local and locked during a shared edit.');
     if(panel._vgSharedBusy)throw Error('Shared asset save is pending.');
     if(nextValue===panel._vgSharedDraft.graphJson)return false;
+    panel._vgProfile=null;panel._vgProfileRequestToken++;
     panel._vgSharedDraft.graphJson=nextValue;
     panel._vgGraphJson=nextValue;
     return true;
@@ -214,6 +228,7 @@ function commitProperty(panel,key,nextValue){
      typeof prop.dispatch!=='function')
     throw Error('Missing Cocos Inspector dump for '+key+'.');
   if(nextValue===dump.value)return false;
+  panel._vgProfile=null;panel._vgProfileRequestToken++;
   const prior=dump.value;
   try{
     prop.dump=dump;
@@ -301,6 +316,13 @@ const inspector={
     const shared=dump?.value?.useGraphAsset?.value===true;
     const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
+    const rendererOutputId=dump?.value?.outputId?.value??'';
+    if(changedShared||(!shared&&this._vgGraphJson!==graphJson)||
+       this._vgProfileOutputId!==rendererOutputId){
+      this._vgProfile=null;
+      this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
+    }
+    this._vgProfileOutputId=rendererOutputId;
     if(changedShared){
       this._vgSharedDraft=null;
       this._vgSharedReview=null;
@@ -322,6 +344,8 @@ const inspector={
     this._vgRendered=false;this._vgPreviewLayout=null;
     this._vgShared=false;this._vgAssetIdentity=null;this._vgRequestToken=0;
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
+    this._vgProfile=null;this._vgProfileBusy=false;
+    this._vgProfileRequestToken=0;this._vgProfileOutputId='';
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
@@ -340,6 +364,29 @@ const inspector={
         }).catch(error=>status(this,String(error?.message||error),true)));
     }
     this.$?.vgRefresh?.addEventListener('click',()=>void refreshAsset(this));
+    this.$?.vgProfile?.addEventListener('click',()=>void (async()=>{
+      if(this._vgProfileBusy||this._vgSharedBusy||this._vgSharedDraft)return;
+      const token=this._vgProfileRequestToken;
+      let message='',isError=false;
+      this._vgProfileBusy=true;render(this);
+      try{
+        const response=await Editor.Message.request('cocos-splines','profile-geometry-graph');
+        if(token!==this._vgProfileRequestToken)return;
+        if(!response?.ok)throw Error(response?.error||'Unable to profile Geometry Graph.');
+        const formatted=formatGeometryGraphProfile(response.profile);
+        this._vgProfile=response.profile;
+        if(this.$?.vgProfileReport)this.$.vgProfileReport.textContent=formatted;
+        message='Cold / Warm per-node profiling complete. No graph JSON was written.';
+      }catch(error){
+        if(token!==this._vgProfileRequestToken)return;
+        this._vgProfile=null;
+        message=String(error?.message||error);isError=true;
+      }finally{
+        this._vgProfileBusy=false;render(this);
+        if(token===this._vgProfileRequestToken&&message)
+          status(this,message,isError);
+      }
+    })());
     this.$?.vgEditShared?.addEventListener('click',()=>void (async()=>{
       if(!this._vgShared||this._vgSharedDraft||this._vgSharedBusy)return;
       const token=this._vgRequestToken;
@@ -588,6 +635,8 @@ const inspector={
     this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
     this._vgShared=false;this._vgAssetIdentity=null;
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
+    this._vgProfile=null;this._vgProfileBusy=false;
+    this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
 };
