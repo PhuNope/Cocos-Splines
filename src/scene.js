@@ -452,7 +452,8 @@ function queryGeometryGraphAsset(uuid){
         if(typeof graphJson!=='string'||graphJson.length>16384)
             throw Error('Invalid or oversized Geometry Graph content.');
         return {ok:true,componentIndex,graphJson,localGraphJson:comp.graphJson,assetMode:!!comp.useGraphAsset,
-            assetName:comp.graphAsset?.name||null};
+            assetName:comp.graphAsset?.name||null,
+            assetUuid:typeof comp.graphAsset?.uuid==='string'?comp.graphAsset.uuid:null};
     }catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
 function rebuildGeometryGraph(uuid){
