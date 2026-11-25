@@ -80,3 +80,23 @@ Inspector Geometry Graph có thêm **Edit Shared Asset… → Save Shared JSON�
 - [ ] Phase 4.2c2: cải thiện UX xung đột và bố cục graph; Phase 4.3: node Tube/Extrude/Profile/Deform, multi-output, profiling.
 
 Chỉ push `v2`; không tạo tag hoặc release cho đến khi được yêu cầu.
+
+## Phase 4.2c2 — Review / Rebase Shared Graph conflicts (2026-11-25, preview)
+
+Khi đang **Edit Shared Asset…**, có hai nút mới:
+
+- **Compare with Source**: đọc lại file JSON bằng AssetDB UUID mapping và SHA-256 trong extension process, không động vào bản nháp. Hiển thị danh sách những thay đổi **trên bản nháp** so với lúc mở, những thay đổi **trên source** so với lúc mở, trường xung đột và trạng thái cấu trúc.
+- **Rebase Safe Changes**: chỉ sáng nếu source thực sự đổi checksum, cùng topology (cùng node IDs, type, input connections và output), không có tham số bị sửa thành **hai giá trị khác nhau**. Lấy Graph mới nhất làm nền rồi chép các thay đổi tham số từ draft; giữ nguyên dữ liệu source còn lại. Đây chỉ là bản nháp mới, **vẫn phải bấm Save Shared JSON và xác nhận** để ghi file.
+
+Nếu thay đổi topology hoặc cùng tham số nhưng khác giá trị, rebase bị khóa. Bản nháp vẫn giữ nguyên để người dùng tự so sánh, chỉnh lại hoặc Discard Draft (có chủ ý). Save nhận `{conflict:true}` khi checksum nguồn đã thay đổi và đưa hướng dẫn Compare; **không có nút Force Overwrite**. Cả Compare và Rebase đều không ghi file, Scene property hay snapshot. Sau Rebase, Save vẫn kiểm tra lại UUID/selection/path/sha trước khi ghi.
+
+Regression headless bao phủ param khác nhau/giống nhau, xung đột cùng trường, thay đổi topology, draft/Scene immutability, quá trình Save → Compare → Rebase → Save và Discard. Kiểm thử native trong Cocos Creator 3.8.8 vẫn là mục mở, đặc biệt reimport đúng JsonAsset sau khi cập nhật và đồng bộ nhiều renderer.
+
+- [x] So sánh 3-way theo field/node và nhận diện thay đổi topology.
+- [x] Chỉ tự rebase thay đổi param tương thích; không tự động merge topology.
+- [x] Giữ nguyên draft trên conflict; no-op khi so sánh; không ghi Scene/Asset khi Rebase.
+- [x] Đăng ký CI regression cho Pure Model và Inspector.
+- [ ] Native Editor 3.8.8 acceptance và UX xử lý xung đột topology phức tạp.
+- [ ] Phase 4.3: Tube, Extrude/Profile, Mesh Deform, Multi-output và profiling.
+
+Không gắn tag hoặc tạo release, chỉ cập nhật nhánh `v2`.
