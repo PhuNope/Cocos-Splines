@@ -125,3 +125,53 @@ Bổ sung node **`tube` (`path` → `mesh`)** làm generator thay thế Ribbon t
 - [ ] 1.025 frames / radialSegments=32 và closed knots trên Creator thật; CI chỉ kiểm thử headless.
 
 Chỉ push nhánh `v2`, **không gắn tag hoặc phát hành Release**.
+
+## Phase 4.3b — Profile Extrude Generator (2026-11-25, preview)
+
+Bổ sung node **`extrude` (`path` → `mesh`)** trong typed Geometry Graph V1. Các Node `ribbon`/`tube` cũ và `DEFAULT_GEOMETRY_GRAPH` không đổi; không migration Scene/Prefab/JsonAsset.
+
+### Profile dựng sẵn
+
+`profileShape` là enum nguyên `0..2`:
+
+| Giá trị | Profile | Hình học |
+| --- | --- | --- |
+| `0` | Rectangle | Thanh hộp chữ nhật, bốn góc cạnh sắc |
+| `1` | Beveled | Thanh hộp vát bốn góc, tám cạnh |
+| `2` | U Channel | Rãnh chữ U lõm, tám cạnh, cap theo diện tích thật (không bịt kín phần rãnh) |
+
+Node hỗ trợ `width` và `height` riêng biệt (0.05–100, mặc định 1), `uvMetersPerRepeat` (0.01–10000, mặc định 5), `capEnds` (Boolean, mặc định false). `width` node upstream nhân **đều cả hai kích thước** của profile để bảo toàn tỉ lệ hình dạng, tương tự nhân radius của Tube.
+
+Geometry: mặt cạnh có normal riêng (hard edges), UV U theo phần chu vi tương đối của mặt cắt, V theo khoảng cách dọc spline. Các nắp đầu sinh vertex/normal/UV riêng để không làm mềm cạnh; với profile U Channel dùng **ear clipping** thay vì triangle fan để tránh tự lấp rãnh. Closed spline không tạo nắp, dù `capEnds=true`. Winding theo determinant của frame local, bao gồm negative/mirrored transform; frame không hợp lệ hoặc đổi handedness đột ngột bị chặn.
+
+### Sử dụng Inspector
+
+Trong SplineGeometryGraphRenderer → Visual Geometry Graph, chọn **Use Extrude Profile** để đổi generator cuối từ Ribbon hoặc Tube. Chọn node `extrude` để chỉnh `width`, `height`, `profileShape`, UV, cap. Nút **Switch to Tube** vẫn đổi Extrude sang Tube (và Tube↔Ribbon như trước). Nếu muốn quay từ Extrude về Ribbon, chuyển qua Tube rồi bấm Switch to Ribbon. Các tham số không dùng chung giữa hai kiểu generator được reset; `uvMetersPerRepeat`/`capEnds` và `width` khi tương thích được giữ.
+
+Có thể thêm `offset`, `width` trước Extrude; các graph có profile được validate giống graph Ribbon/Tube. Với Shared JsonAsset, chỉ chỉnh khi **Edit Shared Asset** mở bản nháp; Save vẫn cần xác nhận/checksum conflict, không có ghi source ngầm.
+
+### Graph ví dụ
+
+```json
+{
+  "version": 1,
+  "nodes": [
+    {"id": "source", "type": "spline"},
+    {"id": "extrude", "type": "extrude", "input": "source", "width": 1.5,
+     "height": 1, "profileShape": 2, "uvMetersPerRepeat": 4, "capEnds": true},
+    {"id": "output", "type": "output", "input": "extrude"}
+  ],
+  "output": "output"
+}
+```
+
+Cài bằng **Install Examples** sẽ có `assets/CocosSplinesExamples/GeometryGraph/BasicProfileExtrudeGraph.json`, không ghi đè bản đã chỉnh và không chép UUID `.meta` từ extension.
+
+### Phạm vi kiểm thử và hạn chế
+
+- [x] Regression headless: triangle winding, cap concave U area, hard-edge normal, bevel, reflected/anisotropic frames, open/closed, bounds, source-frame immutability, per-node cache, local Inspector change-dump và Shared draft.
+- [ ] Native Cocos Creator 3.8.8: material culling/UV, nonuniform/negative parent scale, open/closed Spline, roll/tangent, Undo/Prefab override và refresh Shared JsonAsset; đo hiệu năng tại 1025 frames.
+- [ ] Custom authored profile points/holes, bevel tuỳ ý, smoothing groups, hollow extrusion và profile asset editor: **chưa triển khai**, sẽ cần versioned schema/validator riêng.
+- [ ] Mesh Deform generator, Multi-output và profiling theo node: Phase 4.3c trở đi.
+
+Cả source spline, Knot, Mesh asset và vật liệu người dùng đều không được chỉnh sửa bởi generator. Không tạo Collider/NavMesh hoặc hình học Boolean tại giao nhau. Chỉ nhánh `v2`, không tag / GitHub Release.
