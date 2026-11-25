@@ -10,7 +10,7 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const label=(id,key)=>id+'.'+key;
 const topology=g=>JSON.stringify({
   output:g.output,
-  nodes:g.nodes.map(n=>({id:n.id,type:n.type,input:n.input??null}))
+  nodes:g.nodes.map(n=>({id:n.id,type:n.type,input:n.input??null,meshInput:n.meshInput??null}))
     .sort((a,b)=>a.id.localeCompare(b.id)),
 });
 function changeList(before,after){
@@ -24,6 +24,7 @@ function changeList(before,after){
     if(!right){paths.push(id+' (removed)');continue;}
     if(left.type!==right.type)paths.push(label(id,'type'));
     if(left.input!==right.input)paths.push(label(id,'input'));
+    if(left.meshInput!==right.meshInput)paths.push(label(id,'meshInput'));
     for(const key of TYPES[left.type]?.params||[]){
       if(!same(left[key],right[key]))paths.push(label(id,key));
     }
