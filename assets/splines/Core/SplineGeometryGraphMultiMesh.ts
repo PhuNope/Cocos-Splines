@@ -1,0 +1,154 @@
+/** Phase 4.3g2 — one Cocos Mesh with one material primitive per graph output.
+ * Cocos Creator v3.8.8 Mesh.reset({struct,data}) is used instead of
+ * utils.createMesh(), which always creates just one primitive.
+ *
+ * No asset mutation, scene node creation, or material allocation occurs here.
+ * The caller owns the returned transient Mesh and commits it atomically.
+ */
+import {Mesh,Vec3,gfx} from 'cc';
+import {RoadGeometry} from './SplineRoadMath';
+
+export interface GraphMultiMeshChunk {
+    outputId:string;
+    geometry:Readonly<RoadGeometry>;
+}
+export interface GraphMultiMeshResult {
+    mesh:Mesh;
+    outputIds:string[];
+    vertexCount:number;
+    indexCount:number;
+}
+const MAX_VERTICES=65536;
+const MAX_INDICES=393216;
+const MAX_BYTES=8*1024*1024;
+const VERTEX_STRIDE=32; // position XYZ, normal XYZ, UV
+const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
+const align4=(n:number)=>(n+3)&~3;
+const safeId=(id:unknown):id is string=>
+    typeof id==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(id);
+
+/** Validate every branch before allocating even a temporary Mesh.
+ * Prevents huge multi-branch outputs from bypassing per-node geometry caps.
+ */
+export function checkGraphMultiMesh(chunks:ReadonlyArray<GraphMultiMeshChunk>):{
+    vertexCount:number;indexCount:number;
+}{
+    if(!Array.isArray(chunks)||chunks.length<2||chunks.length>4)
+        throw Error('Multi-output Mesh requires 2–4 output branches.');
+    let vertexCount=0,indexCount=0;
+    const ids=new Set<string>();
+    for(const chunk of chunks){
+        if(!chunk||!safeId(chunk.outputId)||ids.has(chunk.outputId))
+            throw Error('Multi-output Mesh requires unique valid Output Node IDs.');
+        ids.add(chunk.outputId);
+        const g=chunk.geometry;
+        if(!g||!Array.isArray(g.positions)||!Array.isArray(g.indices)||
+           !Array.isArray(g.normals)||!Array.isArray(g.uvs))
+            throw Error('Multi-output Mesh geometry is missing typed arrays.');
+        const count=g.positions.length/3;
+        if(!Number.isInteger(count)||count<3||count>MAX_VERTICES||
+           g.normals.length!==g.positions.length||
+           g.uvs.length!==count*2||
+           g.indices.length<3||g.indices.length%3!==0||
+           g.positions.some(n=>!finite(n)||Math.abs(n)>1e7)||
+           g.normals.some(n=>!finite(n))||
+           g.uvs.some(n=>!finite(n))||
+           g.indices.some(n=>!Number.isInteger(n)||n<0||n>=count))
+            throw Error('Multi-output Mesh branch contains invalid geometry.');
+        vertexCount+=count;
+        indexCount+=g.indices.length;
+        if(vertexCount>MAX_VERTICES||indexCount>MAX_INDICES)
+            throw Error('Multi-output Mesh combined geometry exceeds 65536 vertices / 393216 indices.');
+    }
+    if(vertexCount*VERTEX_STRIDE+indexCount*2+chunks.length*4>MAX_BYTES)
+        throw Error('Multi-output Mesh combined buffers exceed 8 MiB.');
+    return {vertexCount,indexCount};
+}
+
+/** This helper can be headless-tested by injecting a minimal Mesh constructor.
+ * Production always calls it with the Cocos Mesh class.
+ */
+export function createGraphMultiOutputMesh(
+    chunks:ReadonlyArray<GraphMultiMeshChunk>,MeshCtor:typeof Mesh=Mesh,
+):GraphMultiMeshResult{
+    const counts=checkGraphMultiMesh(chunks);
+    const vertexBundles:Mesh.IVertexBundle[]=[];
+    const primitives:Mesh.ISubMesh[]=[];
+    const segments:{vertexOffset:number;indexOffset:number}[]=[];
+    let offset=0;
+    const attrs=[
+        new gfx.Attribute(gfx.AttributeName.ATTR_POSITION,gfx.Format.RGB32F),
+        new gfx.Attribute(gfx.AttributeName.ATTR_NORMAL,gfx.Format.RGB32F),
+        new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD,gfx.Format.RG32F),
+    ];
+    for(const {geometry:g} of chunks){
+        offset=align4(offset);
+        const vertexOffset=offset,count=g.positions.length/3;
+        const vertexLength=count*VERTEX_STRIDE;
+        vertexBundles.push({
+            attributes:attrs.map(a=>new gfx.Attribute(a.name,a.format)),
+            view:{offset:vertexOffset,length:vertexLength,
+                count,stride:VERTEX_STRIDE},
+        });
+        offset+=vertexLength;
+        offset=align4(offset);
+        const indexOffset=offset;
+        const indexLength=g.indices.length*2;
+        primitives.push({
+            vertexBundelIndices:[vertexBundles.length-1],
+            primitiveMode:gfx.PrimitiveMode.TRIANGLE_LIST,
+            indexView:{offset:indexOffset,length:indexLength,
+                count:g.indices.length,stride:2},
+        });
+        segments.push({vertexOffset,indexOffset});
+        offset+=indexLength;
+    }
+    if(offset>MAX_BYTES)throw Error('Multi-output Mesh combined buffers exceed 8 MiB.');
+    const bytes=new Uint8Array(offset);
+    const view=new DataView(bytes.buffer);
+    const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
+    for(let chunkIndex=0;chunkIndex<chunks.length;chunkIndex++){
+        const g=chunks[chunkIndex].geometry;
+        const count=g.positions.length/3;
+        const {vertexOffset,indexOffset}=segments[chunkIndex];
+        for(let i=0;i<count;i++){
+            const at=vertexOffset+i*VERTEX_STRIDE;
+            for(let k=0;k<3;k++){
+                const position=g.positions[i*3+k];
+                min[k]=Math.min(min[k],position);
+                max[k]=Math.max(max[k],position);
+                view.setFloat32(at+k*4,position,true);
+                view.setFloat32(at+12+k*4,g.normals[i*3+k],true);
+            }
+            view.setFloat32(at+24,g.uvs[i*2],true);
+            view.setFloat32(at+28,g.uvs[i*2+1],true);
+        }
+        for(let i=0;i<g.indices.length;i++){
+            view.setUint16(indexOffset+i*2,g.indices[i],true);
+        }
+    }
+    const struct:Mesh.IStruct={
+        vertexBundles,primitives,
+        minPosition:new Vec3(min[0],min[1],min[2]),
+        maxPosition:new Vec3(max[0],max[1],max[2]),
+    };
+    const mesh=new MeshCtor();
+    try{mesh.reset({struct,data:bytes});}
+    catch(error){mesh.destroy();throw error;}
+    return {mesh,outputIds:chunks.map(c=>c.outputId),
+        vertexCount:counts.vertexCount,indexCount:counts.indexCount};
+}
+
+/** Single wireframe spanning every output. Does not merge material primitives. */
+export function graphMultiMeshGizmoGeometry(
+    chunks:ReadonlyArray<GraphMultiMeshChunk>,
+):{positions:number[];indices:number[]}{
+    checkGraphMultiMesh(chunks);
+    const positions:number[]=[],indices:number[]=[];
+    for(const {geometry:g} of chunks){
+        const base=positions.length/3;
+        positions.push(...g.positions);
+        for(const idx of g.indices)indices.push(idx+base);
+    }
+    return {positions,indices};
+}
