@@ -9,6 +9,7 @@
  */
 const TYPES=Object.freeze({
   spline:{input:null,output:'path',params:[]},
+  meshAsset:{input:null,output:'meshSource',params:[]},
   offset:{input:'path',output:'path',params:['right','up']},
   width:{input:'path',output:'path',params:['multiplier']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
@@ -25,7 +26,7 @@ const LIMITS=Object.freeze({
   height:[.05,100,1],profileShape:[0,2,0],
   deformShape:[0,1,0],segments:[2,64,12],repeats:[1,16,1],
 });
-const NODE_KEYS=new Set(['id','type','input','right','up','multiplier','width',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','deformShape','segments','repeats']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -40,15 +41,17 @@ function validateGraph(graph) {
     Object.keys(graph).some(k=>!['version','nodes','output'].includes(k)))
     throw Error('Graph V1 requires 3–32 nodes, version=1 and a valid output.');
   const map=new Map();
-  let sources=0,outputs=0;
+  let sources=0,outputs=0,meshAssets=0;
   for(const node of graph.nodes){
     if(!object(node)||!safeId(node.id)||!Object.hasOwn(TYPES,node.type)||
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
     const info=TYPES[node.type];
-    const allowed=new Set(['id','type',...(info.input?['input']:[]),...info.params]);
+    const allowed=new Set(['id','type',...(info.input?['input']:[]),
+      ...(node.type==='meshDeform'?['meshInput']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
-    if(info.input===null) sources++;
+    if(node.type==='spline')sources++;
+    if(node.type==='meshAsset')meshAssets++;
     if(node.type==='output')outputs++;
     for(const key of info.params){
       const value=node[key];
@@ -64,18 +67,23 @@ function validateGraph(graph) {
     }
     map.set(node.id,node);
   }
-  if(sources!==1||(graph.version===1&&outputs!==1)||
+  if(sources!==1||meshAssets>1||(graph.version===1&&outputs!==1)||
      (graph.version===2&&(outputs<2||outputs>4))||
      map.get(graph.output)?.type!=='output')
     throw Error('Graph requires one Spline and one v1 Output or 2–4 v2 Outputs.');
   for(const node of map.values()){
     const info=TYPES[node.type];
-    if(info.input===null){if(node.input!==undefined)throw Error('Spline source must have no input.');}
+    if(info.input===null){if(node.input!==undefined||node.meshInput!==undefined)
+      throw Error('Graph source node must have no input.');}
     else{
       if(!safeId(node.input)||!map.has(node.input))
         throw Error('Missing input for node '+node.id+'.');
       if(TYPES[map.get(node.input).type].output!==info.input)
         throw Error('Port type mismatch at '+node.id+'.');
+    }
+    if(node.type==='meshDeform'&&node.meshInput!==undefined){
+      if(!safeId(node.meshInput)||map.get(node.meshInput)?.type!=='meshAsset')
+        throw Error('meshDeform meshInput must reference a typed meshAsset node.');
     }
   }
   const state=new Map(),ordered=[];
@@ -86,6 +94,7 @@ function validateGraph(graph) {
     state.set(id,1);
     const node=map.get(id);
     if(node.input)visit(node.input);
+    if(node.meshInput)visit(node.meshInput);
     state.set(id,2);ordered.push(node);
   }
   visit(graph.output);
@@ -113,7 +122,27 @@ function applyGraphEdit(json,action,details={}) {
     if(i>100)throw Error('Graph node ID limit reached.');
     return id;
   };
-  if(action==='add-output'){
+  if(action==='attach-mesh-asset'){
+    const target=find(details.id);
+    if(!target||target.type!=='meshDeform')
+      throw Error('Select a Mesh Deform node to attach a Mesh Asset.');
+    if(target.meshInput)return json;
+    let source=next.nodes.find(n=>n.type==='meshAsset');
+    if(!source){
+      if(next.nodes.length>=32)throw Error('Graph node limit reached.');
+      source={id:unique('meshAsset'),type:'meshAsset'};
+      next.nodes.push(source);
+    }
+    target.meshInput=source.id;
+  }else if(action==='detach-mesh-asset'){
+    const target=find(details.id);
+    if(!target||target.type!=='meshDeform'||!target.meshInput)
+      throw Error('Select a Mesh Deform node with a Mesh Asset input.');
+    const sourceId=target.meshInput;
+    delete target.meshInput;
+    if(!next.nodes.some(n=>n.meshInput===sourceId))
+      next.nodes=next.nodes.filter(n=>n.id!==sourceId);
+  }else if(action==='add-output'){
     const existing=next.nodes.filter(n=>n.type==='output');
     if(existing.length>=4||next.nodes.length>30)
       throw Error('Multi-output Graph requires at most four outputs and 32 nodes.');
@@ -144,6 +173,7 @@ function applyGraphEdit(json,action,details={}) {
       if(!node)throw Error('Output branch dependency is missing.');
       live.add(id);
       if(node.input)mark(node.input);
+      if(node.meshInput)mark(node.meshInput);
     };
     for(const node of next.nodes)if(node.type==='output')mark(node.id);
     next.nodes=next.nodes.filter(n=>live.has(n.id));
@@ -176,6 +206,11 @@ function applyGraphEdit(json,action,details={}) {
     const target=find(details.target),source=find(details.source);
     if(!target||!source||!TYPES[target.type].input)
       throw Error('Select a valid input and output socket.');
+    if(TYPES[source.type].output==='meshSource'){
+      if(target.type!=='meshDeform')
+        throw Error('Mesh Asset may connect only to meshDeform meshInput.');
+      target.meshInput=source.id;
+    }else{
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
     if(target.id===source.id)throw Error('Cannot connect a node to itself.');
@@ -190,6 +225,7 @@ function applyGraphEdit(json,action,details={}) {
       source.input=target.input;
       target.input=source.id;
     }else target.input=source.id;
+    }
   }else if(action==='replace-generator'){
     const kind=details.type;
     if(!['ribbon','tube','extrude','meshDeform'].includes(kind))
@@ -217,6 +253,9 @@ function applyGraphEdit(json,action,details={}) {
     else next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
     if(next.nodes.length>32)throw Error('Graph node limit reached.');
     output.input=name;
+    if(current.type==='meshDeform'&&current.meshInput&&
+       !next.nodes.some(n=>n.meshInput===current.meshInput))
+      next.nodes=next.nodes.filter(n=>n.id!==current.meshInput);
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
     if(!target||!TYPES[target.type].params.includes(key))
@@ -275,12 +314,12 @@ function cleanGraphLayout(layoutJson,graphJson){
 }
 function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
   const {ordered,map}=parseGraph(graphJson),positions=parseLayout(layoutJson,graphJson);
-  const links=ordered.filter(n=>n.input).map(node=>{
-    const from=positions[node.input],to=positions[node.id];
+  const links=ordered.flatMap(n=>[n.input,n.meshInput].filter(Boolean).map(id=>({node:n,fromId:id}))).map(({node,fromId})=>{
+    const from=positions[fromId],to=positions[node.id];
     const sx=from.x+STAGE.cardWidth,sy=from.y+STAGE.cardHeight/2,
       tx=to.x,ty=to.y+STAGE.cardHeight/2;
     const dx=Math.max(28,Math.abs(tx-sx)*.42);
-    return '<path class="spl-vg-wire spl-vg-wire-'+TYPES[map.get(node.input).type].output+
+    return '<path class="spl-vg-wire spl-vg-wire-'+TYPES[map.get(fromId).type].output+
       '" d="M '+sx+' '+sy+' C '+(sx+dx)+' '+sy+' '+(tx-dx)+' '+ty+' '+tx+' '+ty+
       '" fill="none"/>';
   }).join('');
@@ -293,6 +332,7 @@ function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
       '<div class="spl-vg-type">'+escapeHtml(n.type)+'</div>'+
       (info.input?'<button type="button" class="spl-vg-socket in '+info.input+
         '" data-socket="in" data-node="'+n.id+'" title="Input '+info.input+'">◀ '+info.input+'</button>':'')+
+      (n.type==='meshDeform'?'<button type="button" class="spl-vg-socket mesh-in meshSource" data-socket="mesh-in" data-node="'+n.id+'" title="Imported Mesh Asset input">◀ asset</button>':'')+
       '<button type="button" class="spl-vg-socket out '+info.output+
         '" data-socket="out" data-node="'+n.id+'" title="Output '+info.output+'">'+info.output+' ▶</button>'+
       '</div>';
@@ -328,7 +368,11 @@ function renderNodeParameters(graphJson,id){
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
-    (rows?'<div class="spl-vg-params">'+rows+'</div>':'<div class="spl-vg-note">No editable properties.</div>');
+    (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
+    (rows?'<div class="spl-vg-params">'+rows+'</div>':
+      '<div class="spl-vg-note">'+(n.type==='meshAsset'?
+       'Source Mesh is assigned on each Renderer (native Mesh Asset field).':
+       'No editable properties.')+'</div>');
 }
 module.exports={TYPES,LIMITS,STAGE,parseGraph,validateGraph,applyGraphEdit,
   parseLayout,moveGraphNode,cleanGraphLayout,renderGraphCanvas,renderNodeParameters};
