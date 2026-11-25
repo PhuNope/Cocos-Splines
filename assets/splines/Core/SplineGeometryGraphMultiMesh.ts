@@ -7,6 +7,7 @@
  */
 import {Mesh,Vec3,gfx} from 'cc';
 import {RoadGeometry} from './SplineRoadMath';
+import type {GeometryGraphPlan,GeometryGraphNode} from './SplineGeometryGraph';
 
 export interface GraphMultiMeshChunk {
     outputId:string;
@@ -43,6 +44,34 @@ export function resolveGraphOutputOrder(ids:ReadonlyArray<string>,order:string):
        ordered.some(id=>!sorted.includes(id)))
         throw Error('Output Order must list every Output Node ID exactly once.');
     return ordered;
+}
+
+/** Trace imported meshAsset dependencies without evaluating the graph.
+ * Procedural outputs have no imported material (null). All IDs are from a
+ * compiled, typechecked plan; an ambiguous dependency fails closed.
+ */
+export function graphOutputMeshSourceSlots(
+    plan:GeometryGraphPlan,orderedIds:ReadonlyArray<string>,
+):Array<number|null>{
+    const map=new Map<string,GeometryGraphNode>(plan.nodes.map(node=>[node.id,node]));
+    return orderedIds.map(id=>{
+        if(map.get(id)?.type!=='output')
+            throw Error('Imported Material binding requires a valid Output Node.');
+        const visited=new Set<string>(),slots=new Set<number>();
+        const visit=(nodeId:string):void=>{
+            if(visited.has(nodeId))return;
+            visited.add(nodeId);
+            const node=map.get(nodeId);
+            if(!node)throw Error('Imported Material graph dependency is missing.');
+            if(node.type==='meshAsset')slots.add(node.slot??0);
+            if(node.input)visit(node.input);
+            if(node.meshInput)visit(node.meshInput);
+        };
+        visit(id);
+        if(slots.size>1)throw Error(
+            'Imported Material cannot infer a source from multiple Mesh Assets on one output.');
+        return slots.size===1?[...slots][0]:null;
+    });
 }
 
 /** Validate every branch before allocating even a temporary Mesh.

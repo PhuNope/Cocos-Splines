@@ -27,6 +27,24 @@ try{
   const {createGraphMultiOutputMesh,checkGraphMultiMesh,
    graphMultiMeshGizmoGeometry}=
     require(dir+'/Core/SplineGeometryGraphMultiMesh.js');
+  const {graphOutputMeshSourceSlots}=require(
+    dir+'/Core/SplineGeometryGraphMultiMesh.js');
+  const importPlan={nodes:[
+   {id:'spline',type:'spline'},
+   {id:'assetA',type:'meshAsset',slot:0},
+   {id:'assetB',type:'meshAsset',slot:1},
+   {id:'path',type:'offset',input:'spline'},
+   {id:'deformA',type:'meshDeform',input:'path',meshInput:'assetA'},
+   {id:'deformB',type:'meshDeform',input:'path',meshInput:'assetB'},
+   {id:'ribbon',type:'ribbon',input:'path'},
+   {id:'outputA',type:'output',input:'deformA'},
+   {id:'outputB',type:'output',input:'deformB'},
+   {id:'outputRibbon',type:'output',input:'ribbon'},
+  ],output:'outputA',version:2,outputs:['outputA','outputB','outputRibbon']};
+  assert.deepEqual(graphOutputMeshSourceSlots(importPlan,
+    ['outputB','outputRibbon','outputA']),[1,null,0],
+   'Imported Material sources follow graph dependencies, not material order');
+  assert.throws(()=>graphOutputMeshSourceSlots(importPlan,['missing']),/Output Node/);
   const road={positions:[0,0,0,2,0,0,0,0,2,2,0,2],
    normals:[0,1,0,0,1,0,0,1,0,0,1,0],
    uvs:[0,0,1,0,0,1,1,1],indices:[0,2,1,1,2,3],

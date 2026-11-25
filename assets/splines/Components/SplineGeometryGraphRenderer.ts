@@ -8,7 +8,7 @@ import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGr
     from '../Core/SplineGeometryGraph';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
     from '../Core/SplineGraphMeshAssetReader';
-import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder}
+import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder,graphOutputMeshSourceSlots}
     from '../Core/SplineGeometryGraphMultiMesh';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
@@ -73,6 +73,17 @@ export class SplineGeometryGraphRenderer extends Component {
     sourceSubMeshB=0;
     @property({min:0,max:3,step:1,tooltip:'Source Mesh C: imported submesh index 0–3. Must exist in the assigned Mesh.'})
     sourceSubMeshC=0;
+    /** Imported FBX/glTF Materials are on the model MeshRenderer, not the
+     * Mesh geometry asset. These are read-only source renderer references.
+     */
+    @property({tooltip:'Render All Outputs only: read matching submesh Materials from imported model MeshRenderer(s). Manual Material A/B/C/D overrides take precedence.'})
+    autoBindImportedMaterials=false;
+    @property({type:MeshRenderer,tooltip:'Mesh slot A: imported model MeshRenderer using the SAME Source Mesh A; reads Source Submesh A material.'})
+    materialSourceRenderer:MeshRenderer|null=null;
+    @property({type:MeshRenderer,tooltip:'Mesh slot B: imported model MeshRenderer using the SAME Source Mesh B; reads Source Submesh B material.'})
+    materialSourceRendererB:MeshRenderer|null=null;
+    @property({type:MeshRenderer,tooltip:'Mesh slot C: imported model MeshRenderer using the SAME Source Mesh C; reads Source Submesh C material.'})
+    materialSourceRendererC:MeshRenderer|null=null;
     /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON
      * changes dependent renderers even when the asset UUID stays the same.
@@ -107,7 +118,9 @@ export class SplineGeometryGraphRenderer extends Component {
     private _gizmo:MeshGizmoLines|null=null;
     private _fallback:Material|null=null;
     private _boundMaterials:(Material|null)[]=[];
+    private _lastMaterialWarning='';
     private _subMeshCount=1;
+    private _autoSourceSlots:(number|null)[]=[];
     private _renderedOutputIds:string[]=[];
     private _revision='';
     private _lastAttempt='';
@@ -173,6 +186,36 @@ export class SplineGeometryGraphRenderer extends Component {
         return slot===0?this.sourceSubMesh:
             slot===1?this.sourceSubMeshB:this.sourceSubMeshC;
     }
+    private sourceMaterialRenderer(slot:number):MeshRenderer|null{
+        return slot===0?this.materialSourceRenderer:
+            slot===1?this.materialSourceRendererB:this.materialSourceRendererC;
+    }
+    /** Resolve ALL imported materials before writing any output slot. Missing
+     * or mismatched FBX model references never partially change the renderer.
+     */
+    private importedMaterials(
+        slots:ReadonlyArray<number|null>,overrides:ReadonlyArray<Material|null>,
+        outputRenderer:MeshRenderer,
+    ):(Material|null)[]{
+        if(!this.renderAllOutputs||!this.autoBindImportedMaterials)
+            return slots.map(()=>null);
+        return slots.map((slot,index)=>{
+            if(slot===null||overrides[index])return null;
+            const source=this.sourceMaterialRenderer(slot);
+            if(!source||source===outputRenderer)
+                throw Error('Imported Material Source Renderer '+String(slot)+
+                    ' must reference a separate FBX/glTF model MeshRenderer.');
+            if(!this.slotMesh(slot)||source.mesh!==this.slotMesh(slot))
+                throw Error('Imported Material Source Renderer '+String(slot)+
+                    ' Mesh does not match Source Mesh slot.');
+            const submesh=this.slotSubMesh(slot);
+            const material=source.getSharedMaterial(submesh);
+            if(!material)
+                throw Error('Imported Material Source Renderer '+String(slot)+
+                    ' is missing Material for Source Submesh '+String(submesh)+'.');
+            return material;
+        });
+    }
     private signature():string {
         const json=this.activeGraphJson();
         const slots=json.includes('"meshAsset"')?
@@ -180,7 +223,9 @@ export class SplineGeometryGraphRenderer extends Component {
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
         return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
-            this.renderAllOutputs?this.outputOrder:null,assets,this.gizmoEdgeLimit]);
+            this.renderAllOutputs?this.outputOrder:null,
+            this.renderAllOutputs?this.autoBindImportedMaterials:null,
+            assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -200,9 +245,10 @@ export class SplineGeometryGraphRenderer extends Component {
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
         const overrides=[this.material,this.materialB,this.materialC,this.materialD];
+        const imported=this.importedMaterials(this._autoSourceSlots,overrides,renderer);
         for(let i=0;i<this._subMeshCount;i++){
             const current=renderer.getSharedMaterial(i);
-            const selected=overrides[i];
+            const selected=overrides[i]||imported[i]||null;
             if(selected){
                 if(current!==selected)renderer.setSharedMaterial(selected,i);
                 this._boundMaterials[i]=selected;
@@ -226,7 +272,14 @@ export class SplineGeometryGraphRenderer extends Component {
         }
     }
     update():void {
-        this.syncMaterial(this.getComponent(MeshRenderer));
+        try{this.syncMaterial(this.getComponent(MeshRenderer));}
+        catch(error){
+            // Invalid imported references cannot partially change output slots.
+            if(EDITOR_NOT_IN_PREVIEW&&String(error)!==this._lastMaterialWarning){
+                console.warn('[SplineGeometryGraph] Material binding failed:',error);
+                this._lastMaterialWarning=String(error);
+            }
+        }
         const source=this.source();
         if(!this.rebuildOnChange||!source||source.count<2)return;
         let signature:string;
@@ -282,6 +335,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const context={frames,closed:source.closed,revision:frameRevision,
             ...this.graphMeshContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
+        let nextMaterialSlots:(number|null)[]=[];
         if(this.renderAllOutputs){
             if(plan.version!==2||!plan.outputs||
                 plan.outputs.length<2||plan.outputs.length>4)
@@ -291,6 +345,11 @@ export class SplineGeometryGraphRenderer extends Component {
             // primitive. The resolved per-renderer order defines material slots.
             const outputs=this._runner.evaluateOutputs(plan,context);
             const orderedIds=resolveGraphOutputOrder(plan.outputs,this.outputOrder);
+            nextMaterialSlots=graphOutputMeshSourceSlots(plan,orderedIds);
+            // Validate imported MeshRenderer/Material references BEFORE
+            // creating a transient Mesh or committing a new output.
+            this.importedMaterials(nextMaterialSlots,
+                [this.material,this.materialB,this.materialC,this.materialD],renderer);
             const chunks=orderedIds.map(outputId=>({
                 outputId,geometry:outputs[outputId],
             }));
@@ -311,16 +370,36 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         // A failing renderer assignment must not destroy the previously bound
         // generated Mesh or a manually assigned external Mesh asset.
-        const previousMesh=this._mesh;
-        try{renderer.mesh=mesh;}
-        catch(error){mesh.destroy();throw error;}
+        const previousMesh=this._mesh,previousBoundMesh=renderer.mesh;
+        const oldSlots=this._autoSourceSlots,oldCount=this._subMeshCount;
+        const oldBoundMaterials=this._boundMaterials.slice();
+        const oldRendererMaterials=[0,1,2,3].map(i=>renderer.getSharedMaterial(i));
+        try{
+            renderer.mesh=mesh;
+            this._autoSourceSlots=nextMaterialSlots;
+            this._subMeshCount=outputIds.length;
+            this.syncMaterial(renderer);
+        }catch(error){
+            // Best-effort native rollback; never destroy a previously owned
+            // successful Mesh on a failed Mesh/material commit.
+            try{if(renderer.mesh===mesh)renderer.mesh=previousBoundMesh;}catch{}
+            for(let i=0;i<4;i++){
+                try{
+                    if(renderer.getSharedMaterial(i)!==oldRendererMaterials[i])
+                        renderer.setSharedMaterial(oldRendererMaterials[i],i);
+                }catch{}
+            }
+            this._autoSourceSlots=oldSlots;
+            this._subMeshCount=oldCount;
+            this._boundMaterials=oldBoundMaterials;
+            mesh.destroy();
+            throw error;
+        }
         this._mesh=mesh;this._gizmo=wire;
-        this._subMeshCount=outputIds.length;
         this._renderedOutputIds=outputIds;
         this._frameCache=frames;this._frameRevision=frameRevision;
-        this._revision=signature;this._lastAttempt='';
+        this._revision=signature;this._lastAttempt='';this._lastMaterialWarning='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
-        this.syncMaterial(renderer);
     }
     onDestroy():void{
         const renderer=this.getComponent(MeshRenderer);
@@ -333,7 +412,8 @@ export class SplineGeometryGraphRenderer extends Component {
             }
         }
         this._fallback?.destroy();this._fallback=null;
-        this._boundMaterials=[];this._subMeshCount=1;this._renderedOutputIds=[];
+        this._boundMaterials=[];this._subMeshCount=1;
+        this._autoSourceSlots=[];this._renderedOutputIds=[];this._lastMaterialWarning='';
         this._runner.clear();this._frameCache=null;this._frameRevision='';
     }
 }
