@@ -9,6 +9,8 @@ import {buildProfileExtrudeGeometry,GraphProfileShape} from './SplineProfileExtr
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 
 export const GEOMETRY_GRAPH_VERSION=1;
+/** Multi-output opt-in; v1 scenes/assets remain unchanged. */
+export const GEOMETRY_GRAPH_MULTI_OUTPUT_VERSION=2;
 export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
     version:1,nodes:[
         {id:'source',type:'spline'},
@@ -44,6 +46,10 @@ export interface GeometryGraphContext {
 export interface GeometryGraphPlan {
     nodes:GeometryGraphNode[];
     output:string;
+    /** V2 only. Omitting version preserves V1 plan signatures. */
+    version?:number;
+    /** V2 only; IDs are sorted and all are validated, reachable output nodes. */
+    outputs?:string[];
 }
 interface GraphFrame extends RoadFrame {widthFactor:number}
 interface GraphPath {kind:'path';frames:GraphFrame[];closed:boolean}
@@ -79,9 +85,10 @@ const needInput=(type:GeometryNodeType):GeometryPortType|null=>
  */
 export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     if(!graph||!Array.isArray(graph.nodes)||graph.nodes.length<3||
-       graph.nodes.length>32||graph.version!==1||
+       graph.nodes.length>32||![1,2].includes(graph.version)||
        typeof graph.output!=='string')
-        throw Error('Geometry Graph v1 requires 3–32 nodes and one output ID.');
+        throw Error('Geometry Graph requires version 1 or 2, 3–32 nodes and one default output ID.');
+    const multi=graph.version===GEOMETRY_GRAPH_MULTI_OUTPUT_VERSION;
     if(Object.keys(graph).some(k=>!['version','nodes','output'].includes(k)))
         throw Error('Unsupported Geometry Graph root property.');
     const table=new Map<string,GeometryGraphNode>();
@@ -147,8 +154,9 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         }
         table.set(node.id,{...node});
     }
-    if(sources!==1||outputs!==1||table.get(graph.output)?.type!=='output')
-        throw Error('Geometry Graph must contain exactly one spline source and one selected output.');
+    if(sources!==1||(!multi&&outputs!==1)||
+       (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
+        throw Error('Geometry Graph requires one spline source, one v1 output or 2–4 v2 outputs, and a valid default output.');
     for(const node of table.values()){
         const expected=needInput(node.type);
         if(expected===null){
@@ -172,9 +180,14 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         state.set(id,2);order.push(node);
     };
     visit(graph.output);
+    const outputIds=Array.from(table.values()).filter(n=>n.type==='output')
+        .map(n=>n.id).sort();
+    if(multi)for(const id of outputIds)visit(id);
     if(order.length!==table.size)
         throw Error('Geometry Graph contains disconnected nodes. Connect or remove them.');
-    return {nodes:order,output:graph.output};
+    return multi?
+        {nodes:order,output:graph.output,version:2,outputs:outputIds}:
+        {nodes:order,output:graph.output};
 }
 /** String is stored as a serialized component property: bound size and reject
  * prototype/dynamic fields before processing. No eval or arbitrary callbacks.
@@ -221,11 +234,17 @@ export class GeometryGraphRunner {
     private last:GeometryGraphMetrics={computed:0,reused:0,nodes:0};
     get metrics():GeometryGraphMetrics{return {...this.last};}
     clear():void{this.cache.clear();}
-    evaluate(plan:GeometryGraphPlan,context:GeometryGraphContext):RoadGeometry{
+    evaluate(plan:GeometryGraphPlan,context:GeometryGraphContext,
+        selectedOutputId?:string):RoadGeometry{
         // Compile the supplied plan afresh for defensiveness against JS mutation.
         const checked=compileGeometryGraph({
-            version:1,nodes:plan.nodes,output:plan.output,
+            version:plan.version??1,nodes:plan.nodes,output:plan.output,
         });
+        const requested=selectedOutputId===undefined||selectedOutputId===''?
+            checked.output:selectedOutputId;
+        if(requested!==checked.output&&
+           !(checked.outputs?.includes(requested)))
+            throw Error('Geometry Graph selected Output Node does not exist: '+String(requested));
         validateFrames(context);
         const next=new Map<string,CacheEntry>();
         let computed=0,reused=0;
@@ -319,7 +338,7 @@ export class GeometryGraphRunner {
                 next.set(node.id,{key,version:++this.sequence,value});
                 computed++;
             }
-            const result=next.get(checked.output)?.value;
+            const result=next.get(requested)?.value;
             if(result?.kind!=='mesh')throw Error('Geometry Graph output was not a mesh.');
             this.cache=next;
             this.last={computed,reused,nodes:checked.nodes.length};
@@ -327,5 +346,23 @@ export class GeometryGraphRunner {
         }catch(error){
             this.sequence=seqBase;throw error;
         }
+    }
+    /** Compute and clone every declared output in one bounded, atomic pass.
+     * Renderer consumers can instead request a single output via evaluate().
+     */
+    evaluateOutputs(plan:GeometryGraphPlan,context:GeometryGraphContext):
+        Record<string,RoadGeometry>{
+        const checked=compileGeometryGraph({
+            version:plan.version??1,nodes:plan.nodes,output:plan.output,
+        });
+        this.evaluate(checked,context);
+        const meshes:Record<string,RoadGeometry>={};
+        for(const id of checked.outputs??[checked.output]){
+            const value=this.cache.get(id)?.value;
+            if(value?.kind!=='mesh')
+                throw Error('Geometry Graph output was not a mesh: '+id);
+            meshes[id]=meshCopy(value.geometry);
+        }
+        return meshes;
     }
 }
