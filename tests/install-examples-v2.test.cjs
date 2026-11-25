@@ -77,6 +77,15 @@ try {
  assert.deepEqual(submeshGraph.nodes.filter(n=>n.type==='meshAsset').map(n=>n.slot),[0,1]);
  assert.deepEqual(submeshGraph.nodes.filter(n=>n.type==='output').map(n=>n.id),
    ['outputA','outputB']);
+ const allOutputs=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/MultiMaterialOutputsGraph.json'),'utf8'));
+ assert.equal(allOutputs.version,2);
+ assert.equal(allOutputs.output,'outputRoad');
+ assert.deepEqual(allOutputs.nodes.filter(n=>n.type==='output')
+   .map(n=>n.id).sort(),['outputExtrude','outputRoad','outputTube']);
+ assert.deepEqual(allOutputs.nodes.filter(n=>
+   ['ribbon','tube','extrude'].includes(n.type)).map(n=>n.type),
+   ['ribbon','tube','extrude']);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
