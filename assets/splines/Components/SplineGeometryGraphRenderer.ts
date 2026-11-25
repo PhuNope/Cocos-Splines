@@ -47,6 +47,10 @@ export class SplineGeometryGraphRenderer extends Component {
      */
     @property({type:Mesh,tooltip:'Optional readable Mesh Asset used by meshAsset → meshDeform. Enable Allow Data Access. One submesh, <=4096 vertices.'})
     sourceMesh:Mesh|null=null;
+    @property({type:Mesh,tooltip:'Mesh Asset slot 1, for meshAsset node with Slot B (1).'})
+    sourceMeshB:Mesh|null=null;
+    @property({type:Mesh,tooltip:'Mesh Asset slot 2, for meshAsset node with Slot C (2).'})
+    sourceMeshC:Mesh|null=null;
     /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON
      * changes dependent renderers even when the asset UUID stays the same.
@@ -129,17 +133,31 @@ export class SplineGeometryGraphRenderer extends Component {
             matrix(this.node?.worldMatrix),this.samplesPerCurve,
         ]);
     }
+    private slotMesh(slot:number):Mesh|null{
+        return slot===0?this.sourceMesh:slot===1?this.sourceMeshB:this.sourceMeshC;
+    }
     private signature():string {
         const json=this.activeGraphJson();
-        const assetRevision=json.includes('"meshAsset"')?
-            graphMeshDataFingerprint(this.sourceMesh):'';
-        return JSON.stringify([this.frameSignature(),json,this.outputId,assetRevision,this.gizmoEdgeLimit]);
+        const slots=json.includes('"meshAsset"')?
+            [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
+                .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
+        const assets=slots.map(slot=>[slot,graphMeshDataFingerprint(this.slotMesh(slot))]);
+        return JSON.stringify([this.frameSignature(),json,this.outputId,assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
-        Pick<GeometryGraphContext,'meshSource'|'meshRevision'>{
-        if(!plan.nodes.some(n=>n.type==='meshAsset'))return {};
-        const data=readGraphSourceMeshAsset(this.sourceMesh);
-        return {meshSource:data.geometry,meshRevision:data.revision};
+        Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
+        const slots=[...new Set(plan.nodes.filter(n=>n.type==='meshAsset')
+            .map(n=>n.slot??0))];
+        if(slots.length===0)return {};
+        const meshSources:NonNullable<GeometryGraphContext['meshSources']>[number][]=[];
+        const meshRevisions:(string|undefined)[]=[];
+        for(const slot of slots){
+            const data=readGraphSourceMeshAsset(this.slotMesh(slot));
+            meshSources[slot]=data.geometry;
+            meshRevisions[slot]=data.revision;
+        }
+        return {meshSources,meshRevisions,
+            meshSource:meshSources[0],meshRevision:meshRevisions[0]};
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
