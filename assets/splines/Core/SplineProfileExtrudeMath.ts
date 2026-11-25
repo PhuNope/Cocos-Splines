@@ -11,12 +11,17 @@ import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
 export interface GraphProfilePoint {x:number;y:number}
-/** Optional UV0 side-band mapping. Seam is the starting edge; edge weights
- * redistribute its normalized U span. Absent UV keeps legacy perimeter mapping.
+/** Optional UV0 side-band mapping. Seam starts the U cycle; edge weights
+ * redistribute its perimeter. uMetersPerRepeat opts into meter-based U
+ * (at nominal Width/Height); absent value preserves normalized U=[0,1].
  */
 export interface GraphProfileUV {
     seamEdge?:number;
     edgeWeights?:number[];
+    /** Optional positive authored side U tile length at nominal width/height.
+     * Omitted => one repeat around weighted section circumference.
+     */
+    uMetersPerRepeat?:number;
 }
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
@@ -47,7 +52,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -62,6 +67,13 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
                w<.25||w>4))
             throw Error('Graph Profile Asset UV edgeWeights must contain one value in [0.25,4] per edge.');
         uv.edgeWeights=(raw.edgeWeights as number[]).slice();
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'uMetersPerRepeat')){
+        if(typeof raw.uMetersPerRepeat!=='number'||
+           !Number.isFinite(raw.uMetersPerRepeat)||
+           raw.uMetersPerRepeat<.01||raw.uMetersPerRepeat>10000)
+            throw Error('Graph Profile Asset UV uMetersPerRepeat must be finite in [0.01,10000].');
+        uv.uMetersPerRepeat=raw.uMetersPerRepeat;
     }
     return {format:'cocos-splines/profile',version:1,points,uv};
 }
@@ -199,13 +211,16 @@ export function buildProfileExtrudeGeometry(
     let cumulative=0;
     for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
     const seam=authored?.uv?.seamEdge??0;
+    // Opt-in metric tiling: U grows with actual nominal profile side lengths.
+    // Legacy weighted/seamed UV stays normalized to [0,1] without this field.
+    const uDenominator=authored?.uv?.uMetersPerRepeat??perimeter;
     for(let i=0;i<bands;i++){
         // Side bands use duplicated endpoints, so the discontinuity can move
         // to any selected edge WITHOUT moving geometry or altering cap UV.
         const rotated=i>=seam?prefix[i]-prefix[seam]:
             perimeter-prefix[seam]+prefix[i];
-        const u=rotated/perimeter;
-        uvStart.push(u);uvEnd.push(u+weightedLengths[i]/perimeter);
+        const u=rotated/uDenominator;
+        uvStart.push(u);uvEnd.push(u+weightedLengths[i]/uDenominator);
     }
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};

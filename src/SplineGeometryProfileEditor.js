@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -61,6 +61,12 @@ function parseProfile(value){
      raw.edgeWeights.some(w=>!finite(w)||w<.25||w>4))
    throw Error('Profile UV edgeWeights must be 0.25–4 for each polygon edge.');
   uv.edgeWeights=raw.edgeWeights.slice();
+ }
+ if(Object.prototype.hasOwnProperty.call(raw,'uMetersPerRepeat')){
+  if(!finite(raw.uMetersPerRepeat)||raw.uMetersPerRepeat<.01||
+     raw.uMetersPerRepeat>10000)
+   throw Error('Profile UV uMetersPerRepeat must be within [0.01,10000].');
+  uv.uMetersPerRepeat=raw.uMetersPerRepeat;
  }
  return {format:FORMAT,version:1,points,uv};
 }
@@ -90,6 +96,17 @@ function applyProfileEdit(value,action,params={}){
  };
  if(action==='reset-uv'){
   delete profile.uv;
+ }else if(action==='set-u-meters-per-repeat'){
+  const value=params.meters;
+  if(value===''||!finite(value)||value<.01||value>10000)
+   throw Error('Profile UV side U meters/repeat must be within [0.01,10000].');
+  profile.uv=profile.uv||{};
+  profile.uv.uMetersPerRepeat=round(value);
+ }else if(action==='clear-u-meters-per-repeat'){
+  if(profile.uv){
+   delete profile.uv.uMetersPerRepeat;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
+  }
  }else if(action==='set-uv-seam'){
   profile.uv=profile.uv||{};
   profile.uv.seamEdge=index;
@@ -187,7 +204,17 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
   '<div class="spl-profile-uv-info">UV0 side bands · '+
    (profile.uv===undefined?'Default perimeter mapping':
     'Custom mapping · seam edge #'+((profile.uv.seamEdge??0)+1))+
-   ' · selected edge #'+(selectedEdge===null?'—':selectedEdge+1)+'</div>'+
+   ' · selected edge #'+(selectedEdge===null?'—':selectedEdge+1)+
+   ' · U mode: '+(profile.uv?.uMetersPerRepeat===undefined?
+    'Normalized perimeter':'Nominal meters, repeat every '+profile.uv.uMetersPerRepeat+' m')+
+   '</div>'+
+  '<div class="spl-vg-toolbar">'+
+  '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
+   'min="0.01" max="10000" step="0.1" placeholder="Normalized" value="'+
+   (profile.uv?.uMetersPerRepeat??'')+'"></label>'+
+  '<button type="button" class="spl-btn spl-profile-clear-uv-meters"'+
+   (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
+   '>Use Normalized U</button></div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Edge UV weight <input type="number" class="spl-profile-uv-weight" '+
    'min="0.25" max="4" step="0.05" value="'+
