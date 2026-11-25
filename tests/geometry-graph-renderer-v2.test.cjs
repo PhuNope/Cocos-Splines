@@ -514,6 +514,85 @@ async function run(){
    assert.notEqual(JSON.stringify(out.mesh.data),originalA,
     'Submesh A selector must be independent of submesh B');
    assert.deepEqual(renderer.getGraphMetrics(),{computed:3,reused:4,nodes:7});
+   // Phase 4.3g2b2a: read shared Materials from an imported model
+   // MeshRenderer, selecting the source submesh for each graph branch.
+   renderer.sourceSubMesh=0;renderer.sourceSubMeshB=1;
+   const importedRenderer=new MeshRenderer();
+   importedRenderer.mesh=multiImported;
+   const importedMatA=new Material(),importedMatB=new Material();
+   importedRenderer.setSharedMaterial(importedMatA,0);
+   importedRenderer.setSharedMaterial(importedMatB,1);
+   renderer.materialSourceRenderer=importedRenderer;
+   renderer.materialSourceRendererB=importedRenderer;
+   renderer.autoBindImportedMaterials=true;
+   renderer.renderAllOutputs=true;
+   renderer.outputOrder='outputB,outputA';renderer.outputId='ignored';
+   const beforeMaterialFrames=frameBuilds;
+   renderer.rebuild();
+   const importedCombined=out.mesh;
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputB','outputA']);
+   assert.equal(out.mesh.struct.primitives.length,2);
+   assert.equal(out.getSharedMaterial(0),importedMatB);
+   assert.equal(out.getSharedMaterial(1),importedMatA);
+   assert.equal(frameBuilds,beforeMaterialFrames);
+   assert.equal(importedRenderer.getSharedMaterial(0),importedMatA,
+    'Source FBX model Materials must remain untouched');
+   const importedMatHot=new Material(),metricsBeforeHot=renderer.getGraphMetrics();
+   importedRenderer.setSharedMaterial(importedMatHot,1);
+   renderer.update();
+   assert.equal(out.mesh,importedCombined,'Hot material update never rebuilds geometry');
+   assert.deepEqual(renderer.getGraphMetrics(),metricsBeforeHot);
+   assert.equal(out.getSharedMaterial(0),importedMatHot);
+   assert.equal(out.getSharedMaterial(1),importedMatA);
+   const manualOverride=new Material();
+   renderer.material=manualOverride;
+   renderer.rebuild();
+   assert.equal(out.getSharedMaterial(0),manualOverride,
+    'Explicit Material A wins over inferred imported Material');
+   renderer.material=null;renderer.rebuild();
+   assert.equal(out.getSharedMaterial(0),importedMatHot);
+   const beforeInvalidImport=out.mesh;
+   importedRenderer.mesh=new Mesh({incorrect:true});
+   assert.throws(()=>renderer.rebuild(),/does not match Source Mesh/);
+   assert.equal(out.mesh,beforeInvalidImport,'Mismatched source model cannot replace last good Mesh');
+   assert.equal(beforeInvalidImport.destroyed,false);
+   assert.equal(out.getSharedMaterial(0),importedMatHot);
+   importedRenderer.mesh=multiImported;
+   importedRenderer.setSharedMaterial(null,1);
+   assert.throws(()=>renderer.rebuild(),/missing Material/);
+   assert.equal(out.mesh,beforeInvalidImport,'Missing source material rejects before mesh allocation');
+   assert.equal(out.getSharedMaterial(1),importedMatA);
+   importedRenderer.setSharedMaterial(importedMatHot,1);
+   renderer.materialSourceRendererB=null;
+   assert.throws(()=>renderer.rebuild(),/Material Source Renderer/);
+   assert.equal(out.mesh,beforeInvalidImport);
+   renderer.materialSourceRendererB=importedRenderer;
+   renderer.rebuild();
+   assert.equal(out.getSharedMaterial(0),importedMatHot);
+   // Failure inside destination material assignment rolls back to the
+   // previous Mesh + Materials before destroying only the transient Mesh.
+   const committedImportedMesh=out.mesh;
+   const previousSlot0=out.getSharedMaterial(0),previousSlot1=out.getSharedMaterial(1);
+   const oldSet=out.setSharedMaterial.bind(out);
+   let injected=false;
+   out.setSharedMaterial=(material,slot)=>{
+    if(slot===1&&!injected){injected=true;throw Error('Injected Material slot failure');}
+    return oldSet(material,slot);
+   };
+   renderer.materialB=new Material();
+   assert.throws(()=>renderer.rebuild(),/Injected Material slot failure/);
+   out.setSharedMaterial=oldSet;
+   renderer.materialB=null;
+   assert.equal(out.mesh,committedImportedMesh,'Material setter failure restores previous Mesh');
+   assert.equal(out.getSharedMaterial(0),previousSlot0);
+   assert.equal(out.getSharedMaterial(1),previousSlot1);
+   assert.equal(committedImportedMesh.destroyed,false);
+   renderer.autoBindImportedMaterials=false;
+   renderer.rebuild();
+   assert.equal(renderer.getRenderedOutputIds().length,2);
+   assert.equal(importedRenderer.getSharedMaterial(1),importedMatHot,
+    'Turning off opt-in never changes source model Material');
+   renderer.renderAllOutputs=false;renderer.outputOrder='';
    renderer.sourceSubMesh=0;renderer.sourceSubMeshB=0;
    renderer.sourceMesh=null;renderer.sourceMeshB=null;
    const external=new Mesh({other:true});
