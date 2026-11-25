@@ -23,7 +23,7 @@ const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 export class SplineGeometryGraphRenderer extends Component {
     @property({type:SplineContainer,tooltip:'Source spline. Never modified by graph execution.'})
     spline:SplineContainer|null=null;
-    @property({multiline:true,tooltip:'Versioned typed node graph JSON v1. Supported: spline, offset, width, ribbon, tube, extrude, meshDeform, output.'})
+    @property({multiline:true,tooltip:'Versioned typed graph JSON v1/v2 (multi-output). Supported: spline, offset, width, ribbon, tube, extrude, meshDeform, output.'})
     graphJson=DEFAULT_GEOMETRY_GRAPH;
     /** Editor canvas coordinates only. Kept separate from graphJson so dragging
      * cards never invalidates the geometry/frame cache. Serialized with Scene.
@@ -34,7 +34,13 @@ export class SplineGeometryGraphRenderer extends Component {
     useGraphAsset=false;
     @property({type:JsonAsset,tooltip:'Drag a .json graph from Assets. Shared and read-only for all referencing renderers.'})
     graphAsset:JsonAsset|null=null;
-    /** Active V1 graph text for read-only export and rebuilding.
+    /** V2: select an Output Node by ID. Empty means the graph's default
+     * `output`. A renderer owns one MeshRenderer; use multiple renderers
+     * referencing the same JsonAsset to display multiple branches.
+     */
+    @property({tooltip:'V2 graph: optional Output Node ID (e.g. outputBranch). Empty uses graph default.'})
+    outputId='';
+    /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON
      * changes dependent renderers even when the asset UUID stays the same.
      */
@@ -44,7 +50,7 @@ export class SplineGeometryGraphRenderer extends Component {
             throw Error('Geometry Graph asset mode needs an assigned JsonAsset.');
         const payload=JSON.stringify(this.graphAsset.json);
         if(typeof payload!=='string'||payload.length<2||payload.length>16384)
-            throw Error('Geometry Graph JsonAsset exceeds the supported v1 JSON limit.');
+            throw Error('Geometry Graph JsonAsset exceeds the supported 16 KiB JSON limit.');
         return payload;
     }
     @property({min:2,max:64,step:1,tooltip:'Sample resolution per Bezier segment. Full graph is evaluated on Rebuild.'})
@@ -86,7 +92,7 @@ export class SplineGeometryGraphRenderer extends Component {
         ]);
     }
     private signature():string {
-        return JSON.stringify([this.frameSignature(),this.activeGraphJson(),this.gizmoEdgeLimit]);
+        return JSON.stringify([this.frameSignature(),this.activeGraphJson(),this.outputId,this.gizmoEdgeLimit]);
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
@@ -164,9 +170,10 @@ export class SplineGeometryGraphRenderer extends Component {
             }
         }
         const signature=this.signature();
+        const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const geometry=this._runner.evaluate(plan,{
             frames,closed:source.closed,revision:frameRevision,
-        });
+        },selection||undefined);
         const wire=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
         const mesh=utils.createMesh({
             positions:geometry.positions,normals:geometry.normals,
