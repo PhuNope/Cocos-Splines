@@ -214,7 +214,7 @@ export function buildGraphMeshDeformGeometry(
         uvs:output.uvs,indices:output.indices,
         bands,
         ringCount:repeatLayout===1?
-            Math.round(output.positions.length/(imported?3:bands*2)):
+            Math.round(output.positions.length/(3*(imported?1:bands*2))):
             imported?source.positions.length/3*repeats:(segments+1)*repeats,
     };
 }
