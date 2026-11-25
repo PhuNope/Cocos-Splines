@@ -3,7 +3,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
  path=require('node:path'),cp=require('node:child_process');
 const root=path.resolve(__dirname,'..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'splines-graph-tube-'));
-const almost=(a,b,e=1e-5)=>assert(Math.abs(a-b)<e,a+' != '+b);
+const almost=(a,b,epsOrLabel=1e-5)=>assert(Math.abs(a-b)<(typeof epsOrLabel==='number'?epsOrLabel:1e-5),
+ typeof epsOrLabel==='string'?epsOrLabel:a+' != '+b);
 const vec=(x=0,y=0,z=0)=>({x,y,z});
 const frame=(z=0,right=vec(1),up=vec(0,1),forward=vec(0,0,1))=>({
  position:vec(0,0,z),right,up,forward,distance:z,widthFactor:1,
