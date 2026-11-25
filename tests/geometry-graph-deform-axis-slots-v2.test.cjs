@@ -53,8 +53,17 @@ try{
  }
  const before=JSON.stringify(importedX);
  const fromX=buildGraphMeshDeformGeometry(frames,{...settings,axis:0},false,importedX);
+ const importedY={...mesh,positions:mesh.positions.slice()};
+ for(let i=0;i<importedY.positions.length;i+=3){
+  const z=importedY.positions[i+2];
+  importedY.positions[i+2]=importedY.positions[i+1];importedY.positions[i+1]=z;
+ }
+ const fromY=buildGraphMeshDeformGeometry(frames,{...settings,axis:1},false,importedY);
  const fromZ=buildGraphMeshDeformGeometry(frames,{...settings,axis:2},false,mesh);
- for(let i=0;i<fromZ.positions.length;i++)almost(fromX.positions[i],fromZ.positions[i]);
+ for(let i=0;i<fromZ.positions.length;i++){
+  almost(fromX.positions[i],fromZ.positions[i]);
+  almost(fromY.positions[i],fromZ.positions[i]);
+ }
  assert.equal(JSON.stringify(importedX),before,'Imported mesh must remain immutable');
  const plan=compileGeometryGraph(graph());
  assert.deepEqual(plan.outputs,['outputA','outputB']);
@@ -92,7 +101,8 @@ try{
   {id:'deformC',type:'meshDeform',input:'source',meshInput:'assetC',axis:1},
   {id:'outputC',type:'output',input:'deformC'});
  const runner3=new GeometryGraphRunner();
- const geomC={...mesh,positions:mesh.positions.map((v,i)=>i%3===0?v*.75:v)};
+ const geomC={...importedY,
+  positions:importedY.positions.map((v,i)=>i%3===0?v*.75:v)};
  const plan3=compileGeometryGraph(triple);
  const res3=runner3.evaluateOutputs(plan3,{
   ...ctx(),meshSources:[mesh,updatedB,geomC],meshRevisions:['A','B','C']});
