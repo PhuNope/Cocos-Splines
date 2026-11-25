@@ -704,10 +704,26 @@ const inspector={
         applyAuthoredEdit(this,'set-uv-seam',{index:this._vgAuthoredEdge});
       else if(el.classList?.contains('spl-profile-reset-uv'))
         applyAuthoredEdit(this,'reset-uv',{});
+      else if(el.classList?.contains('spl-profile-clear-uv-meters'))
+        applyAuthoredEdit(this,'clear-u-meters-per-repeat',{});
     });
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-uv-meters')){
+        const raw=event.target.value;
+        if(raw===''){
+          applyAuthoredEdit(this,'clear-u-meters-per-repeat',{});
+          return;
+        }
+        const meters=Number(raw);
+        if(!Number.isFinite(meters)||meters<.01||meters>10000){
+          profileStatus(this,'Profile UV side U meters/repeat must be in [0.01,10000].',true);
+          return;
+        }
+        applyAuthoredEdit(this,'set-u-meters-per-repeat',{meters});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-weight')){
         if(!Number.isInteger(this._vgAuthoredEdge))return;
         if(event.target.value===''||!Number.isFinite(Number(event.target.value))){

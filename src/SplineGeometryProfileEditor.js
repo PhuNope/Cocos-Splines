@@ -74,7 +74,8 @@ const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(action!=='reset-uv'&&(!Number.isInteger(index)||index<0||index>=p.length))
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat'].includes(action)&&
+    (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
   if(!profile.uv)return;
