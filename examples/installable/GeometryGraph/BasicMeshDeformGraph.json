@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "offset",
+      "type": "offset",
+      "input": "source",
+      "right": 0,
+      "up": 0.1
+    },
+    {
+      "id": "width",
+      "type": "width",
+      "input": "offset",
+      "multiplier": 1
+    },
+    {
+      "id": "meshDeform",
+      "type": "meshDeform",
+      "input": "width",
+      "width": 1.5,
+      "height": 0.6,
+      "deformShape": 1,
+      "segments": 16,
+      "repeats": 4,
+      "uvMetersPerRepeat": 3
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "meshDeform"
+    }
+  ],
+  "output": "output"
+}
