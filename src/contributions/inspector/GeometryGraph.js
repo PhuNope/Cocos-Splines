@@ -1109,8 +1109,10 @@ const inspector={
       const input=closest(event.target,'[data-graph-param]');
       if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!input||!this._vgSelected)return;
       const key=input.dataset.graphParam;
+      const optionalTaper=key==='midMultiplier'||key==='endMultiplier';
       editGraph(this,'param',{id:this._vgSelected,key,
-        value:key==='capEnds'?!!input.checked:Number(input.value)});
+        value:key==='capEnds'?!!input.checked:
+          (optionalTaper&&input.value==='')?null:Number(input.value)});
     });
     this.$.vgStage.addEventListener('pointerdown',event=>{
       const handle=closest(event.target,'[data-drag]');
