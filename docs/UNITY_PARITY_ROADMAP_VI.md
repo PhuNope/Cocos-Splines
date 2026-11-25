@@ -236,7 +236,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3g2b1: per-renderer Output ID → Material A/B/C/D ordering override (default alphabetic), native Inspector up/down/reset, shared JsonAsset isolation, invalid-permutation rollback and cached rebuild tests.
 - [x] Phase 4.3g2b2a: opt-in FBX/glTF model MeshRenderer shared Material binding for graph meshAsset output branches, indexed source submesh A/B/C, per-slot explicit override precedence, hot material refresh without mesh rebuild, fail-closed mismatch/absent material, atomic Mesh/Material rollback and mocked regression.
 - [x] Phase 4.3g2b2b1: author-owned Profile JsonAsset v1 (3–16 simple CCW x/y points), typed Extrude profileSlot A/B/C and visual preset selector, content revision isolation, invalid-asset rollback, installable L/Octagon profiles and mocked Core/Renderer/Inspector regressions.
-- [ ] Phase 4.3g2b2b2+: richer 2D Profile authoring UI, holes/UV profile variants, Cocos Creator 3.8.8 native multi-material/Undo/Prefab/FBX/GPU acceptance.
+- [x] Phase 4.3g2b2b2a: in-Inspector Profile SVG editor for existing native JsonAsset A/B/C with selectable/draggable points, bounded numeric input, insert/remove, temporary drafts, explicit confirmation, checksum conflict guard, safe AssetDB refresh and no Scene mutation.
+- [ ] Phase 4.3g2b2b2b+: drag profile edges/UV handles, richer Profile library, holes/closed variants and native Creator 3.8.8 Undo/Prefab/FBX/GPU acceptance.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.

@@ -26,7 +26,7 @@ for(const action of ['insert','remove','move'])for(const index of [-1,6,1.2,'bad
  assert.throws(()=>model.applyProfileEdit(formatted,action,{index,x:0,y:0}),/point index/);
 assert.throws(()=>model.applyProfileEdit(formatted,'move',{index:0,x:100,y:0}));
 assert.throws(()=>model.applyProfileEdit(formatted,'move',{index:1,x:-.5,y:-.5}));
-const reduced=model.applyProfileEdit(formatted,'remove',{index:0});
+const reduced=model.applyProfileEdit(formatted,'remove',{index:2});
 assert.equal(model.parseProfile(reduced).points.length,5);
 const cw={...profile,points:[...profile.points].reverse()};
 const bow={...profile,points:[
