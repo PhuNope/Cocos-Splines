@@ -3,7 +3,9 @@ const NAME='cocos-splines';
 const {parseSvg,exportSvg}=require('./SplineSvgConverter');
 const {parseSplineJSON,serializeSplineJSON}=require('./SplineJsonInterop');
 const {installSplineExamples}=require('./SplineExampleInstaller');
-const {canonicalGraphJSON,readGraphFile,writeGraphFile}=require('./SplineGeometryGraphAssetWorkflow');
+const path=require('node:path');
+const {canonicalGraphJSON,readGraphFile,writeGraphFile,readSharedGraphSnapshot,
+    saveSharedGraphIfUnchanged}=require('./SplineGeometryGraphAssetWorkflow');
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
@@ -16,6 +18,29 @@ const {validateRouteAdmission}=require('./SplineRouteAdmission');
 const {validateSeamMode}=require('./SplineJunctionSeamMath');
 const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMath');
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
+let sharedGraphSaveBusy=false;
+function singleGraphSelection(){
+    const ids=selected();
+    if(ids.length!==1||!ids[0])throw Error('Select exactly one Geometry Graph Renderer Node.');
+    return ids[0];
+}
+function requiredGraphAssetUuid(info){
+    if(!info?.ok||!info.assetMode||typeof info.assetUuid!=='string'||!info.assetUuid)
+        throw Error(info?.error||'Select an active renderer using a native shared JsonAsset.');
+    return info.assetUuid;
+}
+async function resolveSharedGraphSource(assetUuid){
+    const project=Editor.Project?.path;
+    if(typeof project!=='string'||!path.isAbsolute(project))
+        throw Error('Project root unavailable.');
+    const url=await Editor.Message.request('asset-db','query-url',assetUuid);
+    if(typeof url!=='string'||!url.startsWith('db://assets/')||
+       url.includes('\\')||url.includes('?')||url.includes('#'))
+        throw Error('Shared graph source is not a project Assets JsonAsset.');
+    const file=await Editor.Message.request('asset-db','query-path',assetUuid);
+    if(typeof file!=='string')throw Error('Cannot resolve the shared Graph asset on disk.');
+    return {url,file,root:path.join(project,'assets')};
+}
 function selected(){return Editor.Selection.getSelected('node')||[];}
 // Editor.Selection.select() ADDS a selection in Creator 3.8.
 // Use a single-selection helper for all Inspector navigation actions.
@@ -849,6 +874,79 @@ const methods={
             await snapshot();selectOnly(id);
             return {ok:true,uuid:id,message:'Junction được tạo. Gán Connections trong Inspector để nối nhiều spline.'};
         }catch(e){return alertError('create-junction',e);}
+    },
+    /** Start an explicit, non-serialized shared JsonAsset edit. The Inspector
+     * owns the draft; no change reaches Scene properties or disk until Save.
+     */
+    async beginSharedGeometryGraphEdit(){
+        try{
+            const nodeUuid=singleGraphSelection();
+            const info=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            const assetUuid=requiredGraphAssetUuid(info);
+            const source=await resolveSharedGraphSource(assetUuid);
+            const snapshot=readSharedGraphSnapshot(source.file,source.root);
+            return {ok:true,nodeUuid,assetUuid,assetName:info.assetName,
+                assetUrl:source.url,graphJson:snapshot.graphJson,sha256:snapshot.sha256};
+        }catch(error){return alertError('begin-shared-geometry-graph-edit',error);}
+    },
+    /** Only an explicit confirmed Save may overwrite a native shared JSON.
+     * A user warning is separate from the optimistic disk hash conflict guard.
+     * No Scene snapshot is created for an external file edit.
+     */
+    async saveSharedGeometryGraphEdit(draft){
+        if(sharedGraphSaveBusy)return {ok:false,error:'Another shared graph save is pending.'};
+        sharedGraphSaveBusy=true;
+        try{
+            if(!draft||typeof draft!=='object')throw Error('Missing shared graph draft.');
+            const {nodeUuid,assetUuid,sha256,graphJson}=draft;
+            if(typeof nodeUuid!=='string'||typeof assetUuid!=='string')
+                throw Error('Missing shared graph selection or asset identity.');
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Graph selection changed; discard or reopen the shared draft.');
+            const info=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            if(requiredGraphAssetUuid(info)!==assetUuid)
+                throw Error('Graph Asset reference changed; discard or reopen the draft.');
+            const canonical=canonicalGraphJSON(graphJson);
+            let source=await resolveSharedGraphSource(assetUuid);
+            let snapshot=readSharedGraphSnapshot(source.file,source.root);
+            if(snapshot.sha256!==sha256)throw Error('Shared graph changed on disk; discard and reopen to resolve the conflict.');
+            if(snapshot.graphJson===canonical)
+                return {ok:true,changed:false,graphJson:canonical,
+                    message:'Shared graph unchanged; no file write or Scene history created.'};
+            if(typeof Editor.Dialog?.info!=='function')
+                throw Error('Native confirmation dialog is unavailable; shared asset will not be written.');
+            const answer=await Editor.Dialog.info(
+                'Overwrite the shared Geometry Graph JSON asset?',
+                {title:'Save Shared Geometry Graph',
+                    detail:source.url+'\\nThis updates every renderer referencing the same JsonAsset. This file edit is not part of Scene Undo/Redo.',
+                    buttons:['Save shared JSON','Cancel'],default:1,cancel:1});
+            if(answer?.response!==0)return {ok:false,canceled:true};
+            // The dialog may have changed selection, scene or asset mapping.
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Graph selection changed while confirming save.');
+            const latest=await invokeScene('queryGeometryGraphAsset',nodeUuid);
+            if(requiredGraphAssetUuid(latest)!==assetUuid)
+                throw Error('Graph Asset changed while confirming save.');
+            const fresh=await resolveSharedGraphSource(assetUuid);
+            if(fresh.url!==source.url||fresh.file!==source.file)
+                throw Error('Graph asset was moved while confirming save.');
+            source=fresh;
+            const saved=saveSharedGraphIfUnchanged(source.file,source.root,canonical,sha256);
+            if(!saved.changed)return {ok:true,changed:false,graphJson:canonical};
+            try{
+                const imported=await Editor.Message.request('asset-db','refresh-asset',source.url);
+                if(imported===false)throw Error('AssetDB refresh returned false.');
+                return {ok:true,changed:true,assetUrl:source.url,
+                    graphJson:canonical,sha256:saved.sha256,
+                    message:'Shared graph saved; Cocos AssetDB refresh requested. Scene Undo does not revert JSON file writes.'};
+            }catch(refreshError){
+                return {ok:true,changed:true,refreshPending:true,
+                    assetUrl:source.url,graphJson:canonical,sha256:saved.sha256,
+                    message:'Shared JSON saved, but AssetDB refresh failed: '+String(refreshError?.message||refreshError)+
+                        '. Refresh the asset manually in Creator; do not assume Scene Undo will restore it.'};
+            }
+        }catch(error){return alertError('save-shared-geometry-graph-edit',error);}
+        finally{sharedGraphSaveBusy=false;}
     },
     async queryGeometryGraphAsset(){
         try{
