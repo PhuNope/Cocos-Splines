@@ -5,7 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
-import {buildProfileExtrudeGeometry,GraphProfileShape} from './SplineProfileExtrudeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 
@@ -35,7 +35,7 @@ export interface GeometryGraphNode {
     width?:number;endWidth?:number;uvMetersPerRepeat?:number;
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
-    height?:number;profileShape?:number;
+    height?:number;profileShape?:number;profileSlot?:number;
     deformShape?:number;segments?:number;repeats?:number;
     /** 0 Count (legacy), 1 physical length with clipped final tile. */
     repeatLayout?:number;
@@ -62,6 +62,9 @@ export interface GeometryGraphContext {
     /** Three native mesh slots. Falls back to legacy slot zero fields. */
     meshSources?:ReadonlyArray<Readonly<MeshGeometry>|undefined>;
     meshRevisions?:ReadonlyArray<string|undefined>;
+    /** Explicit authored profile slots A/B/C for Extrude nodes. */
+    profileSources?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>|undefined>;
+    profileRevisions?:ReadonlyArray<string|undefined>;
 }
 export interface GeometryGraphPlan {
     nodes:GeometryGraphNode[];
@@ -145,7 +148,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='width'?['input','multiplier']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
-            node.type==='extrude'?['input','width','height','profileShape','uvMetersPerRepeat','capEnds']:
+            node.type==='extrude'?['input','width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
             node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
@@ -183,6 +186,10 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph Tube capEnds must be a boolean.');
         }
         if(node.type==='extrude'){
+            if(node.profileSlot!==undefined){
+                const slot=bound(node.profileSlot,0,2,'Extrude profileSlot');
+                if(!Number.isInteger(slot))throw Error('Geometry Graph Extrude profileSlot must be an integer.');
+            }
             bound(node.width??1,.05,100,'Extrude width');
             bound(node.height??1,.05,100,'Extrude height');
             const shape=bound(node.profileShape??0,0,2,'Extrude profileShape');
@@ -357,6 +364,8 @@ export class GeometryGraphRunner {
                          ((node.slot??0)===0?context.meshRevision:null)):null,
                     input?.version??null,
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
+                    node.type==='extrude'&&node.profileSlot!==undefined?
+                        context.profileRevisions?.[node.profileSlot]??null:null,
                 ]);
                 const prior=this.cache.get(node.id);
                 if(prior?.key===key){
@@ -426,9 +435,18 @@ export class GeometryGraphRunner {
                     value={kind:'mesh',geometry};
                 }else if(node.type==='extrude'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Extrude input is not a path.');
+                    let authored:ReadonlyArray<Readonly<GraphProfilePoint>>|undefined;
+                    if(node.profileSlot!==undefined){
+                        const slot=node.profileSlot,revision=context.profileRevisions?.[slot];
+                        if(typeof revision!=='string'||!revision||revision.length>2048)
+                            throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
+                        authored=parseGraphProfileAsset({format:'cocos-splines/profile',
+                            version:1,points:context.profileSources?.[slot]}).points;
+                    }
                     const geometry=buildProfileExtrudeGeometry(source.frames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
+                        profile:authored,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
                     },source.closed);

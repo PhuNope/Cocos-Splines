@@ -1,6 +1,6 @@
 /** Phase 4.3b — bounded profile extrusion along a spline frame field.
- * Pure and deterministic: profile coordinates are built-in presets, never
- * runtime code or an untrusted arbitrary vertex array.
+ * Pure and deterministic: built-in profiles remain defaults; optional
+ * author-owned polygon points are validated and never executed as code.
  *
  * Shapes are counter-clockwise when viewed along +forward:
  *   0 Rectangle, 1 Beveled rectangle, 2 U-channel (concave).
@@ -10,7 +10,68 @@ import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
 
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
+export interface GraphProfilePoint {x:number;y:number}
+export interface GraphAuthoredProfile {
+    format:'cocos-splines/profile';
+    version:1;
+    points:GraphProfilePoint[];
+}
+/** Strict data-only profile; copied out of the Cocos JsonAsset, never mutated. */
+export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
+    const r=input as Record<string,unknown>;
+    if(!r||typeof r!=='object'||Array.isArray(r)||
+       Object.keys(r).some(k=>!['format','version','points'].includes(k))||
+       r.format!=='cocos-splines/profile'||r.version!==1||
+       !Array.isArray(r.points)||r.points.length<3||r.points.length>16)
+        throw Error('Graph Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
+    const points:GraphProfilePoint[]=r.points.map(raw=>{
+        const p=raw as Record<string,unknown>;
+        if(!p||typeof p!=='object'||Array.isArray(p)||
+           Object.keys(p).some(k=>!['x','y'].includes(k))||
+           typeof p.x!=='number'||typeof p.y!=='number'||
+           !Number.isFinite(p.x)||!Number.isFinite(p.y)||
+           Math.abs(p.x)>1||Math.abs(p.y)>1)
+            throw Error('Graph Profile Asset point requires finite x/y in [-1,1].');
+        return {x:p.x,y:p.y};
+    });
+    checkAuthoredProfilePolygon(points);
+    return {format:'cocos-splines/profile',version:1,points};
+}
+function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfilePoint>>):void{
+    const epsilon=1e-8,n=points.length;
+    const cross2=(a:GraphProfilePoint,b:GraphProfilePoint,c:GraphProfilePoint)=>
+        (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+    const on=(a:GraphProfilePoint,b:GraphProfilePoint,p:GraphProfilePoint)=>
+        Math.abs(cross2(a,b,p))<=epsilon&&
+        p.x>=Math.min(a.x,b.x)-epsilon&&p.x<=Math.max(a.x,b.x)+epsilon&&
+        p.y>=Math.min(a.y,b.y)-epsilon&&p.y<=Math.max(a.y,b.y)+epsilon;
+    const intersects=(a:GraphProfilePoint,b:GraphProfilePoint,
+        c:GraphProfilePoint,d:GraphProfilePoint)=>{
+        const o1=cross2(a,b,c),o2=cross2(a,b,d);
+        const o3=cross2(c,d,a),o4=cross2(c,d,b);
+        return on(a,b,c)||on(a,b,d)||on(c,d,a)||on(c,d,b)||
+            (((o1>epsilon&&o2<-epsilon)||(o1<-epsilon&&o2>epsilon))&&
+             ((o3>epsilon&&o4<-epsilon)||(o3<-epsilon&&o4>epsilon)));
+    };
+    let area=0;
+    for(let i=0;i<n;i++){
+        const a=points[i],b=points[(i+1)%n],next=points[(i+2)%n];
+        if(Math.hypot(b.x-a.x,b.y-a.y)<.0001||
+           Math.abs(cross2(a,b,next))<=epsilon)
+            throw Error('Graph Profile Asset has zero-length or collinear edges.');
+        area+=a.x*b.y-b.x*a.y;
+        for(let j=i+1;j<n;j++){
+            if(j===i+1||(i===0&&j===n-1))continue;
+            if(intersects(a,b,points[j],points[(j+1)%n]))
+                throw Error('Graph Profile Asset polygon self-intersects.');
+        }
+    }
+    if(area<=.0002)
+        throw Error('Graph Profile Asset polygon must be counter-clockwise (CCW) with positive area.');
+}
 export interface ProfileExtrudeSettings {
+    /** Optional data-only polygon; absent preserves built-in preset. */
+    profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
     width:number;
     height:number;
     profileShape:GraphProfileShape;
@@ -87,7 +148,10 @@ export function buildProfileExtrudeGeometry(
        typeof capEnds!=='boolean'||typeof closed!=='boolean'||
        !Array.isArray(frames)||frames.length<2||frames.length>1025)
         throw Error('Geometry Graph Extrude settings or frame count are invalid.');
-    const profile=PROFILES[profileShape],bands=profile.length;
+    const profile=settings.profile?
+        parseGraphProfileAsset({format:'cocos-splines/profile',
+            version:1,points:settings.profile}).points:PROFILES[profileShape];
+    const bands=profile.length;
     const triangles=capEnds&&!closed?profileTriangles(profile):[];
     const perimeterLengths=profile.map((p,i)=>{
         const next=profile[(i+1)%bands];
