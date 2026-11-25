@@ -387,9 +387,11 @@ function renderNodeParameters(graphJson,id){
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':
-      '<div class="spl-vg-note">'+(n.type==='meshAsset'?
-       'Source Mesh is assigned on each Renderer (native Mesh Asset field).':
-       'No editable properties.')+'</div>');
+      (n.type==='meshAsset'?'':'<div class="spl-vg-note">No editable properties.</div>'))+
+    (n.type==='meshAsset'?'<div class="spl-vg-note">'+
+      'Source Mesh is assigned on each Renderer (native Mesh Asset field). '+
+      'Use Slot A/B/C to select Source Mesh, Source Mesh B or Source Mesh C.'+
+      '</div>':'');
 }
 module.exports={TYPES,LIMITS,STAGE,parseGraph,validateGraph,applyGraphEdit,
   parseLayout,moveGraphNode,cleanGraphLayout,renderGraphCanvas,renderNodeParameters};
