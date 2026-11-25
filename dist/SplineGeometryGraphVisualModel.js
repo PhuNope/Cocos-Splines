@@ -11,7 +11,7 @@ const TYPES=Object.freeze({
   spline:{input:null,output:'path',params:[]},
   meshAsset:{input:null,output:'meshSource',params:['slot']},
   offset:{input:'path',output:'path',params:['right','up']},
-  width:{input:'path',output:'path',params:['multiplier']},
+  width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   extrude:{input:'path',output:'mesh',params:['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']},
@@ -20,14 +20,16 @@ const TYPES=Object.freeze({
 });
 const LIMITS=Object.freeze({
   right:[-1000,1000,0],up:[-1000,1000,0],
-  multiplier:[.01,20,1],width:[.05,100,4],endWidth:[0,100,0],
+  multiplier:[.01,20,1],midMultiplier:[.01,20,1],
+  endMultiplier:[.01,20,1],taperMode:[0,1,0],
+  width:[.05,100,4],endWidth:[0,100,0],
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
   height:[.05,100,1],profileShape:[0,2,0],profileSlot:[0,2,0],
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','width',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','midMultiplier','endMultiplier','taperMode','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -69,7 +71,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -276,6 +278,12 @@ function applyGraphEdit(json,action,details={}) {
     if(!target||!TYPES[target.type].params.includes(key))
       throw Error('Selected node does not support '+key+'.');
     let value=details.value;
+    if(target.type==='width'&&['midMultiplier','endMultiplier'].includes(key)&&
+       value===null){
+      delete target[key];
+      validateGraph(next);
+      return formatGraph(next);
+    }
     if(key==='profileSlot'&&value===-1){
       delete target.profileSlot;
       validateGraph(next);
@@ -285,7 +293,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -372,6 +380,16 @@ function renderNodeParameters(graphJson,id){
       return '<label>'+escapeHtml(key)+' <input type="checkbox" data-graph-param="'+key+'"'+
         (value?' checked':'')+'></label>';
     const [min,max]=LIMITS[key];
+    if(n.type==='width'&&['midMultiplier','endMultiplier'].includes(key))
+      return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
+        '" min="'+min+'" max="'+max+'" step="any" placeholder="'+
+        (key==='midMultiplier'?'Auto (linear midpoint)':'Same as Start')+
+        '" value="'+(n[key]??'')+'"></label>';
+    if(n.type==='width'&&key==='taperMode')
+      return '<label>Interpolation <select data-graph-param="taperMode">'+
+        ['Linear','Smoothstep (ease in/out)'].map((name,i)=>
+          '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
+        '</select></label>';
     if(key==='axis'||key==='slot')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       (key==='axis'?['X','Y','Z']:['A (Source Mesh)','B (Source Mesh B)','C (Source Mesh C)'])
@@ -411,6 +429,11 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
+    (n.type==='width'?'<div class="spl-vg-note">'+
+      'Multiplier = Start scale. Optional Mid/End make a distance-based taper curve; '+
+      'blank Mid = average, blank End = Start (uniform). Smoothstep eases at control points. '+
+      'For closed splines, Start and End must match to avoid a seam jump.'+
+      '</div>':'')+
     (n.type==='extrude'?'<div class="spl-vg-note">'+
       (n.profileSlot===undefined?'Built-in profile: Rectangle, Beveled or U Channel.':
        'Authored Profile Slot '+['A','B','C'][n.profileSlot]+
