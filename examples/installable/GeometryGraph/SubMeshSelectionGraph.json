@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "meshAssetA",
+      "type": "meshAsset",
+      "slot": 0
+    },
+    {
+      "id": "meshAssetB",
+      "type": "meshAsset",
+      "slot": 1
+    },
+    {
+      "id": "deformA",
+      "type": "meshDeform",
+      "input": "source",
+      "meshInput": "meshAssetA",
+      "axis": 2,
+      "width": 1,
+      "height": 1,
+      "repeats": 2,
+      "uvMode": 0
+    },
+    {
+      "id": "deformB",
+      "type": "meshDeform",
+      "input": "source",
+      "meshInput": "meshAssetB",
+      "axis": 2,
+      "width": 1,
+      "height": 1,
+      "repeats": 2,
+      "uvMode": 0
+    },
+    {
+      "id": "outputA",
+      "type": "output",
+      "input": "deformA"
+    },
+    {
+      "id": "outputB",
+      "type": "output",
+      "input": "deformB"
+    }
+  ],
+  "output": "outputA"
+}
