@@ -14,6 +14,7 @@ export interface GraphMeshDeformFrame extends RoadFrame {widthFactor:number}
 export interface GraphMeshDeformSettings {
     width:number;height:number;
     deformShape:number; // 0 strip, 1 box shell
+    axis?:number; // 0 X, 1 Y, 2 Z (default) for imported + preset meshes
     segments:number; // subdivisions per source repeat
     repeats:number; // count of source modules along full path
     uvMetersPerRepeat:number;
@@ -79,6 +80,9 @@ export function buildGraphMeshDeformGeometry(
     settings:GraphMeshDeformSettings,closed:boolean,
     imported?:Readonly<MeshGeometry>):RoadGeometry {
     const {width,height,deformShape,segments,repeats,uvMetersPerRepeat}=settings;
+    const axis=settings.axis??2;
+    if(!Number.isInteger(axis)||axis<0||axis>2)
+        throw Error('Geometry Graph Mesh Deform axis must be X, Y, or Z.');
     if(!Number.isInteger(repeats)||repeats<1||repeats>16||
        !finite(uvMetersPerRepeat)||uvMetersPerRepeat<.01||uvMetersPerRepeat>10000||
        !Array.isArray(frames)||frames.length<2||frames.length>1025||
@@ -90,6 +94,16 @@ export function buildGraphMeshDeformGeometry(
         {positions:imported.positions.slice(),indices:imported.indices.slice(),
             uvs:imported.uvs?.slice(),normals:imported.normals?.slice()}:
         createDeformPresetMesh({width,height,deformShape,segments,repeats,uvMetersPerRepeat});
+    if(!imported&&axis!==2){
+        // Source presets are authored along Z. Swap the longitudinal
+        // coordinate into the chosen axis before the shared deformation
+        // kernel applies its X/Y handedness correction.
+        for(let i=0;i<source.positions.length;i+=3){
+            const z=source.positions[i+2];
+            if(axis===0){source.positions[i+2]=source.positions[i];source.positions[i]=z;}
+            else{source.positions[i+2]=source.positions[i+1];source.positions[i+1]=z;}
+        }
+    }
     if(imported){
         const count=source.positions.length/3;
         if(count<3||count>4096||source.indices.length<3||
@@ -143,7 +157,7 @@ export function buildGraphMeshDeformGeometry(
     // The downstream CPU kernel reads source mesh arrays only. It returns
     // freshly allocated positions, normals, UVs and indices.
     const output=deformMesh(source,interpolate,{
-        axis:2,repeats,start:0,end:1,
+        axis:axis as 0|1|2,repeats,start:0,end:1,
         crossScale:imported?width:1,depthScale:imported?height:1,length,
         uvMode:2,uvTilesPerUnit:1/uvMetersPerRepeat,
         flipFaces:sign<0,
