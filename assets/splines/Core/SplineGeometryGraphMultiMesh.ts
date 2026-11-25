@@ -147,7 +147,7 @@ export function graphMultiMeshGizmoGeometry(
     const positions:number[]=[],indices:number[]=[];
     for(const {geometry:g} of chunks){
         const base=positions.length/3;
-        positions.push(...g.positions);
+        for(const v of g.positions)positions.push(v);
         for(const idx of g.indices)indices.push(idx+base);
     }
     return {positions,indices};
