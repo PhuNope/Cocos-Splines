@@ -330,3 +330,25 @@ Graph `meshDeform` đã dùng lại cơ chế **physical-length repeat** của s
 **QA**: headless regression kiểm tra repeat vật lý dài 2 trên path 5 (2 tile nguyên + tile cuối 1), UV0 tại mặt cắt, đường UV liên tục/distance, tileLength override, đường ngắn hơn tile, preset, path closed không sinh cap, giới hạn đồ thị và rollback. **Cần xác nhận native trên Creator 3.8.8**: FBX có UV atlas, ngược winding/mirrored scale, đường kín nối seam, vật liệu transparent, undo/reimport hot reload, Prefab overrides và thời gian xử lý mesh nhiều tile.
 
 **Chưa bao gồm:** nhiều material/submesh trong cùng mesh imported, tự gắn end caps, source-axis resampling, lặp tile có offset phase, multi-renderer slot output trên cùng Node. Tiếp theo là 4.3g và native QA. Chỉ nhánh `v2`, không tag hoặc GitHub Release.
+
+## Phase 4.3g1 — Indexed imported submesh selection (2026-11-25)
+
+Cocos Creator 3.8 cho phép một imported FBX/Mesh có nhiều submesh. Trong Phase 4.3g1, **mỗi Graph Renderer vẫn xuất một mesh / một material**, nhưng có thể chọn submesh cụ thể từ một native Mesh asset nhiều phần, không bắt buộc tách FBX nguồn. Không thay đổi Graph JSON schema, renderer output node, scene topology hay MeshRenderer Materials đang được quản lý bởi người dùng.
+
+**Native fields trên `SplineGeometryGraphRenderer`** (mặc định 0, lưu Scene/Prefab bằng Inspector như các field Cocos khác):
+
+| Native Mesh slot | Native submesh index | Giá trị |
+| --- | --- | --- |
+| `sourceMesh` (A) | `sourceSubMesh` | 0–3 |
+| `sourceMeshB` (B) | `sourceSubMeshB` | 0–3 |
+| `sourceMeshC` (C) | `sourceSubMeshC` | 0–3 |
+
+**Dùng ví dụ:** bấm **Install Examples**, chọn `GeometryGraph/SubMeshSelectionGraph.json`. Gán **cùng một imported readable Mesh asset** (đã bật Allow Data Access) vào Source Mesh A và Source Mesh B. Đặt Source Submesh A = 0, Source Submesh B = 1 trên mỗi renderer. Một renderer có `Output ID=outputA`, renderer khác có `Output ID=outputB`. Có thể gán material riêng qua field **Material** của Graph Renderer hoặc qua MeshRenderer. Plugin **không** tự gán material theo tên FBX; không tạo child hoặc MeshRenderer.
+
+**Ràng buộc:** asset có 1–4 submeshes; phải chọn index nguyên từ 0 đến `submeshCount-1`; mỗi submesh được chọn phải có POSITION/indices tam giác hợp lệ, tối đa 4096 vertices, 24576 indices; toàn buffer không quá 4 MiB. Nếu source primitive công bố `primitiveMode`, loại khác `TRIANGLE_LIST` bị từ chối. Decoder sử dụng `readAttribute(index)`, `readIndices(index)` và format theo đúng submesh index; normal/UV0 là tùy chọn theo import format hỗ trợ. Mỗi submesh được sao chép thành geometry riêng để deform; không ghi asset nguồn.
+
+**Cache:** `sourceSubMesh` là thành phần của renderer signature, và output revision chứa cả submesh index lẫn fingerprint dữ liệu đã giải mã, nên đổi index chỉ làm dirty meshAsset node tương ứng và các node downstream; Spline source và nhánh khác vẫn reuse cache. Index sai hoặc submesh thiếu attribute giữ nguyên generated mesh đã bound (two-phase commit); Shared JsonAsset và các renderer khác không bị sửa.
+
+**Chưa hỗ trợ ở Phase 4.3g1:** gộp nhiều submeshes thành một generated Mesh chứa các primitive/material slots trên cùng MeshRenderer, source Mesh nhiều hơn bốn submesh, auto-material từ FBX, skinned source, biên tập UV island, tự chọn material slot theo submesh. Đây là mục Phase 4.3g2 và cần Cocos Creator 3.8.8 native smoke trước khi xác nhận.
+
+**Native QA còn cần:** import FBX có 2–4 submesh với VertexBundle khác nhau; chọn Source Submesh A/B/C và đổi khi Scene đang mở; test Material, culling, UV0/normal, reimport hot reload, Prefab overrides và Undo/Redo; đo profiling trên mesh dài có Source Length. Chỉ push `v2`, không tag/Release.
