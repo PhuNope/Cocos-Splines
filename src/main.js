@@ -909,7 +909,7 @@ const methods={
             const canonical=canonicalGraphJSON(graphJson);
             let source=await resolveSharedGraphSource(assetUuid);
             let snapshot=readSharedGraphSnapshot(source.file,source.root);
-            if(snapshot.sha256!==sha256)throw Error('Shared graph changed on disk; discard and reopen to resolve the conflict.');
+            if(snapshot.sha256!==sha256)return {ok:false,conflict:true,error:'Shared graph changed on disk; compare source changes before retrying.'};
             if(snapshot.graphJson===canonical)
                 return {ok:true,changed:false,graphJson:canonical,
                     message:'Shared graph unchanged; no file write or Scene history created.'};
