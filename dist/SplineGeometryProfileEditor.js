@@ -9,7 +9,7 @@ function parseProfile(value){
   try{value=JSON.parse(value);}catch{throw Error('Invalid Profile JSON syntax.');}
  }
  if(!value||typeof value!=='object'||Array.isArray(value)||
-    Object.keys(value).some(k=>!['format','version','points'].includes(k))||
+    Object.keys(value).some(k=>!['format','version','points','uv'].includes(k))||
     value.format!==FORMAT||value.version!==1||!Array.isArray(value.points)||
     value.points.length<3||value.points.length>MAX_POINTS)
   throw Error('Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
@@ -44,15 +44,63 @@ function parseProfile(value){
   }
  }
  if(area<=.0002)throw Error('Profile polygon must be counter-clockwise (CCW).');
- return {format:FORMAT,version:1,points};
+ if(!Object.prototype.hasOwnProperty.call(value,'uv'))
+  return {format:FORMAT,version:1,points};
+ const raw=value.uv;
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights'].includes(k)))
+  throw Error('Profile UV must have only seamEdge and edgeWeights.');
+ const uv={};
+ if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
+  if(!Number.isInteger(raw.seamEdge)||raw.seamEdge<0||raw.seamEdge>=points.length)
+   throw Error('Profile UV seamEdge must be an existing edge index.');
+  uv.seamEdge=raw.seamEdge;
+ }
+ if(Object.prototype.hasOwnProperty.call(raw,'edgeWeights')){
+  if(!Array.isArray(raw.edgeWeights)||raw.edgeWeights.length!==points.length||
+     raw.edgeWeights.some(w=>!finite(w)||w<.25||w>4))
+   throw Error('Profile UV edgeWeights must be 0.25–4 for each polygon edge.');
+  uv.edgeWeights=raw.edgeWeights.slice();
+ }
+ return {format:FORMAT,version:1,points,uv};
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!Number.isInteger(index)||index<0||index>=p.length)
+ if(action!=='reset-uv'&&(!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
- if(action==='move'){
+ const insertedUv=at=>{
+  if(!profile.uv)return;
+  if(profile.uv.edgeWeights){
+   const weight=profile.uv.edgeWeights[at];
+   profile.uv.edgeWeights.splice(at+1,0,weight);
+  }
+  if(profile.uv.seamEdge!==undefined&&profile.uv.seamEdge>at)
+   profile.uv.seamEdge++;
+ };
+ const removedUv=(at,oldLength)=>{
+  if(!profile.uv)return;
+  if(profile.uv.edgeWeights)profile.uv.edgeWeights.splice(at,1);
+  if(profile.uv.seamEdge!==undefined){
+   const seam=profile.uv.seamEdge;
+   const surviving=seam===at?(at+oldLength-1)%oldLength:seam;
+   profile.uv.seamEdge=surviving>at?surviving-1:surviving;
+  }
+ };
+ if(action==='reset-uv'){
+  delete profile.uv;
+ }else if(action==='set-uv-seam'){
+  profile.uv=profile.uv||{};
+  profile.uv.seamEdge=index;
+ }else if(action==='set-edge-weight'){
+  const weight=Number(params.weight);
+  if(params.weight===''||!finite(weight)||weight<.25||weight>4)
+   throw Error('Profile UV edge weight must be within [0.25,4].');
+  profile.uv=profile.uv||{};
+  if(!profile.uv.edgeWeights)profile.uv.edgeWeights=p.map(()=>1);
+  profile.uv.edgeWeights[index]=round(weight);
+ }else if(action==='move'){
   const x=Number(params.x),y=Number(params.y);
   if(!finite(x)||!finite(y))throw Error('Profile coordinates must be finite.');
   p[index]={x:round(x),y:round(y)};
@@ -79,18 +127,21 @@ function applyProfileEdit(value,action,params={}){
    throw Error('Profile edge insertion requires a nondegenerate non-collinear point.');
   p.splice(index+1,0,{x:round(a.x+dx*t+dy*offset),
    y:round(a.y+dy*t-dx*offset)});
+  insertedUv(index);
  }else if(action==='remove'){
   if(p.length<=3)throw Error('Profile requires at least three points.');
-  p.splice(index,1);
+  const oldLength=p.length;
+  p.splice(index,1);removedUv(index,oldLength);
  }else if(action==='insert'){
   if(p.length>=MAX_POINTS)throw Error('Profile supports up to 16 points.');
   const a=p[index],b=p[(index+1)%p.length],dx=b.x-a.x,dy=b.y-a.y;
   p.splice(index+1,0,{x:round((a.x+b.x)/2+dy*.12),y:round((a.y+b.y)/2-dx*.12)});
+  insertedUv(index);
  }else throw Error('Unknown Profile edit action.');
  return formatProfile(profile);
 }
 function renderProfileControls(value,selected=0,selectedEdge=null){
- const points=parseProfile(value).points,pt=points[selected]||points[0];
+ const profile=parseProfile(value),points=profile.points,pt=points[selected]||points[0];
  const map=point=>String(round(120+point.x*104))+','+String(round(120-point.y*104));
  const polygon=points.map(map).join(' ');
  // Wider invisible line targets enable selecting/dragging an entire edge.
@@ -105,7 +156,7 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    'role="button" tabindex="0" aria-label="Profile edge '+(i+1)+'"/>'+
    '<circle data-profile-edge="'+i+'" cx="'+mx+'" cy="'+my+'" r="'+
    (selectedEdge===i?6:4)+'" fill="'+
-   (selectedEdge===i?'#ffca76':'#a7f0bb')+'" stroke="#142a37" stroke-width="1.5"/>';
+   (selectedEdge===i?'#ffca76':profile.uv?.seamEdge===i?'#f49bb7':'#a7f0bb')+'" stroke="#142a37" stroke-width="1.5"/>';
  }).join('');
  const circles=points.map((point,i)=>{
   const [x,y]=map(point).split(',');
@@ -131,6 +182,20 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    (selectedEdge===null||points.length>=MAX_POINTS?' disabled':'')+
    '>Insert at selected edge</button>'+
   '<button type="button" class="spl-btn spl-profile-remove"'+(points.length<=3?' disabled':'')+
-  '>Remove selected point</button></div>';
+  '>Remove selected point</button></div>'+
+  '<div class="spl-profile-uv-controls">'+
+  '<div class="spl-profile-uv-info">UV0 side bands · '+
+   (profile.uv===undefined?'Default perimeter mapping':
+    'Custom mapping · seam edge #'+((profile.uv.seamEdge??0)+1))+
+   ' · selected edge #'+(selectedEdge===null?'—':selectedEdge+1)+'</div>'+
+  '<div class="spl-vg-toolbar">'+
+  '<label>Edge UV weight <input type="number" class="spl-profile-uv-weight" '+
+   'min="0.25" max="4" step="0.05" value="'+
+   (selectedEdge===null?1:profile.uv?.edgeWeights?.[selectedEdge]??1)+
+   '"'+(selectedEdge===null?' disabled':'')+'></label>'+
+  '<button type="button" class="spl-btn spl-profile-set-uv-seam"'+
+   (selectedEdge===null?' disabled':'')+'>Set UV seam at selected edge</button>'+
+  '<button type="button" class="spl-btn spl-profile-reset-uv"'+
+   (profile.uv===undefined?' disabled':'')+'>Reset UV mapping</button></div></div>';
 }
 module.exports={FORMAT,MAX_POINTS,parseProfile,formatProfile,applyProfileEdit,renderProfileControls};
