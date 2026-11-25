@@ -344,7 +344,52 @@ async function run(){
    assert.throws(()=>renderer.rebuild(),/Source Mesh/);
    assert.equal(out.mesh,outputBMesh,'Missing slot B keeps previous bound Mesh');
    renderer.sourceMeshB=slotB;renderer.outputId='';
-   renderer.sourceMesh=null;
+   // Phase 4.3g1: the *same* imported FBX Mesh with two submeshes can
+   // feed slots A and B with independent native submesh selection.
+   const subMeshPos=new Float32Array([-2,0,0,2,0,0,-2,0,1,2,0,1]);
+   const multiImported={...imported,uuid:'readable-two-submeshes',
+    struct:{...imported.struct,
+     primitives:[{vertexBundelIndices:[0],primitiveMode:4},
+      {vertexBundelIndices:[1],primitiveMode:4}],
+     vertexBundles:[imported.struct.vertexBundles[0],imported.struct.vertexBundles[0]]},
+    readAttribute(i,name){return name==='a_position'?
+      (i===0?importedPos:subMeshPos):name==='a_texCoord'?importedUV:null;},
+    readIndices(i){return importedIndices;},
+   };
+   renderer.sourceMesh=multiImported;
+   renderer.sourceMeshB=multiImported;
+   renderer.sourceSubMesh=0;renderer.sourceSubMeshB=1;
+   renderer.outputId='outputB';
+   const beforeSubMeshFrames=frameBuilds;
+   renderer.rebuild();
+   assert.equal(frameBuilds,beforeSubMeshFrames,
+    'Submesh selector does not resample the source spline');
+   const selectedSecond=JSON.stringify(out.mesh.data);
+   assert.notEqual(selectedSecond,slotAMesh,
+    'Selected imported submesh must affect output geometry');
+   renderer.sourceSubMeshB=0;
+   renderer.rebuild();
+   assert.notEqual(JSON.stringify(out.mesh.data),selectedSecond,
+    'Selecting a different submesh changes the dependent mesh output');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:3,reused:4,nodes:7},
+    'Changing submesh B dirties only asset B, deformB and outputB');
+   const firstFromB=out.mesh,firstFromBData=JSON.stringify(out.mesh.data);
+   renderer.sourceSubMeshB=9;
+   assert.throws(()=>renderer.rebuild(),/Submesh Index/);
+   assert.equal(out.mesh,firstFromB,
+    'Invalid submesh selection preserves previously generated mesh');
+   renderer.sourceSubMeshB=1;
+   renderer.rebuild();
+   assert.equal(JSON.stringify(out.mesh.data),selectedSecond);
+   renderer.outputId='outputA';
+   renderer.rebuild();
+   const originalA=JSON.stringify(out.mesh.data);
+   renderer.sourceSubMesh=1;renderer.rebuild();
+   assert.notEqual(JSON.stringify(out.mesh.data),originalA,
+    'Submesh A selector must be independent of submesh B');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:3,reused:4,nodes:7});
+   renderer.sourceSubMesh=0;renderer.sourceSubMeshB=0;
+   renderer.sourceMesh=null;renderer.sourceMeshB=null;
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
