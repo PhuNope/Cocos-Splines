@@ -14,7 +14,7 @@ const tube=(override={})=>({version:1,nodes:[
  {id:'tube',type:'tube',input:'source',radius:1,radialSegments:8,...override},
  {id:'output',type:'output',input:'tube'}],output:'output'});
 const xyz=(arr,i)=>arr.slice(i*3,i*3+3);
-const cross=(a,b)=>vec(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]);
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
 function winding(mesh,index){
