@@ -238,7 +238,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3g2b2b1: author-owned Profile JsonAsset v1 (3–16 simple CCW x/y points), typed Extrude profileSlot A/B/C and visual preset selector, content revision isolation, invalid-asset rollback, installable L/Octagon profiles and mocked Core/Renderer/Inspector regressions.
 - [x] Phase 4.3g2b2b2a: in-Inspector Profile SVG editor for existing native JsonAsset A/B/C with selectable/draggable points, bounded numeric input, insert/remove, temporary drafts, explicit confirmation, checksum conflict guard, safe AssetDB refresh and no Scene mutation.
 - [x] Phase 4.3g2b2b2b1: edge selection and drag (both endpoints), edge-handle insert (bounded t/offset), optional SVG point/edge drag snap, 32-step draft-only Undo/Redo with one step per drag and save reset, atomic invalid-polygon rollback and automated Inspector/model regression.
-- [ ] Phase 4.3g2b2b2b2+: UV profile handles/edge seam authoring, richer Profile library, holes/closed variants and native Creator 3.8.8 Undo/Prefab/FBX/GPU acceptance.
+- [x] Phase 4.3g2b2b2b2a: authored Profile JsonAsset v1 UV0 seamEdge + per-edge edgeWeights, normalized weighted side perimeter UV, per-renderer/profile-slot cache invalidation, Inspector seam/weight/reset with draft Undo/Redo, insert/remove index migration, strict validation, installable UV example and headless regression tests.
+- [ ] Phase 4.3g2b2b2b2b+: authored UV islands/physical texel density, Profile Library, polygon holes/multiple contours and native Creator 3.8.8 PBR/Undo/Prefab/FBX/GPU validation.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.

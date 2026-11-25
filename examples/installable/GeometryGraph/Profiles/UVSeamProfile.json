@@ -1,0 +1,31 @@
+{
+  "format": "cocos-splines/profile",
+  "version": 1,
+  "points": [
+    {
+      "x": -0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": 0.5
+    },
+    {
+      "x": -0.5,
+      "y": 0.5
+    }
+  ],
+  "uv": {
+    "seamEdge": 2,
+    "edgeWeights": [
+      1,
+      2,
+      1,
+      1
+    ]
+  }
+}

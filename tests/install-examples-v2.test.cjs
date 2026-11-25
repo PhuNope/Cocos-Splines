@@ -42,6 +42,12 @@ try {
  assert.equal(authored.version,2);
  assert.deepEqual(authored.nodes.filter(n=>n.type==='extrude').map(n=>n.profileSlot),
   [0,1]);
+ const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
+ assert.equal(uvExample.format,'cocos-splines/profile');
+ assert.equal(uvExample.uv.seamEdge,2);
+ assert.deepEqual(uvExample.uv.edgeWeights,[1,2,1,1]);
+ assert.equal(uvExample.uv.edgeWeights.length,uvExample.points.length);
  for(const file of ['LProfile','OctagonProfile']){
   const source=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/Profiles/'+file+'.json'),'utf8'));

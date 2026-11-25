@@ -23,6 +23,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/AuthoredProfileExtrudeGraph.json','examples/installable/GeometryGraph/AuthoredProfileExtrudeGraph.json'],
  ['GeometryGraph/Profiles/LProfile.json','examples/installable/GeometryGraph/Profiles/LProfile.json'],
  ['GeometryGraph/Profiles/OctagonProfile.json','examples/installable/GeometryGraph/Profiles/OctagonProfile.json'],
+ ['GeometryGraph/Profiles/UVSeamProfile.json','examples/installable/GeometryGraph/Profiles/UVSeamProfile.json'],
  ['GeometryGraph/BasicMeshDeformGraph.json','examples/installable/GeometryGraph/BasicMeshDeformGraph.json'],
  ['GeometryGraph/MultiOutputRoadTubeGraph.json','examples/installable/GeometryGraph/MultiOutputRoadTubeGraph.json'],
  ['GeometryGraph/ImportedMeshDeformGraph.json','examples/installable/GeometryGraph/ImportedMeshDeformGraph.json'],
