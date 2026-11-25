@@ -24,6 +24,12 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-rebase-shared">Rebase Safe Changes</button>',
  '</div>',
  '<div class="spl-vg-source-mode" role="status">Local graph JSON</div>',
+ '<details class="spl-section spl-vg-order-section" open>',
+ '<summary>Render All Outputs · material slot order</summary>',
+ '<div class="spl-note">Output IDs in Material A/B/C/D slots on THIS renderer. Use arrows to reorder without editing a shared graph.</div>',
+ '<div class="spl-vg-order-list" role="group" aria-label="Output material slot order"></div>',
+ '<button type="button" class="spl-btn spl-vg-order-reset">Reset alphabetical order</button>',
+ '</details>',
  '<div class="spl-vg-conflict" role="status" aria-live="polite"></div>',
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
@@ -52,6 +58,9 @@ const template=base.template+[
 ].join('');
 const style=base.style+[
 '.spl-vg-toolbar{display:flex;gap:4px;flex-wrap:wrap;margin:7px 0}',
+'.spl-vg-order-row{display:flex;align-items:center;gap:5px;margin:3px 0;font-size:11px}',
+'.spl-vg-order-id{flex:1;min-width:0;overflow-wrap:anywhere}',
+'.spl-vg-order-row .spl-btn{padding:2px 7px}',
 '.spl-vg-viewport{overflow:auto;max-width:100%;height:360px;border:1px solid #3c6172;border-radius:6px;background:rgba(18,26,36,.65);touch-action:pan-x pan-y}',
 '.spl-vg-stage{position:relative;width:860px;height:410px;min-width:860px;min-height:410px}',
 '.spl-vg-wires{position:absolute;inset:0;pointer-events:none}',
@@ -90,6 +99,8 @@ const $={...base.$,
   vgConflict:'.spl-vg-conflict',
   vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
+  vgOrderSection:'.spl-vg-order-section',
+  vgOrderList:'.spl-vg-order-list',vgOrderReset:'.spl-vg-order-reset',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
@@ -128,6 +139,20 @@ function summarizeReview(panel){
         'No overlapping parameter changes. Rebase Safe Changes keeps your draft edits.',
     'This comparison does NOT save or replace either version.',
   ].join('\n');
+}
+/** UI mirror of the core complete-permutation validation, independent of
+ * user-supplied JSON source so shared assets are never edited by slot actions.
+ */
+function readOutputOrder(ids,value){
+  const sorted=ids.slice().sort();
+  if(value==='')return sorted;
+  if(typeof value!=='string'||value.length>200)
+    throw Error('Output Order must be a comma-separated ID list.');
+  const order=value.split(',').map(id=>id.trim());
+  if(order.length!==sorted.length||new Set(order).size!==sorted.length||
+     order.some(id=>!sorted.includes(id)))
+    throw Error('Output Order must list every Output Node ID exactly once.');
+  return order;
 }
 function render(panel){
   const draft=panel._vgSharedDraft;
@@ -168,6 +193,31 @@ function render(panel){
   if(!stage||!properties)return;
   try{
     const view=graph.parseGraph(panel._vgGraphJson);
+    if(panel.$?.vgOrderList){
+      const enabled=panel._vgRenderAllOutputs===true&&view.graph.version===2&&
+        view.outputs.length>=2;
+      if(panel.$.vgOrderSection)panel.$.vgOrderSection.hidden=!enabled;
+      if(panel.$.vgOrderReset)
+        panel.$.vgOrderReset.disabled=!enabled||busy||!panel._vgOutputOrder;
+      if(enabled){
+        try{
+          const ids=readOutputOrder(view.outputs,panel._vgOutputOrder??'');
+          panel.$.vgOrderList.innerHTML=ids.map((id,i)=>
+            '<div class="spl-vg-order-row"><span class="spl-vg-order-id">'+
+            'Material '+String.fromCharCode(65+i)+' · '+id+'</span>'+
+            '<button type="button" class="spl-btn" data-order-index="'+i+
+            '" data-order-move="-1" '+(busy||i===0?'disabled':'')+
+            ' aria-label="Move '+id+' up">↑</button>'+
+            '<button type="button" class="spl-btn" data-order-index="'+i+
+            '" data-order-move="1" '+(busy||i===ids.length-1?'disabled':'')+
+            ' aria-label="Move '+id+' down">↓</button></div>'
+          ).join('');
+        }catch(error){
+          panel.$.vgOrderList.textContent=String(error?.message||error)+
+            ' Reset alphabetically or correct Output Order in native property.';
+        }
+      }else panel.$.vgOrderList.innerHTML='';
+    }
     const finalGenerator=view.map.get(view.map.get(view.graph.output)?.input);
     if(panel.$?.vgSwitchGenerator){
       panel.$.vgSwitchGenerator.textContent=finalGenerator?.type==='tube'?'Switch to Ribbon':'Switch to Tube';
@@ -214,6 +264,7 @@ function render(panel){
   }catch(error){
     stage.textContent='Graph unavailable. Fix graphJson/layout JSON in the property Inspector.';
     properties.textContent='';
+    if(panel.$?.vgOrderSection)panel.$.vgOrderSection.hidden=true;
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=true;
     status(panel,String(error?.message||error),true);
   }
@@ -249,6 +300,24 @@ function commitProperty(panel,key,nextValue){
   }catch(error){dump.value=prior;throw error;}
   if(key==='graphJson')panel._vgGraphJson=nextValue;
   else panel._vgLayoutJson=nextValue;
+  return true;
+}
+/** Native component-level ui-prop commit, allowed even with shared graph
+ * read-only. This does not call scene:set-property or modify Graph JSON.
+ */
+function commitOutputOrder(panel,value){
+  if(panel._vgSharedBusy)throw Error('Shared graph operation pending.');
+  const dump=panel._splineDump?.value?.outputOrder;
+  const prop=panel.$?.p_outputOrder;
+  if(!dump||typeof dump.value!=='string'||!prop||
+     typeof prop.dispatch!=='function')
+    throw Error('Missing native Cocos Inspector dump for Output Order.');
+  if(value===dump.value)return false;
+  const previous=dump.value;
+  try{
+    prop.dump=dump;dump.value=value;prop.dispatch('change-dump');
+  }catch(error){dump.value=previous;throw error;}
+  panel._vgOutputOrder=value;
   return true;
 }
 function activeOutputId(view,selectedId){
@@ -335,6 +404,10 @@ const inspector={
     const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
     const rendererOutputId=dump?.value?.outputId?.value??'';
+    const rendererOrder=dump?.value?.outputOrder?.value??'';
+    const renderAllOutputs=dump?.value?.renderAllOutputs?.value===true;
+    const changedOrder=this._vgOutputOrder!==rendererOrder||
+      this._vgRenderAllOutputs!==renderAllOutputs;
     const changedOutput=this._vgProfileOutputId!==rendererOutputId;
     if(changedShared||(!shared&&this._vgGraphJson!==graphJson)||
        changedOutput){
@@ -348,8 +421,10 @@ const inspector={
       this._vgRequestToken=(this._vgRequestToken||0)+1;
     }
     const changed=this._vgGraphJson!==graphJson||
-      this._vgLayoutJson!==layoutJson||changedShared||changedOutput;
+      this._vgLayoutJson!==layoutJson||changedShared||changedOutput||changedOrder;
     this._vgShared=shared;this._vgAssetIdentity=assetIdentity;
+    this._vgOutputOrder=rendererOrder;
+    this._vgRenderAllOutputs=renderAllOutputs;
     this._vgLayoutJson=layoutJson;
     if(!shared)this._vgGraphJson=graphJson;
     else if(changedShared){this._vgGraphJson='Asset loading';}
@@ -365,10 +440,38 @@ const inspector={
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgProfile=null;this._vgProfileBusy=false;
     this._vgProfileRequestToken=0;this._vgProfileOutputId='';
+    this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
        !this.$.vgAddWidth||!this.$.vgRemove||!this.$.vgAuto)return;
+    this.$?.vgOrderList?.addEventListener('click',event=>{
+      if(!this._vgRenderAllOutputs||this._vgSharedBusy)return;
+      const button=closest(event.target,'button[data-order-index]');
+      if(!button||button.disabled)return;
+      try{
+        const view=graph.parseGraph(this._vgGraphJson);
+        const ids=readOutputOrder(view.outputs,this._vgOutputOrder);
+        const index=Number(button.dataset?.orderIndex);
+        const direction=Number(button.dataset?.orderMove);
+        if(!Number.isInteger(index)||![-1,1].includes(direction)||
+           index<0||index>=ids.length||index+direction<0||
+           index+direction>=ids.length)
+          throw Error('Invalid Output Order move request.');
+        [ids[index],ids[index+direction]]=[ids[index+direction],ids[index]];
+        const next=ids.join(',')===view.outputs.join(',')?'':ids.join(',');
+        if(commitOutputOrder(this,next)){
+          render(this);status(this,'Output-to-Material order saved on renderer.');
+        }
+      }catch(error){status(this,String(error?.message||error),true);}
+    });
+    this.$?.vgOrderReset?.addEventListener('click',()=>{
+      try{
+        if(commitOutputOrder(this,'')){
+          render(this);status(this,'Alphabetic Output ID order restored.');
+        }
+      }catch(error){status(this,String(error?.message||error),true);}
+    });
     const actions={
       vgExport:'export-geometry-graph-asset',
       vgImport:'import-geometry-graph-asset',
@@ -665,6 +768,7 @@ const inspector={
     this._vgShared=false;this._vgAssetIdentity=null;
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgProfile=null;this._vgProfileBusy=false;
+    this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
