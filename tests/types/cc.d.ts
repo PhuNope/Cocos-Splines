@@ -91,13 +91,27 @@ declare module 'cc' {
         struct:{primitives:any[];vertexBundles?:any[]};readAttribute(i:number,attr:string):Float32Array|Uint16Array|Int16Array|Uint32Array|Int32Array|null;
         readIndices(i:number):Uint16Array|Uint32Array|null;
         readAttributeFormat(i:number,attr:string):{name:string;size:number;count:number}|number|null;
+        reset(info:{struct:Mesh.IStruct;data:Uint8Array}):void;
         destroy():void;
+    }
+    export namespace Mesh {
+        export interface IBufferView {offset:number;length:number;count:number;stride:number}
+        export interface IVertexBundle {
+            view:IBufferView;attributes:Array<{name:string;format:number}>;
+        }
+        export interface ISubMesh {
+            vertexBundelIndices:number[];primitiveMode:number;indexView?:IBufferView;
+        }
+        export interface IStruct {
+            vertexBundles:IVertexBundle[];primitives:ISubMesh[];
+            minPosition?:Vec3;maxPosition?:Vec3;
+        }
     }
     export class Graphics extends Component {
         lineWidth:number;strokeColor:Color;clear():void;moveTo(x:number,y:number):void;
         lineTo(x:number,y:number):void;stroke():void;close():void;
     }
-    export const gfx:{AttributeName:{ATTR_POSITION:string;ATTR_TEX_COORD:string;ATTR_NORMAL:string};PrimitiveMode:{TRIANGLE_LIST:number};Format:{RGB32F:number;RG32F:number;RGB16F:number;RG16F:number;RGB16I:number;RGB16UI:number;RG16I:number;RG16UI:number}};
+    export const gfx:{Attribute:new(name:string,format:number)=>{name:string;format:number};AttributeName:{ATTR_POSITION:string;ATTR_TEX_COORD:string;ATTR_NORMAL:string};PrimitiveMode:{TRIANGLE_LIST:number};Format:{RGB32F:number;RG32F:number;RGB16F:number;RG16F:number;RGB16I:number;RGB16UI:number;RG16I:number;RG16UI:number}};
     export class Color {constructor(r?:number,g?:number,b?:number,a?:number);r:number;g:number;b:number;a:number;}
     export class Material {uuid:string;initialize(options:any):void;setProperty(key:string,value:any):void;destroy():void;}
     export class MeshRenderer extends Component {
