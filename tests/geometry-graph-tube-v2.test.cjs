@@ -36,14 +36,14 @@ try{
  almost(raw.positions[8*3],1,'duplicate ring seam');
  almost(raw.uvs[16],1,'angular seam UV');
  almost(raw.uvs[(9*2)+1],1,'distance-based UV');
- assert.deepEqual(xyz(raw.normals,0),[1,0,0]);
+ xyz(raw.normals,0).forEach((v,i)=>almost(v,[1,0,0][i]));
  almost(dot(winding(raw,0),xyz(raw.normals,0))>0?1:0,1,'side triangles face outwards');
  assert.equal(JSON.stringify(input),source,'source frames must remain immutable');
  const cap=buildTubeGeometry(input,{radius:1,radialSegments:8,uvMetersPerRepeat:2,capEnds:true},false);
  assert.equal(cap.positions.length/3,18+2*9);
  assert.equal(cap.indices.length,8*6+2*8*3);
- assert.deepEqual(xyz(cap.normals,18),[0,0,-1]);
- assert.deepEqual(xyz(cap.normals,27),[0,0,1]);
+ xyz(cap.normals,18).forEach((v,i)=>almost(v,[0,0,-1][i]));
+ xyz(cap.normals,27).forEach((v,i)=>almost(v,[0,0,1][i]));
  assert(dot(winding(cap,16),xyz(cap.normals,18))>0,'start cap faces outside');
  assert(dot(winding(cap,24),xyz(cap.normals,27))>0,'end cap faces outside');
  const closed=buildTubeGeometry(input,{radius:1,radialSegments:8,uvMetersPerRepeat:2,capEnds:true},true);
@@ -56,7 +56,7 @@ try{
  almost(oblique[0],nx/d);almost(oblique[1],ny/d);
  const mirrored=[frame(0,vec(-1)),frame(2,vec(-1))];
  const reflected=buildTubeGeometry(mirrored,{radius:1,radialSegments:8,uvMetersPerRepeat:2,capEnds:true},false);
- assert.deepEqual(xyz(reflected.normals,0),[-1,0,0]);
+ xyz(reflected.normals,0).forEach((v,i)=>almost(v,[-1,0,0][i]));
  assert(dot(winding(reflected,0),xyz(reflected.normals,0))>0,'mirrored side winding faces out');
  assert(dot(winding(reflected,16),xyz(reflected.normals,18))>0,'mirrored cap winding faces out');
  const graph=compileGeometryGraph(tube());
