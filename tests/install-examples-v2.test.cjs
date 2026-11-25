@@ -43,6 +43,14 @@ try {
  assert.deepEqual(deform.nodes.map(n=>n.type),
    ['spline','offset','width','meshDeform','output']);
  assert.equal(deform.nodes.find(n=>n.type==='meshDeform').repeats,4);
+ const multi=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/MultiOutputRoadTubeGraph.json'),'utf8'));
+ assert.equal(multi.version,2);
+ assert.equal(multi.output,'outputRoad');
+ assert.deepEqual(multi.nodes.filter(n=>n.type==='output').map(n=>n.id),
+   ['outputRoad','outputPipe']);
+ assert.deepEqual(multi.nodes.filter(n=>['ribbon','tube'].includes(n.type)).map(n=>n.type),
+   ['ribbon','tube']);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
