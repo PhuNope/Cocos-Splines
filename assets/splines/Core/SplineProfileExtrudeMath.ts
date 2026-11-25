@@ -1,0 +1,160 @@
+/** Phase 4.3b — bounded profile extrusion along a spline frame field.
+ * Pure and deterministic: profile coordinates are built-in presets, never
+ * runtime code or an untrusted arbitrary vertex array.
+ *
+ * Shapes are counter-clockwise when viewed along +forward:
+ *   0 Rectangle, 1 Beveled rectangle, 2 U-channel (concave).
+ * Separate side bands provide crisp profile corners and independent cap UVs.
+ */
+import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
+
+export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
+export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
+export interface ProfileExtrudeSettings {
+    width:number;
+    height:number;
+    profileShape:GraphProfileShape;
+    uvMetersPerRepeat:number;
+    capEnds:boolean;
+}
+interface P2 {x:number;y:number}
+const PROFILES:Readonly<Record<GraphProfileShape,ReadonlyArray<Readonly<P2>>>>={
+    [GraphProfileShape.Rectangle]:[
+        {x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:-.5,y:.5},
+    ],
+    [GraphProfileShape.Beveled]:[
+        {x:-.4,y:-.5},{x:.4,y:-.5},{x:.5,y:-.4},{x:.5,y:.4},
+        {x:.4,y:.5},{x:-.4,y:.5},{x:-.5,y:.4},{x:-.5,y:-.4},
+    ],
+    [GraphProfileShape.UChannel]:[
+        {x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:.3,y:.5},
+        {x:.3,y:-.2},{x:-.3,y:-.2},{x:-.3,y:.5},{x:-.5,y:.5},
+    ],
+};
+const add=(a:V3,b:V3):V3=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z});
+const mul=(a:V3,k:number):V3=>({x:a.x*k,y:a.y*k,z:a.z*k});
+const cross=(a:V3,b:V3):V3=>({
+    x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x,
+});
+const dot=(a:V3,b:V3)=>a.x*b.x+a.y*b.y+a.z*b.z;
+const length=(a:V3)=>Math.hypot(a.x,a.y,a.z);
+const distance=(a:P2,b:P2)=>Math.hypot(b.x-a.x,b.y-a.y);
+const cross2=(a:P2,b:P2,c:P2)=>
+    (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+const isFinite3=(v:V3)=>!!v&&[v.x,v.y,v.z].every(Number.isFinite);
+const unit=(v:V3):V3=>{
+    const size=length(v);
+    if(!Number.isFinite(size)||size<1e-8)
+        throw Error('Geometry Graph Extrude requires nondegenerate frames.');
+    return mul(v,1/size);
+};
+function profileTriangles(profile:ReadonlyArray<Readonly<P2>>):number[] {
+    // Ear clipping works for U-channel too (a triangle fan would fill its gap).
+    // Built-in profiles are fixed/short; their triangulation is deterministic.
+    const remaining=profile.map((_,i)=>i),triangles:number[]=[];
+    let attempts=0;
+    while(remaining.length>3){
+        if(++attempts>profile.length*profile.length)
+            throw Error('Geometry Graph Extrude cannot triangulate its profile.');
+        let found=false;
+        for(let i=0;i<remaining.length;i++){
+            const a=remaining[(i+remaining.length-1)%remaining.length],
+                b=remaining[i],c=remaining[(i+1)%remaining.length];
+            const A=profile[a],B=profile[b],C=profile[c];
+            if(cross2(A,B,C)<=1e-10)continue;
+            const hasInterior=remaining.some(p=>{
+                if(p===a||p===b||p===c)return false;
+                const P=profile[p];
+                return cross2(A,B,P)>=-1e-10&&
+                    cross2(B,C,P)>=-1e-10&&cross2(C,A,P)>=-1e-10;
+            });
+            if(hasInterior)continue;
+            triangles.push(a,b,c);remaining.splice(i,1);
+            found=true;break;
+        }
+        if(!found)throw Error('Geometry Graph Extrude profile has no valid ear.');
+    }
+    triangles.push(...remaining);
+    return triangles;
+}
+export function buildProfileExtrudeGeometry(
+    frames:ReadonlyArray<ProfileExtrudeFrame>,settings:ProfileExtrudeSettings,
+    closed:boolean):RoadGeometry {
+    const {width,height,profileShape,uvMetersPerRepeat,capEnds}=settings;
+    if(!Number.isFinite(width)||width<.05||width>100||
+       !Number.isFinite(height)||height<.05||height>100||
+       !Number.isInteger(profileShape)||!Object.hasOwn(PROFILES,profileShape)||
+       !Number.isFinite(uvMetersPerRepeat)||uvMetersPerRepeat<.01||uvMetersPerRepeat>10000||
+       typeof capEnds!=='boolean'||typeof closed!=='boolean'||
+       !Array.isArray(frames)||frames.length<2||frames.length>1025)
+        throw Error('Geometry Graph Extrude settings or frame count are invalid.');
+    const profile=PROFILES[profileShape],bands=profile.length;
+    const triangles=capEnds&&!closed?profileTriangles(profile):[];
+    const perimeterLengths=profile.map((p,i)=>
+        distance(p,profile[(i+1)%bands]));
+    const perimeter=perimeterLengths.reduce((total,l)=>total+l,0);
+    const uvStart:number[]=[],uvEnd:number[]=[];
+    let cumulative=0;
+    for(const len of perimeterLengths){
+        uvStart.push(cumulative/perimeter);
+        cumulative+=len;uvEnd.push(cumulative/perimeter);
+    }
+    const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
+    const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};
+    const push=(p:V3,n:V3,u:number,v:number):number=>{
+        const idx=positions.length/3;
+        positions.push(p.x,p.y,p.z);normals.push(n.x,n.y,n.z);uvs.push(u,v);
+        return idx;
+    };
+    const at=(f:ProfileExtrudeFrame,p:Readonly<P2>):V3=>
+        add(add(f.position,mul(f.right,p.x*width*f.widthFactor)),
+            mul(f.up,p.y*height*f.widthFactor));
+    let handedness=0;
+    // Band-major layout makes normals hard at every edge and avoids smoothing
+    // across sharp corners. Two distinct vertices per edge per frame.
+    for(let j=0;j<bands;j++){
+        const A=profile[j],B=profile[(j+1)%bands];
+        for(const f of frames){
+            if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
+               f.widthFactor>1000||!Number.isFinite(f.distance)||
+               ![f.position,f.forward,f.right,f.up].every(isFinite3))
+                throw Error('Geometry Graph Extrude contains an invalid frame.');
+            const orientation=dot(cross(f.right,f.up),f.forward);
+            if(!Number.isFinite(orientation)||Math.abs(orientation)<1e-10)
+                throw Error('Geometry Graph Extrude frame basis is degenerate.');
+            const sign=orientation>0?1:-1;
+            if(handedness!==0&&handedness!==sign)
+                throw Error('Geometry Graph Extrude frame handedness changed.');
+            handedness=sign;
+            const edge=add(mul(f.right,(B.x-A.x)*width*f.widthFactor),
+                mul(f.up,(B.y-A.y)*height*f.widthFactor));
+            const n=unit(mul(cross(edge,f.forward),handedness));
+            push(at(f,A),n,uvStart[j],f.distance/uvMetersPerRepeat);
+            push(at(f,B),n,uvEnd[j],f.distance/uvMetersPerRepeat);
+        }
+        const first=j*frames.length*2;
+        for(let i=0;i<frames.length-1;i++){
+            const a=first+i*2,b=a+1,c=a+2,d=c+1;
+            if(handedness>0)indices.push(a,b,c,b,d,c);
+            else indices.push(a,c,b,b,c,d);
+        }
+    }
+    if(capEnds&&!closed){
+        for(let end=0;end<2;end++){
+            const f=frames[end===0?0:frames.length-1];
+            const outward=unit(mul(cross(f.right,f.up),
+                handedness*(end===0?-1:1)));
+            const offset=positions.length/3;
+            for(const point of profile)
+                push(at(f,point),outward,point.x+.5,point.y+.5);
+            const ccw=(end===1)===(handedness>0);
+            for(let t=0;t<triangles.length;t+=3){
+                const a=offset+triangles[t],b=offset+triangles[t+1],
+                    c=offset+triangles[t+2];
+                if(ccw)indices.push(a,b,c);
+                else indices.push(a,c,b);
+            }
+        }
+    }
+    return result;
+}
