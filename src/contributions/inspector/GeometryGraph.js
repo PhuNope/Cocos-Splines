@@ -33,7 +33,7 @@ const template=base.template+[
  '</details>',
  '<details class="spl-section spl-profile-editor" open>',
  '<summary>Authored Profile Editor · JsonAsset drafts</summary>',
- '<div class="spl-note">Pick Profile Asset A/B/C, click or drag a vertex (blue), drag an edge midpoint (green), or select an edge and insert a point. Undo/Redo here changes only the unsaved draft, not Scene history. Save requires confirmation and external file writes cannot be undone through Scene Undo.</div>',
+ '<div class="spl-note">Pick Profile Asset A/B/C; edit vertices (blue), edges (green), and UV0 seam/edge weights. UV seam is highlighted pink. Changes are draft-only until Save; Undo/Redo does NOT restore saved JsonAsset files.</div>',
  '<div class="spl-vg-toolbar">',
  '<label>Profile Slot <select class="spl-profile-slot"><option value="0">A</option><option value="1">B</option><option value="2">C</option></select></label>',
  '<button type="button" class="spl-btn spl-profile-open">Edit Profile Asset…</button>',
@@ -83,6 +83,9 @@ const style=base.style+[
 '.spl-profile-slot,.spl-profile-snap{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
 '.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
 '.spl-profile-count{margin:6px 0;color:#b6d4df}',
+'.spl-profile-uv-controls{margin:8px 0;padding:7px;border:1px solid #42667b;border-radius:5px}',
+'.spl-profile-uv-info{font-size:11px;color:#b5d3e1;line-height:1.6}',
+'.spl-profile-uv-controls input{width:80px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
 '.spl-vg-viewport{overflow:auto;max-width:100%;height:360px;border:1px solid #3c6172;border-radius:6px;background:rgba(18,26,36,.65);touch-action:pan-x pan-y}',
 '.spl-vg-stage{position:relative;width:860px;height:410px;min-width:860px;min-height:410px}',
 '.spl-vg-wires{position:absolute;inset:0;pointer-events:none}',
@@ -666,10 +669,24 @@ const inspector={
               Number.isInteger(this._vgAuthoredEdge))
         applyAuthoredEdit(this,'insert-edge',{
           index:this._vgAuthoredEdge,t:.5,offset:.12});
+      else if(el.classList?.contains('spl-profile-set-uv-seam')&&
+              Number.isInteger(this._vgAuthoredEdge))
+        applyAuthoredEdit(this,'set-uv-seam',{index:this._vgAuthoredEdge});
+      else if(el.classList?.contains('spl-profile-reset-uv'))
+        applyAuthoredEdit(this,'reset-uv',{});
     });
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-uv-weight')){
+        if(!Number.isInteger(this._vgAuthoredEdge))return;
+        if(event.target.value===''||!Number.isFinite(Number(event.target.value))){
+          profileStatus(this,'Profile UV edge weight must be finite.',true);return;
+        }
+        applyAuthoredEdit(this,'set-edge-weight',{
+          index:this._vgAuthoredEdge,weight:Number(event.target.value)});
+        return;
+      }
       if(!cls?.contains('spl-profile-x')&&!cls?.contains('spl-profile-y'))return;
       const pt=authored.parseProfile(this._vgAuthoredDraft.profileJson)
         .points[this._vgAuthoredSelected];
