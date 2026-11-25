@@ -33,12 +33,15 @@ const template=base.template+[
  '</details>',
  '<details class="spl-section spl-profile-editor" open>',
  '<summary>Authored Profile Editor · JsonAsset drafts</summary>',
- '<div class="spl-note">Pick Profile Asset A/B/C on this renderer first. Edit points here without touching the source file; Save requires an explicit confirmation. External file writes are not part of Scene Undo.</div>',
+ '<div class="spl-note">Pick Profile Asset A/B/C, click or drag a vertex (blue), drag an edge midpoint (green), or select an edge and insert a point. Undo/Redo here changes only the unsaved draft, not Scene history. Save requires confirmation and external file writes cannot be undone through Scene Undo.</div>',
  '<div class="spl-vg-toolbar">',
  '<label>Profile Slot <select class="spl-profile-slot"><option value="0">A</option><option value="1">B</option><option value="2">C</option></select></label>',
  '<button type="button" class="spl-btn spl-profile-open">Edit Profile Asset…</button>',
  '<button type="button" class="spl-btn spl-profile-save">Save Profile JSON…</button>',
  '<button type="button" class="spl-btn spl-profile-discard">Discard Profile Draft</button>',
+ '<button type="button" class="spl-btn spl-profile-undo">Undo Draft</button>',
+ '<button type="button" class="spl-btn spl-profile-redo">Redo Draft</button>',
+ '<label>Drag Snap <select class="spl-profile-snap"><option value="0">Free</option><option value="0.01">0.01</option><option value="0.05">0.05</option><option value="0.1">0.10</option></select></label>',
  '</div>',
  '<div class="spl-profile-status" role="status" aria-live="polite">Select an authored Profile Asset slot to begin.</div>',
  '<div class="spl-profile-canvas"></div>',
@@ -77,7 +80,7 @@ const style=base.style+[
 '.spl-profile-canvas{margin:8px 0;font-size:11px}',
 '.spl-profile-coordinates{display:flex;gap:10px;margin:8px 0}',
 '.spl-profile-coordinates input{width:90px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
-'.spl-profile-slot{width:60px;color:inherit;background:#1b3544}',
+'.spl-profile-slot,.spl-profile-snap{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
 '.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
 '.spl-profile-count{margin:6px 0;color:#b6d4df}',
 '.spl-vg-viewport{overflow:auto;max-width:100%;height:360px;border:1px solid #3c6172;border-radius:6px;background:rgba(18,26,36,.65);touch-action:pan-x pan-y}',
@@ -119,6 +122,8 @@ const $={...base.$,
   vgProfileSlot:'.spl-profile-slot',vgProfileOpen:'.spl-profile-open',
   vgProfileSave:'.spl-profile-save',vgProfileDiscard:'.spl-profile-discard',
   vgProfileStatus:'.spl-profile-status',vgProfileCanvas:'.spl-profile-canvas',
+  vgProfileUndo:'.spl-profile-undo',vgProfileRedo:'.spl-profile-redo',
+  vgProfileSnap:'.spl-profile-snap',
   vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
   vgOrderSection:'.spl-vg-order-section',
@@ -193,6 +198,10 @@ function renderAuthoredProfile(panel){
       draft.profileJson===draft.initialProfileJson;
   if(panel.$?.vgProfileDiscard)
     panel.$.vgProfileDiscard.disabled=!draft||blocked;
+  if(panel.$?.vgProfileUndo)
+    panel.$.vgProfileUndo.disabled=!draft||blocked||!draft.undo?.length;
+  if(panel.$?.vgProfileRedo)
+    panel.$.vgProfileRedo.disabled=!draft||blocked||!draft.redo?.length;
   if(!panel.$?.vgProfileCanvas)return;
   if(!draft){
     panel.$.vgProfileCanvas.textContent='';
@@ -200,28 +209,64 @@ function renderAuthoredProfile(panel){
   }
   try{
     panel.$.vgProfileCanvas.innerHTML=
-      authored.renderProfileControls(draft.profileJson,panel._vgAuthoredSelected||0);
+      authored.renderProfileControls(draft.profileJson,
+        panel._vgAuthoredSelected||0,panel._vgAuthoredEdge??null);
   }catch(error){
     panel.$.vgProfileCanvas.textContent=String(error?.message||error);
   }
 }
-function applyAuthoredEdit(panel,action,details){
+function applyAuthoredEdit(panel,action,details={}){
   const draft=panel._vgAuthoredDraft;
   if(!draft||panel._vgAuthoredBusy)return;
   try{
-    const next=authored.applyProfileEdit(draft.profileJson,action,
-      {index:panel._vgAuthoredSelected,...details});
+    const {baseProfile,...params}=details;
+    const next=authored.applyProfileEdit(baseProfile||draft.profileJson,action,
+      {index:panel._vgAuthoredSelected,...params});
     if(next!==draft.profileJson){
+      // One history entry per pointer drag, regardless of move event count.
+      // Input/insert/remove remain individually undoable transactions.
+      const drag=panel._vgAuthoredDrag;
+      if(!drag||!drag.historySaved){
+        draft.undo.push(drag?.baseProfile||draft.profileJson);
+        if(draft.undo.length>32)draft.undo.shift();
+        draft.redo.length=0;
+        if(drag)drag.historySaved=true;
+      }
       draft.profileJson=next;
-      if(action==='insert')panel._vgAuthoredSelected++;
-      else if(action==='remove')panel._vgAuthoredSelected=Math.min(
-        panel._vgAuthoredSelected,authored.parseProfile(next).points.length-1);
+      if(action==='insert'||action==='insert-edge'){
+        panel._vgAuthoredSelected=Number(params.index??panel._vgAuthoredSelected)+1;
+        panel._vgAuthoredEdge=null;
+      }else if(action==='remove'){
+        panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
+          authored.parseProfile(next).points.length-1);
+        panel._vgAuthoredEdge=null;
+      }
     }
     renderAuthoredProfile(panel);
     profileStatus(panel,'Unsaved Profile draft: '+draft.assetName+
       ' · '+authored.parseProfile(draft.profileJson).points.length+
       ' validated points. Save explicitly to update JsonAsset.');
   }catch(error){profileStatus(panel,String(error?.message||error),true);}
+}
+function restoreAuthoredHistory(panel,mode){
+  const draft=panel._vgAuthoredDraft;
+  if(!draft||panel._vgAuthoredBusy||panel._vgAuthoredDrag)return;
+  const from=mode==='undo'?draft.undo:draft.redo;
+  const to=mode==='undo'?draft.redo:draft.undo;
+  if(!from?.length)return;
+  const prior=draft.profileJson;
+  const next=authored.formatProfile(from.pop());
+  to.push(prior);if(to.length>32)to.shift();
+  draft.profileJson=next;
+  panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
+    authored.parseProfile(next).points.length-1);
+  panel._vgAuthoredEdge=null;
+  renderAuthoredProfile(panel);
+  profileStatus(panel,(mode==='undo'?'Undo':'Redo')+
+    ' applied to unsaved Profile draft only.');
+}
+function snapProfileCoordinate(value,grid){
+  return grid>0?Math.round(value/grid)*grid:value;
 }
 function render(panel){
   renderAuthoredProfile(panel);
@@ -525,6 +570,7 @@ const inspector={
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     this._vgAuthoredDraft=null;this._vgAuthoredBusy=false;
     this._vgAuthoredToken=0;this._vgAuthoredSelected=0;
+    this._vgAuthoredEdge=null;
     this._vgProfileAssetIdentity=undefined;this._vgAuthoredDrag=null;
     this.$?.vgProfileSlot?.addEventListener('change',event=>{
       const slot=Number(event.target?.value);
@@ -546,8 +592,9 @@ const inspector={
         const canonical=authored.formatProfile(result.profileJson);
         this._vgAuthoredDraft={nodeUuid:result.nodeUuid,assetUuid:result.assetUuid,
           slot,assetName:result.assetName||'Profile',sha256:result.sha256,
-          profileJson:canonical,initialProfileJson:canonical};
-        this._vgAuthoredSelected=0;
+          profileJson:canonical,initialProfileJson:canonical,
+          undo:[],redo:[]};
+        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
         profileStatus(this,'Editing '+this._vgAuthoredDraft.assetName+
           ' in memory; no file/Scene changes until Save.');
       }catch(error){
@@ -580,6 +627,7 @@ const inspector={
         draft.sha256=response.sha256||draft.sha256;
         draft.profileJson=authored.formatProfile(response.profileJson||draft.profileJson);
         draft.initialProfileJson=draft.profileJson;
+        draft.undo.length=0;draft.redo.length=0;
         profileStatus(this,response.message||'Profile saved.',!!response.refreshPending);
       }catch(error){
         if(token===this._vgAuthoredToken&&draft===this._vgAuthoredDraft)
@@ -591,8 +639,21 @@ const inspector={
     this.$?.vgProfileDiscard?.addEventListener('click',()=>{
       if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
       this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
+      this._vgAuthoredEdge=null;
       this._vgAuthoredToken++;
       render(this);profileStatus(this,'Profile draft discarded. Source JsonAsset unchanged.');
+    });
+    this.$?.vgProfileUndo?.addEventListener('click',()=>restoreAuthoredHistory(this,'undo'));
+    this.$?.vgProfileRedo?.addEventListener('click',()=>restoreAuthoredHistory(this,'redo'));
+    this.$?.vgProfileCanvas?.addEventListener('keydown',event=>{
+      if(!this._vgAuthoredDraft||!event.ctrlKey||
+         (event.target?.tagName==='INPUT'))return;
+      if(event.key.toLowerCase()==='z'){
+        event.preventDefault?.();
+        restoreAuthoredHistory(this,event.shiftKey?'redo':'undo');
+      }else if(event.key.toLowerCase()==='y'){
+        event.preventDefault?.();restoreAuthoredHistory(this,'redo');
+      }
     });
     this.$?.vgProfileCanvas?.addEventListener('click',event=>{
       const el=closest(event.target,'button');
@@ -601,6 +662,10 @@ const inspector={
         applyAuthoredEdit(this,'insert',{});
       else if(el.classList?.contains('spl-profile-remove'))
         applyAuthoredEdit(this,'remove',{});
+      else if(el.classList?.contains('spl-profile-insert-edge')&&
+              Number.isInteger(this._vgAuthoredEdge))
+        applyAuthoredEdit(this,'insert-edge',{
+          index:this._vgAuthoredEdge,t:.5,offset:.12});
     });
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
@@ -620,10 +685,19 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('pointerdown',event=>{
       if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
       const circle=closest(event.target,'[data-profile-point]');
-      const index=Number(circle?.dataset?.profilePoint);
-      if(!circle||!Number.isInteger(index)||index<0)return;
+      const edge=circle?null:closest(event.target,'[data-profile-edge]');
+      const kind=circle?'point':edge?'edge':null;
+      if(!kind)return;
+      const index=Number(circle?.dataset?.profilePoint??
+        edge?.dataset?.profileEdge);
+      if(!Number.isInteger(index)||index<0||
+         index>=authored.parseProfile(this._vgAuthoredDraft.profileJson).points.length)
+        return;
       this._vgAuthoredSelected=index;
-      this._vgAuthoredDrag={pointerId:event.pointerId,index};
+      this._vgAuthoredEdge=kind==='edge'?index:null;
+      this._vgAuthoredDrag={pointerId:event.pointerId,index,kind,
+        startX:event.clientX,startY:event.clientY,
+        baseProfile:this._vgAuthoredDraft.profileJson,historySaved:false};
       this.$.vgProfileCanvas.setPointerCapture?.(event.pointerId);
       event.preventDefault?.();
       renderAuthoredProfile(this);
@@ -634,11 +708,23 @@ const inspector={
       const svg=this.$.vgProfileCanvas.querySelector?.('svg');
       const rect=svg?.getBoundingClientRect?.();
       if(!rect||rect.width<=0||rect.height<=0)return;
-      const x=Math.max(-1,Math.min(1,
-        ((event.clientX-rect.left)/rect.width*240-120)/104));
-      const y=Math.max(-1,Math.min(1,
-        (120-(event.clientY-rect.top)/rect.height*240)/104));
-      applyAuthoredEdit(this,'move',{index:drag.index,x,y});
+      const grid=Number(this.$?.vgProfileSnap?.value||0);
+      const snap=Number.isFinite(grid)&&grid>=0&&grid<=.1?grid:0;
+      if(drag.kind==='edge'){
+        if(!Number.isFinite(drag.startX)||!Number.isFinite(drag.startY))return;
+        const dx=snapProfileCoordinate(
+          (event.clientX-drag.startX)/rect.width*240/104,snap);
+        const dy=snapProfileCoordinate(
+          -(event.clientY-drag.startY)/rect.height*240/104,snap);
+        applyAuthoredEdit(this,'move-edge',{
+          baseProfile:drag.baseProfile,index:drag.index,dx,dy});
+      }else{
+        const x=snapProfileCoordinate(Math.max(-1,Math.min(1,
+          ((event.clientX-rect.left)/rect.width*240-120)/104)),snap);
+        const y=snapProfileCoordinate(Math.max(-1,Math.min(1,
+          (120-(event.clientY-rect.top)/rect.height*240)/104)),snap);
+        applyAuthoredEdit(this,'move',{index:drag.index,x,y});
+      }
     });
     const finishProfileDrag=event=>{
       const drag=this._vgAuthoredDrag;
@@ -978,6 +1064,7 @@ const inspector={
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     this._vgAuthoredToken=(this._vgAuthoredToken||0)+1;
     this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
+    this._vgAuthoredEdge=null;
     this._vgAuthoredBusy=false;this._vgProfileAssetIdentity=undefined;
     this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
