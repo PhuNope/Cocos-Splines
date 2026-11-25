@@ -326,7 +326,8 @@ async function run(){
    const slotFrames=frameBuilds;
    renderer.rebuild();
    assert.equal(frameBuilds,slotFrames,'Changing mesh sources never resamples spline');
-   assert.deepEqual(renderer.getGraphMetrics(),{computed:7,reused:0,nodes:7});
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:6,reused:1,nodes:7},
+    'Shared spline source cache remains valid when upgrading to dual Mesh slots');
    const slotAMesh=JSON.stringify(out.mesh.data);
    slotBPos[0]=-1.75;slotBBytes[0]=31;
    renderer.update();
