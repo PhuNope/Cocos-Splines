@@ -16,7 +16,7 @@ const RAW=[
  {id:'l-section',label:'L Section',detail:'6-point concave corner',
   points:[[-.5,-.5],[.5,-.5],[.5,-.1],[.1,-.1],[.1,.5],[-.5,.5]]},
  {id:'octagon',label:'Octagon',detail:'8-point beveled column',
-  points:[[-.4,-.5],[.4,-.5],[.5,-.4],[.5,.4],[.4,.5],[-.4,.5],[-.5,.4],[-.5,-.4]]},
+  points:[[-.3,-.5],[.3,-.5],[.5,-.3],[.5,.3],[.3,.5],[-.3,.5],[-.5,.3],[-.5,-.3]]},
  {id:'uv-seam-demo',label:'UV Seam Example',detail:'rectangle with seam and weighted U',
   points:[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]],
   uv:{seamEdge:2,edgeWeights:[1,2,1,1]}},
