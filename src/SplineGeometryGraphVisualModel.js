@@ -13,6 +13,7 @@ const TYPES=Object.freeze({
   width:{input:'path',output:'path',params:['multiplier']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
+  extrude:{input:'path',output:'mesh',params:['width','height','profileShape','uvMetersPerRepeat','capEnds']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 const LIMITS=Object.freeze({
@@ -20,9 +21,11 @@ const LIMITS=Object.freeze({
   multiplier:[.01,20,1],width:[.05,100,4],endWidth:[0,100,0],
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
+  height:[.05,100,1],profileShape:[0,2,0],
 });
 const NODE_KEYS=new Set(['id','type','input','right','up','multiplier','width',
-  'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments']);
+  'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
+  'height','profileShape']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -53,7 +56,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -135,11 +138,11 @@ function applyGraphEdit(json,action,details={}) {
     }else target.input=source.id;
   }else if(action==='replace-generator'){
     const kind=details.type;
-    if(!['ribbon','tube'].includes(kind))
-      throw Error('Only Ribbon and Tube generators can be selected.');
+    if(!['ribbon','tube','extrude'].includes(kind))
+      throw Error('Only Ribbon, Tube and Extrude generators can be selected.');
     const output=find(next.output);
     const current=find(output?.input);
-    if(!current||!['ribbon','tube'].includes(current.type))
+    if(!current||!['ribbon','tube','extrude'].includes(current.type))
       throw Error('Output must connect to an existing mesh generator.');
     if(current.type===kind)return json;
     const reserved=new Set(next.nodes.map(n=>n.id));
@@ -148,6 +151,8 @@ function applyGraphEdit(json,action,details={}) {
     const replacement={id:name,type:kind,input:current.input,
       uvMetersPerRepeat:current.uvMetersPerRepeat??5,
       capEnds:current.capEnds??false};
+    if((kind==='ribbon'||kind==='extrude')&&
+       typeof current.width==='number')replacement.width=current.width;
     next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
     output.input=name;
   }else if(action==='param'){
@@ -159,7 +164,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     target[key]=value;
@@ -243,6 +248,11 @@ function renderNodeParameters(graphJson,id){
       return '<label>'+escapeHtml(key)+' <input type="checkbox" data-graph-param="'+key+'"'+
         (value?' checked':'')+'></label>';
     const [min,max]=LIMITS[key];
+    if(key==='profileShape')return '<label>'+escapeHtml(key)+
+      ' <select data-graph-param="'+key+'">'+
+      ['Rectangle','Beveled','U Channel'].map((name,i)=>
+        '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
+      '</select></label>';
     if(key==='cornerMode')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
