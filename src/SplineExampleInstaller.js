@@ -20,6 +20,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/BasicRibbonGraph.json','examples/installable/GeometryGraph/BasicRibbonGraph.json'],
  ['GeometryGraph/BasicTubeGraph.json','examples/installable/GeometryGraph/BasicTubeGraph.json'],
  ['GeometryGraph/BasicProfileExtrudeGraph.json','examples/installable/GeometryGraph/BasicProfileExtrudeGraph.json'],
+ ['GeometryGraph/TaperWidthExtrudeGraph.json','examples/installable/GeometryGraph/TaperWidthExtrudeGraph.json'],
  ['GeometryGraph/AuthoredProfileExtrudeGraph.json','examples/installable/GeometryGraph/AuthoredProfileExtrudeGraph.json'],
  ['GeometryGraph/Profiles/LProfile.json','examples/installable/GeometryGraph/Profiles/LProfile.json'],
  ['GeometryGraph/Profiles/OctagonProfile.json','examples/installable/GeometryGraph/Profiles/OctagonProfile.json'],

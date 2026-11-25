@@ -37,6 +37,16 @@ try {
  assert.deepEqual(extrude.nodes.map(n=>n.type),
    ['spline','offset','width','extrude','output']);
  assert.equal(extrude.nodes.find(n=>n.type==='extrude').profileShape,2);
+ const taperGraph=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/TaperWidthExtrudeGraph.json'),'utf8'));
+ assert.equal(taperGraph.version,1);
+ assert.deepEqual(taperGraph.nodes.map(n=>n.type),
+  ['spline','width','extrude','output']);
+ const taperWidth=taperGraph.nodes.find(n=>n.type==='width');
+ assert.equal(taperWidth.midMultiplier,.35);
+ assert.equal(taperWidth.endMultiplier,1);
+ assert.equal(taperWidth.taperMode,1);
+ assert.equal(taperGraph.nodes.find(n=>n.type==='extrude').profileSlot,0);
  const authored=JSON.parse(fs.readFileSync(
   path.join(first.folder,'GeometryGraph/AuthoredProfileExtrudeGraph.json'),'utf8'));
  assert.equal(authored.version,2);
