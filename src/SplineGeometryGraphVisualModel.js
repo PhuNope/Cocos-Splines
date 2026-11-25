@@ -14,7 +14,7 @@ const TYPES=Object.freeze({
   width:{input:'path',output:'path',params:['multiplier']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
-  extrude:{input:'path',output:'mesh',params:['width','height','profileShape','uvMetersPerRepeat','capEnds']},
+  extrude:{input:'path',output:'mesh',params:['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']},
   meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
@@ -23,13 +23,13 @@ const LIMITS=Object.freeze({
   multiplier:[.01,20,1],width:[.05,100,4],endWidth:[0,100,0],
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
-  height:[.05,100,1],profileShape:[0,2,0],
+  height:[.05,100,1],profileShape:[0,2,0],profileSlot:[0,2,0],
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
+  'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -69,7 +69,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -276,11 +276,16 @@ function applyGraphEdit(json,action,details={}) {
     if(!target||!TYPES[target.type].params.includes(key))
       throw Error('Selected node does not support '+key+'.');
     let value=details.value;
+    if(key==='profileSlot'&&value===-1){
+      delete target.profileSlot;
+      validateGraph(next);
+      return formatGraph(next);
+    }
     if(key==='capEnds'){if(typeof value!=='boolean')throw Error('capEnds must be Boolean.');}
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -386,6 +391,12 @@ function renderNodeParameters(graphJson,id){
       ['Strip','Box Shell'].map((name,i)=>
         '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
       '</select></label>';
+    if(key==='profileSlot')return '<label>Profile Asset Slot'+
+      ' <select data-graph-param="profileSlot">'+
+      '<option value="-1"'+(n.profileSlot===undefined?' selected':'')+'>Built-in preset (default)</option>'+
+      ['A (Profile Asset A)','B (Profile Asset B)','C (Profile Asset C)']
+        .map((name,i)=>'<option value="'+i+'"'+(n.profileSlot===i?' selected':'')+'>'+name+'</option>').join('')+
+      '</select></label>';
     if(key==='profileShape')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       ['Rectangle','Beveled','U Channel'].map((name,i)=>
@@ -400,6 +411,11 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
+    (n.type==='extrude'?'<div class="spl-vg-note">'+
+      (n.profileSlot===undefined?'Built-in profile: Rectangle, Beveled or U Channel.':
+       'Authored Profile Slot '+['A','B','C'][n.profileSlot]+
+       ': assign cocos-splines/profile v1 JsonAsset in this Renderer. Built-in shape ignored.')+
+      '</div>':'')+
     (n.type==='meshDeform'?'<div class="spl-vg-note">'+
       ((n.repeatLayout??0)===1?
        'Source Length: 0 tileLength uses mesh axis bounds; last tile is clipped, not stretched.'+

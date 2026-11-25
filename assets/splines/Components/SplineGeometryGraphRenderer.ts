@@ -6,6 +6,7 @@ import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
 import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext}
     from '../Core/SplineGeometryGraph';
+import {parseGraphProfileAsset} from '../Core/SplineProfileExtrudeMath';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
     from '../Core/SplineGraphMeshAssetReader';
 import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder,graphOutputMeshSourceSlots}
@@ -73,6 +74,15 @@ export class SplineGeometryGraphRenderer extends Component {
     sourceSubMeshB=0;
     @property({min:0,max:3,step:1,tooltip:'Source Mesh C: imported submesh index 0–3. Must exist in the assigned Mesh.'})
     sourceSubMeshC=0;
+    /** Optional data-only JsonAsset profiles; Extrude nodes opt in with
+     * profileSlot 0/1/2. Existing preset graphs do not read these assets.
+     */
+    @property({type:JsonAsset,tooltip:'Extrude Profile Slot A: cocos-splines/profile v1 polygon JsonAsset.'})
+    profileAssetA:JsonAsset|null=null;
+    @property({type:JsonAsset,tooltip:'Extrude Profile Slot B: independent authored polygon JsonAsset.'})
+    profileAssetB:JsonAsset|null=null;
+    @property({type:JsonAsset,tooltip:'Extrude Profile Slot C: independent authored polygon JsonAsset.'})
+    profileAssetC:JsonAsset|null=null;
     /** Imported FBX/glTF Materials are on the model MeshRenderer, not the
      * Mesh geometry asset. These are read-only source renderer references.
      */
@@ -154,7 +164,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const runner=new GeometryGraphRunner();
         runner.setProfilingEnabled(true);
         const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
-            ...this.graphMeshContext(plan)};
+            ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
         runner.evaluate(plan,context,selected||undefined);
         const cold=runner.profile!;
         runner.evaluate(plan,context,selected||undefined);
@@ -185,6 +195,30 @@ export class SplineGeometryGraphRenderer extends Component {
     private slotSubMesh(slot:number):number{
         return slot===0?this.sourceSubMesh:
             slot===1?this.sourceSubMeshB:this.sourceSubMeshC;
+    }
+    private profileAsset(slot:number):JsonAsset|null{
+        return slot===0?this.profileAssetA:
+            slot===1?this.profileAssetB:this.profileAssetC;
+    }
+    /** Validate a fresh copy; modified asset content changes per-slot
+     * revisions without changing shared Graph JSON or Spline samples.
+     */
+    private graphProfileContext(plan:GeometryGraphPlan):
+        Pick<GeometryGraphContext,'profileSources'|'profileRevisions'>{
+        const slots=[...new Set(plan.nodes.filter(n=>n.type==='extrude'&&
+            n.profileSlot!==undefined).map(n=>n.profileSlot!))];
+        if(slots.length===0)return {};
+        const sources:NonNullable<GeometryGraphContext['profileSources']>[number][]=[];
+        const revisions:(string|undefined)[]=[];
+        for(const slot of slots){
+            const asset=this.profileAsset(slot);
+            if(!asset||!asset.json)
+                throw Error('Graph Profile Asset slot '+slot+' requires an assigned JsonAsset.');
+            const profile=parseGraphProfileAsset(asset.json);
+            sources[slot]=profile.points;
+            revisions[slot]=JSON.stringify(profile.points);
+        }
+        return {profileSources:sources,profileRevisions:revisions};
     }
     private sourceMaterialRenderer(slot:number):MeshRenderer|null{
         return slot===0?this.materialSourceRenderer:
@@ -222,10 +256,12 @@ export class SplineGeometryGraphRenderer extends Component {
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
+        const profiles=this.graphProfileContext(parseGeometryGraph(json));
+        const activeProfileRevisions=Object.entries(profiles.profileRevisions||{});
         return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
             this.renderAllOutputs?this.outputOrder:null,
             this.renderAllOutputs?this.autoBindImportedMaterials:null,
-            assets,this.gizmoEdgeLimit]);
+            assets,activeProfileRevisions,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -333,7 +369,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const signature=this.signature();
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const context={frames,closed:source.closed,revision:frameRevision,
-            ...this.graphMeshContext(plan)};
+            ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];
         if(this.renderAllOutputs){
