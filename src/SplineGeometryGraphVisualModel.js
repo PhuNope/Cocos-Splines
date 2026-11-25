@@ -14,6 +14,7 @@ const TYPES=Object.freeze({
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   extrude:{input:'path',output:'mesh',params:['width','height','profileShape','uvMetersPerRepeat','capEnds']},
+  meshDeform:{input:'path',output:'mesh',params:['width','height','deformShape','segments','repeats','uvMetersPerRepeat']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 const LIMITS=Object.freeze({
@@ -22,10 +23,11 @@ const LIMITS=Object.freeze({
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
   height:[.05,100,1],profileShape:[0,2,0],
+  deformShape:[0,1,0],segments:[2,64,12],repeats:[1,16,1],
 });
 const NODE_KEYS=new Set(['id','type','input','right','up','multiplier','width',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape']);
+  'height','profileShape','deformShape','segments','repeats']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -56,7 +58,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','deformShape','segments','repeats'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -138,21 +140,23 @@ function applyGraphEdit(json,action,details={}) {
     }else target.input=source.id;
   }else if(action==='replace-generator'){
     const kind=details.type;
-    if(!['ribbon','tube','extrude'].includes(kind))
-      throw Error('Only Ribbon, Tube and Extrude generators can be selected.');
+    if(!['ribbon','tube','extrude','meshDeform'].includes(kind))
+      throw Error('Only Ribbon, Tube, Extrude and Mesh Deform generators can be selected.');
     const output=find(next.output);
     const current=find(output?.input);
-    if(!current||!['ribbon','tube','extrude'].includes(current.type))
+    if(!current||!['ribbon','tube','extrude','meshDeform'].includes(current.type))
       throw Error('Output must connect to an existing mesh generator.');
     if(current.type===kind)return json;
     const reserved=new Set(next.nodes.map(n=>n.id));
     let name=kind,i=1;
     while(reserved.has(name))name=kind+String(i++);
     const replacement={id:name,type:kind,input:current.input,
-      uvMetersPerRepeat:current.uvMetersPerRepeat??5,
-      capEnds:current.capEnds??false};
-    if((kind==='ribbon'||kind==='extrude')&&
+      uvMetersPerRepeat:current.uvMetersPerRepeat??5};
+    if(kind!=='meshDeform')replacement.capEnds=current.capEnds??false;
+    if(['ribbon','extrude','meshDeform'].includes(kind)&&
        typeof current.width==='number')replacement.width=current.width;
+    if(['extrude','meshDeform'].includes(kind)&&
+       typeof current.height==='number')replacement.height=current.height;
     next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
     output.input=name;
   }else if(action==='param'){
@@ -164,7 +168,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','deformShape','segments','repeats'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     target[key]=value;
@@ -248,6 +252,11 @@ function renderNodeParameters(graphJson,id){
       return '<label>'+escapeHtml(key)+' <input type="checkbox" data-graph-param="'+key+'"'+
         (value?' checked':'')+'></label>';
     const [min,max]=LIMITS[key];
+    if(key==='deformShape')return '<label>'+escapeHtml(key)+
+      ' <select data-graph-param="'+key+'">'+
+      ['Strip','Box Shell'].map((name,i)=>
+        '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
+      '</select></label>';
     if(key==='profileShape')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       ['Rectangle','Beveled','U Channel'].map((name,i)=>
@@ -257,7 +266,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="'+(key==='radialSegments'?'1':'any')+'" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
