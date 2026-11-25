@@ -9,6 +9,8 @@ const {canonicalGraphJSON,readGraphFile,writeGraphFile,readSharedGraphSnapshot,
 const {createExampleGalleryWorkflow}=require('./SplineExampleSceneWorkflow');
 const {formatProfile}=require('./SplineGeometryProfileEditor');
 const {readProfileSnapshot,saveProfileIfUnchanged}=require('./SplineGeometryProfileAssetWorkflow');
+const {createProfilePreset}=require('./SplineGeometryProfileLibrary');
+const {writeNewProfileAsset}=require('./SplineGeometryProfileExport');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -22,6 +24,7 @@ const {finiteQuat:validCopyQuat,planCopiedKnot}=require('./SplineTopologyCopyMat
 const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCopyPolicy');
 let sharedGraphSaveBusy=false;
 let profileAssetSaveBusy=false;
+let profileAssetExportBusy=false;
 function singleGraphSelection(){
     const ids=selected();
     if(ids.length!==1||!ids[0])throw Error('Select exactly one Geometry Graph Renderer Node.');
@@ -957,6 +960,81 @@ const methods={
             }
         }catch(error){return alertError('save-geometry-profile-edit',error);}
         finally{profileAssetSaveBusy=false;}
+    },
+    /** Export a Profile Library preset or current validated authored draft to
+     * a BRAND NEW project JsonAsset. Never replace files or silently bind
+     * the result to the renderer (which would modify serialized Scene data).
+     * A native Save dialog + confirmation are both mandatory.
+     */
+    async exportGeometryProfileAsset(request){
+        if(profileAssetExportBusy)return {ok:false,error:'Another Profile export is pending.'};
+        profileAssetExportBusy=true;
+        try{
+            const nodeUuid=singleGraphSelection();
+            if(!request||typeof request!=='object'||Array.isArray(request))
+                throw Error('Profile export requires an explicit preset or draft.');
+            const hasPreset=typeof request.presetId==='string';
+            const hasDraft=typeof request.profileJson==='string';
+            if(hasPreset===hasDraft)
+                throw Error('Choose exactly one Profile Library preset or authored draft.');
+            let sourceText,sourceName;
+            if(hasPreset){
+                sourceText=createProfilePreset(request.presetId);
+                sourceName=request.presetId;
+            }else{
+                if(request.nodeUuid!==nodeUuid||
+                   !Number.isInteger(request.slot)||request.slot<0||request.slot>2||
+                   typeof request.assetUuid!=='string'||!request.assetUuid)
+                    throw Error('Profile draft selection and asset slot are invalid.');
+                const info=await invokeScene('queryGeometryProfileAsset',nodeUuid,request.slot);
+                if(!info?.ok||info.assetUuid!==request.assetUuid)
+                    throw Error('Profile draft Asset reference has changed; reopen the draft.');
+                sourceText=formatProfile(request.profileJson);
+                sourceName='AuthoredProfile';
+            }
+            if(typeof Editor.Dialog?.save!=='function'||typeof Editor.Dialog?.info!=='function')
+                throw Error('Native save/confirmation dialog unavailable; no Profile exported.');
+            const root=Editor.Project?.path;
+            if(typeof root!=='string'||!path.isAbsolute(root))
+                throw Error('Project root unavailable.');
+            const assets=path.join(root,'assets');
+            const choice=await Editor.Dialog.save({
+                title:'Create NEW authored Profile JsonAsset in Project/assets',
+                path:path.join(assets,sourceName+'.json'),
+                filters:[{name:'Authored Profile JSON',extensions:['json']}],
+            });
+            if(choice?.canceled||!choice?.filePath)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Selected renderer changed during Profile export.');
+            const confirm=await Editor.Dialog.info('Create a NEW Profile JsonAsset?',{
+                title:'Export Authored Profile',
+                detail:'Destination: '+choice.filePath+
+                    '\nExisting files will NEVER be overwritten. This will NOT auto-assign a Profile Asset slot or create a Scene Undo entry.',
+                buttons:['Create New Profile','Cancel'],default:1,cancel:1,
+            });
+            if(confirm?.response!==0)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)
+                throw Error('Selected renderer changed before Profile export.');
+            if(hasDraft){
+                const active=await invokeScene('queryGeometryProfileAsset',nodeUuid,request.slot);
+                if(!active?.ok||active.assetUuid!==request.assetUuid)
+                    throw Error('Profile draft reference changed before export.');
+            }
+            const saved=writeNewProfileAsset(choice.filePath,assets,sourceText);
+            try{
+                const refreshed=await Editor.Message.request('asset-db','refresh-asset',saved.assetUrl);
+                if(refreshed===false)throw Error('AssetDB returned false.');
+                return {ok:true,created:true,...saved,
+                    message:'New Profile JsonAsset created at '+saved.assetUrl+
+                        '. Assign it manually to Profile Asset A/B/C. Existing draft and Scene unchanged.'};
+            }catch(error){
+                return {ok:true,created:true,refreshPending:true,...saved,
+                    message:'New Profile JSON saved, but AssetDB refresh failed: '+
+                      String(error?.message||error)+
+                      '. Refresh Assets manually, then assign the JsonAsset to a slot.'};
+            }
+        }catch(error){return alertError('export-geometry-profile-asset',error);}
+        finally{profileAssetExportBusy=false;}
     },
     /** Start an explicit, non-serialized shared JsonAsset edit. The Inspector
      * owns the draft; no change reaches Scene properties or disk until Save.

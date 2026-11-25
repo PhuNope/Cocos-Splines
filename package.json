@@ -478,6 +478,11 @@
           "saveGeometryProfileEdit"
         ]
       },
+      "export-geometry-profile-asset": {
+        "methods": [
+          "exportGeometryProfileAsset"
+        ]
+      },
       "begin-shared-geometry-graph-edit": {
         "methods": [
           "beginSharedGeometryGraphEdit"
