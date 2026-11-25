@@ -307,6 +307,42 @@ async function run(){
    assert(cpuImport.cold.nodes.some(n=>n.type==='meshAsset'));
    assert(cpuImport.warm.nodes.every(n=>n.cached));
    assert.equal(out.mesh,goodAssetOutput,'Profiler must not replace generated imported mesh');
+   // Dual Mesh Asset slots: two imported sources are independent on one Graph.
+   const slotBPos=new Float32Array([-1,0,0,1,0,0,-1,0,1,1,0,1]);
+   const slotBData=new ArrayBuffer(16),slotBBytes=new Uint8Array(slotBData);
+   const slotB={...imported,uuid:'readable-asset-b',data:slotBData,
+    readAttribute(_i,name){return name==='a_position'?slotBPos:
+      name==='a_texCoord'?importedUV:null;}};
+   renderer.graphJson=JSON.stringify({version:2,nodes:[
+    {id:'source',type:'spline'},
+    {id:'assetA',type:'meshAsset'},
+    {id:'assetB',type:'meshAsset',slot:1},
+    {id:'deformA',type:'meshDeform',input:'source',meshInput:'assetA',axis:0},
+    {id:'deformB',type:'meshDeform',input:'source',meshInput:'assetB',axis:2},
+    {id:'outputA',type:'output',input:'deformA'},
+    {id:'outputB',type:'output',input:'deformB'},
+   ],output:'outputA'});
+   renderer.sourceMeshB=slotB;renderer.outputId='outputA';
+   const slotFrames=frameBuilds;
+   renderer.rebuild();
+   assert.equal(frameBuilds,slotFrames,'Changing mesh sources never resamples spline');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:7,reused:0,nodes:7});
+   const slotAMesh=JSON.stringify(out.mesh.data);
+   slotBPos[0]=-1.75;slotBBytes[0]=31;
+   renderer.update();
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:3,reused:4,nodes:7},
+    'Reimport of slot B invalidates only its own branch');
+   assert.equal(JSON.stringify(out.mesh.data),slotAMesh,
+    'Slot A output is bit-for-bit stable when only Slot B changes');
+   renderer.outputId='outputB';
+   renderer.rebuild();
+   assert.notEqual(JSON.stringify(out.mesh.data),slotAMesh,
+    'Output B routes to the independent Mesh Asset slot');
+   const outputBMesh=out.mesh;
+   renderer.sourceMeshB=null;
+   assert.throws(()=>renderer.rebuild(),/Source Mesh/);
+   assert.equal(out.mesh,outputBMesh,'Missing slot B keeps previous bound Mesh');
+   renderer.sourceMeshB=slotB;renderer.outputId='';
    renderer.sourceMesh=null;
    const external=new Mesh({other:true});
    out.mesh=external;
