@@ -263,6 +263,16 @@ async function run(){
    assert.equal(node.components.length,sourceChildren,
     'Multi-output cannot create extra renderers, children or nodes');
    assert(renderer.getMeshGizmoGeometry()?.edgePairs.length>0);
+   const multiProfile=renderer.profileGraph();
+   assert.deepEqual([multiProfile.cold.computed,multiProfile.warm.reused],[5,5]);
+   assert.equal(multiProfile.outputId,'outputRoad',
+    'Multi-output profiling uses graph default, ignoring stale Output ID');
+   assert.equal(out.mesh,multiMesh,
+    'Profiling cannot replace the multi-material MeshRenderer mesh');
+   renderer.outputId='also-ignored';
+   renderer.update();
+   assert.equal(out.mesh,multiMesh,
+    'Output ID changes are irrelevant in Render All Outputs mode');
    const prevCombined=multiMesh;
    multiShared.json.nodes.find(n=>n.id==='road').width=7;
    renderer.update();
