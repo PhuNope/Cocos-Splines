@@ -7,6 +7,7 @@ const graph=require('../../SplineGeometryGraphVisualModel');
 const conflict=require('../../SplineGeometryGraphConflict');
 const {formatGeometryGraphProfile}=require('../../SplineGeometryGraphProfileReport');
 const authored=require('../../SplineGeometryProfileEditor');
+const library=require('../../SplineGeometryProfileLibrary');
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
@@ -42,6 +43,13 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-profile-undo">Undo Draft</button>',
  '<button type="button" class="spl-btn spl-profile-redo">Redo Draft</button>',
  '<label>Drag Snap <select class="spl-profile-snap"><option value="0">Free</option><option value="0.01">0.01</option><option value="0.05">0.05</option><option value="0.1">0.10</option></select></label>',
+ '</div>',
+ '<div class="spl-vg-toolbar spl-profile-library">',
+ '<label>Profile Library <select class="spl-profile-preset">'+
+  library.PRESETS.map(p=>'<option value="'+p.id+'">'+p.label+'</option>').join('')+
+  '</select></label>',
+ '<button type="button" class="spl-btn spl-profile-apply-preset">Load Preset into Draft</button>',
+ '<span class="spl-profile-preset-note">Replaces the draft polygon and UV metadata. Undo Draft restores previous values.</span>',
  '</div>',
  '<div class="spl-profile-status" role="status" aria-live="polite">Select an authored Profile Asset slot to begin.</div>',
  '<div class="spl-profile-canvas"></div>',
@@ -80,7 +88,8 @@ const style=base.style+[
 '.spl-profile-canvas{margin:8px 0;font-size:11px}',
 '.spl-profile-coordinates{display:flex;gap:10px;margin:8px 0}',
 '.spl-profile-coordinates input{width:90px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
-'.spl-profile-slot,.spl-profile-snap{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
+'.spl-profile-slot,.spl-profile-snap,.spl-profile-preset{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
+'.spl-profile-preset-note{font-size:10px;color:#b0c4d0;align-self:center}',
 '.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
 '.spl-profile-count{margin:6px 0;color:#b6d4df}',
 '.spl-profile-uv-controls{margin:8px 0;padding:7px;border:1px solid #42667b;border-radius:5px}',
@@ -127,6 +136,7 @@ const $={...base.$,
   vgProfileStatus:'.spl-profile-status',vgProfileCanvas:'.spl-profile-canvas',
   vgProfileUndo:'.spl-profile-undo',vgProfileRedo:'.spl-profile-redo',
   vgProfileSnap:'.spl-profile-snap',
+  vgProfilePreset:'.spl-profile-preset',vgProfileApplyPreset:'.spl-profile-apply-preset',
   vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
   vgOrderSection:'.spl-vg-order-section',
@@ -205,6 +215,10 @@ function renderAuthoredProfile(panel){
     panel.$.vgProfileUndo.disabled=!draft||blocked||!draft.undo?.length;
   if(panel.$?.vgProfileRedo)
     panel.$.vgProfileRedo.disabled=!draft||blocked||!draft.redo?.length;
+  if(panel.$?.vgProfilePreset)
+    panel.$.vgProfilePreset.disabled=!draft||blocked;
+  if(panel.$?.vgProfileApplyPreset)
+    panel.$.vgProfileApplyPreset.disabled=!draft||blocked||!!panel._vgAuthoredDrag;
   if(!panel.$?.vgProfileCanvas)return;
   if(!draft){
     panel.$.vgProfileCanvas.textContent='';
@@ -223,8 +237,10 @@ function applyAuthoredEdit(panel,action,details={}){
   if(!draft||panel._vgAuthoredBusy)return;
   try{
     const {baseProfile,...params}=details;
-    const next=authored.applyProfileEdit(baseProfile||draft.profileJson,action,
-      {index:panel._vgAuthoredSelected,...params});
+    const next=action==='library-preset'?
+      library.applyProfilePreset(draft.profileJson,params.preset):
+      authored.applyProfileEdit(baseProfile||draft.profileJson,action,
+        {index:panel._vgAuthoredSelected,...params});
     if(next!==draft.profileJson){
       // One history entry per pointer drag, regardless of move event count.
       // Input/insert/remove remain individually undoable transactions.
@@ -236,7 +252,10 @@ function applyAuthoredEdit(panel,action,details={}){
         if(drag)drag.historySaved=true;
       }
       draft.profileJson=next;
-      if(action==='insert'||action==='insert-edge'){
+      if(action==='library-preset'){
+        panel._vgAuthoredSelected=0;
+        panel._vgAuthoredEdge=null;
+      }else if(action==='insert'||action==='insert-edge'){
         panel._vgAuthoredSelected=Number(params.index??panel._vgAuthoredSelected)+1;
         panel._vgAuthoredEdge=null;
       }else if(action==='remove'){
@@ -639,6 +658,17 @@ const inspector={
         if(token===this._vgAuthoredToken){this._vgAuthoredBusy=false;render(this);}
       }
     })());
+    this.$?.vgProfileApplyPreset?.addEventListener('click',()=>{
+      if(!this._vgAuthoredDraft||this._vgAuthoredBusy||this._vgSharedBusy||
+         this._vgAuthoredDrag)return;
+      const preset=this.$?.vgProfilePreset?.value;
+      if(!library.PRESETS.some(p=>p.id===preset)){
+        profileStatus(this,'Choose a valid Profile Library preset.',true);return;
+      }
+      applyAuthoredEdit(this,'library-preset',{preset});
+      profileStatus(this,'Profile Library preset '+preset+
+        ' applied to the UNSAVED draft. Use Undo Draft to restore the old profile, or Save Profile JSON to commit.');
+    });
     this.$?.vgProfileDiscard?.addEventListener('click',()=>{
       if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
       this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
