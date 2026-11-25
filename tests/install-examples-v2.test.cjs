@@ -56,6 +56,13 @@ try {
  assert.equal(imported.version,1);
  assert.equal(imported.nodes.find(n=>n.type==='meshDeform').meshInput,'meshAsset');
  assert.equal(imported.nodes.find(n=>n.type==='meshAsset').id,'meshAsset');
+ const dual=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/DualMeshAxisGraph.json'),'utf8'));
+ assert.equal(dual.version,2);
+ assert.deepEqual(dual.nodes.filter(n=>n.type==='meshAsset').map(n=>n.slot),[0,1]);
+ assert.deepEqual(dual.nodes.filter(n=>n.type==='meshDeform').map(n=>n.axis),[0,1]);
+ assert.deepEqual(dual.nodes.filter(n=>n.type==='output').map(n=>n.id),
+   ['outputA','outputB']);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
