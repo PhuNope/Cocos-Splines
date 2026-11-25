@@ -11,16 +11,24 @@ import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
 export interface GraphProfilePoint {x:number;y:number}
+/** Optional UV0 side-band mapping. Seam is the starting edge; edge weights
+ * redistribute its normalized U span. Absent UV keeps legacy perimeter mapping.
+ */
+export interface GraphProfileUV {
+    seamEdge?:number;
+    edgeWeights?:number[];
+}
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
     version:1;
     points:GraphProfilePoint[];
+    uv?:GraphProfileUV;
 }
 /** Strict data-only profile; copied out of the Cocos JsonAsset, never mutated. */
 export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
     const r=input as Record<string,unknown>;
     if(!r||typeof r!=='object'||Array.isArray(r)||
-       Object.keys(r).some(k=>!['format','version','points'].includes(k))||
+       Object.keys(r).some(k=>!['format','version','points','uv'].includes(k))||
        r.format!=='cocos-splines/profile'||r.version!==1||
        !Array.isArray(r.points)||r.points.length<3||r.points.length>16)
         throw Error('Graph Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
@@ -35,7 +43,27 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {x:p.x,y:p.y};
     });
     checkAuthoredProfilePolygon(points);
-    return {format:'cocos-splines/profile',version:1,points};
+    if(!Object.prototype.hasOwnProperty.call(r,'uv'))
+        return {format:'cocos-splines/profile',version:1,points};
+    const raw=r.uv as Record<string,unknown>;
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights'].includes(k)))
+        throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
+    const uv:GraphProfileUV={};
+    if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
+        if(!Number.isInteger(raw.seamEdge)||!Number.isFinite(raw.seamEdge as number)||
+           (raw.seamEdge as number)<0||(raw.seamEdge as number)>=points.length)
+            throw Error('Graph Profile Asset UV seamEdge is outside polygon edge range.');
+        uv.seamEdge=raw.seamEdge as number;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'edgeWeights')){
+        if(!Array.isArray(raw.edgeWeights)||raw.edgeWeights.length!==points.length||
+           raw.edgeWeights.some(w=>typeof w!=='number'||!Number.isFinite(w)||
+               w<.25||w>4))
+            throw Error('Graph Profile Asset UV edgeWeights must contain one value in [0.25,4] per edge.');
+        uv.edgeWeights=(raw.edgeWeights as number[]).slice();
+    }
+    return {format:'cocos-splines/profile',version:1,points,uv};
 }
 function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfilePoint>>):void{
     const epsilon=1e-8,n=points.length;
@@ -72,6 +100,8 @@ function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfileP
 export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
+    /** Only for authored profile; no implicit UV changes to built-in presets. */
+    profileUV?:Readonly<GraphProfileUV>;
     width:number;
     height:number;
     profileShape:GraphProfileShape;
@@ -148,21 +178,34 @@ export function buildProfileExtrudeGeometry(
        typeof capEnds!=='boolean'||typeof closed!=='boolean'||
        !Array.isArray(frames)||frames.length<2||frames.length>1025)
         throw Error('Geometry Graph Extrude settings or frame count are invalid.');
-    const profile=settings.profile?
-        parseGraphProfileAsset({format:'cocos-splines/profile',
-            version:1,points:settings.profile}).points:PROFILES[profileShape];
+    if(settings.profileUV!==undefined&&!settings.profile)
+        throw Error('Graph Profile Asset UV requires an authored profile.');
+    const authored=settings.profile?
+        parseGraphProfileAsset({format:'cocos-splines/profile',version:1,
+            points:settings.profile,...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
+    const profile=authored?.points??PROFILES[profileShape];
     const bands=profile.length;
     const triangles=capEnds&&!closed?profileTriangles(profile):[];
     const perimeterLengths=profile.map((p,i)=>{
         const next=profile[(i+1)%bands];
         return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
     });
-    const perimeter=perimeterLengths.reduce((total,l)=>total+l,0);
+    const uvWeights=authored?.uv?.edgeWeights;
+    const weightedLengths=perimeterLengths.map((len,i)=>
+        len*(uvWeights?.[i]??1));
+    const perimeter=weightedLengths.reduce((total,l)=>total+l,0);
     const uvStart:number[]=[],uvEnd:number[]=[];
+    const prefix:number[]=[];
     let cumulative=0;
-    for(const len of perimeterLengths){
-        uvStart.push(cumulative/perimeter);
-        cumulative+=len;uvEnd.push(cumulative/perimeter);
+    for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
+    const seam=authored?.uv?.seamEdge??0;
+    for(let i=0;i<bands;i++){
+        // Side bands use duplicated endpoints, so the discontinuity can move
+        // to any selected edge WITHOUT moving geometry or altering cap UV.
+        const rotated=i>=seam?prefix[i]-prefix[seam]:
+            perimeter-prefix[seam]+prefix[i];
+        const u=rotated/perimeter;
+        uvStart.push(u);uvEnd.push(u+weightedLengths[i]/perimeter);
     }
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};

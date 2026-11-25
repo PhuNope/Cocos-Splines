@@ -204,11 +204,12 @@ export class SplineGeometryGraphRenderer extends Component {
      * revisions without changing shared Graph JSON or Spline samples.
      */
     private graphProfileContext(plan:GeometryGraphPlan):
-        Pick<GeometryGraphContext,'profileSources'|'profileRevisions'>{
+        Pick<GeometryGraphContext,'profileSources'|'profileUVs'|'profileRevisions'>{
         const slots=[...new Set(plan.nodes.filter(n=>n.type==='extrude'&&
             n.profileSlot!==undefined).map(n=>n.profileSlot!))];
         if(slots.length===0)return {};
         const sources:NonNullable<GeometryGraphContext['profileSources']>[number][]=[];
+        const uvs:NonNullable<GeometryGraphContext['profileUVs']>[number][]=[];
         const revisions:(string|undefined)[]=[];
         for(const slot of slots){
             const asset=this.profileAsset(slot);
@@ -216,9 +217,10 @@ export class SplineGeometryGraphRenderer extends Component {
                 throw Error('Graph Profile Asset slot '+slot+' requires an assigned JsonAsset.');
             const profile=parseGraphProfileAsset(asset.json);
             sources[slot]=profile.points;
-            revisions[slot]=JSON.stringify(profile.points);
+            uvs[slot]=profile.uv;
+            revisions[slot]=JSON.stringify(profile);
         }
-        return {profileSources:sources,profileRevisions:revisions};
+        return {profileSources:sources,profileUVs:uvs,profileRevisions:revisions};
     }
     private sourceMaterialRenderer(slot:number):MeshRenderer|null{
         return slot===0?this.materialSourceRenderer:

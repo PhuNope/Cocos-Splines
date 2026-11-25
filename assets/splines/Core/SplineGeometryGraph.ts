@@ -5,7 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
-import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 
@@ -64,6 +64,8 @@ export interface GeometryGraphContext {
     meshRevisions?:ReadonlyArray<string|undefined>;
     /** Explicit authored profile slots A/B/C for Extrude nodes. */
     profileSources?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>|undefined>;
+    /** Optional UV0 side-band metadata for the same authored Profile slots. */
+    profileUVs?:ReadonlyArray<Readonly<GraphProfileUV>|undefined>;
     profileRevisions?:ReadonlyArray<string|undefined>;
 }
 export interface GeometryGraphPlan {
@@ -436,17 +438,20 @@ export class GeometryGraphRunner {
                 }else if(node.type==='extrude'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Extrude input is not a path.');
                     let authored:ReadonlyArray<Readonly<GraphProfilePoint>>|undefined;
+                    let authoredUV:Readonly<GraphProfileUV>|undefined;
                     if(node.profileSlot!==undefined){
                         const slot=node.profileSlot,revision=context.profileRevisions?.[slot];
                         if(typeof revision!=='string'||!revision||revision.length>2048)
                             throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
-                        authored=parseGraphProfileAsset({format:'cocos-splines/profile',
-                            version:1,points:context.profileSources?.[slot]}).points;
+                        const profile=parseGraphProfileAsset({format:'cocos-splines/profile',
+                            version:1,points:context.profileSources?.[slot],
+                            ...(context.profileUVs?.[slot]===undefined?{}:{uv:context.profileUVs[slot]})});
+                        authored=profile.points;authoredUV=profile.uv;
                     }
                     const geometry=buildProfileExtrudeGeometry(source.frames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
-                        profile:authored,
+                        profile:authored,profileUV:authoredUV,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
                     },source.closed);
