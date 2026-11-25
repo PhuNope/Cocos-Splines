@@ -89,11 +89,11 @@ function validateGraph(graph) {
     state.set(id,2);ordered.push(node);
   }
   visit(graph.output);
-  const outputs=graph.nodes.filter(n=>n.type==='output').map(n=>n.id).sort();
-  if(graph.version===2)for(const id of outputs)visit(id);
+  const outputIds=graph.nodes.filter(n=>n.type==='output').map(n=>n.id).sort();
+  if(graph.version===2)for(const id of outputIds)visit(id);
   if(ordered.length!==map.size)
     throw Error('Graph contains disconnected nodes. Remove or reconnect them.');
-  return {graph,ordered,map,outputs};
+  return {graph,ordered,map,outputs:outputIds};
 }
 function parseGraph(json){
   if(typeof json!=='string'||json.length<2||json.length>16384)
