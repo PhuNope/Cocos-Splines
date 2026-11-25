@@ -64,6 +64,28 @@ async function run(){
   assert.equal(ui.$.vgProfileOpen.disabled,true);
   assert.equal(ui.$.vgProfileDiscard.disabled,false);
   assert.equal(ui.$.vgProfileSave.disabled,true);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/spl-profile-uv-island-mode/);
+  // UV island mode is draft-only, supports native draft Undo/Redo and does
+  // not touch the source JsonAsset or the Graph component scene dump.
+  const uvBefore=ui._vgAuthoredDraft.profileJson;
+  const setIsland=raw=>ui.$.vgProfileCanvas.events.change({target:{
+   value:raw,classList:{contains:name=>name==='spl-profile-uv-island-mode'},
+  }});
+  setIsland('1');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,1);
+  assert.equal(ui.$.vgProfileSave.disabled,false);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,uvBefore);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,1);
+  setIsland('2');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,2);
+  const validUvDraft=ui._vgAuthoredDraft.profileJson;
+  setIsland('3');
+  assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);
+  assert.match(ui.$.vgProfileStatus.textContent,/Invalid side UV island mode/);
+  assert.equal(dump.value.graphJson.value,graph);
+  assert.equal(dump.value.profileAssetA.value.uuid,'profile-1');
   // Selecting and moving a point through native numeric controls edits draft only.
   ui.$.vgProfileCanvas.events.pointerdown({pointerId:7,preventDefault(){},
    target:{dataset:{profilePoint:'1'},closest(s){

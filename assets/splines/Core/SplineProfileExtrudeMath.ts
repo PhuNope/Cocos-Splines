@@ -26,6 +26,12 @@ export interface GraphProfileUV {
      * Requires metric uMetersPerRepeat; independent of node world transform.
      */
     uFollowFrameScale?:boolean;
+    /** Opt-in UV0 side islands: 0 continuous legacy perimeter (default),
+     * 1 edge islands (independent U per cross-section edge, continuous V),
+     * 2 quad islands (separate U/V for each spline-span side face).
+     * Cap UV islands are always independent and are unchanged.
+     */
+    sideIslandMode?:number;
 }
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
@@ -56,7 +62,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','sideIslandMode'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -84,6 +90,12 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            (raw.uFollowFrameScale&&!Object.prototype.hasOwnProperty.call(uv,'uMetersPerRepeat')))
             throw Error('Graph Profile Asset UV uFollowFrameScale requires boolean and metric uMetersPerRepeat when enabled.');
         uv.uFollowFrameScale=raw.uFollowFrameScale;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'sideIslandMode')){
+        if(!Number.isInteger(raw.sideIslandMode)||
+           (raw.sideIslandMode as number)<0||(raw.sideIslandMode as number)>2)
+            throw Error('Graph Profile Asset UV sideIslandMode must be an integer 0–2.');
+        uv.sideIslandMode=raw.sideIslandMode as number;
     }
     return {format:'cocos-splines/profile',version:1,points,uv};
 }
@@ -221,16 +233,27 @@ export function buildProfileExtrudeGeometry(
     let cumulative=0;
     for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
     const seam=authored?.uv?.seamEdge??0;
+    const sideIslandMode=authored?.uv?.sideIslandMode??0;
+    // Quad islands duplicate only side vertices per spline span. Preflight
+    // prevents exceeding the same 16-bit-safe graph mesh budget as the runner.
+    const plannedVertices=sideIslandMode===2?
+        bands*(frames.length-1)*4+(triangles.length?2*bands:0):
+        bands*frames.length*2+(triangles.length?2*bands:0);
+    if(plannedVertices>65536)
+        throw Error('Graph Profile Asset UV side islands exceed the 65536-vertex mesh limit.');
     // Opt-in metric tiling: U grows with actual nominal profile side lengths.
     // Legacy weighted/seamed UV stays normalized to [0,1] without this field.
     const uDenominator=authored?.uv?.uMetersPerRepeat??perimeter;
     for(let i=0;i<bands;i++){
         // Side bands use duplicated endpoints, so the discontinuity can move
         // to any selected edge WITHOUT moving geometry or altering cap UV.
-        const rotated=i>=seam?prefix[i]-prefix[seam]:
-            perimeter-prefix[seam]+prefix[i];
-        const u=rotated/uDenominator;
-        uvStart.push(u);uvEnd.push(u+weightedLengths[i]/uDenominator);
+        const rotated=sideIslandMode===0?
+            (i>=seam?prefix[i]-prefix[seam]:
+                perimeter-prefix[seam]+prefix[i]):0;
+        const edgeDenominator=sideIslandMode===0?uDenominator:
+            (authored?.uv?.uMetersPerRepeat??weightedLengths[i]);
+        const u=rotated/edgeDenominator;
+        uvStart.push(u);uvEnd.push(u+weightedLengths[i]/edgeDenominator);
     }
     // This opt-in mode derives physical U per ring from the same local
     // geometry used to emit the section, including widthFactor, nonunit
@@ -256,8 +279,9 @@ export function buildProfileExtrudeGeometry(
         for(const len of lengths){prefix.push(cursor);cursor+=len;}
         const start:number[]=[],end:number[]=[];
         for(let i=0;i<bands;i++){
-            const rotated=i>=seam?prefix[i]-prefix[seam]:
-                total-prefix[seam]+prefix[i];
+            const rotated=sideIslandMode===0?
+                (i>=seam?prefix[i]-prefix[seam]:
+                    total-prefix[seam]+prefix[i]):0;
             const u=rotated/uDenominator,finish=u+lengths[i]/uDenominator;
             if(!Number.isFinite(u)||!Number.isFinite(finish))
                 throw Error('Graph Profile Asset UV frame U overflow.');
@@ -280,6 +304,46 @@ export function buildProfileExtrudeGeometry(
     // across sharp corners. Two distinct vertices per edge per frame.
     for(let j=0;j<bands;j++){
         const A=profile[j],B=profile[(j+1)%bands];
+        if(sideIslandMode===2){
+            // Each side quad needs its own four UV0 vertices, because its V
+            // must restart at zero at every spline span. Existing geometry
+            // and normals are evaluated at the SAME frame positions as the
+            // continuous mode, preserving hard profile corners.
+            const sideNormal=(f:ProfileExtrudeFrame):V3=>{
+                if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
+                   f.widthFactor>1000||!Number.isFinite(f.distance)||
+                   ![f.position,f.forward,f.right,f.up].every(isFinite3))
+                    throw Error('Geometry Graph Extrude contains an invalid frame.');
+                const orientation=dot(cross(f.right,f.up),f.forward);
+                if(!Number.isFinite(orientation)||Math.abs(orientation)<1e-10)
+                    throw Error('Geometry Graph Extrude frame basis is degenerate.');
+                const sign=orientation>0?1:-1;
+                if(handedness!==0&&handedness!==sign)
+                    throw Error('Geometry Graph Extrude frame handedness changed.');
+                handedness=sign;
+                const edge=add(mul(f.right,(B.x-A.x)*width*f.widthFactor),
+                    mul(f.up,(B.y-A.y)*height*f.widthFactor));
+                return unit(mul(cross(edge,f.forward),handedness));
+            };
+            for(let fi=0;fi<frames.length-1;fi++){
+                const f0=frames[fi],f1=frames[fi+1];
+                const n0=sideNormal(f0),n1=sideNormal(f1);
+                const start0=ringUV?.[fi].start[j]??uvStart[j];
+                const end0=ringUV?.[fi].end[j]??uvEnd[j];
+                const start1=ringUV?.[fi+1].start[j]??uvStart[j];
+                const end1=ringUV?.[fi+1].end[j]??uvEnd[j];
+                const v=(f1.distance-f0.distance)/uvMetersPerRepeat;
+                if(!Number.isFinite(v)||v<0)
+                    throw Error('Graph Profile Asset UV Quad Islands require ordered finite frames.');
+                const a=push(at(f0,A),n0,start0,0);
+                const b=push(at(f0,B),n0,end0,0);
+                const c=push(at(f1,A),n1,start1,v);
+                const d=push(at(f1,B),n1,end1,v);
+                if(handedness>0)indices.push(a,b,c,b,d,c);
+                else indices.push(a,c,b,b,c,d);
+            }
+            continue;
+        }
         for(let fi=0;fi<frames.length;fi++){
             const f=frames[fi];
             if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||

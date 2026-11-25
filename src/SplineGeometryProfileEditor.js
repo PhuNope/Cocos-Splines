@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','sideIslandMode'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -74,13 +74,19 @@ function parseProfile(value){
    throw Error('Profile UV uFollowFrameScale requires boolean and metric Side U meters/repeat when enabled.');
   uv.uFollowFrameScale=raw.uFollowFrameScale;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'sideIslandMode')){
+  if(!Number.isInteger(raw.sideIslandMode)||
+     raw.sideIslandMode<0||raw.sideIslandMode>2)
+   throw Error('Profile UV sideIslandMode must be an integer 0–2.');
+  uv.sideIslandMode=raw.sideIslandMode;
+ }
  return {format:FORMAT,version:1,points,uv};
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-side-island-mode'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -103,6 +109,19 @@ function applyProfileEdit(value,action,params={}){
  };
  if(action==='reset-uv'){
   delete profile.uv;
+ }else if(action==='set-side-island-mode'){
+  const mode=params.mode;
+  if(!Number.isInteger(mode)||mode<0||mode>2)
+   throw Error('Profile UV sideIslandMode must be an integer 0–2.');
+  if(mode===0){
+   if(profile.uv){
+    delete profile.uv.sideIslandMode;
+    if(Object.keys(profile.uv).length===0)delete profile.uv;
+   }
+  }else{
+   profile.uv=profile.uv||{};
+   profile.uv.sideIslandMode=mode;
+  }
  }else if(action==='set-u-meters-per-repeat'){
   const value=params.meters;
   if(value===''||!finite(value)||value<.01||value>10000)
@@ -227,6 +246,14 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
     'Normalized perimeter':(profile.uv?.uFollowFrameScale?'Frame-local':'Nominal')+
      ' meters, repeat every '+profile.uv.uMetersPerRepeat+' m')+
    '</div>'+
+  '<div class="spl-vg-toolbar">'+
+  '<label>Side UV islands <select class="spl-profile-uv-island-mode" '+
+   'title="Continuous keeps legacy mapping; Edge Islands reset U per edge; Quad Islands reset U/V per side quad">'+
+   ['Continuous perimeter (legacy)','Edge Islands · U per edge','Quad Islands · U/V per face']
+    .map((name,i)=>'<option value="'+i+'"'+
+     ((profile.uv?.sideIslandMode??0)===i?' selected':'')+'>'+name+'</option>')
+    .join('')+'</select></label>'+
+  '</div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
    'min="0.01" max="10000" step="0.1" placeholder="Normalized" value="'+

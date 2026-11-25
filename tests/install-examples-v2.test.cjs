@@ -52,6 +52,19 @@ try {
  assert.equal(authored.version,2);
  assert.deepEqual(authored.nodes.filter(n=>n.type==='extrude').map(n=>n.profileSlot),
   [0,1]);
+ const islandsGraph=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/UVIslandExtrudeGraph.json'),'utf8'));
+ assert.equal(islandsGraph.version,1);
+ assert.equal(islandsGraph.nodes.find(n=>n.type==='extrude').profileSlot,0);
+ for(const [filename,mode] of [
+  ['UVEdgeIslandProfile',1],['UVQuadIslandProfile',2],
+ ]){
+  const asset=JSON.parse(fs.readFileSync(path.join(first.folder,
+   'GeometryGraph/Profiles/'+filename+'.json'),'utf8'));
+  assert.equal(asset.version,1);
+  assert.equal(asset.uv.sideIslandMode,mode);
+  assert.equal(asset.points.length,4);
+ }
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');

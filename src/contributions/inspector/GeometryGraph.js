@@ -90,7 +90,7 @@ const style=base.style+[
 '.spl-profile-canvas{margin:8px 0;font-size:11px}',
 '.spl-profile-coordinates{display:flex;gap:10px;margin:8px 0}',
 '.spl-profile-coordinates input{width:90px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
-'.spl-profile-slot,.spl-profile-snap,.spl-profile-preset{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
+'.spl-profile-slot,.spl-profile-snap,.spl-profile-preset,.spl-profile-uv-island-mode{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
 '.spl-profile-preset-note{font-size:10px;color:#b0c4d0;align-self:center}',
 '.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
 '.spl-profile-count{margin:6px 0;color:#b6d4df}',
@@ -764,6 +764,14 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-uv-island-mode')){
+        const raw=event.target.value;
+        if(!/^[012]$/.test(raw)){
+          profileStatus(this,'Invalid side UV island mode.',true);return;
+        }
+        applyAuthoredEdit(this,'set-side-island-mode',{mode:Number(raw)});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-follow-frame')){
         applyAuthoredEdit(this,'set-u-follow-frame-scale',{
           enabled:event.target.checked===true});
