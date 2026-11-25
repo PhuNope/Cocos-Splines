@@ -50,10 +50,10 @@ export function checkGraphMultiMesh(chunks:ReadonlyArray<GraphMultiMeshChunk>):{
            g.normals.length!==g.positions.length||
            g.uvs.length!==count*2||
            g.indices.length<3||g.indices.length%3!==0||
-           g.positions.some(n=>!finite(n)||Math.abs(n)>1e7)||
-           g.normals.some(n=>!finite(n))||
-           g.uvs.some(n=>!finite(n))||
-           g.indices.some(n=>!Number.isInteger(n)||n<0||n>=count))
+           g.positions.some((n:number)=>!finite(n)||Math.abs(n)>1e7)||
+           g.normals.some((n:number)=>!finite(n))||
+           g.uvs.some((n:number)=>!finite(n))||
+           g.indices.some((n:number)=>!Number.isInteger(n)||n<0||n>=count))
             throw Error('Multi-output Mesh branch contains invalid geometry.');
         vertexCount+=count;
         indexCount+=g.indices.length;
