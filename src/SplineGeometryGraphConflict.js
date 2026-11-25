@@ -10,7 +10,7 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const label=(id,key)=>id+'.'+key;
 const topology=g=>JSON.stringify({
   output:g.output,
-  nodes:g.nodes.map(n=>({id:n.id,type:n.type,input:n.input??null,meshInput:n.meshInput??null}))
+  nodes:g.nodes.map(n=>({id:n.id,type:n.type,input:n.input??null,meshInput:n.meshInput??null,slot:n.type==='meshAsset'?(n.slot??0):null}))
     .sort((a,b)=>a.id.localeCompare(b.id)),
 });
 function changeList(before,after){
