@@ -4,6 +4,7 @@
  */
 const base=require('./common').makeInspector('geometryGraph');
 const graph=require('../../SplineGeometryGraphVisualModel');
+const conflict=require('../../SplineGeometryGraphConflict');
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
  '<summary>Visual Geometry Graph · typed sockets</summary>',
@@ -18,8 +19,11 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-edit-shared">Edit Shared Asset…</button>',
  '<button type="button" class="spl-btn spl-vg-save-shared">Save Shared JSON…</button>',
  '<button type="button" class="spl-btn spl-vg-discard-shared">Discard Draft</button>',
+ '<button type="button" class="spl-btn spl-vg-review-shared">Compare with Source</button>',
+ '<button type="button" class="spl-btn spl-vg-rebase-shared">Rebase Safe Changes</button>',
  '</div>',
  '<div class="spl-vg-source-mode" role="status">Local graph JSON</div>',
+ '<div class="spl-vg-conflict" role="status" aria-live="polite"></div>',
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
  '<button type="button" class="spl-btn spl-vg-add-width">＋ Width</button>',
@@ -57,13 +61,17 @@ const style=base.style+[
 '.spl-vg-params input:not([type=checkbox]),.spl-vg-params select{min-width:0;width:100%;box-sizing:border-box;border:1px solid #546b78;border-radius:4px;background:rgba(22,37,51,.9);color:inherit;padding:4px}',
 '.spl-vg-params input[type=checkbox]{align-self:flex-start}',
 '.spl-vg-status{font-size:11px;white-space:pre-wrap;color:#9ad6c9;min-height:15px}',
-'.spl-vg-status.error{color:#f7b2a9}'
+'.spl-vg-status.error{color:#f7b2a9}',
+'.spl-vg-conflict{font-size:11px;white-space:pre-wrap;color:#eacb97;margin:6px 0}'
 ].join('\n');
 const $={...base.$,
   vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',
   vgCopyLocal:'.spl-vg-copy-local',vgRefresh:'.spl-vg-refresh',
   vgEditShared:'.spl-vg-edit-shared',vgSaveShared:'.spl-vg-save-shared',
   vgDiscardShared:'.spl-vg-discard-shared',
+  vgReviewShared:'.spl-vg-review-shared',
+  vgRebaseShared:'.spl-vg-rebase-shared',
+  vgConflict:'.spl-vg-conflict',
   vgSourceMode:'.spl-vg-source-mode',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
@@ -74,6 +82,29 @@ function status(panel,message,isError=false){
   if(!panel.$?.vgStatus)return;
   panel.$.vgStatus.textContent=message;
   panel.$.vgStatus.classList?.toggle?.('error',isError);
+}
+function changeSummary(values){
+  if(values.length===0)return 'none';
+  return values.slice(0,12).join(', ')+(values.length>12?' … +'+(values.length-12):'');
+}
+function summarizeReview(panel){
+  const draft=panel._vgSharedDraft,review=panel._vgSharedReview;
+  if(!draft||!review)return '';
+  const analysis=conflict.analyzeSharedGraphChanges(
+    draft.initialGraphJson,draft.graphJson,review.graphJson);
+  review.analysis=analysis;
+  if(review.sha256===draft.sha256)return 'Source checksum unchanged since draft opened.';
+  return [
+    'Source changed since your draft was opened.',
+    'Your edits: '+changeSummary(analysis.draftChanges),
+    'Source edits: '+changeSummary(analysis.sourceChanges),
+    analysis.structuralConflict?
+      'Topology differs. Automatic rebase is blocked; keep draft or explicitly discard it.':
+      analysis.conflicts.length>0?
+        'Conflicting fields: '+changeSummary(analysis.conflicts)+'. Rebase blocked.':
+        'No overlapping parameter changes. Rebase Safe Changes keeps your draft edits.',
+    'This comparison does NOT save or replace either version.',
+  ].join('\\n');
 }
 function render(panel){
   const draft=panel._vgSharedDraft;
@@ -94,6 +125,14 @@ function render(panel){
   if(panel.$?.vgSaveShared)panel.$.vgSaveShared.disabled=!draft||busy||
     draft.graphJson===draft.initialGraphJson;
   if(panel.$?.vgDiscardShared)panel.$.vgDiscardShared.disabled=!draft||busy;
+  if(panel.$?.vgReviewShared)panel.$.vgReviewShared.disabled=!draft||busy;
+  if(panel.$?.vgRebaseShared)panel.$.vgRebaseShared.disabled=
+    !draft||busy||!panel._vgSharedReview||
+    panel._vgSharedReview.sha256===draft.sha256||
+    !panel._vgSharedReview.analysis?.canRebase;
+  for(const key of ['vgExport','vgImport'])if(panel.$?.[key])
+    panel.$[key].disabled=!!draft||busy;
+  if(panel.$?.vgConflict)panel.$.vgConflict.textContent=summarizeReview(panel);
   if(panel.$?.vgRefresh)panel.$.vgRefresh.disabled=!!draft||busy;
   const stage=panel.$?.vgStage,properties=panel.$?.vgProperties;
   if(!stage||!properties)return;
@@ -150,6 +189,7 @@ function commitProperty(panel,key,nextValue){
 }
 function editGraph(panel,action,details){
   try{
+    if(panel._vgSharedBusy)throw Error('Shared asset operation pending.');
     const prior=graph.parseGraph(panel._vgGraphJson);
     const output=graph.applyGraphEdit(panel._vgGraphJson,action,details);
     if(!commitProperty(panel,'graphJson',output))return;
@@ -212,6 +252,7 @@ const inspector={
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
     if(changedShared){
       this._vgSharedDraft=null;
+      this._vgSharedReview=null;
       this._vgRequestToken=(this._vgRequestToken||0)+1;
     }
     const changed=this._vgGraphJson!==graphJson||
@@ -229,7 +270,7 @@ const inspector={
     this._vgSelected=null;this._vgPending=null;this._vgDrag=null;
     this._vgRendered=false;this._vgPreviewLayout=null;
     this._vgShared=false;this._vgAssetIdentity=null;this._vgRequestToken=0;
-    this._vgSharedDraft=null;this._vgSharedBusy=false;
+    this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
@@ -259,6 +300,7 @@ const inspector={
         graph.parseGraph(info.graphJson);
         this._vgSharedDraft={nodeUuid:info.nodeUuid,assetUuid:info.assetUuid,
           sha256:info.sha256,initialGraphJson:info.graphJson,graphJson:info.graphJson};
+        this._vgSharedReview=null;
         this._vgGraphJson=info.graphJson;this._vgSelected=null;this._vgPending=null;
         render(this);
         status(this,'Editing a temporary shared draft. Save requires confirmation and changes the source JSON file.');
@@ -281,8 +323,13 @@ const inspector={
             assetUuid:draft.assetUuid,sha256:draft.sha256,graphJson:draft.graphJson});
         if(token!==this._vgRequestToken||this._vgSharedDraft!==draft)return;
         if(result?.canceled){status(this,'Save canceled. Draft retained.');return;}
-        if(!result?.ok)throw Error(result?.error||'Shared JSON save failed.');
+        if(!result?.ok){
+          if(result?.conflict)
+            throw Error('Shared JSON changed on disk. Choose Compare with Source to review differences without losing your draft.');
+          throw Error(result?.error||'Shared JSON save failed.');
+        }
         this._vgSharedDraft=null;
+        this._vgSharedReview=null;
         this._vgGraphJson=result.graphJson;
         this._vgPending=null;
         render(this);
@@ -298,9 +345,54 @@ const inspector={
     })());
     this.$?.vgDiscardShared?.addEventListener('click',()=>{
       if(!this._vgSharedDraft||this._vgSharedBusy)return;
-      this._vgSharedDraft=null;this._vgPending=null;this._vgSelected=null;
+      this._vgSharedDraft=null;this._vgSharedReview=null;
+      this._vgPending=null;this._vgSelected=null;
       this._vgGraphJson='Asset loading';render(this);
       void refreshAsset(this);
+    });
+    this.$?.vgReviewShared?.addEventListener('click',()=>void (async()=>{
+      const draft=this._vgSharedDraft;
+      if(!draft||this._vgSharedBusy)return;
+      const token=this._vgRequestToken;
+      this._vgSharedBusy=true;render(this);
+      try{
+        const latest=await Editor.Message.request('cocos-splines',
+          'begin-shared-geometry-graph-edit');
+        if(token!==this._vgRequestToken||this._vgSharedDraft!==draft)return;
+        if(!latest?.ok)throw Error(latest?.error||'Cannot read latest source.');
+        if(latest.assetUuid!==draft.assetUuid||latest.nodeUuid!==draft.nodeUuid)
+          throw Error('Graph asset selection changed. Review canceled.');
+        graph.parseGraph(latest.graphJson);
+        this._vgSharedReview={sha256:latest.sha256,graphJson:latest.graphJson};
+        render(this);
+        status(this,'Source comparison updated. Draft remains untouched.');
+      }catch(error){
+        if(token===this._vgRequestToken&&this._vgSharedDraft===draft)
+          status(this,String(error?.message||error),true);
+      }finally{
+        const message=this.$?.vgStatus?.textContent,wasError=this._vgStatusError;
+        this._vgSharedBusy=false;render(this);
+        if(message)status(this,message,wasError);
+      }
+    })());
+    this.$?.vgRebaseShared?.addEventListener('click',()=>{
+      const draft=this._vgSharedDraft,review=this._vgSharedReview;
+      if(!draft||!review||this._vgSharedBusy)return;
+      try{
+        if(review.sha256===draft.sha256)
+          throw Error('Source has not changed. No rebase needed.');
+        const analysis=conflict.analyzeSharedGraphChanges(
+          draft.initialGraphJson,draft.graphJson,review.graphJson);
+        if(!analysis.canRebase)throw Error('Conflicting graph changes. Automatic rebase blocked.');
+        draft.initialGraphJson=review.graphJson;
+        draft.graphJson=analysis.mergedGraphJson;
+        draft.sha256=review.sha256;
+        this._vgGraphJson=draft.graphJson;
+        this._vgSharedReview=null;
+        this._vgPending=null;
+        render(this);
+        status(this,'Draft rebased onto the reviewed source. Save Shared JSON still requires confirmation.');
+      }catch(error){status(this,String(error?.message||error),true);}
     });
     const insert=type=>{
       try{
@@ -399,7 +491,7 @@ const inspector={
     this._vgPreviewLayout=null;this._vgSelected=null;
     this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
     this._vgShared=false;this._vgAssetIdentity=null;
-    this._vgSharedDraft=null;this._vgSharedBusy=false;
+    this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
 };
