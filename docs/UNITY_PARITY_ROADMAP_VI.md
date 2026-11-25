@@ -223,7 +223,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.2a: in-Inspector visual graph canvas with typed path/mesh socket reconnection, Offset/Width insertion/removal, numeric parameter editing, draggable card layout, native dump commits and isolated frame layout serialization.
 - [x] Phase 4.2b: shared **native JsonAsset** graph references for multiple GeometryGraphRenderer instances, content-based revision invalidation, bounded non-overwriting JSON export/import and copy-to-local with rollback; shared canvas read-only.
 - [ ] Phase 4.2c: native visual editing of shared assets with explicit save intent, asset-db synchronization and UX polish; multi-input/branching and richer auto layout.
-- [ ] Phase 4.3: tube/extrude/deform/profile generator nodes, multi-output graphs and profiling.
+- [x] Phase 4.3a: `tube` generator (path→mesh), bounded radius/radialSegments, UV seam/caps, anisotropic and mirrored frame winding, native Inspector Ribbon↔Tube switching, regression tests.
+- [ ] Phase 4.3b+: extrude/profile/deform generator nodes, multi-output graphs and profiling. Tube native Cocos Creator 3.8.8 acceptance remains pending.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
