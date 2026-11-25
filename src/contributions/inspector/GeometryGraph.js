@@ -289,12 +289,18 @@ async function refreshAsset(panel){
     if(panel._vgRequestToken!==requestToken||!panel._vgShared)return;
     if(!info?.ok||!info.assetMode)throw Error(info?.error||'Shared graph unavailable.');
     graph.parseGraph(info.graphJson);
+    if(panel._vgGraphJson!==info.graphJson){
+      panel._vgProfile=null;
+      panel._vgProfileRequestToken=(panel._vgProfileRequestToken||0)+1;
+    }
     panel._vgGraphJson=info.graphJson;
     panel._vgSelected=null;panel._vgPending=null;
     render(panel);
     status(panel,'Shared JsonAsset: '+(info.assetName||'unnamed')+' · read-only view.');
   }catch(error){
     if(panel._vgRequestToken!==requestToken||!panel._vgShared)return;
+    panel._vgProfile=null;
+    panel._vgProfileRequestToken=(panel._vgProfileRequestToken||0)+1;
     panel._vgGraphJson='invalid shared graph';
     render(panel);
     status(panel,String(error?.message||error),true);
