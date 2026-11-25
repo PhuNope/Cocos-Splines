@@ -225,6 +225,24 @@ function validateMesh(m:RoadGeometry):void{
         throw Error('Geometry Graph generated invalid or oversized mesh geometry.');
 }
 export interface GeometryGraphMetrics {computed:number;reused:number;nodes:number}
+/** Timings measure synchronous per-node graph evaluation only; they exclude
+ * Bezier frame sampling, graph compilation, mesh uploads and gizmo generation.
+ * Cached nodes report zero compute time rather than misleading elapsed time.
+ */
+export interface GeometryNodeTiming {
+    id:string;type:GeometryNodeType;cached:boolean;durationMs:number;
+}
+export interface GeometryGraphProfile {
+    totalMs:number;computed:number;reused:number;nodes:GeometryNodeTiming[];
+}
+const defaultProfileClock=():number=>{
+    const p=(globalThis as unknown as {performance?:{now?:()=>number}}).performance;
+    return typeof p?.now==='function'?p.now():Date.now();
+};
+const elapsedMs=(start:number,end:number):number=>{
+    if(!finite(start)||!finite(end))return 0;
+    return Math.round(Math.min(60000,Math.max(0,end-start))*1000)/1000;
+};
 /** Atomic per-node cache. If any node fails, previous cache/output remain valid.
  * A downstream node recomputes iff its own settings or an input version changes.
  */
@@ -232,8 +250,17 @@ export class GeometryGraphRunner {
     private cache=new Map<string,CacheEntry>();
     private sequence=0;
     private last:GeometryGraphMetrics={computed:0,reused:0,nodes:0};
+    private profileEnabled=false;
+    private lastProfile:GeometryGraphProfile|null=null;
+    constructor(private readonly profileClock:()=>number=defaultProfileClock){}
     get metrics():GeometryGraphMetrics{return {...this.last};}
-    clear():void{this.cache.clear();}
+    /** Null before first profiled success. Clone all arrays to protect cache. */
+    get profile():GeometryGraphProfile|null{
+        const p=this.lastProfile;
+        return p?{...p,nodes:p.nodes.map(n=>({...n}))}:null;
+    }
+    setProfilingEnabled(enabled:boolean):void{this.profileEnabled=enabled===true;}
+    clear():void{this.cache.clear();this.lastProfile=null;}
     evaluate(plan:GeometryGraphPlan,context:GeometryGraphContext,
         selectedOutputId?:string):RoadGeometry{
         // Compile the supplied plan afresh for defensiveness against JS mutation.
@@ -248,6 +275,8 @@ export class GeometryGraphRunner {
         validateFrames(context);
         const next=new Map<string,CacheEntry>();
         let computed=0,reused=0;
+        const timings:GeometryNodeTiming[]|null=this.profileEnabled?[]:null;
+        let totalMs=0;
         const seqBase=this.sequence;
         try{
             for(const node of checked.nodes){
@@ -260,8 +289,11 @@ export class GeometryGraphRunner {
                 ]);
                 const prior=this.cache.get(node.id);
                 if(prior?.key===key){
-                    next.set(node.id,prior);reused++;continue;
+                    next.set(node.id,prior);reused++;
+                    if(timings)timings.push({id:node.id,type:node.type,cached:true,durationMs:0});
+                    continue;
                 }
+                const start=timings?this.profileClock():0;
                 const source=input?.value;
                 let value:GraphValue;
                 if(node.type==='spline'){
@@ -337,12 +369,24 @@ export class GeometryGraphRunner {
                 // is returned from the selected output.
                 next.set(node.id,{key,version:++this.sequence,value});
                 computed++;
+                if(timings){
+                    const durationMs=elapsedMs(start,this.profileClock());
+                    totalMs+=durationMs;
+                    timings.push({id:node.id,type:node.type,cached:false,durationMs});
+                }
             }
             const result=next.get(requested)?.value;
             if(result?.kind!=='mesh')throw Error('Geometry Graph output was not a mesh.');
+            // Commit the cache and profile only after successful cloning.
+            // A failed graph evaluation keeps the last successful report.
+            const output=meshCopy(result.geometry);
             this.cache=next;
             this.last={computed,reused,nodes:checked.nodes.length};
-            return meshCopy(result.geometry);
+            if(timings)this.lastProfile={
+                totalMs:Math.round(totalMs*1000)/1000,
+                computed,reused,nodes:timings,
+            };
+            return output;
         }catch(error){
             this.sequence=seqBase;throw error;
         }
