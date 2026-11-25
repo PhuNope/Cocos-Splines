@@ -270,3 +270,19 @@ Chỉ push `v2`; không tạo tag hoặc GitHub Release.
 - [ ] **Phase 4.3f**: imported Mesh Asset input port & profile assets, nhiều MeshRenderer slot trên cùng một Node, đo chi phí graph compile/mesh upload & sampling/GPU performance riêng.
 
 Chỉ push `v2`; không tag hoặc GitHub Release.
+
+## Phase 4.3f1 — Typed Mesh Asset source input (preview)
+
+Graph V1/V2 hỗ trợ **`meshAsset` → `meshDeform.meshInput`**, bên cạnh đầu vào path bắt buộc. Mesh Asset được gán tại thuộc tính native **Source Mesh** của từng `SplineGeometryGraphRenderer` (không nhúng asset UUID, đường dẫn hay vertex vào JSON). Shared JsonAsset có thể dùng trên nhiều renderer với Source Mesh riêng. Graph cũ không đổi.
+
+**Cách dùng:** import Mesh/FBX có một submesh, bật **Allow Data Access**, bảo đảm có đủ phân đoạn dọc **trục +Z**. Trong Visual Graph, chọn node Mesh Deform và bấm **＋ Mesh Asset Input**; nút **✕ Mesh Asset Input** ngắt liên kết để quay về preset Strip/Box Shell. Nhấp socket `meshSource` ở node `meshAsset` rồi socket `asset` ở `meshDeform` để kết nối lại. Width/Height trở thành hệ số scale cross-section của imported mesh; Repeats 1–16, UV V theo chiều dài spline. `segments` và `deformShape` chỉ dùng với generated preset.
+
+**Install Examples:** `GeometryGraph/ImportedMeshDeformGraph.json` tạo graph nguồn imported; người dùng gán Mesh Asset thật sau khi cài. Extension không phát hành mesh FBX mẫu và không tạo UUID giả.
+
+**Giới hạn an toàn:** tối đa 1 meshAsset node mỗi graph, 4.096 source vertices, 24.576 indices, 4 MiB backing buffer, một submesh, graph tổng 32 nodes. Adapter dùng `SplineMeshRead` để đọc POSITION, UV0, normals (nếu có) và index từ Cocos Creator 3.8, sao chép mọi dữ liệu. Mesh nguồn không bị sửa. Source không thể thay thế cổng path. Graph cache tách meshAsset revision khỏi spline; data fingerprint đọc raw bytes khi Cocos cung cấp, còn thay đổi buffer không quan sát được phải bấm **Rebuild**. Invalid/missing asset hoặc unsupported format giữ nguyên MeshRenderer cuối hợp lệ. Shared Graph Compare/Rebase xem `meshInput` là thay đổi cấu trúc và không tự gộp.
+
+**Chưa hỗ trợ:** nhiều Mesh Asset slots, trục deform X/Y, automatic subdivision cho FBX ít vertices, source-length physical repeat trim, submesh nhiều material, skinned mesh, multi-slot output cùng renderer. Hỗ trợ normals/UV nhập phụ thuộc format readable hiện có.
+
+**QA còn cần trên Cocos Creator 3.8.8:** FBX readable/half-float, reimport & hot reload, material and culling, mirrored/nonuniform scale, Undo/Redo, Prefab override, Source Mesh cùng graph khác renderer, Scene save/reopen và performance. Regression headless bao phủ typed ports, immutable mesh, cache invalidation, bounds và draft workflow.
+
+Chỉ push nhánh `v2`, không tag hoặc GitHub Release.
