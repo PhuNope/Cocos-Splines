@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   validate:
@@ -65,12 +66,25 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 6
-      - name: Download preview artifact for install-layout smoke test
+      - name: Download preview artifact for install-layout smoke test (retry propagation)
         if: github.ref == 'refs/heads/v2'
-        uses: actions/download-artifact@v4
-        with:
-          name: cocos-splines-v2-${{ github.sha }}
-          path: builds/artifact-smoke
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8; do
+            rm -rf builds/artifact-smoke
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "cocos-splines-v2-$GITHUB_SHA" --dir builds/artifact-smoke; then
+              test -f builds/artifact-smoke/package.json
+              echo "Artifact downloaded and extracted in one pass."
+              exit 0
+            fi
+            echo "GitHub artifact not propagated yet (attempt $attempt/8)."
+            sleep 5
+          done
+          echo "Could not download freshly uploaded artifact after retries." >&2
+          exit 1
       - name: Verify downloaded ZIP extracts directly into an extension
         if: github.ref == 'refs/heads/v2'
         run: node tests/preview-artifact-roundtrip-v2.test.cjs
