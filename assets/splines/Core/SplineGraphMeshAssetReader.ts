@@ -7,7 +7,16 @@ import {MeshGeometry} from './SplineMeshDeformMath';
 import {readPositionTriples,readUVPairs,readNormalTriples,
     resolveAttributeFormatName,findStoredAttributeFormat,VertexFormat} from './SplineMeshRead';
 
-export interface GraphSourceMeshRead {geometry:MeshGeometry;revision:string}
+export interface GraphSourceMeshRead {
+    geometry:MeshGeometry;
+    revision:string;
+    subMeshIndex:number;
+    subMeshCount:number;
+}
+/** A bounded opt-in subset of an imported Mesh. Renderer material slot zero
+ * remains user-controlled: this adapter never copies or changes materials.
+ */
+export const MAX_GRAPH_SOURCE_SUBMESHES=4;
 const maxBytes=4*1024*1024;
 export function graphMeshDataFingerprint(mesh:Mesh|null):string{
     if(!mesh)return 'none';
@@ -41,32 +50,42 @@ function decodedGeometryHash(mesh:MeshGeometry):string{
     }
     return h.toString(16);
 }
-export function readGraphSourceMeshAsset(mesh:Mesh|null):GraphSourceMeshRead {
+export function readGraphSourceMeshAsset(mesh:Mesh|null,subMeshIndex=0):GraphSourceMeshRead {
     if(!mesh)throw Error('Geometry Graph meshAsset requires Source Mesh on the Renderer.');
     if(mesh.allowDataAccess!==true)
         throw Error('Enable Allow Data Access on the Graph Source Mesh import settings.');
-    if(!mesh.struct||mesh.struct.primitives.length!==1)
-        throw Error('Geometry Graph Source Mesh must have exactly one submesh.');
+    const count=mesh.struct?.primitives?.length??0;
+    if(!Number.isInteger(count)||count<1||count>MAX_GRAPH_SOURCE_SUBMESHES)
+        throw Error('Geometry Graph Source Mesh supports 1–4 imported submeshes.');
+    if(!Number.isInteger(subMeshIndex)||subMeshIndex<0||
+       subMeshIndex>=count||subMeshIndex>=MAX_GRAPH_SOURCE_SUBMESHES)
+        throw Error('Graph Source Submesh Index must select an existing submesh (0–'+
+            (count-1)+').');
+    const primitive=mesh.struct.primitives[subMeshIndex];
+    const triangle=(gfx.PrimitiveMode as {TRIANGLE_LIST?:number}|undefined)?.TRIANGLE_LIST;
+    if(primitive?.primitiveMode!==undefined&&triangle!==undefined&&
+       primitive.primitiveMode!==triangle)
+        throw Error('Graph Source Mesh requires TRIANGLE_LIST indexed submeshes.');
     const revision=graphMeshDataFingerprint(mesh);
-    const position=mesh.readAttribute(0,gfx.AttributeName.ATTR_POSITION);
-    const uv=mesh.readAttribute(0,gfx.AttributeName.ATTR_TEX_COORD);
-    const normal=mesh.readAttribute(0,gfx.AttributeName.ATTR_NORMAL);
-    const indices=mesh.readIndices(0);
+    const position=mesh.readAttribute(subMeshIndex,gfx.AttributeName.ATTR_POSITION);
+    const uv=mesh.readAttribute(subMeshIndex,gfx.AttributeName.ATTR_TEX_COORD);
+    const normal=mesh.readAttribute(subMeshIndex,gfx.AttributeName.ATTR_NORMAL);
+    const indices=mesh.readIndices(subMeshIndex);
     if(!position||!indices)throw Error('Cannot read imported Graph Mesh position/indices.');
     const formats=gfx.Format as unknown as Readonly<Record<string,number|string>>;
     const format=(name:string,reported:unknown):VertexFormat=>
         resolveAttributeFormatName(reported,formats,
-            findStoredAttributeFormat(mesh,0,name)) as VertexFormat;
+            findStoredAttributeFormat(mesh,subMeshIndex,name)) as VertexFormat;
     const pos=readPositionTriples(position,format(gfx.AttributeName.ATTR_POSITION,
-        mesh.readAttributeFormat(0,gfx.AttributeName.ATTR_POSITION)));
+        mesh.readAttributeFormat(subMeshIndex,gfx.AttributeName.ATTR_POSITION)));
     const vertices=pos.length/3;
     if(vertices<3||vertices>4096||indices.length<3||indices.length>24576)
         throw Error('Graph Source Mesh supports 3–4096 vertices and up to 24576 indices.');
     const uvs=uv?readUVPairs(uv,format(gfx.AttributeName.ATTR_TEX_COORD,
-        mesh.readAttributeFormat(0,gfx.AttributeName.ATTR_TEX_COORD))):undefined;
+        mesh.readAttributeFormat(subMeshIndex,gfx.AttributeName.ATTR_TEX_COORD))):undefined;
     const normalName=resolveAttributeFormatName(
-        mesh.readAttributeFormat(0,gfx.AttributeName.ATTR_NORMAL),formats,
-        findStoredAttributeFormat(mesh,0,gfx.AttributeName.ATTR_NORMAL));
+        mesh.readAttributeFormat(subMeshIndex,gfx.AttributeName.ATTR_NORMAL),formats,
+        findStoredAttributeFormat(mesh,subMeshIndex,gfx.AttributeName.ATTR_NORMAL));
     const normals=readNormalTriples(normal,normalName);
     const geometry:MeshGeometry={positions:pos,indices:Array.from(indices),
         uvs,normals:normals&&normals.length===pos.length?normals:undefined};
@@ -74,5 +93,9 @@ export function readGraphSourceMeshAsset(mesh:Mesh|null):GraphSourceMeshRead {
        geometry.indices.some(i=>!Number.isInteger(i)||i<0||i>=vertices)||
        (uvs&&uvs.length!==vertices*2))
         throw Error('Graph Source Mesh indices or UV count are invalid.');
-    return {geometry,revision:revision+':'+decodedGeometryHash(geometry)};
+    return {
+        geometry,
+        revision:revision+':submesh-'+subMeshIndex+':'+decodedGeometryHash(geometry),
+        subMeshIndex,subMeshCount:count,
+    };
 }
