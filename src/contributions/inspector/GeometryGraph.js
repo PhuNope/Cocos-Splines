@@ -108,6 +108,7 @@ function summarizeReview(panel){
 }
 function render(panel){
   const draft=panel._vgSharedDraft;
+  const reviewText=summarizeReview(panel);
   const sharedLocked=!!panel._vgShared&&!draft;
   const busy=!!panel._vgSharedBusy;
   if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=draft?
@@ -132,7 +133,7 @@ function render(panel){
     !panel._vgSharedReview.analysis?.canRebase;
   for(const key of ['vgExport','vgImport'])if(panel.$?.[key])
     panel.$[key].disabled=!!draft||busy;
-  if(panel.$?.vgConflict)panel.$.vgConflict.textContent=summarizeReview(panel);
+  if(panel.$?.vgConflict)panel.$.vgConflict.textContent=reviewText;
   if(panel.$?.vgRefresh)panel.$.vgRefresh.disabled=!!draft||busy;
   const stage=panel.$?.vgStage,properties=panel.$?.vgProperties;
   if(!stage||!properties)return;
