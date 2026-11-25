@@ -86,3 +86,42 @@ Visual node graph editor (kéo-thả, chỉnh node/cổng bằng UI), nhiều ou
 - [ ] Native compile/build + performance 1.025 frame và graph 32 node trên Editor thật; offline CI không thay thế bước này.
 
 Chính sách: **chỉ branch `v2`, không tạo tag hoặc GitHub Release đến khi người dùng yêu cầu chốt**.
+
+## Phase 4.3a — Tube Generator (preview, 2026-11-25)
+
+Bổ sung node **`tube` (`path` → `mesh`)** làm generator thay thế Ribbon trong typed Graph V1. Không thay đổi serial schema version (`version:1`), default Ribbon, hành vi của các file cũ hay policy dùng Shared JsonAsset.
+
+**Sử dụng**: Trong SplineGeometryGraphRenderer Inspector → Visual Geometry Graph, bấm **Switch to Tube**. Graph sẽ thay mesh generator cuối `ribbon` bằng `tube`, giữ đường nối path, tùy chọn `uvMetersPerRepeat` và `capEnds`; tham số Ribbon riêng (`thickness`, `width`, `cornerMode`) được bỏ vì không có ngữ nghĩa tương đương. Ngược lại bấm **Switch to Ribbon**. Thêm Offset/Width trước Tube vẫn dùng được, và Width multiplier được áp dụng lên bán kính ống. Edit Shared Asset tiếp tục yêu cầu chế độ draft và xác nhận Save.
+
+**JSON ví dụ**
+
+```json
+{
+  "version": 1,
+  "nodes": [
+    {"id": "source", "type": "spline"},
+    {"id": "tube", "type": "tube", "input": "source", "radius": 0.75, "radialSegments": 12, "uvMetersPerRepeat": 4, "capEnds": true},
+    {"id": "output", "type": "output", "input": "tube"}
+  ],
+  "output": "output"
+}
+```
+
+- `radius`: 0.025–50 (mặc định 1), bán kính spline mesh, nhân với Width Node.
+- `radialSegments`: số nguyên 3–32 (mặc định 12). Với giới hạn 1.025 frame, mỗi ring có tối đa 33 đỉnh (kể cả đỉnh UV seam duplicate), bảo đảm không vượt giới hạn 65.536 vertices.
+- `uvMetersPerRepeat`: 0.01–10000 (mặc định 5): UV V theo quãng đường; UV U chạy từ 0 đến 1 quanh vòng, có duplicate seam vertex để tránh nội suy UV sai.
+- `capEnds`: tùy chọn (mặc định false), chỉ đóng hai đầu trên spline mở. Closed Spline không sinh cap.
+- Normal dùng đạo hàm tiếp tuyến vòng và frame forward, hỗ trợ hệ vector transform sang MeshRenderer-local không đồng tỉ lệ. Hệ trục phản chiếu (negative determinant) được xét trong winding/normal; frame degenerate hoặc handedness đổi đột ngột được từ chối để không sinh mesh lỗi.
+- Source frames, Knot, asset Mesh/material không bị sửa. Runner dùng cache theo từng node như Ribbon, lỗi validate/tessellation giữ mesh cũ. Frame giới hạn theo pipeline v1; không đảm bảo không tự cắt nhau khi radius lớn trên khúc cua hẹp.
+
+**Chưa làm ở Phase 4.3a:** profile tuỳ biến, Tube có thickness/hollow, Mesh Deform, Multi-output graph, vertex smoothing tuỳ chọn và per-node profiling (Phase 4.3b+).
+
+**Native acceptance (Cocos Creator 3.8.8):**
+
+- [ ] Switch Ribbon ↔ Tube trong Inspector, nhận đủ trường Radius/Segments/UV/Cap, Undo/Redo và Prefab override vẫn đúng.
+- [ ] Ống mở có/không cap; spline kín UV seam và không sinh nắp; MeshRenderer material/culling ổn.
+- [ ] Parent non-uniform/negative scale, scale riêng output Node, spline dốc/roll cao, normal và winding đúng.
+- [ ] Spline/Graph source không bị thay đổi; JSON invalid giữ mesh cũ. Shared JsonAsset draft yêu cầu Save mới sửa file.
+- [ ] 1.025 frames / radialSegments=32 và closed knots trên Creator thật; CI chỉ kiểm thử headless.
+
+Chỉ push nhánh `v2`, **không gắn tag hoặc phát hành Release**.
