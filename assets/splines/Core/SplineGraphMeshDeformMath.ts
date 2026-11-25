@@ -16,7 +16,10 @@ export interface GraphMeshDeformSettings {
     deformShape:number; // 0 strip, 1 box shell
     axis?:number; // 0 X, 1 Y, 2 Z (default) for imported + preset meshes
     segments:number; // subdivisions per source repeat
-    repeats:number; // count of source modules along full path
+    repeats:number; // legacy count; ignored in Source Length mode
+    repeatLayout?:number; // 0 fixed Count, 1 physical source tile length
+    tileLength?:number; // 0 auto from source axis bounds
+    uvMode?:number; // 0 original UV0, 1 continuous, 2 path distance
     uvMetersPerRepeat:number;
 }
 const finite=(n:number)=>Number.isFinite(n);
@@ -81,6 +84,14 @@ export function buildGraphMeshDeformGeometry(
     imported?:Readonly<MeshGeometry>):RoadGeometry {
     const {width,height,deformShape,segments,repeats,uvMetersPerRepeat}=settings;
     const axis=settings.axis??2;
+    const repeatLayout=settings.repeatLayout??0;
+    const tileLength=settings.tileLength??0;
+    const uvMode=settings.uvMode??2;
+    if(!Number.isInteger(repeatLayout)||![0,1].includes(repeatLayout)||
+       !Number.isInteger(uvMode)||![0,1,2].includes(uvMode)||
+       !finite(tileLength)||tileLength<0||tileLength>10000||
+       (tileLength>0&&tileLength<.01))
+        throw Error('Geometry Graph Mesh Deform repeat layout, tile length or UV mode invalid.');
     if(!Number.isInteger(axis)||axis<0||axis>2)
         throw Error('Geometry Graph Mesh Deform axis must be X, Y, or Z.');
     if(!Number.isInteger(repeats)||repeats<1||repeats>16||
@@ -127,6 +138,29 @@ export function buildGraphMeshDeformGeometry(
     const origin=frames[0].distance,length=frames[frames.length-1].distance-origin;
     if(!finite(length)||length<=1e-7)
         throw Error('Geometry Graph Mesh Deform requires a positive source arc length.');
+    // Preflight before allocating the repeated output. Source Length mode
+    // may need a geometrically clipped last tile; keep both CPU work and
+    // output sizes within the existing typed Graph geometry budget.
+    let tileCount=repeats;
+    if(repeatLayout===1){
+        let lo=Infinity,hi=-Infinity;
+        for(let i=axis;i<source.positions.length;i+=3){
+            lo=Math.min(lo,source.positions[i]);hi=Math.max(hi,source.positions[i]);
+        }
+        const axisLength=hi-lo;
+        if(!finite(axisLength)||axisLength<=1e-7)
+            throw Error('Geometry Graph physical repeat needs positive source mesh axis length.');
+        const effectiveLength=tileLength>0?tileLength:axisLength;
+        tileCount=Math.max(1,Math.ceil(length/effectiveLength-1e-9));
+        if(tileCount>256)
+            throw Error('Geometry Graph physical repeat exceeds 256 tiles; increase tileLength.');
+        const vertices=source.positions.length/3,indices=source.indices.length;
+        // An extra tile-index budget is reserved for the clipped end, which
+        // can produce more triangles than an ordinary complete tile.
+        if((tileCount*vertices+indices)>65536||
+           ((tileCount+1)*indices)>393216)
+            throw Error('Geometry Graph physical repeat exceeds mesh geometry budget; increase tileLength.');
+    }
     let sign=0;
     for(const f of frames){
         if(!finite(f.distance)||f.distance<origin||f.distance>origin+length||
@@ -166,14 +200,21 @@ export function buildGraphMeshDeformGeometry(
     // freshly allocated positions, normals, UVs and indices.
     const output=deformMesh(source,interpolate,{
         axis:axis as 0|1|2,repeats,start:0,end:1,
+        repeatLayout:repeatLayout as 0|1,
+        tileLength:tileLength===0?undefined:tileLength,
         crossScale:imported?width:1,depthScale:imported?height:1,length,
-        uvMode:2,uvTilesPerUnit:1/uvMetersPerRepeat,
+        uvMode:uvMode as 0|1|2,uvTilesPerUnit:1/uvMetersPerRepeat,
         flipFaces:sign<0,
     });
+    if(output.positions.length/3>65536||output.indices.length>393216)
+        throw Error('Geometry Graph physical repeat produced oversized clipped mesh geometry.');
+    const bands=imported?1:deformShape===0?1:4;
     return {
         positions:output.positions,normals:output.normals,
         uvs:output.uvs,indices:output.indices,
-        bands:imported?1:deformShape===0?1:4,
-        ringCount:imported?source.positions.length/3*repeats:(segments+1)*repeats,
+        bands,
+        ringCount:repeatLayout===1?
+            Math.round(output.positions.length/(imported?3:bands*2)):
+            imported?source.positions.length/3*repeats:(segments+1)*repeats,
     };
 }
