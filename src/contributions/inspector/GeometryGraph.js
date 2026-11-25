@@ -14,6 +14,11 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-copy-local">Copy Asset to Local</button>',
  '<button type="button" class="spl-btn spl-vg-refresh">Refresh Asset View</button>',
  '</div>',
+ '<div class="spl-vg-toolbar spl-vg-shared-toolbar">',
+ '<button type="button" class="spl-btn spl-vg-edit-shared">Edit Shared Asset…</button>',
+ '<button type="button" class="spl-btn spl-vg-save-shared">Save Shared JSON…</button>',
+ '<button type="button" class="spl-btn spl-vg-discard-shared">Discard Draft</button>',
+ '</div>',
  '<div class="spl-vg-source-mode" role="status">Local graph JSON</div>',
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
@@ -57,6 +62,8 @@ const style=base.style+[
 const $={...base.$,
   vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',
   vgCopyLocal:'.spl-vg-copy-local',vgRefresh:'.spl-vg-refresh',
+  vgEditShared:'.spl-vg-edit-shared',vgSaveShared:'.spl-vg-save-shared',
+  vgDiscardShared:'.spl-vg-discard-shared',
   vgSourceMode:'.spl-vg-source-mode',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
@@ -68,13 +75,25 @@ function status(panel,message,isError=false){
   panel.$.vgStatus.classList?.toggle?.('error',isError);
 }
 function render(panel){
-  if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=panel._vgShared?
-    'Shared JsonAsset mode · canvas is read-only. Export or Copy Asset to Local to edit.':
-    'Local graph · editable Visual Canvas';
+  const draft=panel._vgSharedDraft;
+  const sharedLocked=!!panel._vgShared&&!draft;
+  const busy=!!panel._vgSharedBusy;
+  if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=draft?
+    'Shared JsonAsset · UNSAVED DRAFT. Graph edits are temporary; node layout stays locked.':
+    panel._vgShared?
+      'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
+      'Local graph · editable Visual Canvas';
   for(const key of ['vgAddOffset','vgAddWidth','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
-    if(element)element.disabled=key==='vgCopyLocal'?!panel._vgShared:!!panel._vgShared;
+    if(element)element.disabled=busy||(
+      key==='vgCopyLocal'?(!panel._vgShared||!!draft):
+      key==='vgAuto'?!!panel._vgShared:sharedLocked);
   }
+  if(panel.$?.vgEditShared)panel.$.vgEditShared.disabled=!panel._vgShared||!!draft||busy;
+  if(panel.$?.vgSaveShared)panel.$.vgSaveShared.disabled=!draft||busy||
+    draft.graphJson===draft.initialGraphJson;
+  if(panel.$?.vgDiscardShared)panel.$.vgDiscardShared.disabled=!draft||busy;
+  if(panel.$?.vgRefresh)panel.$.vgRefresh.disabled=!!draft||busy;
   const stage=panel.$?.vgStage,properties=panel.$?.vgProperties;
   if(!stage||!properties)return;
   try{
@@ -85,7 +104,7 @@ function render(panel){
       panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
-      !!panel._vgShared||!['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
+      sharedLocked||busy||!['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
@@ -101,7 +120,15 @@ function render(panel){
  * change-dump. Do not use low-level scene.set-property or a manual snapshot.
  */
 function commitProperty(panel,key,nextValue){
-  if(panel._vgShared)throw Error('Shared JsonAsset is read-only: use Copy Asset to Local first.');
+  if(panel._vgSharedDraft){
+    if(key!=='graphJson')throw Error('Shared asset layout is component-local and locked during a shared edit.');
+    if(panel._vgSharedBusy)throw Error('Shared asset save is pending.');
+    if(nextValue===panel._vgSharedDraft.graphJson)return false;
+    panel._vgSharedDraft.graphJson=nextValue;
+    panel._vgGraphJson=nextValue;
+    return true;
+  }
+  if(panel._vgShared)throw Error('Shared JsonAsset is read-only: use Edit Shared Asset or Copy to Local.');
   if(!['graphJson','graphLayoutJson'].includes(key))
     throw Error('Visual Graph cannot edit '+key+'.');
   const dump=panel._splineDump?.value?.[key];
@@ -147,6 +174,7 @@ function commitLayout(panel,next){
   }
 }
 async function refreshAsset(panel){
+  if(panel._vgSharedDraft||panel._vgSharedBusy)return;
   const requestToken=(panel._vgRequestToken||0)+1;
   panel._vgRequestToken=requestToken;
   try{
@@ -181,6 +209,10 @@ const inspector={
     const shared=dump?.value?.useGraphAsset?.value===true;
     const assetIdentity=JSON.stringify(dump?.value?.graphAsset?.value??null);
     const changedShared=this._vgShared!==shared||this._vgAssetIdentity!==assetIdentity;
+    if(changedShared){
+      this._vgSharedDraft=null;
+      this._vgRequestToken=(this._vgRequestToken||0)+1;
+    }
     const changed=this._vgGraphJson!==graphJson||
       this._vgLayoutJson!==layoutJson||changedShared;
     this._vgShared=shared;this._vgAssetIdentity=assetIdentity;
@@ -196,6 +228,7 @@ const inspector={
     this._vgSelected=null;this._vgPending=null;this._vgDrag=null;
     this._vgRendered=false;this._vgPreviewLayout=null;
     this._vgShared=false;this._vgAssetIdentity=null;this._vgRequestToken=0;
+    this._vgSharedDraft=null;this._vgSharedBusy=false;
     // Legacy headless Inspector smoke mocks only provide the Rebuild button.
     // The real Cocos panel registers every selector in this module.
     if(!this.$?.vgStage||!this.$.vgProperties||!this.$.vgAddOffset||
@@ -214,6 +247,52 @@ const inspector={
         }).catch(error=>status(this,String(error?.message||error),true)));
     }
     this.$?.vgRefresh?.addEventListener('click',()=>void refreshAsset(this));
+    this.$?.vgEditShared?.addEventListener('click',()=>void (async()=>{
+      if(!this._vgShared||this._vgSharedDraft||this._vgSharedBusy)return;
+      const token=this._vgRequestToken;
+      this._vgSharedBusy=true;render(this);
+      try{
+        const info=await Editor.Message.request('cocos-splines','begin-shared-geometry-graph-edit');
+        if(token!==this._vgRequestToken||!this._vgShared)return;
+        if(!info?.ok)throw Error(info?.error||'Cannot open shared asset draft.');
+        graph.parseGraph(info.graphJson);
+        this._vgSharedDraft={nodeUuid:info.nodeUuid,assetUuid:info.assetUuid,
+          sha256:info.sha256,initialGraphJson:info.graphJson,graphJson:info.graphJson};
+        this._vgGraphJson=info.graphJson;this._vgSelected=null;this._vgPending=null;
+        render(this);
+        status(this,'Editing a temporary shared draft. Save requires confirmation and changes the source JSON file.');
+      }catch(error){
+        if(token===this._vgRequestToken)status(this,String(error?.message||error),true);
+      }finally{this._vgSharedBusy=false;render(this);}
+    })());
+    this.$?.vgSaveShared?.addEventListener('click',()=>void (async()=>{
+      const draft=this._vgSharedDraft;
+      if(!draft||this._vgSharedBusy)return;
+      const token=this._vgRequestToken;
+      this._vgSharedBusy=true;render(this);
+      try{
+        const result=await Editor.Message.request('cocos-splines',
+          'save-shared-geometry-graph-edit',{nodeUuid:draft.nodeUuid,
+            assetUuid:draft.assetUuid,sha256:draft.sha256,graphJson:draft.graphJson});
+        if(token!==this._vgRequestToken||this._vgSharedDraft!==draft)return;
+        if(result?.canceled){status(this,'Save canceled. Draft retained.');return;}
+        if(!result?.ok)throw Error(result?.error||'Shared JSON save failed.');
+        this._vgSharedDraft=null;
+        this._vgGraphJson=result.graphJson;
+        this._vgPending=null;
+        render(this);
+        status(this,result.message||'Shared JSON saved.');
+      }catch(error){
+        if(token===this._vgRequestToken&&this._vgSharedDraft===draft)
+          status(this,String(error?.message||error),true);
+      }finally{this._vgSharedBusy=false;render(this);}
+    })());
+    this.$?.vgDiscardShared?.addEventListener('click',()=>{
+      if(!this._vgSharedDraft||this._vgSharedBusy)return;
+      this._vgSharedDraft=null;this._vgPending=null;this._vgSelected=null;
+      this._vgGraphJson='Asset loading';render(this);
+      void refreshAsset(this);
+    });
     const insert=type=>{
       try{
         const nodes=graph.parseGraph(this._vgGraphJson).ordered;
@@ -230,7 +309,7 @@ const inspector={
     this.$.vgAuto.addEventListener('click',()=>commitLayout(this,'{}'));
     this.$.vgStage.addEventListener('click',event=>{
       if(this._vgIgnoreClick){this._vgIgnoreClick=false;return;}
-      if(this._vgShared)return;
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy)return;
       const socket=closest(event.target,'[data-socket]');
       if(socket){
         const id=socket.dataset.node;
@@ -246,7 +325,7 @@ const inspector={
     });
     this.$.vgProperties.addEventListener('change',event=>{
       const input=closest(event.target,'[data-graph-param]');
-      if(this._vgShared||!input||!this._vgSelected)return;
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!input||!this._vgSelected)return;
       const key=input.dataset.graphParam;
       editGraph(this,'param',{id:this._vgSelected,key,
         value:key==='capEnds'?!!input.checked:Number(input.value)});
@@ -311,6 +390,7 @@ const inspector={
     this._vgPreviewLayout=null;this._vgSelected=null;
     this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
     this._vgShared=false;this._vgAssetIdentity=null;
+    this._vgSharedDraft=null;this._vgSharedBusy=false;
     this._vgRequestToken=(this._vgRequestToken||0)+1;
   },
 };
