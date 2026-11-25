@@ -37,6 +37,12 @@ export interface GeometryGraphNode {
     radius?:number;radialSegments?:number;
     height?:number;profileShape?:number;
     deformShape?:number;segments?:number;repeats?:number;
+    /** 0 Count (legacy), 1 physical length with clipped final tile. */
+    repeatLayout?:number;
+    /** 0 = imported/preset source axis length, otherwise physical tile length. */
+    tileLength?:number;
+    /** 0 authored UV0, 1 continuous tile UV, 2 spline-distance UV (legacy). */
+    uvMode?:number;
 }
 export interface GeometryGraph {
     version:number;
@@ -140,7 +146,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
             node.type==='extrude'?['input','width','height','profileShape','uvMetersPerRepeat','capEnds']:
-            node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','uvMetersPerRepeat']:
+            node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
         if(node.type==='spline')sources++;
@@ -194,8 +200,16 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             const preset=bound(node.deformShape??0,0,1,'Mesh Deform shape');
             const segments=bound(node.segments??12,2,64,'Mesh Deform segments');
             const repeats=bound(node.repeats??1,1,16,'Mesh Deform repeats');
-            if(!Number.isInteger(preset)||!Number.isInteger(segments)||!Number.isInteger(repeats))
-                throw Error('Geometry Graph Mesh Deform preset, segments and repeats must be integers.');
+            const layout=bound(node.repeatLayout??0,0,1,'Mesh Deform repeat layout');
+            const uv=bound(node.uvMode??2,0,2,'Mesh Deform UV mode');
+            if(!Number.isInteger(preset)||!Number.isInteger(segments)||
+               !Number.isInteger(repeats)||!Number.isInteger(layout)||
+               !Number.isInteger(uv))
+                throw Error('Geometry Graph Mesh Deform shape, segments, repeats, repeatLayout and uvMode must be integers.');
+            // 0 keeps native source-axis length; positive override is local units.
+            const tileLength=bound(node.tileLength??0,0,10000,'Mesh Deform tile length');
+            if(tileLength>0&&tileLength<.01)
+                throw Error('Geometry Graph tileLength must be 0 or >= 0.01.');
             bound(node.uvMetersPerRepeat??5,.01,10000,'Mesh Deform UV length');
         }
         table.set(node.id,{...node});
@@ -432,6 +446,9 @@ export class GeometryGraphRunner {
                         axis:node.axis??2,
                         segments:node.segments??12,
                         repeats:node.repeats??1,
+                        repeatLayout:node.repeatLayout??0,
+                        tileLength:node.tileLength??0,
+                        uvMode:node.uvMode??2,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                     },source.closed,meshSource?.kind==='meshSource'?meshSource.geometry:undefined);
                     validateMesh(geometry);
