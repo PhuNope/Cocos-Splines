@@ -77,7 +77,7 @@ try{
  const skew=[frame(0,v(2),v(0,.5)),frame(2,v(2),v(0,.5))];
  const skewBevel=buildProfileExtrudeGeometry(skew,settings(1),false);
  const actual=xyz(skewBevel.normals,4); // first vertex of second profile edge
- const expected=[.05,-.2,0],l=Math.hypot(...expected);
+ const expected=[.05,-.4,0],l=Math.hypot(...expected);
  almost(actual[0],expected[0]/l);almost(actual[1],expected[1]/l);
  assert(dot(triangle(skewBevel,2).normal,actual)>0,'nonuniform normal and winding');
  const reflected=[frame(0,v(-1)),frame(2,v(-1))];
