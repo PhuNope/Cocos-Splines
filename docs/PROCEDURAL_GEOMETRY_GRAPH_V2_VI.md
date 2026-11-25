@@ -251,3 +251,22 @@ Ví dụ được cài qua **Install Examples**: `GeometryGraph/MultiOutputRoadT
 - [ ] Output slots trên cùng một Renderer (nhiều MeshRenderer/Materials), multi-input nodes, imported Mesh Asset port, custom output names/aliases, branching auto-layout và per-node CPU timing chưa có. Chúng cần API/serializer và native smoke riêng.
 
 Chỉ push `v2`; không tạo tag hoặc GitHub Release.
+
+## Phase 4.3e — Per-node CPU profiling (preview, 2026-11-25)
+
+**Profile CPU · Cold / Warm** nằm dưới Visual Geometry Graph Inspector. Đây là nút chẩn đoán **on-demand**, không thêm serialized Scene field hoặc sửa Graph JSON/JsonAsset.
+
+1. Chọn Node có `SplineGeometryGraphRenderer` đang bật, trỏ tới Spline hợp lệ (tối thiểu 2 Knot). Chọn đúng `Output ID` mong muốn nếu dùng Multi-output V2.
+2. Bấm **Profile CPU · Cold / Warm**. Scene process dùng cache frame Spline đã có; nếu frame cache bị stale hoặc chưa tồn tại, renderer thực hiện **rebuild bình thường** trước, giữ cơ chế commit Mesh nguyên tử cũ. Sau đó tạo **GeometryGraphRunner riêng** cho profiling, không thay thế live runner/cache hoặc MeshRenderer đang bound.
+3. Lượt **Cold** tính mới tất cả node; lượt **Warm** gọi cùng graph/context trên runner đó để đo cache hit. Bảng hiển thị `node ID`, `type`, thời gian CPU (ms) hoặc `cached`; tổng chỉ là tổng thời gian compute các node, không phải tổng thời gian dựng hình.
+4. Khi graph thay đổi, Output ID đổi, Shared Asset refresh hoặc mở bản nháp chỉnh Shared, báo cáo cũ bị vô hiệu. **Không profile bản nháp chưa lưu:** phải Save Shared JsonAsset hoặc Discard Draft trước khi chạy profiling. Không tạo Scene snapshot, không ghi `graphJson`, `graphLayoutJson`, Prefab, Knot hoặc JsonAsset.
+
+**Phạm vi thời gian:** thời gian đồng bộ của từng node trong Graph Runner, gồm path transform, tessellation, validation mỗi mesh. **Không bao gồm** đọc/parse JSON, biên dịch DAG, tạo World spline frames, MeshRenderer/GPU upload, gizmo, render pass hoặc Cocos lifecycle; do đó không dùng kết quả làm FPS benchmark. Đồng hồ dùng `performance.now()` khi có, fallback `Date.now()`; làm tròn ba chữ số thập phân. Cache hits có 0 ms compute (ghi `cached`); profiler chỉ hoạt động ở runner chẩn đoán để tránh overhead trên mọi frame. Profile cuối hợp lệ được bảo toàn nếu lần đo kế tiếp lỗi.
+
+**API thuần:** `GeometryGraphRunner.setProfilingEnabled(true)`, `runner.profile` (immutable snapshot trả về), `runner.metrics` giữ contract v1 cũ. Có thể inject hàm clock vào constructor để test chính xác. `SplineGeometryGraphRenderer.profileGraph()` trả `{cold,warm,graphVersion,outputId,sampledFrames}`. Editor message `profile-geometry-graph` gọi qua Scene, không trả Mesh data, chỉ báo cáo nhỏ ≤32 node. Text format bị kiểm tra/giới hạn trước khi chèn bằng `textContent`, không HTML injection.
+
+- [x] Regression tests: clock deterministic; cold/warm, per-node dirty cache, clone dữ liệu, lỗi node giữ báo cáo cũ, xử lý NaN timer, bounded output, Inspector invalidation, shared draft và renderer mesh ownership.
+- [ ] Native Cocos Creator 3.8.8: độ chính xác của `performance.now()` trong Scene, thao tác Inspector sau selection switch, stale frame rebuild, hai renderer cùng JsonAsset, profiling trên spline lớn và GC overhead thực tế.
+- [ ] **Phase 4.3f**: imported Mesh Asset input port & profile assets, nhiều MeshRenderer slot trên cùng một Node, đo chi phí graph compile/mesh upload & sampling/GPU performance riêng.
+
+Chỉ push `v2`; không tag hoặc GitHub Release.
