@@ -56,6 +56,29 @@ function applyProfileEdit(value,action,params={}){
   const x=Number(params.x),y=Number(params.y);
   if(!finite(x)||!finite(y))throw Error('Profile coordinates must be finite.');
   p[index]={x:round(x),y:round(y)};
+ }else if(action==='move-edge'){
+  const dx=Number(params.dx),dy=Number(params.dy);
+  if(!finite(dx)||!finite(dy)||Math.abs(dx)>2||Math.abs(dy)>2)
+   throw Error('Profile edge translation requires finite dx/dy within [-2,2].');
+  const next=(index+1)%p.length;
+  // Preserve the edge direction and length exactly until coordinate rounding;
+  // invalid winding/overlap/out-of-bounds rejects the entire draft transaction.
+  p[index]={x:round(p[index].x+dx),y:round(p[index].y+dy)};
+  p[next]={x:round(p[next].x+dx),y:round(p[next].y+dy)};
+ }else if(action==='insert-edge'){
+  if(p.length>=MAX_POINTS)throw Error('Profile supports up to 16 points.');
+  const t=params.t===undefined?.5:params.t;
+  const offset=params.offset===undefined?.12:params.offset;
+  if(!finite(t)||t<.1||t>.9||!finite(offset)||offset<-.4||offset>.4)
+   throw Error('Profile edge insertion requires t in [0.1,0.9] and offset within [-0.4,0.4].');
+  const a=p[index],b=p[(index+1)%p.length],dx=b.x-a.x,dy=b.y-a.y;
+  const length=Math.hypot(dx,dy);
+  // Outward is the right-hand normal of a CCW contour. A nonzero offset is
+  // required because the runtime rejects collinear edges/zero-area cap ears.
+  if(length<.0001||Math.abs(offset*length)<.0001)
+   throw Error('Profile edge insertion requires a nondegenerate non-collinear point.');
+  p.splice(index+1,0,{x:round(a.x+dx*t+dy*offset),
+   y:round(a.y+dy*t-dx*offset)});
  }else if(action==='remove'){
   if(p.length<=3)throw Error('Profile requires at least three points.');
   p.splice(index,1);
@@ -66,10 +89,24 @@ function applyProfileEdit(value,action,params={}){
  }else throw Error('Unknown Profile edit action.');
  return formatProfile(profile);
 }
-function renderProfileControls(value,selected=0){
+function renderProfileControls(value,selected=0,selectedEdge=null){
  const points=parseProfile(value).points,pt=points[selected]||points[0];
  const map=point=>String(round(120+point.x*104))+','+String(round(120-point.y*104));
  const polygon=points.map(map).join(' ');
+ // Wider invisible line targets enable selecting/dragging an entire edge.
+ // Midpoint dots communicate edge interaction; coordinates are generated
+ // only from bounded numeric polygon data, never user-provided SVG/HTML.
+ const edges=points.map((point,i)=>{
+  const a=map(point).split(','),b=map(points[(i+1)%points.length]).split(',');
+  const mx=round((Number(a[0])+Number(b[0]))/2);
+  const my=round((Number(a[1])+Number(b[1]))/2);
+  return '<line data-profile-edge="'+i+'" x1="'+a[0]+'" y1="'+a[1]+
+   '" x2="'+b[0]+'" y2="'+b[1]+'" stroke="transparent" stroke-width="16" '+
+   'role="button" tabindex="0" aria-label="Profile edge '+(i+1)+'"/>'+
+   '<circle data-profile-edge="'+i+'" cx="'+mx+'" cy="'+my+'" r="'+
+   (selectedEdge===i?6:4)+'" fill="'+
+   (selectedEdge===i?'#ffca76':'#a7f0bb')+'" stroke="#142a37" stroke-width="1.5"/>';
+ }).join('');
  const circles=points.map((point,i)=>{
   const [x,y]=map(point).split(',');
   return '<circle data-profile-point="'+i+'" cx="'+x+'" cy="'+y+
@@ -82,13 +119,17 @@ function renderProfileControls(value,selected=0){
   'role="img" aria-label="Profile polygon: select and drag point handles">'+
   '<path d="M120 0 V240 M0 120 H240" stroke="#345365" fill="none"/>'+
   '<polygon points="'+polygon+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>'+
-  circles+'</svg>';
- return '<div class="spl-profile-count">'+points.length+' CCW points · selected #'+(selected+1)+'</div>'+
+  edges+circles+'</svg>';
+ return '<div class="spl-profile-count">'+points.length+' CCW points · selected #'+(selected+1)+
+  (selectedEdge===null?'':' · edge #'+(selectedEdge+1)+' selected')+'</div>'+
   svg+'<div class="spl-profile-coordinates">'+
   '<label>X <input type="number" class="spl-profile-x" min="-1" max="1" step="0.01" value="'+pt.x+'"></label>'+
   '<label>Y <input type="number" class="spl-profile-y" min="-1" max="1" step="0.01" value="'+pt.y+'"></label></div>'+
   '<div class="spl-vg-toolbar">'+
   '<button type="button" class="spl-btn spl-profile-insert">Add point after selection</button>'+
+  '<button type="button" class="spl-btn spl-profile-insert-edge"'+
+   (selectedEdge===null||points.length>=MAX_POINTS?' disabled':'')+
+   '>Insert at selected edge</button>'+
   '<button type="button" class="spl-btn spl-profile-remove"'+(points.length<=3?' disabled':'')+
   '>Remove selected point</button></div>';
 }

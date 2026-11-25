@@ -20,6 +20,32 @@ const removed=model.applyProfileEdit(inserted,'remove',{index:1});
 assert.equal(removed,formatted,'Insert/remove returns original profile geometry');
 const modified=model.applyProfileEdit(formatted,'move',{index:1,x:.8,y:-.4});
 assert.notEqual(modified,formatted);
+// Edge-aware editor: moving a segment changes its two vertices atomically.
+const edgeMoved=model.applyProfileEdit(formatted,'move-edge',
+ {index:0,dx:0,dy:-.1});
+assert.deepEqual(model.parseProfile(edgeMoved).points.slice(0,2),[
+ {x:-.5,y:-.6},{x:.5,y:-.6}]);
+assert.equal(model.parseProfile(edgeMoved).points.length,6);
+assert.notDeepEqual(model.parseProfile(edgeMoved).points,
+ model.parseProfile(formatted).points);
+// CCW input stays immutable and non-self-intersecting on invalid edge drag.
+for(const invalid of [{dx:2,dy:0},{dx:0,dy:3},{dx:NaN,dy:0},
+ {dx:0,dy:1.2}])
+ assert.throws(()=>model.applyProfileEdit(formatted,'move-edge',
+  {index:0,...invalid}),/Profile/);
+const edgeInserted=model.applyProfileEdit(formatted,'insert-edge',
+ {index:0,t:.25,offset:.12});
+assert.equal(model.parseProfile(edgeInserted).points.length,7);
+assert.notEqual(edgeInserted,formatted);
+assert.match(model.renderProfileControls(edgeInserted,0,0),/Insert at selected edge/);
+assert.match(model.renderProfileControls(edgeInserted,0,0),/data-profile-edge="0"/);
+assert.match(model.renderProfileControls(edgeInserted,0,0),/edge #1 selected/);
+assert.match(model.renderProfileControls(formatted,0),/disabled>Insert at selected edge/);
+assert.equal(model.applyProfileEdit(edgeInserted,'remove',{index:1}),formatted);
+for(const invalid of [{t:0,offset:.1},{t:.5,offset:0},
+ {t:.5,offset:NaN},{t:.5,offset:1}])
+ assert.throws(()=>model.applyProfileEdit(formatted,'insert-edge',
+  {index:0,...invalid}),/Profile/);
 assert.equal(model.parseProfile(modified).points[1].x,.8);
 assert.equal(JSON.stringify(profile),before,'Draft operations never mutate author asset');
 for(const action of ['insert','remove','move'])for(const index of [-1,6,1.2,'bad'])
