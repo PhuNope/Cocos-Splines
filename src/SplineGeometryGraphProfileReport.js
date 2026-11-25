@@ -7,7 +7,8 @@ const idPattern=/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/;
 const types=new Set(['spline','offset','width','ribbon','tube',
   'extrude','meshDeform','output']);
 function validTiming(t){
-  return t&&typeof t==='object'&&idPattern.test(t.id)&&types.has(t.type)&&
+  return t&&typeof t==='object'&&typeof t.id==='string'&&idPattern.test(t.id)&&
+    typeof t.type==='string'&&types.has(t.type)&&
     typeof t.cached==='boolean'&&typeof t.durationMs==='number'&&
     Number.isFinite(t.durationMs)&&t.durationMs>=0&&t.durationMs<=60000;
 }
@@ -18,13 +19,15 @@ function validRun(run){
     run.nodes.length>=3&&run.nodes.length<=32&&
     run.computed+run.reused===run.nodes.length&&
     run.nodes.every(validTiming)&&
+    run.nodes.every(n=>!n.cached||n.durationMs===0)&&
+    Math.abs(run.nodes.reduce((sum,n)=>sum+n.durationMs,0)-run.totalMs)<.01&&
     run.nodes.filter(n=>n.cached).length===run.reused&&
     new Set(run.nodes.map(n=>n.id)).size===run.nodes.length;
 }
 const ms=value=>value.toFixed(3)+' ms';
 function formatGeometryGraphProfile(input){
   if(!input||typeof input!=='object'||![1,2].includes(input.graphVersion)||
-     !idPattern.test(input.outputId)||!Number.isInteger(input.sampledFrames)||
+     typeof input.outputId!=='string'||!idPattern.test(input.outputId)||!Number.isInteger(input.sampledFrames)||
      input.sampledFrames<2||input.sampledFrames>1025||
      !validRun(input.cold)||!validRun(input.warm)||
      input.cold.nodes.length!==input.warm.nodes.length)
