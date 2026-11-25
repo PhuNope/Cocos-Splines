@@ -286,8 +286,39 @@ async function run(){
    assert.throws(()=>renderer.rebuild(),/assigned JsonAsset/);
    assert.equal(out.mesh,lastGood);
    renderer.graphAsset=multiShared;
+   // The same MeshRenderer supports 3–4 material primitives with the
+   // stable lexicographically sorted V2 Output ID mapping.
+   const outputsThree={...multiShared.json,nodes:[
+    ...multiShared.json.nodes,
+    {id:'extrude3',type:'extrude',input:'source',width:1,height:1},
+    {id:'outputExtrude',type:'output',input:'extrude3'},
+   ]};
+   renderer.graphAsset={json:outputsThree};
+   renderer.renderAllOutputs=true;renderer.outputId='ignored';
+   const matThird=new Material(),matFourth=new Material();
+   renderer.materialC=matThird;
+   renderer.rebuild();
+   assert.equal(out.mesh.struct.primitives.length,3);
+   assert.deepEqual(renderer.getRenderedOutputIds(),
+    ['outputExtrude','outputPipe','outputRoad']);
+   assert.equal(out.getSharedMaterial(0),matPipe);
+   assert.equal(out.getSharedMaterial(1),matRoad);
+   assert.equal(out.getSharedMaterial(2),matThird);
+   renderer.graphAsset={json:{...outputsThree,nodes:[
+    ...outputsThree.nodes,
+    {id:'outputTubeX',type:'output',input:'pipe'},
+   ]}};
+   renderer.materialD=matFourth;
+   renderer.rebuild();
+   assert.equal(out.mesh.struct.primitives.length,4);
+   assert.deepEqual(renderer.getRenderedOutputIds(),
+    ['outputExtrude','outputPipe','outputRoad','outputTubeX']);
+   assert.equal(out.getSharedMaterial(3),matFourth);
+   assert.equal(node.components.length,sourceChildren);
+   renderer.graphAsset=multiShared;
    renderer.renderAllOutputs=false;renderer.outputId='';
-   renderer.material=null;renderer.materialB=null;
+   renderer.material=null;renderer.materialB=null;renderer.materialC=null;
+   renderer.materialD=null;
    renderer.rebuild();
    assert.equal(out.mesh.struct,null,
     'Disabled multi-output uses the original single-primitive utils.createMesh path');
