@@ -8,7 +8,8 @@ try{
   '--outDir',dir],{stdio:'pipe'});
  const original=Module._load;
  const gfx={AttributeName:{ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',
-  ATTR_NORMAL:'a_normal'},Format:{RGB32F:1,RG32F:2}};
+  ATTR_NORMAL:'a_normal'},Format:{RGB32F:1,RG32F:2},
+  PrimitiveMode:{TRIANGLE_LIST:4,LINE_LIST:1}};
  Module._load=function(name,parent,isMain){
   if(name==='cc')return {gfx,Mesh:class Mesh{}};
   return original.call(this,name,parent,isMain);
@@ -53,8 +54,43 @@ try{
   assert.throws(()=>readGraphSourceMeshAsset(null),/Source Mesh/);
   assert.throws(()=>readGraphSourceMeshAsset({...mesh,allowDataAccess:false}),
    /Allow Data Access/);
-  assert.throws(()=>readGraphSourceMeshAsset({...mesh,
-   struct:{primitives:[{},{}]}}),/one submesh/);
+  // A model with two submesh primitives can be read one at a time.
+  const alternatePos=new Float32Array([-2,0,0,2,0,0,-2,0,2,2,0,2]);
+  const alternateUV=new Float32Array([.25,0,.75,0,.25,1,.75,1]);
+  const alternateIndices=new Uint16Array([0,1,2,2,1,3]);
+  const multi={...mesh,struct:{
+   ...mesh.struct,
+   primitives:[{vertexBundelIndices:[0],primitiveMode:4},
+    {vertexBundelIndices:[1],primitiveMode:4}],
+   vertexBundles:[mesh.struct.vertexBundles[0],mesh.struct.vertexBundles[0]],
+  },readAttribute(i,name){
+   return name==='a_position'?(i===1?alternatePos:pos):
+    name==='a_texCoord'?(i===1?alternateUV:uvs):null;
+  },readIndices(i){return i===1?alternateIndices:indices;}};
+  const selected0=readGraphSourceMeshAsset(multi,0);
+  const selected1=readGraphSourceMeshAsset(multi,1);
+  assert.equal(selected0.subMeshCount,2);
+  assert.equal(selected1.subMeshIndex,1);
+  assert.deepEqual(selected1.geometry.positions,Array.from(alternatePos));
+  assert.deepEqual(selected1.geometry.uvs,Array.from(alternateUV));
+  assert.deepEqual(selected1.geometry.indices,Array.from(alternateIndices));
+  assert.notEqual(selected0.revision,selected1.revision,
+   'Same Mesh UUID/data must be distinguishable per submesh');
+  assert.equal(graphMeshDataFingerprint(multi),graphMeshDataFingerprint(mesh),
+   'Selector identity is scoped to decoded geometry, not raw buffer');
+  for(const bad of [-1,2,3,4,.5,Infinity,NaN]){
+   assert.throws(()=>readGraphSourceMeshAsset(multi,bad),/Submesh Index/);
+  }
+  assert.throws(()=>readGraphSourceMeshAsset({...multi,struct:{
+   ...multi.struct,primitives:new Array(5).fill({})}},0),/1–4 imported submeshes/);
+  assert.throws(()=>readGraphSourceMeshAsset({...multi,struct:{
+   ...multi.struct,primitives:[multi.struct.primitives[0],
+    {...multi.struct.primitives[1],primitiveMode:1}]}},1),/TRIANGLE_LIST/);
+  assert.throws(()=>readGraphSourceMeshAsset({...multi,
+   readIndices:i=>i===1?new Uint16Array([0,1,99]):indices},1),/indices/);
+  assert.throws(()=>readGraphSourceMeshAsset({...multi,
+   readAttribute:(i,name)=>name==='a_position'&&i===1?
+    new Float32Array(4100*3):multi.readAttribute(i,name)},1),/4096/);
   assert.throws(()=>readGraphSourceMeshAsset({...mesh,
    readIndices:()=>new Uint16Array([0,9,2])}),/indices/);
   assert.throws(()=>readGraphSourceMeshAsset({...mesh,
@@ -65,6 +101,6 @@ try{
   assert.equal(graphMeshDataFingerprint(null),'none');
   assert(require(root+'/package.json').scripts.test.includes(
    'geometry-graph-mesh-asset-reader-v2.test.cjs'));
-  console.log('GRAPH MESH ASSET READER V2 PASS: Cocos native formats, no source writes, content fingerprint, format/safety guards.');
+  console.log('GRAPH MESH ASSET READER V2 PASS: multi-submesh selection, distinct geometry revisions, topology bounds, read-only import.');
  }finally{Module._load=original;}
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
