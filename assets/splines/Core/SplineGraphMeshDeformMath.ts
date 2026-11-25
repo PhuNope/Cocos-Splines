@@ -1,7 +1,7 @@
 /** Phase 4.3c — bounded preset-mesh deformation over a typed path.
  * Reuses the existing SplineMeshDeformMath CPU kernel; unlike the standalone
  * SplineMeshDeform component, graph v1 supplies one path input and therefore
- * uses fixed, generated source-mesh presets (no imported Mesh assets).
+ * uses generated presets or an explicitly connected, bounded readable Mesh asset.
  *
  * 0 = segmented surface strip; 1 = open-ended rectangular box shell.
  * A source longitudinal segment is subdivided before bending, so curves are
@@ -76,14 +76,32 @@ export function createDeformPresetMesh(settings:GraphMeshDeformSettings):MeshGeo
  */
 export function buildGraphMeshDeformGeometry(
     frames:ReadonlyArray<GraphMeshDeformFrame>,
-    settings:GraphMeshDeformSettings,closed:boolean):RoadGeometry {
+    settings:GraphMeshDeformSettings,closed:boolean,
+    imported?:Readonly<MeshGeometry>):RoadGeometry {
     const {width,height,deformShape,segments,repeats,uvMetersPerRepeat}=settings;
     if(!Number.isInteger(repeats)||repeats<1||repeats>16||
        !finite(uvMetersPerRepeat)||uvMetersPerRepeat<.01||uvMetersPerRepeat>10000||
        !Array.isArray(frames)||frames.length<2||frames.length>1025||
        typeof closed!=='boolean')
         throw Error('Geometry Graph Mesh Deform settings or frame count invalid.');
-    const source=createDeformPresetMesh({width,height,deformShape,segments,repeats,uvMetersPerRepeat});
+    // Imported asset vertices are already subdivided by the author. A pure
+    // deformer never mutates them, and no automatic profile triangulation occurs.
+    const source=imported?
+        {positions:imported.positions.slice(),indices:imported.indices.slice(),
+            uvs:imported.uvs?.slice(),normals:imported.normals?.slice()}:
+        createDeformPresetMesh({width,height,deformShape,segments,repeats,uvMetersPerRepeat});
+    if(imported){
+        const count=source.positions.length/3;
+        if(count<3||count>4096||source.indices.length<3||
+           source.indices.length>24576||source.indices.length%3!==0||
+           source.positions.some(v=>!finite(v)||Math.abs(v)>1e6)||
+           source.indices.some(i=>!Number.isInteger(i)||i<0||i>=count)||
+           (source.uvs!==undefined&&(source.uvs.length!==count*2||
+             source.uvs.some(v=>!finite(v))))||
+           (source.normals!==undefined&&(source.normals.length!==count*3||
+             source.normals.some(v=>!finite(v)))))
+            throw Error('Geometry Graph imported Mesh exceeds safety limits.');
+    }
     const origin=frames[0].distance,length=frames[frames.length-1].distance-origin;
     if(!finite(length)||length<=1e-7)
         throw Error('Geometry Graph Mesh Deform requires a positive source arc length.');
@@ -126,14 +144,14 @@ export function buildGraphMeshDeformGeometry(
     // freshly allocated positions, normals, UVs and indices.
     const output=deformMesh(source,interpolate,{
         axis:2,repeats,start:0,end:1,
-        crossScale:1,depthScale:1,length,
+        crossScale:imported?width:1,depthScale:imported?height:1,length,
         uvMode:2,uvTilesPerUnit:1/uvMetersPerRepeat,
         flipFaces:sign<0,
     });
     return {
         positions:output.positions,normals:output.normals,
         uvs:output.uvs,indices:output.indices,
-        bands:deformShape===0?1:4,
-        ringCount:(segments+1)*repeats,
+        bands:imported?1:deformShape===0?1:4,
+        ringCount:imported?source.positions.length/3*repeats:(segments+1)*repeats,
     };
 }
