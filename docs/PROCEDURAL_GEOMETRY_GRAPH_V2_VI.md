@@ -286,3 +286,19 @@ Graph V1/V2 hỗ trợ **`meshAsset` → `meshDeform.meshInput`**, bên cạnh �
 **QA còn cần trên Cocos Creator 3.8.8:** FBX readable/half-float, reimport & hot reload, material and culling, mirrored/nonuniform scale, Undo/Redo, Prefab override, Source Mesh cùng graph khác renderer, Scene save/reopen và performance. Regression headless bao phủ typed ports, immutable mesh, cache invalidation, bounds và draft workflow.
 
 Chỉ push nhánh `v2`, không tag hoặc GitHub Release.
+
+## Phase 4.3f2a — Mesh Asset slots A/B/C + Deform Axis X/Y/Z
+
+Phát triển trên 4.3f1: mỗi `SplineGeometryGraphRenderer` có **ba Mesh Asset property** native: `sourceMesh` (Slot A = 0), `sourceMeshB` (Slot B = 1), `sourceMeshC` (Slot C = 2). Mỗi graph tối đa 3 node `meshAsset` với các slot duy nhất. Các mesh này vẫn là một submesh/readable và mỗi mesh nguồn tối đa 4.096 vertices, 24.576 indices và 4 MiB raw buffer. Graph V1/V2 cũ không cần migration: `meshAsset` thiếu `slot` mặc định 0, `meshDeform` thiếu `axis` mặc định 2 (Z).
+
+**Dùng Visual Graph:** chọn `meshDeform` rồi bấm **＋ Mesh Asset Input**, graph thêm một `meshAsset` mới ở slot còn trống (ưu tiên A, B, C). Chọn node `meshAsset` để chỉnh `slot` bằng dropdown, chọn `meshDeform` để chỉnh `axis` = X(0), Y(1), Z(2). Nối cổng `meshSource` vào `meshDeform.meshInput` để **chia sẻ** mesh source giữa các nhánh; nhánh cũ chỉ mất nguồn khi không còn node nào phụ thuộc. Không tự chia sẻ slot khi tất cả ba slot đã sử dụng: phải nối một source có sẵn để thể hiện ý định rõ ràng.
+
+**Trục deform:** đặt X khi asset được model dọc theo X, Y khi dọc Y, Z khi dọc Z. `SplineMeshDeformMath.deformMesh` thực hiện chuyển axis và điều chỉnh winding/normals. Generated preset Strip/Box Shell cũng đổi được trục (đổi hệ trục nguồn từ Z rồi sửa winding source để giữ outward-facing). X/Y/Z là **local source mesh axis**, không phải world axis của Spline. UV V tiếp tục tính theo spline distance.
+
+**Cache và lifecycle:** mỗi `meshAsset` node nhận `meshRevision` độc lập của đúng native slot, nên thay asset B không làm dirty asset A hay các nhánh chỉ phụ thuộc A. Runner kiểm tra toàn bộ các output trước commit; thiếu/không readable ở một nhánh thì không thay mesh cuối đã render. `Spline` sampled world frames được reuse, và profiling cold/warm vẫn chạy trên runner chẩn đoán. Thay slot node trong Shared JsonAsset là **structural edit**, không auto-rebase. Mesh assets nguồn không bị mutate; mẫu JSON không lưu các UUID/bytes.
+
+Ví dụ `Install Examples → GeometryGraph/DualMeshAxisGraph.json` chứa hai output `outputA` (mesh slot A, trục X) và `outputB` (mesh slot B, trục Y). Gán cùng graph cho hai renderer node, điền Source Mesh/Source Mesh B, và chọn Output ID riêng ở từng renderer.
+
+**Test headless:** 3-slot validation/port typing, preset X/Y/Z winding/normal parity, imported axis mapping, cold/warm cache per-source, shared source linking, conflict handling, native renderer dual-source revision/rollback, example installer.
+
+**Hạng mục chưa làm:** nguồn imported >3 slots, source-length tile trimming, imported mesh X/Y interpolation improvements, renderer xuất đồng thời nhiều mesh/material slot trong *cùng một Node* (hiện mỗi Renderer có một output), authored profile asset UI và Cocos Creator 3.8.8 native smoke (Undo/Redo, Prefab, FBX, hot reimport và mesh culling). Không tag/Release, chỉ push `v2`.
