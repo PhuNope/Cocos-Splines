@@ -8,6 +8,8 @@ import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGr
     from '../Core/SplineGeometryGraph';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
     from '../Core/SplineGraphMeshAssetReader';
+import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry}
+    from '../Core/SplineGeometryGraphMultiMesh';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
 
@@ -42,6 +44,12 @@ export class SplineGeometryGraphRenderer extends Component {
      */
     @property({tooltip:'V2 graph: optional Output Node ID (e.g. outputBranch). Empty uses graph default.'})
     outputId='';
+    /** Opt-in: each V2 Output Node becomes one material primitive in this
+     * same MeshRenderer. No children/components are created.
+     * Material order is stable: lexicographically sorted Output IDs.
+     */
+    @property({tooltip:'V2 only: render all 2–4 graph outputs as material submeshes in one MeshRenderer. Output ID is ignored in this mode.'})
+    renderAllOutputs=false;
     /** Input slot for optional typed graph meshAsset nodes. This is a native
      * project Mesh reference, never raw vertex data in graph JSON.
      */
@@ -78,6 +86,12 @@ export class SplineGeometryGraphRenderer extends Component {
     samplesPerCurve=12;
     @property({type:Material,tooltip:'Optional shared material; otherwise respects a manually assigned MeshRenderer material.'})
     material:Material|null=null;
+    @property({type:Material,tooltip:'All Outputs: material slot 1 (second sorted Output ID). Empty respects MeshRenderer material.'})
+    materialB:Material|null=null;
+    @property({type:Material,tooltip:'All Outputs: material slot 2 (third sorted Output ID). Empty respects MeshRenderer material.'})
+    materialC:Material|null=null;
+    @property({type:Material,tooltip:'All Outputs: material slot 3 (fourth sorted Output ID). Empty respects MeshRenderer material.'})
+    materialD:Material|null=null;
     @property({tooltip:'Rebuild when graph, spline geometry, or output transform changes.'})
     rebuildOnChange=true;
     @property({tooltip:'Selected-only wireframe of generated mesh through Cocos-Gizmos v3.'})
@@ -88,13 +102,17 @@ export class SplineGeometryGraphRenderer extends Component {
     private _mesh:Mesh|null=null;
     private _gizmo:MeshGizmoLines|null=null;
     private _fallback:Material|null=null;
-    private _boundMaterial:Material|null=null;
+    private _boundMaterials:(Material|null)[]=[];
+    private _subMeshCount=1;
+    private _renderedOutputIds:string[]=[];
     private _revision='';
     private _lastAttempt='';
     private _runner=new GeometryGraphRunner();
     private _frameRevision='';
     private _frameCache:RoadFrame[]|null=null;
     public getMeshGizmoGeometry():MeshGizmoLines|null{return this._gizmo;}
+    /** Material slot order for the currently committed generated Mesh only. */
+    public getRenderedOutputIds():string[]{return this._renderedOutputIds.slice();}
     public getGraphMetrics():{computed:number;reused:number;nodes:number}{
         return this._runner.metrics;
     }
@@ -156,7 +174,7 @@ export class SplineGeometryGraphRenderer extends Component {
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
-        return JSON.stringify([this.frameSignature(),json,this.outputId,assets,this.gizmoEdgeLimit]);
+        return JSON.stringify([this.frameSignature(),json,this.outputId,this.renderAllOutputs,assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -175,19 +193,24 @@ export class SplineGeometryGraphRenderer extends Component {
     }
     private syncMaterial(renderer:MeshRenderer|null):void {
         if(!renderer)return;
-        const current=renderer.getSharedMaterial(0);
-        if(this.material){
-            if(current!==this.material)renderer.setSharedMaterial(this.material,0);
-            this._boundMaterial=this.material;
-        }else{
-            if(!current||(this._boundMaterial&&current===this._boundMaterial)){
-                if(!this._fallback){
-                    this._fallback=new Material();
-                    this._fallback.initialize({effectName:'builtin-unlit'});
+        const overrides=[this.material,this.materialB,this.materialC,this.materialD];
+        for(let i=0;i<this._subMeshCount;i++){
+            const current=renderer.getSharedMaterial(i);
+            const selected=overrides[i];
+            if(selected){
+                if(current!==selected)renderer.setSharedMaterial(selected,i);
+                this._boundMaterials[i]=selected;
+            }else{
+                const bound=this._boundMaterials[i];
+                if(!current||(bound&&current===bound)){
+                    if(!this._fallback){
+                        this._fallback=new Material();
+                        this._fallback.initialize({effectName:'builtin-unlit'});
+                    }
+                    if(current!==this._fallback)renderer.setSharedMaterial(this._fallback,i);
                 }
-                if(current!==this._fallback)renderer.setSharedMaterial(this._fallback,0);
+                this._boundMaterials[i]=null;
             }
-            this._boundMaterial=null;
         }
     }
     onEnable():void {
@@ -250,21 +273,43 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         const signature=this.signature();
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
-        const geometry=this._runner.evaluate(plan,{
-            frames,closed:source.closed,revision:frameRevision,
-            ...this.graphMeshContext(plan),
-        },selection||undefined);
-        const wire=buildMeshGizmoLines(geometry.positions,geometry.indices,this.gizmoEdgeLimit);
-        const mesh=utils.createMesh({
-            positions:geometry.positions,normals:geometry.normals,
-            uvs:geometry.uvs,indices:geometry.indices,
-        });
+        const context={frames,closed:source.closed,revision:frameRevision,
+            ...this.graphMeshContext(plan)};
+        let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
+        if(this.renderAllOutputs){
+            if(plan.version!==2||!plan.outputs||
+                plan.outputs.length<2||plan.outputs.length>4)
+                throw Error('Render All Outputs requires a V2 graph with 2–4 Output Nodes.');
+            // Each output is evaluated atomically by the typed runner and
+            // converted to a distinct vertex bundle / index buffer / material
+            // primitive. The sorted V2 output IDs define material slot order.
+            const outputs=this._runner.evaluateOutputs(plan,context);
+            const chunks=plan.outputs.map(outputId=>({
+                outputId,geometry:outputs[outputId],
+            }));
+            const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
+            wire=buildMeshGizmoLines(
+                wireGeometry.positions,wireGeometry.indices,this.gizmoEdgeLimit);
+            mesh=createGraphMultiOutputMesh(chunks).mesh;
+            outputIds=plan.outputs.slice();
+        }else{
+            const geometry=this._runner.evaluate(plan,context,selection||undefined);
+            wire=buildMeshGizmoLines(
+                geometry.positions,geometry.indices,this.gizmoEdgeLimit);
+            mesh=utils.createMesh({
+                positions:geometry.positions,normals:geometry.normals,
+                uvs:geometry.uvs,indices:geometry.indices,
+            });
+            outputIds=[selection||plan.output];
+        }
         // A failing renderer assignment must not destroy the previously bound
         // generated Mesh or a manually assigned external Mesh asset.
         const previousMesh=this._mesh;
         try{renderer.mesh=mesh;}
         catch(error){mesh.destroy();throw error;}
         this._mesh=mesh;this._gizmo=wire;
+        this._subMeshCount=outputIds.length;
+        this._renderedOutputIds=outputIds;
         this._frameCache=frames;this._frameRevision=frameRevision;
         this._revision=signature;this._lastAttempt='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
@@ -274,9 +319,14 @@ export class SplineGeometryGraphRenderer extends Component {
         const renderer=this.getComponent(MeshRenderer);
         if(this._mesh&&renderer?.mesh===this._mesh)renderer.mesh=null;
         this._mesh?.destroy();this._mesh=null;this._gizmo=null;
-        if(renderer&&this._fallback&&renderer.getSharedMaterial(0)===this._fallback)
-            renderer.setSharedMaterial(null,0);
-        this._fallback?.destroy();this._fallback=null;this._boundMaterial=null;
+        if(renderer&&this._fallback){
+            for(let i=0;i<4;i++){
+                if(renderer.getSharedMaterial(i)===this._fallback)
+                    renderer.setSharedMaterial(null,i);
+            }
+        }
+        this._fallback?.destroy();this._fallback=null;
+        this._boundMaterials=[];this._subMeshCount=1;this._renderedOutputIds=[];
         this._runner.clear();this._frameCache=null;this._frameRevision='';
     }
 }
