@@ -67,8 +67,9 @@ async function run(){
      assert(options.path.startsWith(assets));
      return filenameNext===null?{canceled:true}:{filePath:filenameNext};
     },
-    info:async options=>{
+    info:async (message,options)=>{
      dialogConfirms++;
+     assert.match(message,/Create a NEW Profile JsonAsset/);
      assert(options.detail.includes('NEVER be overwritten'));
      return {response:answer};
     },
