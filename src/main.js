@@ -1019,6 +1019,14 @@ const methods={
             return await invokeScene('rebuildGeometryGraph',id);
         }catch(error){return alertError('rebuild-geometry-graph',error);}
     },
+    async profileGeometryGraph(){
+        try{
+            const ids=selected();
+            if(ids.length!==1||!ids[0])
+                throw Error('Select exactly one Geometry Graph Renderer Node to profile.');
+            return await invokeScene('profileGeometryGraph',ids[0]);
+        }catch(error){return alertError('profile-geometry-graph',error);}
+    },
     async rebuildRoad(){
         try{
             const id=selected()[0];if(!id)throw Error('Chọn Road hoặc SplineContainer.');
