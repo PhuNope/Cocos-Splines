@@ -45,6 +45,7 @@ try{
  assert(dot(triangle(rect,0).normal,xyz(rect.normals,0))>0,
   'rectangle side faces outward');
  almost(rect.uvs[1],0);almost(rect.uvs[5],1,'distance UV along spline');
+ almost(rect.uvs[2],1/3,'UV U proportions reflect physical profile width/height');
  const caps=buildProfileExtrudeGeometry(frames,settings(0,{capEnds:true}),false);
  assert.equal(caps.positions.length/3,24,'two independent cap vertex rings');
  assert.equal(caps.indices.length,36,'two rectangle caps each use two triangles');
