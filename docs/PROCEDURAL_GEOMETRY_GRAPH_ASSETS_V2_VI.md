@@ -60,3 +60,23 @@ Phase 4.2c: chỉnh shared asset trực tiếp bằng graph editor có khóa / x
 - [ ] Cần tiếp: kiểm thử trên Creator 3.8.8 (JSON asset reimport, Undo/Redo, đồng bộ nhiều renderer). **Chưa cho phép chỉnh trực tiếp shared asset từ canvas ở bước này.**
 
 Không tạo tag hoặc release. Mọi thay đổi thuộc nhánh `v2`.
+
+## Phase 4.2c1 — Chỉnh sửa shared JSON có xác nhận (preview, 2026-11-25)
+
+Inspector Geometry Graph có thêm **Edit Shared Asset… → Save Shared JSON… / Discard Draft**. Tính năng này chỉ hoạt động khi `Use Graph Asset` bật và `graphAsset` là một JsonAsset thực nằm dưới `<project>/assets/`.
+
+1. Chọn đúng **một** Node có SplineGeometryGraphRenderer đang bật và tham chiếu Shared JsonAsset.
+2. Nhấn **Edit Shared Asset…**. Editor đọc UUID từ Scene, hỏi AssetDB `query-url` và `query-path` để xác định file gốc, kiểm tra file nằm dưới Project Assets, JSON typed DAG hợp lệ, không symlink, rồi tạo bản nháp trong UI kèm SHA-256.
+3. Chỉnh tham số, nối node, thêm hoặc xóa Offset/Width trong Visual Graph. **Không có thao tác ghi file, Scene Undo, hoặc sửa `graphJson` local** trong lúc chỉnh bản nháp. Kéo layout/Auto Layout bị khóa vì layout thuộc renderer component, không thuộc shared asset.
+4. Bấm **Save Shared JSON…**, đọc lại checksum từ disk và yêu cầu người dùng xác nhận bằng Dialog native (mặc định chọn Cancel). Nếu Source đã bị sửa, đổi selection, asset UUID hoặc đường dẫn, Save bị từ chối; bản nháp được giữ để đối chiếu.
+5. Khi Save được xác nhận, Editor ghi file JSON qua temp file cùng thư mục với kiểm tra SHA-256, rồi `asset-db:refresh-asset` đúng URL. Nếu refresh lỗi thì file đã được lưu nhưng UI hiển thị `refreshPending`, yêu cầu refresh asset bằng Creator.
+6. **Discard Draft** sẽ bỏ chỉnh sửa chưa lưu và đọc lại shared asset từ Scene. Chuyển sang asset khác hoặc đóng Inspector hủy bản nháp cũ.
+
+**Hạn chế:** lưu Shared JsonAsset là thay đổi file bên ngoài Scene, **không thuộc Undo/Redo của Scene**, có thể ảnh hưởng tất cả renderer cùng tham chiếu. Không có khóa ghi độc quyền xuyên tiến trình, nên có thể xảy ra race giữa lần kiểm tra checksum cuối và rename nếu phần mềm bên ngoài ghi đúng lúc. Không ghi đè `.meta`, không tạo asset UUID hoặc importer mới. Do chưa chạy Creator native, cần kiểm tra `query-url`/`query-path`/`refresh-asset`, asset reimport/hot reload, lưu Scene/Prefab và tất cả renderer đang tham chiếu trong Cocos Creator **3.8.8**.
+
+- [x] Edit/Save/Discard draft UI, native confirmation, checksum conflict preflight, AssetDB URL/path verification và refresh.
+- [x] Mock regression cho save/cancel/conflict/selection/asset switch/refresh error, giữ component local.
+- [ ] Native 3.8.8 acceptance: hot reload shared JsonAsset, mọi renderer, mô phỏng scene switch lúc dialog mở, prefab overrides, custom path Unicode/Windows.
+- [ ] Phase 4.2c2: cải thiện UX xung đột và bố cục graph; Phase 4.3: node Tube/Extrude/Profile/Deform, multi-output, profiling.
+
+Chỉ push `v2`; không tạo tag hoặc release cho đến khi được yêu cầu.
