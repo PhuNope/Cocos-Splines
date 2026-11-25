@@ -224,6 +224,15 @@ function commitProperty(panel,key,nextValue){
   else panel._vgLayoutJson=nextValue;
   return true;
 }
+function activeOutputId(view,selectedId){
+  const node=view.map.get(selectedId);
+  if(node?.type==='output')return node.id;
+  if(['ribbon','tube','extrude','meshDeform'].includes(node?.type)){
+    const consumer=view.ordered.find(n=>n.type==='output'&&n.input===node.id);
+    if(consumer)return consumer.id;
+  }
+  return view.graph.output;
+}
 function editGraph(panel,action,details){
   try{
     if(panel._vgSharedBusy)throw Error('Shared asset operation pending.');
@@ -438,9 +447,11 @@ const inspector={
     });
     const insert=type=>{
       try{
-        const nodes=graph.parseGraph(this._vgGraphJson).ordered;
-        const generator=nodes.find(n=>['ribbon','tube','extrude','meshDeform'].includes(n.type));
-        if(!generator)throw Error('Missing mesh generator.');
+        const view=graph.parseGraph(this._vgGraphJson);
+        const outputId=activeOutputId(view,this._vgSelected);
+        const generator=view.map.get(view.map.get(outputId)?.input);
+        if(!generator||!['ribbon','tube','extrude','meshDeform'].includes(generator.type))
+          throw Error('Missing selected mesh generator.');
         editGraph(this,'insert',{type,before:generator.id});
       }catch(error){status(this,String(error?.message||error),true);}
     };
@@ -450,19 +461,28 @@ const inspector={
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       try{
         const view=graph.parseGraph(this._vgGraphJson);
-        const generator=view.map.get(view.map.get(view.graph.output)?.input);
+        const outputId=activeOutputId(view,this._vgSelected);
+        const generator=view.map.get(view.map.get(outputId)?.input);
         if(!generator||!['ribbon','tube','extrude','meshDeform'].includes(generator.type))
           throw Error('Output mesh generator is missing.');
-        editGraph(this,'replace-generator',{type:generator.type==='tube'?'ribbon':'tube'});
+        editGraph(this,'replace-generator',{
+          type:generator.type==='tube'?'ribbon':'tube',outputId,
+        });
       }catch(error){status(this,String(error?.message||error),true);}
     });
     this.$?.vgUseExtrude?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
-      editGraph(this,'replace-generator',{type:'extrude'});
+      const view=graph.parseGraph(this._vgGraphJson);
+      editGraph(this,'replace-generator',{
+        type:'extrude',outputId:activeOutputId(view,this._vgSelected),
+      });
     });
     this.$?.vgUseDeform?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
-      editGraph(this,'replace-generator',{type:'meshDeform'});
+      const view=graph.parseGraph(this._vgGraphJson);
+      editGraph(this,'replace-generator',{
+        type:'meshDeform',outputId:activeOutputId(view,this._vgSelected),
+      });
     });
     this.$?.vgAddOutput?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
