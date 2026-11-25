@@ -243,7 +243,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3g2b2b2b2b2: V2 preview delivery as a **single GitHub artifact ZIP** (no ZIP-in-ZIP), directly installable extension root, deterministic clean staging, automatic nested-archive rejection and CI package contract test.
 - [x] Phase 4.3g2b2b2b2c1: opt-in Profile UV0 nominal side U meters/repeat [0.01,10000], stable seam/weight mapping, backward-compatible normalized mapping, Inspector draft numeric field/reset, polygon/renderer/cache/Undo tests and installable UVMetricProfile example.
 - [x] Phase 4.3g2b2b2b2c2a: explicit new Profile Library JsonAsset creation and Export Draft As New JSON via native Save + confirmation; strict project/assets path + symlink + orphan .meta guards, exclusive no-overwrite writes, asset-db refresh, no automatic Scene binding, and model/main/Inspector tests.
-- [ ] Phase 4.3g2b2b2b2c2b+: UV islands/per-face unwrap, world-space texel-density across taper/transforms, polygon holes/multiple contours, native Creator 3.8.8 PBR/Undo/Prefab/FBX/GPU validation.
+- [x] Phase 4.3g2b2b2b2c2b1: optional Profile UV `uFollowFrameScale` per-ring local side-band UV0 physical tiling at widthFactor and frame basis scale, seam/edge weights, bounded geometry regression/Inspector draft Undo/Save and installable taper sample; no change to default legacy UV.
+- [ ] Phase 4.3g2b2b2b2c2b2+: UV islands/per-face unwrap, world-space texel-density under Node transforms, polygon holes/multiple contours, native Creator 3.8.8 PBR/Undo/Prefab/FBX/GPU validation.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.

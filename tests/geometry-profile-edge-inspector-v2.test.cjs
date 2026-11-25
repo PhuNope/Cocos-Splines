@@ -191,6 +191,33 @@ async function run(){
   assert.equal(model.parseProfile(savedProfile).uv.uMetersPerRepeat,1.5);
   assert.equal(ui._vgAuthoredDraft.undo.length,0);
   assert.equal(ui.$.vgProfileSave.disabled,true);
+  // Per-frame metric UV checkbox is draft-only and can be undone, and
+  // disabling it restores exact nominal mapping without losing other UV.
+  ui.$.vgProfileCanvas.events.change({target:{
+   checked:true,classList:{contains:cls=>cls==='spl-profile-uv-follow-frame'},
+  }});
+  const frameDraft=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(frameDraft).uv.uFollowFrameScale,true);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/Follow taper \/ frame scale/);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/Frame-local meters/);
+  assert.equal(ui._vgAuthoredDraft.undo.length,1);
+  assert.equal(writes,3,'Checkbox must not save a JsonAsset implicitly');
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,frameDraft);
+  ui.$.vgProfileCanvas.events.change({target:{
+   checked:false,classList:{contains:cls=>cls==='spl-profile-uv-follow-frame'},
+  }});
+  assert.equal(ui._vgAuthoredDraft.profileJson,metricDraft);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,frameDraft);
+  assert.equal(writes,3);
+  ui.$.vgProfileSave.events.click();await tick();
+  assert.equal(writes,4);
+  assert.equal(savedProfile,frameDraft);
+  assert.equal(ui._vgAuthoredDraft.undo.length,0);
+  assert.equal(ui.$.vgProfileSave.disabled,true);
   ui.$.vgProfileDiscard.events.click();
   assert.equal(ui._vgAuthoredDraft,null);
   panel.close.call(ui);

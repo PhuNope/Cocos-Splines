@@ -56,6 +56,11 @@ try {
  assert.deepEqual(metricExample.uv.edgeWeights,[1,2,1,1]);
  assert.equal(metricExample.uv.uMetersPerRepeat,1.5);
  assert.equal(metricExample.uv.edgeWeights.length,metricExample.points.length);
+ const taperExample=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/UVTaperProfile.json'),'utf8'));
+ assert.equal(taperExample.uv.uFollowFrameScale,true);
+ assert.equal(taperExample.uv.uMetersPerRepeat,1.5);
+ assert.equal(taperExample.uv.edgeWeights.length,taperExample.points.length);
  for(const file of ['LProfile','OctagonProfile']){
   const source=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/Profiles/'+file+'.json'),'utf8'));
