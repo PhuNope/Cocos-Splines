@@ -57,8 +57,8 @@ try{
  });
  assert.deepEqual(linear.outputB.indices,base.outputB.indices);
  assert.deepEqual(linear.outputB.normals,base.outputB.normals);
- assert.deepEqual(linear.outputB.uvs.slice(4*frames.length*2*4),
-  base.outputB.uvs.slice(4*frames.length*2*4),
+ assert.deepEqual(linear.outputB.uvs.slice(4*frames.length*2*2),
+  base.outputB.uvs.slice(4*frames.length*2*2),
   'Cap UVs never change when Width curve is edited');
  assert.equal(JSON.stringify(graph),original);
  assert.equal(JSON.stringify(frames),originalFrames);
