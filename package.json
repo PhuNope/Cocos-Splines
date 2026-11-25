@@ -477,6 +477,11 @@
         "methods": [
           "saveSharedGeometryGraphEdit"
         ]
+      },
+      "profile-geometry-graph": {
+        "methods": [
+          "profileGeometryGraph"
+        ]
       }
     },
     "inspector": {
