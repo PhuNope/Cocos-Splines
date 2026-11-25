@@ -7,6 +7,7 @@ function checkRel(p){assert(fs.existsSync(path.join(root,p)),`Missing ${p}`);}
 checkRel(pkg.main);checkRel(pkg.contributions.scene.script);
 checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineGeometryGraphVisualModel.js');
+checkRel('dist/SplineGeometryProfileLibrary.js');
 checkRel('dist/SplineGeometryGraphAssetWorkflow.js');
 for(const [name,method] of Object.entries({
     'query-geometry-graph-asset':'queryGeometryGraphAsset',

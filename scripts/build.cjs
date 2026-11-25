@@ -9,7 +9,7 @@ for(const rel of ['src/main.js','src/scene.js',
  'src/SplineGeometryGraphVisualModel.js',
  'src/SplineGeometryGraphAssetWorkflow.js','src/SplineGeometryGraphConflict.js',
  'src/SplineGeometryGraphProfileReport.js',
- 'src/SplineGeometryProfileEditor.js','src/SplineGeometryProfileAssetWorkflow.js',
+ 'src/SplineGeometryProfileEditor.js','src/SplineGeometryProfileLibrary.js','src/SplineGeometryProfileAssetWorkflow.js',
  'src/contributions/inspector/Bender.js','src/contributions/inspector/Morph.js',
  'src/contributions/inspector/JunctionMesh.js','src/SplineSvgConverter.js','src/SplineJsonInterop.js','src/SplineKnotEditMath.js','src/SplineConnectionMath.js','src/SplineJunctionTangentMath.js','src/SplineExampleInstaller.js','src/SplineExampleScene.js','src/SplineExampleSceneWorkflow.js','src/SplineJunctionTangentTransaction.js','src/SplineJunctionModeMath.js','src/SplineJunctionJoinMath.js','src/SplineJunctionSeamMath.js','src/SplineJunctionFanoutMath.js','src/SplineJunctionFanoutEditor.js','src/SplineJunctionRouteMath.js','src/SplineJunctionRouteCost.js','src/SplineRouteAdmission.js','src/SplineRouteSliceMath.js','src/SplineJunctionRouteEditor.js','src/SplineJunctionConversionTransaction.js','src/SplineJunctionScene.js','src/SplineTopologyCopyMath.js','src/SplineTopologyCopyPolicy.js','src/SplineSurfaceSnapMath.js','src/SplineColliderSnapMath.js','src/SplineBatchEditTransaction.js']){
  const target=rel.replace(/^src\//,'dist/');
