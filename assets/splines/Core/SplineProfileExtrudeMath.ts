@@ -22,6 +22,10 @@ export interface GraphProfileUV {
      * Omitted => one repeat around weighted section circumference.
      */
     uMetersPerRepeat?:number;
+    /** Opt-in UV0 U derived from actual local side lengths at each frame.
+     * Requires metric uMetersPerRepeat; independent of node world transform.
+     */
+    uFollowFrameScale?:boolean;
 }
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
@@ -52,7 +56,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -74,6 +78,12 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            raw.uMetersPerRepeat<.01||raw.uMetersPerRepeat>10000)
             throw Error('Graph Profile Asset UV uMetersPerRepeat must be finite in [0.01,10000].');
         uv.uMetersPerRepeat=raw.uMetersPerRepeat;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'uFollowFrameScale')){
+        if(typeof raw.uFollowFrameScale!=='boolean'||
+           (raw.uFollowFrameScale&&!Object.prototype.hasOwnProperty.call(uv,'uMetersPerRepeat')))
+            throw Error('Graph Profile Asset UV uFollowFrameScale requires boolean and metric uMetersPerRepeat when enabled.');
+        uv.uFollowFrameScale=raw.uFollowFrameScale;
     }
     return {format:'cocos-splines/profile',version:1,points,uv};
 }
@@ -222,6 +232,39 @@ export function buildProfileExtrudeGeometry(
         const u=rotated/uDenominator;
         uvStart.push(u);uvEnd.push(u+weightedLengths[i]/uDenominator);
     }
+    // This opt-in mode derives physical U per ring from the same local
+    // geometry used to emit the section, including widthFactor, nonunit
+    // frame right/up vectors, and cross-section edge weights. This changes
+    // UV0 only; no geometry, cap, normals or topology changes.
+    const ringUV=authored?.uv?.uFollowFrameScale?frames.map(f=>{
+        if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
+           f.widthFactor>1000||!isFinite3(f.right)||!isFinite3(f.up))
+            throw Error('Graph Profile Asset UV frame scale requires finite valid basis.');
+        const lengths=profile.map((p,i)=>{
+            const next=profile[(i+1)%bands];
+            const tangent=add(mul(f.right,(next.x-p.x)*width*f.widthFactor),
+                mul(f.up,(next.y-p.y)*height*f.widthFactor));
+            const len=length(tangent)*(uvWeights?.[i]??1);
+            if(!Number.isFinite(len)||len<1e-8)
+                throw Error('Graph Profile Asset UV frame edge is degenerate.');
+            return len;
+        });
+        const total=lengths.reduce((sum,len)=>sum+len,0);
+        if(!Number.isFinite(total)||total<1e-8)
+            throw Error('Graph Profile Asset UV frame perimeter is invalid.');
+        const prefix:number[]=[];let cursor=0;
+        for(const len of lengths){prefix.push(cursor);cursor+=len;}
+        const start:number[]=[],end:number[]=[];
+        for(let i=0;i<bands;i++){
+            const rotated=i>=seam?prefix[i]-prefix[seam]:
+                total-prefix[seam]+prefix[i];
+            const u=rotated/uDenominator,finish=u+lengths[i]/uDenominator;
+            if(!Number.isFinite(u)||!Number.isFinite(finish))
+                throw Error('Graph Profile Asset UV frame U overflow.');
+            start.push(u);end.push(finish);
+        }
+        return {start,end};
+    }):null;
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};
     const push=(p:V3,n:V3,u:number,v:number):number=>{
@@ -237,7 +280,8 @@ export function buildProfileExtrudeGeometry(
     // across sharp corners. Two distinct vertices per edge per frame.
     for(let j=0;j<bands;j++){
         const A=profile[j],B=profile[(j+1)%bands];
-        for(const f of frames){
+        for(let fi=0;fi<frames.length;fi++){
+            const f=frames[fi];
             if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
                f.widthFactor>1000||!Number.isFinite(f.distance)||
                ![f.position,f.forward,f.right,f.up].every(isFinite3))
@@ -252,8 +296,8 @@ export function buildProfileExtrudeGeometry(
             const edge=add(mul(f.right,(B.x-A.x)*width*f.widthFactor),
                 mul(f.up,(B.y-A.y)*height*f.widthFactor));
             const n=unit(mul(cross(edge,f.forward),handedness));
-            push(at(f,A),n,uvStart[j],f.distance/uvMetersPerRepeat);
-            push(at(f,B),n,uvEnd[j],f.distance/uvMetersPerRepeat);
+            push(at(f,A),n,ringUV?.[fi].start[j]??uvStart[j],f.distance/uvMetersPerRepeat);
+            push(at(f,B),n,ringUV?.[fi].end[j]??uvEnd[j],f.distance/uvMetersPerRepeat);
         }
         const first=j*frames.length*2;
         for(let i=0;i<frames.length-1;i++){
