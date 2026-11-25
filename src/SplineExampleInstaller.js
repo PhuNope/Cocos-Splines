@@ -24,6 +24,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/MultiOutputRoadTubeGraph.json','examples/installable/GeometryGraph/MultiOutputRoadTubeGraph.json'],
  ['GeometryGraph/ImportedMeshDeformGraph.json','examples/installable/GeometryGraph/ImportedMeshDeformGraph.json'],
  ['GeometryGraph/DualMeshAxisGraph.json','examples/installable/GeometryGraph/DualMeshAxisGraph.json'],
+ ['GeometryGraph/SourceLengthTrimGraph.json','examples/installable/GeometryGraph/SourceLengthTrimGraph.json'],
 ]);
 function directory(fsApi,location,create=false){
  if(create&&!fsApi.existsSync(location))fsApi.mkdirSync(location);
