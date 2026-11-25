@@ -83,7 +83,7 @@ export function buildProfileExtrudeGeometry(
     const {width,height,profileShape,uvMetersPerRepeat,capEnds}=settings;
     if(!Number.isFinite(width)||width<.05||width>100||
        !Number.isFinite(height)||height<.05||height>100||
-       !Number.isInteger(profileShape)||!Object.hasOwn(PROFILES,profileShape)||
+       !Number.isInteger(profileShape)||!Object.prototype.hasOwnProperty.call(PROFILES,profileShape)||
        !Number.isFinite(uvMetersPerRepeat)||uvMetersPerRepeat<.01||uvMetersPerRepeat>10000||
        typeof capEnds!=='boolean'||typeof closed!=='boolean'||
        !Array.isArray(frames)||frames.length<2||frames.length>1025)
