@@ -27,6 +27,10 @@ try {
  assert.equal(demo.output,'output');
  assert.deepEqual(demo.nodes.map(n=>n.type),
    ['spline','offset','width','ribbon','output']);
+ const tube=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/BasicTubeGraph.json'),'utf8'));
+ assert.equal(tube.version,1);
+ assert.deepEqual(tube.nodes.map(n=>n.type),['spline','offset','width','tube','output']);
+ assert.equal(tube.nodes.find(n=>n.type==='tube').radialSegments,16);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
