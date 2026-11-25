@@ -755,6 +755,11 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-uv-follow-frame')){
+        applyAuthoredEdit(this,'set-u-follow-frame-scale',{
+          enabled:event.target.checked===true});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-meters')){
         const raw=event.target.value;
         if(raw===''){
