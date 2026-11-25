@@ -27,6 +27,7 @@ const template=base.template+[
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
  '<button type="button" class="spl-btn spl-vg-add-width">＋ Width</button>',
+ '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-remove">✕ Remove</button>',
  '<button type="button" class="spl-btn spl-vg-auto-layout">⇱ Auto Layout</button>',
  '</div>',
@@ -76,6 +77,7 @@ const $={...base.$,
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
+  vgSwitchGenerator:'.spl-vg-switch-generator',
   vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout'};
 function status(panel,message,isError=false){
   panel._vgStatusError=!!isError;
@@ -116,7 +118,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -139,6 +141,12 @@ function render(panel){
   if(!stage||!properties)return;
   try{
     const view=graph.parseGraph(panel._vgGraphJson);
+    const finalGenerator=view.map.get(view.map.get(view.graph.output)?.input);
+    if(panel.$?.vgSwitchGenerator){
+      panel.$.vgSwitchGenerator.textContent=finalGenerator?.type==='tube'?'Switch to Ribbon':'Switch to Tube';
+      panel.$.vgSwitchGenerator.disabled=sharedLocked||busy||
+        !['ribbon','tube'].includes(finalGenerator?.type);
+    }
     if(panel._vgSelected&&!view.map.has(panel._vgSelected))
       panel._vgSelected=null;
     stage.innerHTML=graph.renderGraphCanvas(panel._vgGraphJson,
@@ -200,7 +208,10 @@ function editGraph(panel,action,details){
       const created=next.ordered.find(n=>!prior.map.has(n.id));
       panel._vgSelected=created?.id||null;
     }else if(action==='remove')panel._vgSelected=null;
-    else if(action==='connect')panel._vgSelected=details.target;
+    else if(action==='replace-generator'){
+      const next=graph.parseGraph(output);
+      panel._vgSelected=next.map.get(next.graph.output)?.input||null;
+    }else if(action==='connect')panel._vgSelected=details.target;
     render(panel);
   }catch(error){status(panel,String(error?.message||error),true);}
 }
@@ -398,13 +409,23 @@ const inspector={
     const insert=type=>{
       try{
         const nodes=graph.parseGraph(this._vgGraphJson).ordered;
-        const ribbon=nodes.find(n=>n.type==='ribbon');
-        if(!ribbon)throw Error('Missing Ribbon node.');
-        editGraph(this,'insert',{type,before:ribbon.id});
+        const generator=nodes.find(n=>n.type==='ribbon'||n.type==='tube');
+        if(!generator)throw Error('Missing Ribbon/Tube node.');
+        editGraph(this,'insert',{type,before:generator.id});
       }catch(error){status(this,String(error?.message||error),true);}
     };
     this.$.vgAddOffset.addEventListener('click',()=>insert('offset'));
     this.$.vgAddWidth.addEventListener('click',()=>insert('width'));
+    this.$?.vgSwitchGenerator?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      try{
+        const view=graph.parseGraph(this._vgGraphJson);
+        const generator=view.map.get(view.map.get(view.graph.output)?.input);
+        if(!generator||!['ribbon','tube'].includes(generator.type))
+          throw Error('Output mesh generator is missing.');
+        editGraph(this,'replace-generator',{type:generator.type==='tube'?'ribbon':'tube'});
+      }catch(error){status(this,String(error?.message||error),true);}
+    });
     this.$.vgRemove.addEventListener('click',()=>{
       if(this._vgSelected)editGraph(this,'remove',{id:this._vgSelected});
     });
