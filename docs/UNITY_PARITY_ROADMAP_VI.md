@@ -230,7 +230,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [x] Phase 4.3e: opt-in cold/warm per-node CPU profiler for Geometry Graph v1/v2, isolated diagnostic runner, bounded Inspector report, deterministic timing regressions and safe Scene IPC.
 - [x] Phase 4.3f1: typed `meshAsset` → `meshDeform.meshInput` source port, native Source Mesh property per renderer, bounded readable imported Mesh adapter, CPU cache invalidation, Graph Inspector attach/detach, installable example and headless regressions.
 - [x] Phase 4.3f2a: 3 native imported Mesh Asset slots (A/B/C), typed slot mapping and isolated cache signatures; Mesh Deform axis X/Y/Z for imported/preset meshes; Visual Graph slot/axis selectors, multi-source example and headless regressions.
-- [ ] Phase 4.3f2b+: source-length repeat trimming, 3+ material/submesh handling, authored profile assets, multiple MeshRenderer output slots and native Creator 3.8.8 acceptance for all graph generators.
+- [x] Phase 4.3f2b: opt-in Mesh Deform Source Length repeat/trim (physical tile length or 0=source axis bounds), clipped final triangles, Original/Continuous/Distance UV, graph/Inspector bounds and installable example; legacy Count remains default.
+- [ ] Phase 4.3g+: multi-material/submesh imported meshes, authored profile asset bindings, multiple MeshRenderer output slots on one Node, native Creator 3.8.8 acceptance and physical repeat performance QA.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
