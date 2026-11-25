@@ -434,7 +434,7 @@ export class GeometryGraphRunner {
                     if(span<1e-8&&(Math.abs(start-middle)>1e-8||
                        Math.abs(middle-end)>1e-8))
                         throw Error('Geometry Graph Width curve needs nonzero spline length.');
-                    const smooth=t=>eased?t*t*(3-2*t):t;
+                    const smooth=(t:number):number=>eased?t*t*(3-2*t):t;
                     value={kind:'path',closed:source.closed,frames:frames.map(f=>{
                         const t=span>1e-8?
                             Math.min(1,Math.max(0,(f.distance-first)/span)):0;
