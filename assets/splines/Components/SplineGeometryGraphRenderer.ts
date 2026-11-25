@@ -23,7 +23,7 @@ const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 export class SplineGeometryGraphRenderer extends Component {
     @property({type:SplineContainer,tooltip:'Source spline. Never modified by graph execution.'})
     spline:SplineContainer|null=null;
-    @property({multiline:true,tooltip:'Versioned typed node graph JSON v1. Supported: spline, offset, width, ribbon, tube, extrude, output.'})
+    @property({multiline:true,tooltip:'Versioned typed node graph JSON v1. Supported: spline, offset, width, ribbon, tube, extrude, meshDeform, output.'})
     graphJson=DEFAULT_GEOMETRY_GRAPH;
     /** Editor canvas coordinates only. Kept separate from graphJson so dragging
      * cards never invalidates the geometry/frame cache. Serialized with Scene.
