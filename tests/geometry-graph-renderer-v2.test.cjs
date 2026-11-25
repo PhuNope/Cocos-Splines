@@ -273,6 +273,33 @@ async function run(){
    renderer.update();
    assert.equal(out.mesh,multiMesh,
     'Output ID changes are irrelevant in Render All Outputs mode');
+   // Phase 4.3g2b1: manual material slot order, complete-permutation
+   // validation, two-phase rollback and cached geometry / frames.
+   const alphabeticalMesh=out.mesh,frameBeforeOrder=frameBuilds;
+   renderer.outputOrder='outputRoad, outputPipe';
+   renderer.update();
+   const reversedMesh=out.mesh;
+   assert.notEqual(reversedMesh,alphabeticalMesh);
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputRoad','outputPipe']);
+   assert.equal(reversedMesh.struct.primitives.length,2);
+   assert.equal(renderer.getGraphMetrics().reused,5);
+   assert.equal(frameBuilds,frameBeforeOrder,'Slot reorder does not resample frames');
+   assert.equal(out.getSharedMaterial(0),matPipe);
+   assert.equal(out.getSharedMaterial(1),matRoad);
+   for(const invalid of ['outputRoad','outputPipe,outputPipe',
+     'outputRoad,unknown','outputRoad,outputPipe,unknown']){
+     renderer.outputOrder=invalid;
+     assert.throws(()=>renderer.rebuild(),/Output Order/);
+     assert.equal(out.mesh,reversedMesh,
+       'Bad Output Order cannot overwrite last committed Mesh');
+     assert.deepEqual(renderer.getRenderedOutputIds(),['outputRoad','outputPipe']);
+     assert.equal(reversedMesh.destroyed,false);
+   }
+   renderer.outputOrder='';
+   renderer.update();
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputPipe','outputRoad'],
+     'Empty order preserves legacy alphabetic mapping');
+   assert.equal(renderer.getGraphMetrics().reused,5);
    const prevCombined=multiMesh;
    multiShared.json.nodes.find(n=>n.id==='road').width=7;
    renderer.update();

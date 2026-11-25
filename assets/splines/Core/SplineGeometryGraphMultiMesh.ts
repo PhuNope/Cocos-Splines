@@ -27,6 +27,24 @@ const align4=(n:number)=>(n+3)&~3;
 const safeId=(id:unknown):id is string=>
     typeof id==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(id);
 
+/** Validate renderer-local output slot mapping without mutating the shared DAG.
+ * Empty order preserves the original lexicographically sorted material slots.
+ */
+export function resolveGraphOutputOrder(ids:ReadonlyArray<string>,order:string):string[]{
+    if(!Array.isArray(ids)||ids.length<2||ids.length>4||
+       ids.some(id=>!safeId(id))||new Set(ids).size!==ids.length)
+        throw Error('Output Order requires 2–4 unique Output Node IDs.');
+    const sorted=ids.slice().sort();
+    if(order==='')return sorted;
+    if(typeof order!=='string'||order.length>200)
+        throw Error('Output Order must be a comma-separated list of Output Node IDs.');
+    const ordered=order.split(',').map(id=>id.trim());
+    if(ordered.length!==sorted.length||new Set(ordered).size!==sorted.length||
+       ordered.some(id=>!sorted.includes(id)))
+        throw Error('Output Order must list every Output Node ID exactly once.');
+    return ordered;
+}
+
 /** Validate every branch before allocating even a temporary Mesh.
  * Prevents huge multi-branch outputs from bypassing per-node geometry caps.
  */

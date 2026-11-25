@@ -8,7 +8,7 @@ import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGr
     from '../Core/SplineGeometryGraph';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
     from '../Core/SplineGraphMeshAssetReader';
-import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry}
+import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder}
     from '../Core/SplineGeometryGraphMultiMesh';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
@@ -46,10 +46,14 @@ export class SplineGeometryGraphRenderer extends Component {
     outputId='';
     /** Opt-in: each V2 Output Node becomes one material primitive in this
      * same MeshRenderer. No children/components are created.
-     * Material order is stable: lexicographically sorted Output IDs.
+     * Material order defaults to lexicographically sorted Output IDs.
+     * A renderer-local Output Order override can change the mapping.
      */
     @property({tooltip:'V2 only: render all 2–4 graph outputs as material submeshes in one MeshRenderer. Output ID is ignored in this mode.'})
     renderAllOutputs=false;
+    /** Optional per-renderer permutation; never writes shared JsonAsset. */
+    @property({tooltip:'Render All Outputs: comma-separated Output Node IDs in Material A/B/C/D slot order. Empty = alphabetical. Use Inspector arrows to reorder.'})
+    outputOrder='';
     /** Input slot for optional typed graph meshAsset nodes. This is a native
      * project Mesh reference, never raw vertex data in graph JSON.
      */
@@ -175,7 +179,8 @@ export class SplineGeometryGraphRenderer extends Component {
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
-        return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,assets,this.gizmoEdgeLimit]);
+        return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
+            this.renderAllOutputs?this.outputOrder:null,assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -283,16 +288,17 @@ export class SplineGeometryGraphRenderer extends Component {
                 throw Error('Render All Outputs requires a V2 graph with 2–4 Output Nodes.');
             // Each output is evaluated atomically by the typed runner and
             // converted to a distinct vertex bundle / index buffer / material
-            // primitive. The sorted V2 output IDs define material slot order.
+            // primitive. The resolved per-renderer order defines material slots.
             const outputs=this._runner.evaluateOutputs(plan,context);
-            const chunks=plan.outputs.map(outputId=>({
+            const orderedIds=resolveGraphOutputOrder(plan.outputs,this.outputOrder);
+            const chunks=orderedIds.map(outputId=>({
                 outputId,geometry:outputs[outputId],
             }));
             const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
             wire=buildMeshGizmoLines(
                 wireGeometry.positions,wireGeometry.indices,this.gizmoEdgeLimit);
             mesh=createGraphMultiOutputMesh(chunks).mesh;
-            outputIds=plan.outputs.slice();
+            outputIds=orderedIds;
         }else{
             const geometry=this._runner.evaluate(plan,context,selection||undefined);
             wire=buildMeshGizmoLines(

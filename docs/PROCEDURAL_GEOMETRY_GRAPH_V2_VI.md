@@ -383,3 +383,9 @@ Trường Material nào null thì **giữ material đã gán thủ công trên M
 **QA cần kiểm thử trong Cocos Creator 3.8.8:** ba materials trên Road/Tube/Extrude, culling bounds, shadows/PBR và normal, đổi Output ID ↔ Render All Outputs, Undo/Redo, Prefab overrides, Scene reopen, shared JsonAsset reimport, chọn mesh import nhiều submesh và profiling. CI headless chỉ xác nhận packing, typed DAG và ownership/mock API; không thay thế visual QA/GPU inspection.
 
 **Chưa có:** manual Output ID → material slot reorder, imported material auto-binding, gộp nhiều đồ thị không cùng Spline, skinned mesh/collider per material, baking multi-submesh thành project-owned Mesh asset. Tiếp theo Phase 4.3g2b và native acceptance. Vẫn chỉ push `v2`, không tag/Release.
+
+## Phase 4.3g2b1 — Per-renderer Output → Material slot reorder (2026-11-25)
+
+Bật **Render All Outputs** rồi dùng **Render All Outputs · material slot order** trong Inspector Geometry Graph. Mỗi hàng là một slot **Material A/B/C/D**; nhấn ↑/↓ để chuyển Output Node, hoặc **Reset alphabetical order**. Trường serialized **Output Order** cũng hỗ trợ chuỗi `outputRoad,outputPipe`, yêu cầu **đúng và đủ 2–4 Output ID**, không trùng. Giá trị rỗng giữ thứ tự alphabet cũ cho tất cả Scene/Prefab.
+
+Thứ tự thuộc **renderer**, không ghi Shared JsonAsset hay thay đổi Material A/B/C/D. Single-output mode bỏ qua trường này. Reorder hợp lệ pack lại primitives nhưng tái sử dụng geometry cache và source frames. Sai thứ tự bị từ chối trước khi cấp phát Mesh và giữ mesh/mapping cuối cùng. Commit property qua native `ui-prop` để Editor quản lý Undo/Prefab. **Cần smoke test Cocos Creator 3.8.8** cho Undo/Redo, nested Prefab, Scene reopen, PBR/FBX/GPU. Không có auto imported-material binding hoặc authored profile asset. Chỉ `v2`, không tag/Release.
