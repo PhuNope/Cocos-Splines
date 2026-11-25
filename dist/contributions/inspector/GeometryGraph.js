@@ -49,7 +49,9 @@ const template=base.template+[
   library.PRESETS.map(p=>'<option value="'+p.id+'">'+p.label+'</option>').join('')+
   '</select></label>',
  '<button type="button" class="spl-btn spl-profile-apply-preset">Load Preset into Draft</button>',
- '<span class="spl-profile-preset-note">Replaces the draft polygon and UV metadata. Undo Draft restores previous values.</span>',
+ '<button type="button" class="spl-btn spl-profile-create-preset">Create Preset JSON…</button>',
+ '<button type="button" class="spl-btn spl-profile-export-draft">Export Draft As New JSON…</button>',
+ '<span class="spl-profile-preset-note">Load changes only the draft (Undo supported). Create / Export writes a NEW JsonAsset with confirmation; manually assign a Profile Asset slot.</span>',
  '</div>',
  '<div class="spl-profile-status" role="status" aria-live="polite">Select an authored Profile Asset slot to begin.</div>',
  '<div class="spl-profile-canvas"></div>',
@@ -137,6 +139,7 @@ const $={...base.$,
   vgProfileUndo:'.spl-profile-undo',vgProfileRedo:'.spl-profile-redo',
   vgProfileSnap:'.spl-profile-snap',
   vgProfilePreset:'.spl-profile-preset',vgProfileApplyPreset:'.spl-profile-apply-preset',
+  vgProfileCreatePreset:'.spl-profile-create-preset',vgProfileExportDraft:'.spl-profile-export-draft',
   vgProfile:'.spl-vg-profile',vgProfileReport:'.spl-vg-profile-report',
   vgSourceMode:'.spl-vg-source-mode',
   vgOrderSection:'.spl-vg-order-section',
@@ -219,6 +222,10 @@ function renderAuthoredProfile(panel){
     panel.$.vgProfilePreset.disabled=!draft||blocked;
   if(panel.$?.vgProfileApplyPreset)
     panel.$.vgProfileApplyPreset.disabled=!draft||blocked||!!panel._vgAuthoredDrag;
+  if(panel.$?.vgProfileCreatePreset)
+    panel.$.vgProfileCreatePreset.disabled=blocked||!!panel._vgAuthoredDrag;
+  if(panel.$?.vgProfileExportDraft)
+    panel.$.vgProfileExportDraft.disabled=!draft||blocked||!!panel._vgAuthoredDrag;
   if(!panel.$?.vgProfileCanvas)return;
   if(!draft){
     panel.$.vgProfileCanvas.textContent='';
@@ -658,6 +665,44 @@ const inspector={
         if(token===this._vgAuthoredToken){this._vgAuthoredBusy=false;render(this);}
       }
     })());
+    const exportNewProfile=source=>void (async()=>{
+      if(this._vgAuthoredBusy||this._vgSharedBusy||this._vgSharedDraft||
+         this._vgAuthoredDrag)return;
+      const draft=this._vgAuthoredDraft;
+      if(source==='draft'&&!draft)return;
+      const preset=this.$?.vgProfilePreset?.value;
+      if(source==='preset'&&!library.PRESETS.some(x=>x.id===preset)){
+        profileStatus(this,'Select a valid Profile Library preset.',true);return;
+      }
+      const payload=source==='preset'?{presetId:preset}:{
+        nodeUuid:draft.nodeUuid,slot:draft.slot,assetUuid:draft.assetUuid,
+        profileJson:draft.profileJson,
+      };
+      const token=this._vgAuthoredToken;
+      this._vgAuthoredBusy=true;render(this);
+      try{
+        const result=await Editor.Message.request('cocos-splines',
+          'export-geometry-profile-asset',payload);
+        if(token!==this._vgAuthoredToken||
+           (source==='draft'&&draft!==this._vgAuthoredDraft))return;
+        if(result?.canceled)
+          profileStatus(this,'Profile JSON creation canceled; nothing changed.');
+        else if(!result?.ok)
+          throw Error(result?.error||'Profile JSON creation failed.');
+        else profileStatus(this,result.message||
+          'New Profile JSON created. Manually assign it to a Profile Asset slot.',
+          !!result.refreshPending);
+      }catch(error){
+        if(token===this._vgAuthoredToken)
+          profileStatus(this,String(error?.message||error),true);
+      }finally{
+        if(token===this._vgAuthoredToken){
+          this._vgAuthoredBusy=false;render(this);
+        }
+      }
+    })();
+    this.$?.vgProfileCreatePreset?.addEventListener('click',()=>exportNewProfile('preset'));
+    this.$?.vgProfileExportDraft?.addEventListener('click',()=>exportNewProfile('draft'));
     this.$?.vgProfileApplyPreset?.addEventListener('click',()=>{
       if(!this._vgAuthoredDraft||this._vgAuthoredBusy||this._vgSharedBusy||
          this._vgAuthoredDrag)return;
