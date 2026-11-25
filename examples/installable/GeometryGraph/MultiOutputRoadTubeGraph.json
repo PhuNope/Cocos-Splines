@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "width",
+      "type": "width",
+      "input": "source",
+      "multiplier": 1
+    },
+    {
+      "id": "road",
+      "type": "ribbon",
+      "input": "width",
+      "width": 4,
+      "uvMetersPerRepeat": 5
+    },
+    {
+      "id": "pipe",
+      "type": "tube",
+      "input": "width",
+      "radius": 0.6,
+      "radialSegments": 12,
+      "uvMetersPerRepeat": 5,
+      "capEnds": false
+    },
+    {
+      "id": "outputRoad",
+      "type": "output",
+      "input": "road"
+    },
+    {
+      "id": "outputPipe",
+      "type": "output",
+      "input": "pipe"
+    }
+  ],
+  "output": "outputRoad"
+}
