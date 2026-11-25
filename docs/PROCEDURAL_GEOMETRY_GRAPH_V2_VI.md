@@ -248,7 +248,7 @@ Ví dụ được cài qua **Install Examples**: `GeometryGraph/MultiOutputRoadT
 **QA:**
 - [x] Headless runtime/Inspector regression: V1 vẫn chạy, V2 compile/typing/cycle/reachability, đổi Output ID, branch-parameter dirty propagation, clone mesh và atomic cache rollback, thêm/xóa branch, đổi default/downgrade V2→V1, Shared JsonAsset review/rebase.
 - [ ] Native Creator 3.8.8: gán **hai renderer nodes** cho cùng JsonAsset (mỗi renderer trỏ Output ID khác), Save/Reopen, Undo/Redo, Prefab overrides, hot reload asset-db, material/culling/wireframe và mesh ownership.
-- [ ] Output slots trên cùng một Renderer (nhiều MeshRenderer/Materials), multi-input nodes, imported Mesh Asset port, custom output names/aliases, branching auto-layout và per-node CPU timing chưa có. Chúng cần API/serializer và native smoke riêng.
+- [ ] Output slots trên cùng một Renderer (nhiều MeshRenderer/Materials), multi-input nodes, imported Mesh Asset port, custom output names/aliases và branching auto-layout chưa có. Per-node CPU timing đã được triển khai ở Phase 4.3e bên dưới; các tính năng Multi-output nâng cao vẫn cần API/serializer và native smoke riêng.
 
 Chỉ push `v2`; không tạo tag hoặc GitHub Release.
 
