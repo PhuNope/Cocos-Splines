@@ -472,8 +472,9 @@ const inspector={
     if(this._vgDrag)return;
     const profileIdentity=JSON.stringify(['profileAssetA','profileAssetB','profileAssetC']
       .map(key=>dump?.value?.[key]?.value??null));
-    if(this._vgProfileAssetIdentity!==undefined&&
-       this._vgProfileAssetIdentity!==profileIdentity){
+    const changedProfiles=this._vgProfileAssetIdentity!==undefined&&
+      this._vgProfileAssetIdentity!==profileIdentity;
+    if(changedProfiles){
       this._vgAuthoredDraft=null;this._vgAuthoredDrag=null;
       this._vgAuthoredToken=(this._vgAuthoredToken||0)+1;
       if(this._vgAuthoredBusy)this._vgAuthoredBusy=false;
@@ -489,7 +490,7 @@ const inspector={
     const changedOrder=this._vgOutputOrder!==rendererOrder||
       this._vgRenderAllOutputs!==renderAllOutputs;
     const changedOutput=this._vgProfileOutputId!==rendererOutputId;
-    if(changedShared||(!shared&&this._vgGraphJson!==graphJson)||
+    if(changedShared||changedProfiles||(!shared&&this._vgGraphJson!==graphJson)||
        changedOutput){
       this._vgProfile=null;
       this._vgProfileRequestToken=(this._vgProfileRequestToken||0)+1;
@@ -501,7 +502,8 @@ const inspector={
       this._vgRequestToken=(this._vgRequestToken||0)+1;
     }
     const changed=this._vgGraphJson!==graphJson||
-      this._vgLayoutJson!==layoutJson||changedShared||changedOutput||changedOrder;
+      this._vgLayoutJson!==layoutJson||changedShared||changedOutput||
+      changedOrder||changedProfiles;
     this._vgShared=shared;this._vgAssetIdentity=assetIdentity;
     this._vgOutputOrder=rendererOrder;
     this._vgRenderAllOutputs=renderAllOutputs;
