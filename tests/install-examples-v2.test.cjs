@@ -31,6 +31,12 @@ try {
  assert.equal(tube.version,1);
  assert.deepEqual(tube.nodes.map(n=>n.type),['spline','offset','width','tube','output']);
  assert.equal(tube.nodes.find(n=>n.type==='tube').radialSegments,16);
+ const extrude=JSON.parse(fs.readFileSync(
+   path.join(first.folder,'GeometryGraph/BasicProfileExtrudeGraph.json'),'utf8'));
+ assert.equal(extrude.version,1);
+ assert.deepEqual(extrude.nodes.map(n=>n.type),
+   ['spline','offset','width','extrude','output']);
+ assert.equal(extrude.nodes.find(n=>n.type==='extrude').profileShape,2);
  const custom=path.join(first.folder,'ExampleGallery.ts');
  fs.appendFileSync(custom,'\n// USER MODIFICATION PRESERVED\n');
  const second=installSplineExamples({projectPath:project,extensionRoot:root});
