@@ -30,6 +30,9 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-use-extrude">Use Extrude Profile</button>',
  '<button type="button" class="spl-btn spl-vg-use-deform">Use Mesh Deform</button>',
+ '<button type="button" class="spl-btn spl-vg-add-output">＋ Output Branch</button>',
+ '<button type="button" class="spl-btn spl-vg-default-output">Set Default Output</button>',
+ '<button type="button" class="spl-btn spl-vg-remove-output">✕ Remove Output</button>',
  '<button type="button" class="spl-btn spl-vg-remove">✕ Remove</button>',
  '<button type="button" class="spl-btn spl-vg-auto-layout">⇱ Auto Layout</button>',
  '</div>',
@@ -81,6 +84,9 @@ const $={...base.$,
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
+  vgAddOutput:'.spl-vg-add-output',
+  vgDefaultOutput:'.spl-vg-default-output',
+  vgRemoveOutput:'.spl-vg-remove-output',
   vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout'};
 function status(panel,message,isError=false){
   panel._vgStatusError=!!isError;
@@ -121,7 +127,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -156,6 +162,17 @@ function render(panel){
     if(panel.$?.vgUseDeform)
       panel.$.vgUseDeform.disabled=sharedLocked||busy||
         !['ribbon','tube','extrude'].includes(finalGenerator?.type);
+    const selectedOutput=view.map.get(panel._vgSelected)?.type==='output'?
+      panel._vgSelected:null;
+    if(panel.$?.vgAddOutput)
+      panel.$.vgAddOutput.disabled=sharedLocked||busy||
+        view.outputs.length>=4||view.ordered.length>30;
+    if(panel.$?.vgDefaultOutput)
+      panel.$.vgDefaultOutput.disabled=sharedLocked||busy||
+        !selectedOutput||selectedOutput===view.graph.output;
+    if(panel.$?.vgRemoveOutput)
+      panel.$.vgRemoveOutput.disabled=sharedLocked||busy||
+        !selectedOutput||selectedOutput===view.graph.output;
     if(panel._vgSelected&&!view.map.has(panel._vgSelected))
       panel._vgSelected=null;
     stage.innerHTML=graph.renderGraphCanvas(panel._vgGraphJson,
@@ -166,7 +183,9 @@ function render(panel){
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
-        'Graph valid · '+view.ordered.length+' nodes · drag headers to arrange.');
+        'Graph v'+view.graph.version+' valid · '+view.ordered.length+
+        ' nodes · '+view.outputs.length+' output(s) · default: '+view.graph.output+
+        ' · drag headers to arrange.');
   }catch(error){
     stage.textContent='Graph unavailable. Fix graphJson/layout JSON in the property Inspector.';
     properties.textContent='';
@@ -212,11 +231,13 @@ function editGraph(panel,action,details){
     const output=graph.applyGraphEdit(panel._vgGraphJson,action,details);
     if(!commitProperty(panel,'graphJson',output))return;
     panel._vgPending=null;panel._vgPreviewLayout=null;
-    if(action==='insert'){
+    if(action==='insert'||action==='add-output'){
       const next=graph.parseGraph(output);
-      const created=next.ordered.find(n=>!prior.map.has(n.id));
+      const created=next.ordered.find(n=>!prior.map.has(n.id)&&
+        (action!=='add-output'||n.type==='output'));
       panel._vgSelected=created?.id||null;
-    }else if(action==='remove')panel._vgSelected=null;
+    }else if(action==='remove'||action==='remove-output')panel._vgSelected=null;
+    else if(action==='set-default-output')panel._vgSelected=details.id;
     else if(action==='replace-generator'){
       const next=graph.parseGraph(output);
       panel._vgSelected=next.map.get(next.graph.output)?.input||null;
@@ -442,6 +463,22 @@ const inspector={
     this.$?.vgUseDeform?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       editGraph(this,'replace-generator',{type:'meshDeform'});
+    });
+    this.$?.vgAddOutput?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      const view=graph.parseGraph(this._vgGraphJson);
+      const selected=view.map.get(this._vgSelected);
+      editGraph(this,'add-output',{
+        fromOutputId:selected?.type==='output'?selected.id:view.graph.output,
+      });
+    });
+    this.$?.vgDefaultOutput?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      editGraph(this,'set-default-output',{id:this._vgSelected});
+    });
+    this.$?.vgRemoveOutput?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      editGraph(this,'remove-output',{id:this._vgSelected});
     });
     this.$.vgRemove.addEventListener('click',()=>{
       if(this._vgSelected)editGraph(this,'remove',{id:this._vgSelected});
