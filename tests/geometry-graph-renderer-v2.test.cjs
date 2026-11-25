@@ -595,6 +595,70 @@ async function run(){
    renderer.renderAllOutputs=false;renderer.outputOrder='';
    renderer.sourceSubMesh=0;renderer.sourceSubMeshB=0;
    renderer.sourceMesh=null;renderer.sourceMeshB=null;
+   // Phase 4.3g2b2b1: renderer-owned authored polygon JsonAssets. The
+   // optional per-Extrude profileSlot maps independent A/B data into one
+   // multi-output mesh; pure preset nodes remain unchanged by default.
+   const lProfile={format:'cocos-splines/profile',version:1,points:[
+    {x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:-.1},
+    {x:.1,y:-.1},{x:.1,y:.5},{x:-.5,y:.5},
+   ]};
+   const squareProfile={format:'cocos-splines/profile',version:1,points:[
+    {x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:-.5,y:.5},
+   ]};
+   const authoredGraph=JSON.stringify({version:2,nodes:[
+    {id:'source',type:'spline'},
+    {id:'extrudeA',type:'extrude',input:'source',width:2,height:2,
+     profileSlot:0,capEnds:true},
+    {id:'extrudeB',type:'extrude',input:'source',width:2,height:1,
+     profileSlot:1,capEnds:true},
+    {id:'outputA',type:'output',input:'extrudeA'},
+    {id:'outputB',type:'output',input:'extrudeB'},
+   ],output:'outputA'});
+   renderer.graphJson=authoredGraph;
+   renderer.useGraphAsset=false;renderer.graphAsset=null;
+   renderer.renderAllOutputs=true;renderer.outputOrder='';
+   renderer.profileAssetA={json:lProfile};
+   renderer.profileAssetB={json:squareProfile};
+   const authoredFrameBuilds=frameBuilds;
+   renderer.rebuild();
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputA','outputB']);
+   assert.equal(out.mesh.struct.primitives.length,2);
+   assert.equal(frameBuilds,authoredFrameBuilds);
+   const authoredFirst=out.mesh;
+   renderer.profileAssetC={json:{format:'bad'}};
+   renderer.update();
+   assert.equal(out.mesh,authoredFirst,
+    'Unused author Profile Asset C cannot invalidate the renderer');
+   squareProfile.points[1].x=.8;
+   renderer.update();
+   assert.notEqual(out.mesh,authoredFirst,'Changing active Profile B rebuilds mesh');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5},
+    'Only Extrude B and Output B recalculate when Profile B changes');
+   assert.equal(frameBuilds,authoredFrameBuilds,
+    'Updating authored profile reuses sampled Spline frames');
+   const authoredLastGood=out.mesh;
+   squareProfile.points[1].x=3;
+   assert.throws(()=>renderer.rebuild(),/Graph Profile Asset/);
+   assert.equal(out.mesh,authoredLastGood,
+    'Invalid authored profile retains last-good generated Mesh');
+   assert.equal(authoredLastGood.destroyed,false);
+   squareProfile.points[1].x=.8;
+   renderer.profileAssetB=null;
+   assert.throws(()=>renderer.rebuild(),/Graph Profile Asset slot 1/);
+   assert.equal(out.mesh,authoredLastGood);
+   renderer.profileAssetB={json:squareProfile};
+   renderer.rebuild();
+   const authoredProfile=renderer.profileGraph();
+   assert.equal(authoredProfile.graphVersion,2);
+   assert.equal(authoredProfile.cold.nodes.length,5);
+   assert(authoredProfile.warm.nodes.every(n=>n.cached));
+   // Opt-out: remove both profileSlot bindings and restore built-in presets.
+   const presetGraph=JSON.parse(authoredGraph);
+   presetGraph.nodes.filter(n=>n.type==='extrude').forEach(n=>delete n.profileSlot);
+   renderer.graphJson=JSON.stringify(presetGraph);
+   renderer.profileAssetA=null;renderer.profileAssetB=null;
+   renderer.rebuild();
+   assert.equal(out.mesh.struct.primitives.length,2);
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
