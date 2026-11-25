@@ -225,7 +225,8 @@ Deterministic sampling/cache, nearest point, spline data, noise layers, connecto
 - [ ] Phase 4.2c: native visual editing of shared assets with explicit save intent, asset-db synchronization and UX polish; multi-input/branching and richer auto layout.
 - [x] Phase 4.3a: `tube` generator (path→mesh), bounded radius/radialSegments, UV seam/caps, anisotropic and mirrored frame winding, native Inspector Ribbon↔Tube switching, regression tests.
 - [x] Phase 4.3b: bounded Profile Extrude generator (Rectangle/Beveled/U Channel preset), concave cap triangulation, hard-edge normals, mirrored/nonuniform winding, UV, typed Inspector selection and installable example JSON; headless regression tests.
-- [ ] Phase 4.3c+: mesh-deform/profile asset customization, multi-output graphs and per-node profiling. Tube + Extrude native Cocos Creator 3.8.8 acceptance remains pending.
+- [x] Phase 4.3c: bounded `meshDeform` generator uses standalone CPU deformation kernel with generated Strip/Box Shell presets, arc-distance frame lookup, mirrored winding, typed Inspector and installable example. Imported source Mesh assets remain future work.
+- [ ] Phase 4.3d+: Mesh Asset graph port, profile asset customization, multi-output graphs and per-node profiling. Tube/Extrude/MeshDeform native Cocos Creator 3.8.8 acceptance remains pending.
 - [ ] Native Cocos Creator 3.8.8 Visual Graph drag/Undo/Redo/Prefab override acceptance.
 
 Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain conform, mesh/profile/volume, module graph typed IO với cache và dirty propagation. **Exit:** UV, winding, normals, material/source immutability tests.
