@@ -49,3 +49,14 @@ Sau khi dùng **Install Examples**, sẽ có `assets/CocosSplinesExamples/Geomet
 Phase 4.2c: chỉnh shared asset trực tiếp bằng graph editor có khóa / xác nhận ghi và native asset-db integration; đồng bộ chọn graph assets. Phase 4.3: Tube/Extrude/Profile/Mesh Deform, nhiều output và graph node profiling.
 
 **Chỉ push nhánh `v2`; không tạo tag hoặc GitHub Release trước khi yêu cầu chốt.**
+
+## Phase 4.2c0 — Nền tảng lưu Shared JsonAsset có kiểm tra xung đột (2026-11-25)
+
+- [x] `readSharedGraphSnapshot(file, assetsRoot)`: đọc nội dung Graph đã kiểm tra, trả về bản JSON chuẩn và SHA-256 của **bytes nguồn**.
+- [x] `saveSharedGraphIfUnchanged(file, assetsRoot, editedGraph, sha256)`: kiểm tra typed DAG/giới hạn 16 KiB trước khi ghi; chỉ ghi tệp .json nằm dưới Assets qua đường dẫn không symlink; từ chối khi checksum nguồn đã thay đổi.
+- [x] Dùng tệp tạm mới (`wx`) và đổi tên cùng thư mục, xóa tệp tạm khi thất bại; no-op khi bytes nguồn đã bằng JSON chuẩn cần lưu. Lưu ý: phép kiểm tra SHA-256 và rename **không phải CAS nguyên tử** nếu một chương trình khác ghi ngay trong khoảng giữa hai thao tác.
+- [x] Headless regression cho kiểm tra path, symlink, graph invalid, stale checksum và no-op, đăng ký trong CI.
+- [ ] Cần tiếp: nối chức năng này vào Inspector với chế độ **Edit Shared (explicit)**; yêu cầu xác nhận ghi, resolve đường dẫn native asset qua asset-db, refresh/import asset-db khi save, xử lý phản hồi và conflict UI.
+- [ ] Cần tiếp: kiểm thử trên Creator 3.8.8 (JSON asset reimport, Undo/Redo, đồng bộ nhiều renderer). **Chưa cho phép chỉnh trực tiếp shared asset từ canvas ở bước này.**
+
+Không tạo tag hoặc release. Mọi thay đổi thuộc nhánh `v2`.
