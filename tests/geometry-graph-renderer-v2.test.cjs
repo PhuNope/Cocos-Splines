@@ -235,8 +235,33 @@ async function run(){
     'Shared V2 must not mutate local graphJson');
    peer.onDestroy();
    assert(peerMesh.mesh===null,'Peer releases only its own transient generated Mesh');
+   const beforeProfileMesh=out.mesh,profileFrameBuilds=frameBuilds;
+   const oldGraphMetrics=renderer.getGraphMetrics();
+   const profile=renderer.profileGraph();
+   assert.equal(profile.graphVersion,2);
+   assert.equal(profile.outputId,'outputRoad');
+   assert.equal(profile.sampledFrames,13);
+   assert.deepEqual([profile.cold.computed,profile.cold.reused],[5,0]);
+   assert.deepEqual([profile.warm.computed,profile.warm.reused],[0,5]);
+   assert.equal(profile.cold.nodes.length,5);
+   assert(profile.warm.nodes.every(n=>n.cached));
+   assert.equal(frameBuilds,profileFrameBuilds,
+    'Warm/cold CPU profile must reuse sampled source frames');
+   assert.equal(out.mesh,beforeProfileMesh,
+    'CPU profiling cannot allocate or replace renderer-owned mesh');
+   assert.deepEqual(renderer.getGraphMetrics(),oldGraphMetrics,
+    'Diagnostic uses an isolated runner and does not alter live cache');
    renderer.useGraphAsset=false;renderer.graphAsset=null;renderer.outputId='';
    renderer.rebuild();
+   const localMesh=out.mesh;
+   const localProfile=renderer.profileGraph();
+   assert.equal(localProfile.graphVersion,1);
+   assert.equal(localProfile.cold.nodes.length,3);
+   assert.equal(out.mesh,localMesh);
+   renderer.graphJson='{invalid';
+   assert.throws(()=>renderer.profileGraph(),/syntax/i);
+   assert.equal(out.mesh,localMesh,'Invalid profiling graph retains last Mesh');
+   renderer.graphJson=localSaved;
    const external=new Mesh({other:true});
    out.mesh=external;
    renderer.onDestroy();
