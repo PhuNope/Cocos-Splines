@@ -12,16 +12,17 @@ const TYPES=Object.freeze({
   offset:{input:'path',output:'path',params:['right','up']},
   width:{input:'path',output:'path',params:['multiplier']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
+  tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 const LIMITS=Object.freeze({
   right:[-1000,1000,0],up:[-1000,1000,0],
   multiplier:[.01,20,1],width:[.05,100,4],endWidth:[0,100,0],
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
-  cornerMode:[0,1,0],
+  cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
 });
 const NODE_KEYS=new Set(['id','type','input','right','up','multiplier','width',
-  'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']);
+  'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -52,7 +53,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (key==='cornerMode'&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -132,6 +133,23 @@ function applyGraphEdit(json,action,details={}) {
       source.input=target.input;
       target.input=source.id;
     }else target.input=source.id;
+  }else if(action==='replace-generator'){
+    const kind=details.type;
+    if(!['ribbon','tube'].includes(kind))
+      throw Error('Only Ribbon and Tube generators can be selected.');
+    const output=find(next.output);
+    const current=find(output?.input);
+    if(!current||!['ribbon','tube'].includes(current.type))
+      throw Error('Output must connect to an existing mesh generator.');
+    if(current.type===kind)return json;
+    const reserved=new Set(next.nodes.map(n=>n.id));
+    let name=kind,i=1;
+    while(reserved.has(name))name=kind+String(i++);
+    const replacement={id:name,type:kind,input:current.input,
+      uvMetersPerRepeat:current.uvMetersPerRepeat??5,
+      capEnds:current.capEnds??false};
+    next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
+    output.input=name;
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
     if(!target||!TYPES[target.type].params.includes(key))
@@ -141,7 +159,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(key==='cornerMode'&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     target[key]=value;
@@ -229,7 +247,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="any" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(key==='radialSegments'?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
