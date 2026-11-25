@@ -132,7 +132,8 @@ export class SplineGeometryGraphRenderer extends Component {
         if(!this._frameCache||this._frameRevision!==frameRevision)
             this.rebuild();
         const plan=parseGeometryGraph(this.activeGraphJson());
-        const selected=typeof this.outputId==='string'?this.outputId.trim():'';
+        const selected=this.renderAllOutputs?'':
+            (typeof this.outputId==='string'?this.outputId.trim():'');
         const runner=new GeometryGraphRunner();
         runner.setProfilingEnabled(true);
         const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
@@ -174,7 +175,7 @@ export class SplineGeometryGraphRenderer extends Component {
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
-        return JSON.stringify([this.frameSignature(),json,this.outputId,this.renderAllOutputs,assets,this.gizmoEdgeLimit]);
+        return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,assets,this.gizmoEdgeLimit]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
