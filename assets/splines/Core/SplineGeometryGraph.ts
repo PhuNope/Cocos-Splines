@@ -5,6 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape} from './SplineProfileExtrudeMath';
 
 export const GEOMETRY_GRAPH_VERSION=1;
 export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
@@ -14,7 +15,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'offset'|'width'|'ribbon'|'tube'|'output';
+export type GeometryNodeType='spline'|'offset'|'width'|'ribbon'|'tube'|'extrude'|'output';
 export type GeometryPortType='path'|'mesh';
 export interface GeometryGraphNode {
     id:string;type:GeometryNodeType;
@@ -24,6 +25,7 @@ export interface GeometryGraphNode {
     width?:number;endWidth?:number;uvMetersPerRepeat?:number;
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
+    height?:number;profileShape?:number;
 }
 export interface GeometryGraph {
     version:number;
@@ -67,7 +69,7 @@ const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     ringCount:data.ringCount,
 });
 const nodePort=(type:GeometryNodeType):GeometryPortType=>
-    type==='ribbon'||type==='tube'||type==='output'?'mesh':'path';
+    type==='ribbon'||type==='tube'||type==='extrude'||type==='output'?'mesh':'path';
 const needInput=(type:GeometryNodeType):GeometryPortType|null=>
     type==='spline'?null:type==='output'?'mesh':'path';
 /** Validate structure AND numeric settings before any evaluation or cache write.
@@ -84,13 +86,14 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     let sources=0,outputs=0;
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','offset','width','ribbon','tube','output'].includes(node.type)||table.has(node.id))
+           !['spline','offset','width','ribbon','tube','extrude','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='offset'?['input','right','up']:
             node.type==='width'?['input','multiplier']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
+            node.type==='extrude'?['input','width','height','profileShape','uvMetersPerRepeat','capEnds']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
         if(node.type==='spline')sources++;
@@ -118,6 +121,16 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             bound(node.uvMetersPerRepeat??5,.01,10000,'Tube UV length');
             if(node.capEnds!==undefined&&typeof node.capEnds!=='boolean')
                 throw Error('Geometry Graph Tube capEnds must be a boolean.');
+        }
+        if(node.type==='extrude'){
+            bound(node.width??1,.05,100,'Extrude width');
+            bound(node.height??1,.05,100,'Extrude height');
+            const shape=bound(node.profileShape??0,0,2,'Extrude profileShape');
+            if(!Number.isInteger(shape))
+                throw Error('Geometry Graph Extrude profileShape must be an integer.');
+            bound(node.uvMetersPerRepeat??5,.01,10000,'Extrude UV length');
+            if(node.capEnds!==undefined&&typeof node.capEnds!=='boolean')
+                throw Error('Geometry Graph Extrude capEnds must be a boolean.');
         }
         table.set(node.id,{...node});
     }
@@ -257,6 +270,16 @@ export class GeometryGraphRunner {
                     const geometry=buildTubeGeometry(source.frames,{
                         radius:node.radius??1,
                         radialSegments:node.radialSegments??12,
+                        uvMetersPerRepeat:node.uvMetersPerRepeat??5,
+                        capEnds:node.capEnds??false,
+                    },source.closed);
+                    validateMesh(geometry);
+                    value={kind:'mesh',geometry};
+                }else if(node.type==='extrude'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Extrude input is not a path.');
+                    const geometry=buildProfileExtrudeGeometry(source.frames,{
+                        width:node.width??1,height:node.height??1,
+                        profileShape:(node.profileShape??0) as GraphProfileShape,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
                     },source.closed);
