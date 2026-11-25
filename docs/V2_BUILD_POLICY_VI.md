@@ -3,11 +3,11 @@
 - Toàn bộ code đang phát triển sẽ đẩy trực tiếp lên **nhánh `v2`**.
 - Không tạo Git tag, GitHub Release, hoặc publish stable cho tới khi chủ repo yêu cầu **chốt** một cách rõ ràng.
 - Mỗi push lên `v2` chạy CI: `npm run check:runtime`, `npm run build`, `npm run verify`, `npm test`.
-- Sau khi thành công, CI tạo **bản test ZIP** qua `npm run package:preview` rồi upload GitHub Actions Artifact. Tên file bên trong chứa SHA ngắn của commit.
+- Sau khi thành công, `npm run package:preview` chỉ tạo **thư mục staging `builds/cocos-splines/`**, không tạo ZIP. GitHub Actions `upload-artifact@v4` tự tạo **đúng một ZIP** tải xuống từ thư mục staging này; tên artifact chứa SHA commit.
 - Bản test bao gồm extension `cocos-splines/` với `package.json`, `dist/`, `assets/`, `docs/`, changelog và README. Không bao gồm `node_modules/`, test source hoặc thay đổi code chỉ phục vụ CI.
 - Bản build có `PREVIEW_BUILD.txt` để xác nhận commit và nhận diện đó là preview, không phải release.
 - Cần cài **Cocos-Gizmos v3.0.3+** trước rồi mới bật Cocos-Splines trong Extension Manager.
-- Tải build: GitHub → Actions → workflow `Cocos Splines — validation` → chọn run thành công trên `v2` → Artifacts → `cocos-splines-v2-<sha>`. Giải nén artifact GitHub, sau đó giải nén ZIP Cocos Splines vào `<project>/extensions/`.
+- Tải build: GitHub → Actions → workflow `Cocos Splines — validation` → chọn run thành công trên `v2` → Artifacts → `cocos-splines-v2-<sha>`. File tải về là **ZIP duy nhất**; tạo `<project>/extensions/cocos-splines/` rồi **giải nén đúng một lần trực tiếp vào thư mục đó** (bên trong có `package.json`, `assets/`, `dist/`). Không còn ZIP nằm trong ZIP. Đừng giải nén thêm vào một thư mục `cocos-splines` thứ hai.
 - Kiểm thử tự động không thể thay thế thao tác thực tế trong Cocos Creator 3.8.x (Gizmos/Undo/Redo/prefab/build player).
 - Khi cập nhật sau này, gửi kèm link tới **artifact đúng SHA của commit vừa đẩy**; không gửi lại build cũ.
 

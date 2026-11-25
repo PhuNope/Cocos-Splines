@@ -42,6 +42,9 @@ jobs:
         env:
           BUILD_SHA: ${{ github.sha }}
         run: npm run package:preview
+      - name: Validate flat ZIP artifact source (no nested ZIP)
+        if: github.ref == 'refs/heads/v2'
+        run: node tests/package-preview-v2.test.cjs
       - name: Upload V2 proximity profiling report
         if: github.ref == 'refs/heads/v2'
         uses: actions/upload-artifact@v4
@@ -55,10 +58,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cocos-splines-v2-${{ github.sha }}
-          path: builds/cocos-splines-v2-*.zip
+          # upload-artifact makes the sole ZIP layer. Never upload a ZIP!
+          # The downloaded archive contains package.json, assets/, dist/, ...
+          # Extract directly into <project>/extensions/cocos-splines/.
+          path: builds/cocos-splines/
           if-no-files-found: error
           retention-days: 90
-          compression-level: 0
+          compression-level: 6
 
 # Release publishing is intentionally disabled. No tag or GitHub Release may
 # be created without the owner's explicit approval. CI only validates pushes.
