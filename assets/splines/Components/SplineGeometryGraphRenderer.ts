@@ -137,6 +137,14 @@ export class SplineGeometryGraphRenderer extends Component {
     @property({type:[Collider],tooltip:'Explicit Conform Path targets (1–64 active 3D Colliders).'})
     conformColliders:Collider[]=[];
     private _conformRevision=0;
+    private _conformTargetIds=new WeakMap<Collider,number>();
+    private _nextConformTargetId=0;
+    private conformTargetId(c:Collider):number|null{
+        if(!c)return null;
+        let id=this._conformTargetIds.get(c);
+        if(id===undefined){id=++this._nextConformTargetId;this._conformTargetIds.set(c,id);}
+        return id;
+    }
     private _runner=new GeometryGraphRunner();
     private _frameRevision='';
     private _frameCache:RoadFrame[]|null=null;
@@ -292,7 +300,7 @@ export class SplineGeometryGraphRenderer extends Component {
         // Keep invalid reference states observable so fixing assignments retries.
         return (Array.isArray(this.conformColliders)?this.conformColliders:[]).map(c=>{
             const m=c?.node?.worldMatrix,b=c?.worldBounds;
-            return [c?.uuid,c?.node?.uuid,c?.enabled,c?.node?.activeInHierarchy,c?.node?.isValid,
+            return [this.conformTargetId(c),c?.node?.uuid,c?.enabled,c?.node?.activeInHierarchy,c?.node?.isValid,
                 m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:null,
                 b?[b.center.x,b.center.y,b.center.z,b.halfExtents.x,b.halfExtents.y,b.halfExtents.z]:null];
         });
