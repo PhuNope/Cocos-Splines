@@ -21,7 +21,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -41,6 +41,10 @@ export interface GeometryGraphNode {
     noiseRight?:number;noiseUp?:number;noiseForward?:number;
     noiseFrequency?:number;noiseOctaves?:number;noisePersistence?:number;
     noisePhase?:number;noiseSeed?:number;noiseFadeEnds?:number;
+    /** Clip interval on the input sampled arc, not geometric Bezier t. */
+    clipStart?:number;clipEnd?:number;
+    /** Number of equal-input-arc intervals (output has count+1 frames). */
+    resampleSegments?:number;
     multiplier?:number;
     /** Optional Width scale across normalized physical distance.
      * Unspecified middle = mean of start/end; unspecified end = start.
@@ -257,6 +261,105 @@ function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray
     });
     return {kind:'path',closed:source.closed,frames:output};
 }
+/** Reverse travel direction without changing the world-space path or its up
+ * hints. Both right and forward must flip together to retain handedness.
+ */
+function reversePath(source:GraphPath):GraphPath{
+    const end=source.frames[source.frames.length-1].distance;
+    const neg=(v:FrameVec3):FrameVec3=>({x:-v.x,y:-v.y,z:-v.z});
+    return {kind:'path',closed:source.closed,frames:source.frames.slice().reverse().map(f=>({
+        ...f,distance:end-f.distance,forward:neg(f.forward),right:neg(f.right),
+    }))};
+}
+/** Interpolate sampled path frames in renderer-local coordinates while
+ * preserving the physical length of each interpolated basis vector.
+ * This also works under a nonuniform or mirrored renderer world matrix.
+ * No exact Bezier reconstruction; an antipodal/degenerate frame fails closed.
+ */
+function sampledPathMetric(linear?:ReadonlyArray<number>){
+    const m=linear??[1,0,0,0,1,0,0,0,1];
+    if(!Array.isArray(m)||m.length!==9||!m.every(v=>finite(v)&&Math.abs(v)<=1e7))
+        throw Error('Geometry Graph path sampling requires a valid world linear matrix.');
+    const world=(v:FrameVec3):FrameVec3=>({
+        x:m[0]*v.x+m[3]*v.y+m[6]*v.z,
+        y:m[1]*v.x+m[4]*v.y+m[7]*v.z,
+        z:m[2]*v.x+m[5]*v.y+m[8]*v.z,
+    });
+    const length=(v:FrameVec3)=>{const p=world(v);return Math.hypot(p.x,p.y,p.z);};
+    const determinant=(a:FrameVec3,b:FrameVec3,c:FrameVec3)=>
+        a.x*(b.y*c.z-b.z*c.y)-a.y*(b.x*c.z-b.z*c.x)+a.z*(b.x*c.y-b.y*c.x);
+    const axis=(i:number):FrameVec3=>({x:m[i],y:m[i+1],z:m[i+2]});
+    const a=axis(0),b=axis(3),c=axis(6);
+    if(Math.abs(determinant(a,b,c))<=1e-12*Math.hypot(a.x,a.y,a.z)*Math.hypot(b.x,b.y,b.z)*Math.hypot(c.x,c.y,c.z))
+        throw Error('Geometry Graph path sampling requires an invertible world linear matrix.');
+    const lerp=(a:FrameVec3,b:FrameVec3,t:number):FrameVec3=>({
+        x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t,
+    });
+    const basis=(a:FrameVec3,b:FrameVec3,t:number):FrameVec3=>{
+        const v=lerp(a,b,t),l=length(v),target=length(a)*(1-t)+length(b)*t;
+        if(!finite(l)||!finite(target)||target<=1e-9||l<target*1e-6)
+            throw Error('Geometry Graph path sampling encountered antipodal or degenerate frames.');
+        const k=target/l;
+        return {x:v.x*k,y:v.y*k,z:v.z*k};
+    };
+    const sample=(frames:GraphFrame[],distance:number):GraphFrame=>{
+        const last=frames.length-1;
+        if(distance<=frames[0].distance)return {...frames[0],distance};
+        if(distance>=frames[last].distance)return {...frames[last],distance};
+        let lo=0,hi=last;
+        while(lo+1<hi){const mid=(lo+hi)>>1;if(frames[mid].distance<distance)lo=mid;else hi=mid;}
+        const a=frames[lo],b=frames[hi];
+        if(distance===b.distance)return {...b,distance};
+        const t=(distance-a.distance)/(b.distance-a.distance);
+        const f={position:lerp(a.position,b.position,t),forward:basis(a.forward,b.forward,t),
+            right:basis(a.right,b.right,t),up:basis(a.up,b.up,t),distance,
+            widthFactor:a.widthFactor+(b.widthFactor-a.widthFactor)*t};
+        const r=world(f.right),u=world(f.up),d=world(f.forward);
+        const volume=Math.hypot(r.x,r.y,r.z)*Math.hypot(u.x,u.y,u.z)*Math.hypot(d.x,d.y,d.z);
+        if(![f.position,f.forward,f.right,f.up].every(vec)||!finite(volume)||
+           volume<=1e-20||Math.abs(determinant(r,u,d))<volume*1e-6)
+            throw Error('Geometry Graph path sampling produced an invalid frame.');
+        return f;
+    };
+    const chord=(a:FrameVec3,b:FrameVec3)=>length({x:b.x-a.x,y:b.y-a.y,z:b.z-a.z});
+    return {sample,chord};
+}
+function clipPath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray<number>):GraphPath{
+    const start=node.clipStart??0,end=node.clipEnd??1;
+    if(start===0&&end===1)return source;
+    const frames=source.frames,first=frames[0].distance,span=frames[frames.length-1].distance-first;
+    if(span<=1e-9)throw Error('Geometry Graph Clip requires a nonzero sampled path.');
+    const from=first+span*start,to=first+span*end;
+    const {sample}=sampledPathMetric(linear);
+    const selected=[sample(frames,from),...frames.filter(f=>f.distance>from&&f.distance<to),sample(frames,to)];
+    return {kind:'path',closed:false,frames:selected.map(f=>({...f,distance:f.distance-from}))};
+}
+function resamplePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray<number>):GraphPath{
+    const frames=source.frames,count=node.resampleSegments??32;
+    const first=frames[0].distance,last=frames[frames.length-1],span=last.distance-first;
+    if(span<=1e-9)throw Error('Geometry Graph Resample requires a nonzero sampled path.');
+    const {sample,chord}=sampledPathMetric(linear);
+    if(source.closed&&chord(frames[0].position,last.position)>1e-4)
+        throw Error('Geometry Graph Resample requires coincident closed-loop endpoints.');
+    const output:GraphFrame[]=[];
+    let distance=0;
+    for(let i=0;i<=count;i++){
+        const f=sample(frames,i===count?last.distance:first+span*i/count);
+        if(source.closed&&i===count){
+            const initial=output[0];
+            // Copy geometric seam, retain final width key (normally equal).
+            f.position=initial.position;f.forward=initial.forward;f.right=initial.right;f.up=initial.up;
+        }
+        if(i>0){
+            const step=chord(output[i-1].position,f.position);
+            if(!finite(step)||step<=1e-9)throw Error('Geometry Graph Resample produced coincident consecutive samples.');
+            distance+=step;
+        }
+        if(!finite(distance)||distance>1e9)throw Error('Geometry Graph Resample exceeded the distance budget.');
+        output.push({...f,distance});
+    }
+    return {kind:'path',closed:source.closed,frames:output};
+}
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
@@ -302,13 +405,15 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','transform','noise','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
             node.type==='transform'?['input','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
             node.type==='noise'?['input','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']:
+            node.type==='clip'?['input','clipStart','clipEnd']:
+            node.type==='resample'?['input','resampleSegments']:
             node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
@@ -347,6 +452,15 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 const n=bound(node[key]===undefined?def:node[key],min,max,'Noise '+key);
                 if(integer&&!Number.isInteger(n))throw Error('Geometry Graph Noise '+key+' must be an integer.');
             }
+        }
+        if(node.type==='clip'){
+            const begin=bound(node.clipStart===undefined?0:node.clipStart,0,1,'Clip start');
+            const end=bound(node.clipEnd===undefined?1:node.clipEnd,0,1,'Clip end');
+            if(end-begin<.001-1e-12)throw Error('Geometry Graph Clip requires end >= start + 0.001.');
+        }
+        if(node.type==='resample'){
+            const count=bound(node.resampleSegments===undefined?32:node.resampleSegments,3,1024,'Resample segments');
+            if(!Number.isInteger(count))throw Error('Geometry Graph Resample segments must be an integer.');
         }
         if(node.type==='width'){
             if(node.widthKeys!==undefined){
@@ -566,7 +680,7 @@ export class GeometryGraphRunner {
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
-                    node.type==='transform'||node.type==='noise'?context.worldUvLinear??null:null,
+                    ['transform','noise','clip','resample'].includes(node.type)?context.worldUvLinear??null:null,
                     // World-space Profile UV also depends on this transform.
                     // It invalidates its Extrude branch even when a pure Core
                     // caller changes matrix without changing frame revision.
@@ -615,6 +729,15 @@ export class GeometryGraphRunner {
                 }else if(node.type==='noise'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Noise input is not a path.');
                     value=noisePath(source,node,context.worldUvLinear);
+                }else if(node.type==='reverse'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Reverse input is not a path.');
+                    value=reversePath(source);
+                }else if(node.type==='clip'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Clip input is not a path.');
+                    value=clipPath(source,node,context.worldUvLinear);
+                }else if(node.type==='resample'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Resample input is not a path.');
+                    value=resamplePath(source,node,context.worldUvLinear);
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
                     const keys=node.widthKeys;

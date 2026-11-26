@@ -106,6 +106,49 @@ try{
  const loopMesh=runNoise(settings,{frames:loop,closed:true,revision:'noise-loop'});
  loopMesh.positions.slice(0,6).forEach((x,k)=>near(x,loopMesh.positions.at(-6+k)));
  assert.deepEqual(runNoise(settings,{frames:loop,closed:true,revision:'noise-loop'}),loopMesh);
+ // Processing nodes operate on immutable sampled frames, not source knots.
+ const pr=new GeometryGraphRunner();
+ const process=(ops,context=ctx)=>pr.evaluate(compileGeometryGraph({
+  version:1,output:'output',nodes:[{id:'source',type:'spline'},...ops.map((n,i)=>({
+   ...n,id:'p'+i,input:i?'p'+(i-1):'source'})),
+   {id:'ribbon',type:'ribbon',input:ops.length?'p'+(ops.length-1):'source',width:4,uvMetersPerRepeat:1},
+   {id:'output',type:'output',input:'ribbon'}]
+ }),context);
+ const original=process([]);
+ const reversed=process([{type:'reverse'}]);
+ centers(reversed).forEach((p,i)=>p.forEach((x,k)=>near(x,centers(original).at(-1-i)[k])));
+ near(reversed.positions[0],2);
+ near(Math.max(...reversed.uvs),3);
+ assert.deepEqual(process([{type:'reverse'},{type:'reverse'}]).positions,original.positions);
+ assert.deepEqual(process([{type:'clip'}]),original);
+ const clipped=process([{type:'clip',clipStart:1/6,clipEnd:5/6}]);
+ assert.equal(clipped.ringCount,4);
+ const cc=centers(clipped);
+ near(cc[0][2],.5);near(cc.at(-1)[2],2.5);
+ near(Math.max(...clipped.uvs),2);
+ const resampled=process([{type:'resample',resampleSegments:6}]);
+ assert.equal(resampled.ringCount,7);
+ centers(resampled).forEach((p,i)=>near(p[2],i*.5));
+ const combined=process([{type:'reverse'},{type:'clip',clipStart:.25,clipEnd:.75},{type:'resample',resampleSegments:4}]);
+ centers(combined).forEach((p,i)=>near(p[2],2.25-i*.375));
+ near(Math.max(...combined.uvs),1.5);
+ assert.deepEqual(process([{type:'reverse'},{type:'clip',clipStart:.25,clipEnd:.75},{type:'resample',resampleSegments:4}]),combined);
+ assert.equal(pr.metrics.reused,6);
+ const closed={frames:loop,closed:true,revision:'processing-loop'};
+ const closedResample=process([{type:'resample',resampleSegments:24}],closed);
+ assert.equal(closedResample.ringCount,25);
+ closedResample.positions.slice(0,6).forEach((x,k)=>near(x,closedResample.positions.at(-6+k)));
+ const openClip=process([{type:'clip',clipStart:.1,clipEnd:.6}],closed);
+ assert.notDeepEqual(centers(openClip)[0],centers(openClip).at(-1));
+ const scaled={...ctx,worldUvLinear:[-2,0,0,0,3,0,0,0,2]};
+ const scaledResample=process([{type:'resample',resampleSegments:6}],scaled);
+ near(Math.max(...scaledResample.uvs),6);
+ assert.throws(()=>process([{type:'clip',clipStart:.9,clipEnd:.1}]));
+ assert.throws(()=>process([{type:'clip',clipStart:null}]));
+ for(const count of [2,1025,4.5,null])assert.throws(()=>process([{type:'resample',resampleSegments:count}]));
+ assert.throws(()=>process([{type:'resample',resampleSegments:6}],{...ctx,worldUvLinear:[0,0,0,0,1,0,0,0,1]}));
+ assert.deepEqual(process([{type:'resample',resampleSegments:6}],scaled),scaledResample);
+ assert.equal(JSON.stringify(frames),beforeTransform);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},

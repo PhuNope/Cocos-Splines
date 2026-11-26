@@ -33,6 +33,23 @@ try{
   assert.throws(()=>m.applyGraphEdit(noise,'param',{id:'noise1',key,value}));
  noise=m.applyGraphEdit(noise,'remove',{id:'noise1'});
  assert.equal(m.parseGraph(noise).map.get('ribbon').input,'source');
+ for(const type of ['reverse','clip','resample']){
+  let p=m.applyGraphEdit(source,'insert',{type,before:'ribbon'});
+  const id=type+'1';
+  assert.equal(m.parseGraph(p).map.get('ribbon').input,id);
+  if(type==='clip'){
+   p=m.applyGraphEdit(p,'param',{id,key:'clipStart',value:.25});
+   assert.throws(()=>m.applyGraphEdit(p,'param',{id,key:'clipEnd',value:.1}));
+   assert(m.renderNodeParameters(p,id).includes('data-graph-param="clipEnd"'));
+  }
+  if(type==='resample'){
+   p=m.applyGraphEdit(p,'param',{id,key:'resampleSegments',value:64});
+   assert.throws(()=>m.applyGraphEdit(p,'param',{id,key:'resampleSegments',value:4.5}));
+   assert(m.renderNodeParameters(p,id).includes('data-graph-param="resampleSegments"'));
+  }
+  p=m.applyGraphEdit(p,'remove',{id});
+  assert.equal(m.parseGraph(p).map.get('ribbon').input,'source');
+ }
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

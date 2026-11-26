@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "reverse",
+      "type": "reverse",
+      "input": "source"
+    },
+    {
+      "id": "clip",
+      "type": "clip",
+      "input": "reverse",
+      "clipStart": 0.1,
+      "clipEnd": 0.85
+    },
+    {
+      "id": "resample",
+      "type": "resample",
+      "input": "clip",
+      "resampleSegments": 64
+    },
+    {
+      "id": "tube",
+      "type": "tube",
+      "input": "resample",
+      "radius": 0.2,
+      "radialSegments": 12,
+      "uvMetersPerRepeat": 2,
+      "capEnds": true
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "tube"
+    }
+  ],
+  "output": "output"
+}
