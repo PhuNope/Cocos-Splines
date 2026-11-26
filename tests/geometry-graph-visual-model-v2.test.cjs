@@ -56,6 +56,23 @@ try{
  assert.throws(()=>m.applyGraphEdit(conform,'param',{id:'conform1',key:'conformAlign',value:.5}));
  conform=m.applyGraphEdit(conform,'remove',{id:'conform1'});
  assert.equal(m.parseGraph(conform).map.get('ribbon').input,'source');
+ let multiSpline=m.applyGraphEdit(source,'add-spline-output',{fromOutputId:'output'});
+ let view=m.parseGraph(multiSpline);
+ assert.equal(view.graph.version,2);
+ assert.equal(view.map.get('splineSource').slot,1);
+ assert.equal(view.map.get(view.map.get('outputBranch').input).input,'splineSource');
+ assert(m.renderNodeParameters(multiSpline,'splineSource').includes('B (Spline B)'));
+ assert.throws(()=>m.applyGraphEdit(multiSpline,'param',{id:'splineSource',key:'slot',value:0}));
+ multiSpline=m.applyGraphEdit(multiSpline,'add-spline-output',{fromOutputId:'outputBranch'});
+ view=m.parseGraph(multiSpline);
+ assert.equal(view.map.get('splineSource1').slot,2);
+ assert.throws(()=>m.applyGraphEdit(multiSpline,'add-spline-output',{fromOutputId:'output'}),/slots/i);
+ multiSpline=m.applyGraphEdit(multiSpline,'remove-output',{id:'outputBranch1'});
+ multiSpline=m.applyGraphEdit(multiSpline,'set-default-output',{id:'outputBranch'});
+ multiSpline=m.applyGraphEdit(multiSpline,'remove-output',{id:'output'});
+ view=m.parseGraph(multiSpline);
+ assert.equal(view.graph.version,1);
+ assert.equal(view.map.get('splineSource').slot,1);
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

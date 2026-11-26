@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "nodes": [
+    {
+      "id": "sourceA",
+      "type": "spline"
+    },
+    {
+      "id": "roadA",
+      "type": "ribbon",
+      "input": "sourceA",
+      "width": 3
+    },
+    {
+      "id": "outputA",
+      "type": "output",
+      "input": "roadA"
+    },
+    {
+      "id": "sourceB",
+      "type": "spline",
+      "slot": 1
+    },
+    {
+      "id": "tubeB",
+      "type": "tube",
+      "input": "sourceB",
+      "radius": 0.25,
+      "radialSegments": 12
+    },
+    {
+      "id": "outputB",
+      "type": "output",
+      "input": "tubeB"
+    }
+  ],
+  "output": "outputA"
+}

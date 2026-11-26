@@ -73,7 +73,13 @@ export interface GeometryGraph {
     nodes:GeometryGraphNode[];
     output:string;
 }
-export interface GeometryGraphContext {
+export interface GeometryGraphSplineSource {
+    frames:ReadonlyArray<RoadFrame>;closed:boolean;revision:string;
+}
+export interface GeometryGraphContext extends GeometryGraphSplineSource {
+    /** Independent sampled spline slots A/B/C. Legacy context fields represent A
+     * when no explicit slot array is supplied. */
+    splineSources?:ReadonlyArray<GeometryGraphSplineSource|undefined>;
     /** Frames already expressed in the output MeshRenderer's LOCAL space. */
     frames:ReadonlyArray<RoadFrame>;
     closed:boolean;
@@ -453,12 +459,12 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         throw Error('Unsupported Geometry Graph root property.');
     const table=new Map<string,GeometryGraphNode>();
     let sources=0,outputs=0,meshAssets=0;
-    const occupiedMeshSlots=new Set<number>();
+    const occupiedMeshSlots=new Set<number>(),occupiedSplineSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
            !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
-        const keys=['id','type',...(node.type==='spline'?[]:
+        const keys=['id','type',...(node.type==='spline'?['slot']:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
             node.type==='transform'?['input','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
@@ -473,7 +479,13 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
             ['input'])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
-        if(node.type==='spline')sources++;
+        if(node.type==='spline'){
+            sources++;
+            const slot=bound(node.slot===undefined?0:node.slot,0,2,'Spline source slot');
+            if(!Number.isInteger(slot)||occupiedSplineSlots.has(slot))
+                throw Error('Geometry Graph Spline slot must be a unique integer 0–2.');
+            occupiedSplineSlots.add(slot);
+        }
         if(node.type==='meshAsset'){
             meshAssets++;
             const slot=bound(node.slot??0,0,2,'Mesh Asset slot');
@@ -598,9 +610,9 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         }
         table.set(node.id,{...node});
     }
-    if(sources!==1||meshAssets>3||(!multi&&outputs!==1)||
+    if(sources<1||sources>(multi?3:1)||meshAssets>3||(!multi&&outputs!==1)||
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
-        throw Error('Geometry Graph requires one spline source, one v1 output or 2–4 v2 outputs, and a valid default output.');
+        throw Error('Geometry Graph requires one v1 spline/output or 1–3 v2 splines and 2–4 v2 outputs, and a valid default output.');
     for(const node of table.values()){
         const expected=needInput(node.type);
         if(expected===null){
@@ -650,7 +662,7 @@ export function parseGeometryGraph(text:string):GeometryGraphPlan{
     try{raw=JSON.parse(text);}catch{throw Error('Invalid Geometry Graph JSON syntax.');}
     return compileGeometryGraph(raw as GeometryGraph);
 }
-function validateFrames(context:GeometryGraphContext):void{
+function validateFrames(context:GeometryGraphSplineSource):void{
     if(!context||typeof context.revision!=='string'||context.revision.length<1||
        context.revision.length>8192||typeof context.closed!=='boolean'||
        !Array.isArray(context.frames)||context.frames.length<2||
@@ -723,7 +735,15 @@ export class GeometryGraphRunner {
         if(requested!==checked.output&&
            !(checked.outputs?.includes(requested)))
             throw Error('Geometry Graph selected Output Node does not exist: '+String(requested));
-        validateFrames(context);
+        const splineSlots=new Map<number,GeometryGraphSplineSource>();
+        if(context.splineSources!==undefined&&(!Array.isArray(context.splineSources)||context.splineSources.length>3))
+            throw Error('Geometry Graph accepts at most three spline source slots.');
+        for(const node of checked.nodes)if(node.type==='spline'){
+            const slot=node.slot??0;
+            const source=context.splineSources===undefined?(slot===0?context:undefined):context.splineSources[slot];
+            if(!source)throw Error('Geometry Graph missing Spline source slot '+slot+'.');
+            validateFrames(source);splineSlots.set(slot,source);
+        }
         const next=new Map<string,CacheEntry>();
         let computed=0,reused=0;
         const timings:GeometryNodeTiming[]|null=this.profileEnabled?[]:null;
@@ -732,10 +752,11 @@ export class GeometryGraphRunner {
         try{
             for(const node of checked.nodes){
                 const input=node.input?next.get(node.input):undefined;
+                const splineSource=node.type==='spline'?splineSlots.get(node.slot??0):undefined;
                 const key=JSON.stringify([
                     node,
-                    node.type==='spline'?context.revision:null,
-                    node.type==='spline'?context.closed:null,
+                    splineSource?.revision??null,
+                    splineSource?.closed??null,
                     node.type==='meshAsset'?
                         (context.meshRevisions?.[node.slot??0]??
                          ((node.slot??0)===0?context.meshRevision:null)):null,
@@ -762,7 +783,7 @@ export class GeometryGraphRunner {
                 const source=input?.value;
                 let value:GraphValue;
                 if(node.type==='spline'){
-                    value={kind:'path',frames:deepCopyFrames(context.frames),closed:context.closed};
+                    value={kind:'path',frames:deepCopyFrames(splineSource!.frames),closed:splineSource!.closed};
                 }else if(node.type==='meshAsset'){
                     const slot=node.slot??0;
                     const revision=context.meshRevisions?.[slot]??

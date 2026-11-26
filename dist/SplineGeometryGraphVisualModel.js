@@ -8,7 +8,7 @@
  * a card only changes graphLayoutJson and never invalidates renderer caches.
  */
 const TYPES=Object.freeze({
-  spline:{input:null,output:'path',params:[]},
+  spline:{input:null,output:'path',params:['slot']},
   meshAsset:{input:null,output:'meshSource',params:['slot']},
   offset:{input:'path',output:'path',params:['right','up']},
   transform:{input:'path',output:'path',params:['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']},
@@ -75,7 +75,7 @@ function validateGraph(graph) {
     throw Error('Graph V1 requires 3–32 nodes, version=1 and a valid output.');
   const map=new Map();
   let sources=0,outputs=0,meshAssets=0;
-  const occupiedSlots=new Set();
+  const occupiedSlots=new Set(),occupiedSplineSlots=new Set();
   for(const node of graph.nodes){
     if(!object(node)||!safeId(node.id)||!Object.hasOwn(TYPES,node.type)||
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
@@ -85,7 +85,13 @@ function validateGraph(graph) {
       ...(node.type==='width'?['widthKeys']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
-    if(node.type==='spline')sources++;
+    if(node.type==='spline'){
+      sources++;
+      const slot=node.slot===undefined?0:node.slot;
+      if(!Number.isInteger(slot)||slot<0||slot>2||occupiedSplineSlots.has(slot))
+        throw Error('Spline source slot must be a unique integer 0–2.');
+      occupiedSplineSlots.add(slot);
+    }
     if(node.type==='meshAsset'){
       meshAssets++;
       const slot=node.slot??0;
@@ -120,10 +126,10 @@ function validateGraph(graph) {
       throw Error('Graph tileLength must be 0 or >= 0.01.');
     map.set(node.id,node);
   }
-  if(sources!==1||meshAssets>3||(graph.version===1&&outputs!==1)||
+  if(sources<1||sources>(graph.version===2?3:1)||meshAssets>3||(graph.version===1&&outputs!==1)||
      (graph.version===2&&(outputs<2||outputs>4))||
      map.get(graph.output)?.type!=='output')
-    throw Error('Graph requires one Spline and one v1 Output or 2–4 v2 Outputs.');
+    throw Error('Graph requires one v1 Spline/Output or 1–3 v2 Splines and 2–4 v2 Outputs.');
   for(const node of map.values()){
     const info=TYPES[node.type];
     if(info.input===null){if(node.input!==undefined||node.meshInput!==undefined)
@@ -195,9 +201,9 @@ function applyGraphEdit(json,action,details={}) {
     delete target.meshInput;
     if(!next.nodes.some(n=>n.meshInput===sourceId))
       next.nodes=next.nodes.filter(n=>n.id!==sourceId);
-  }else if(action==='add-output'){
+  }else if(action==='add-output'||action==='add-spline-output'){
     const existing=next.nodes.filter(n=>n.type==='output');
-    if(existing.length>=4||next.nodes.length>30)
+    if(existing.length>=4||next.nodes.length>(action==='add-spline-output'?29:30))
       throw Error('Multi-output Graph requires at most four outputs and 32 nodes.');
     const target=find(details.fromOutputId||next.output);
     if(!target||target.type!=='output')
@@ -207,8 +213,16 @@ function applyGraphEdit(json,action,details={}) {
       throw Error('Output must be connected to a mesh generator.');
     const meshId=unique(producer.type+'Branch');
     const outputId=unique('outputBranch');
-    next.nodes.push({...producer,id:meshId},
-      {id:outputId,type:'output',input:meshId});
+    let branch={...producer,id:meshId};
+    if(action==='add-spline-output'){
+      const occupied=new Set(next.nodes.filter(n=>n.type==='spline').map(n=>n.slot??0));
+      const slot=[0,1,2].find(i=>!occupied.has(i));
+      if(slot===undefined)throw Error('All three Spline source slots are used.');
+      const sourceId=unique('splineSource');
+      next.nodes.push({id:sourceId,type:'spline',slot});
+      branch={...branch,input:sourceId};
+    }
+    next.nodes.push(branch,{id:outputId,type:'output',input:meshId});
     next.version=2;
   }else if(action==='remove-output'){
     if(next.version!==2||details.id===next.output)
@@ -501,7 +515,7 @@ function renderNodeParameters(graphJson,id){
        '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
     if(key==='axis'||key==='slot')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
-      (key==='axis'?['X','Y','Z']:['A (Source Mesh)','B (Source Mesh B)','C (Source Mesh C)'])
+      (key==='axis'?['X','Y','Z']:n.type==='spline'?['A (Spline)','B (Spline B)','C (Spline C)']:['A (Source Mesh)','B (Source Mesh B)','C (Source Mesh C)'])
        .map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+
          escapeHtml(name)+'</option>').join('')+
       '</select></label>';

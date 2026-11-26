@@ -68,6 +68,7 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-attach-mesh">＋ Mesh Asset Input</button>',
  '<button type="button" class="spl-btn spl-vg-detach-mesh">✕ Mesh Asset Input</button>',
  '<button type="button" class="spl-btn spl-vg-add-output">＋ Output Branch</button>',
+ '<button type="button" class="spl-btn spl-vg-add-spline-output">＋ Spline Output</button>',
  '<button type="button" class="spl-btn spl-vg-default-output">Set Default Output</button>',
  '<button type="button" class="spl-btn spl-vg-remove-output">✕ Remove Output</button>',
  '<button type="button" class="spl-btn spl-vg-remove">✕ Remove</button>',
@@ -162,7 +163,7 @@ const $={...base.$,
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
   vgAttachMesh:'.spl-vg-attach-mesh',vgDetachMesh:'.spl-vg-detach-mesh',
-  vgAddOutput:'.spl-vg-add-output',
+  vgAddOutput:'.spl-vg-add-output',vgAddSplineOutput:'.spl-vg-add-spline-output',
   vgDefaultOutput:'.spl-vg-default-output',
   vgRemoveOutput:'.spl-vg-remove-output',
   vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout'};
@@ -339,7 +340,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgAddNoise','vgAddReverse','vgAddClip','vgAddResample','vgAddConform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgAddNoise','vgAddReverse','vgAddClip','vgAddResample','vgAddConform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgAddSplineOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -411,6 +412,9 @@ function render(panel){
     if(panel.$?.vgAddOutput)
       panel.$.vgAddOutput.disabled=sharedLocked||busy||
         view.outputs.length>=4||view.ordered.length>30;
+    if(panel.$?.vgAddSplineOutput)
+      panel.$.vgAddSplineOutput.disabled=sharedLocked||busy||view.outputs.length>=4||
+        view.ordered.length>29||view.ordered.filter(n=>n.type==='spline').length>=3;
     if(panel.$?.vgDefaultOutput)
       panel.$.vgDefaultOutput.disabled=sharedLocked||busy||
         !selectedOutput||selectedOutput===view.graph.output;
@@ -505,10 +509,10 @@ function editGraph(panel,action,details){
     const output=graph.applyGraphEdit(panel._vgGraphJson,action,details);
     if(!commitProperty(panel,'graphJson',output))return;
     panel._vgPending=null;panel._vgPreviewLayout=null;
-    if(action==='insert'||action==='add-output'){
+    if(action==='insert'||action==='add-output'||action==='add-spline-output'){
       const next=graph.parseGraph(output);
       const created=next.ordered.find(n=>!prior.map.has(n.id)&&
-        (action!=='add-output'||n.type==='output'));
+        (action==='insert'||n.type==='output'));
       panel._vgSelected=created?.id||null;
     }else if(action==='remove'||action==='remove-output')panel._vgSelected=null;
     else if(action==='set-default-output')panel._vgSelected=details.id;
@@ -1231,6 +1235,10 @@ const inspector={
       editGraph(this,'add-output',{
         fromOutputId:selected?.type==='output'?selected.id:view.graph.output,
       });
+    });
+    this.$?.vgAddSplineOutput?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      editGraph(this,'add-spline-output',{fromOutputId:activeOutputId(graph.parseGraph(this._vgGraphJson),this._vgSelected)});
     });
     this.$?.vgDefaultOutput?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;

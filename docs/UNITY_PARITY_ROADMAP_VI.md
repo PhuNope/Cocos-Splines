@@ -269,7 +269,11 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 - [x] Phase 4.4b — typed deterministic Noise Path node (Graph v1/v2): Right/Up/Forward amplitude, bounded integer frequency/octaves/seed, persistence/phase/open endpoint fade, reused SplineNoiseMath and stable World frames, physical sampled distance recomputation, exact closed-loop ring seam, zero-amplitude passthrough, strict schema and failure-safe cache; Visual Inspector, installer examples and offline runtime/model tests. Native 3.8.8 acceptance pending. Transform example also registered in installer.
 - [x] Phase 4.4c — typed Reverse, Clip and Resample Path nodes (Graph v1/v2). Reverse flips travel/right basis together; Clip uses normalized sampled arc interval and opens partial closed paths; Resample selects 3–1024 equal-input-arc intervals and recomputes world chord distance, preserves sampled seam, interpolates width and physical basis lengths, rejects degenerate frames. Visual Inspector, cache isolation, strict schema, installable example and offline tests; native 3.8.8 validation pending. No wrapped clip or exact Bezier reconstruction.
 - [x] Phase 4.4d — typed Conform Path node with explicit renderer-local Collider references (1–64 active unique same-scene targets), World -Y raycast, normal threshold/offset, Fail/Keep missing policy and surface/source up hints, reusable PopulationSurfaceMath + stable displaced frame builder, sampled world distance, closed seam and atomic mesh failure. Manual rebuild refreshes Physics; live rebuild signature tracks target pose/bounds (same-bounds geometry edits require manual rebuild). Visual Inspector, installer example and headless tests; native Creator 3.8.8 Physics validation pending.
-- [ ] Phase 4.5 — Multi-input Path/Mesh processing and merge operations.
+- [x] Phase 4.5a — independent Spline A/B/C slots for Graph V2 (1–3 unique sources, 2–4 outputs), V1 one source (default A, optional B/C). Native component references, per-slot frame revision/cache, typed DAG branch isolation, Visual Graph Add Spline Output and source slot selector, output branch removal/downgrade, explicit missing-source rollback, installable example and offline regression tests. Native Creator 3.8.8 acceptance pending.
+- [ ] Phase 4.5b — typed multi-input Path/Mesh sockets.
+- [ ] Phase 4.5c — Merge/Join Path.
+- [ ] Phase 4.5d — Merge Mesh.
+- [ ] Phase 4.5e — branching and visual graph auto layout.
 
 ### Phase 5 — Runtime networks & controllers
 

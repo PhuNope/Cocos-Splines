@@ -4,7 +4,7 @@ import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
-import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext}
+import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext,GeometryGraphSplineSource}
     from '../Core/SplineGeometryGraph';
 import {parseGraphProfileAsset} from '../Core/SplineProfileExtrudeMath';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
@@ -28,6 +28,10 @@ const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 export class SplineGeometryGraphRenderer extends Component {
     @property({type:SplineContainer,tooltip:'Source spline. Never modified by graph execution.'})
     spline:SplineContainer|null=null;
+    @property({type:SplineContainer,tooltip:'Optional independent Spline source slot B (1).'})
+    splineB:SplineContainer|null=null;
+    @property({type:SplineContainer,tooltip:'Optional independent Spline source slot C (2).'})
+    splineC:SplineContainer|null=null;
     @property({multiline:true,tooltip:'Versioned typed graph JSON v1/v2 (multi-output).'})
     graphJson=DEFAULT_GEOMETRY_GRAPH;
     /** Editor canvas coordinates only. Kept separate from graphJson so dragging
@@ -146,8 +150,9 @@ export class SplineGeometryGraphRenderer extends Component {
         return id;
     }
     private _runner=new GeometryGraphRunner();
-    private _frameRevision='';
-    private _frameCache:RoadFrame[]|null=null;
+    private _splineFrameCache=new Map<number,GeometryGraphSplineSource>();
+    private _splineIds=new WeakMap<SplineContainer,number>();
+    private _nextSplineId=0;
     public getMeshGizmoGeometry():MeshGizmoLines|null{return this._gizmo;}
     /** Material slot order for the currently committed generated Mesh only. */
     public getRenderedOutputIds():string[]{return this._renderedOutputIds.slice();}
@@ -163,18 +168,16 @@ export class SplineGeometryGraphRenderer extends Component {
         cold:GeometryGraphProfile;warm:GeometryGraphProfile;
         graphVersion:number;outputId:string;sampledFrames:number;
     }{
-        const source=this.source();
-        if(!source||source.count<2||source.segmentCount<1)
-            throw Error('Profile Graph requires an active SplineContainer with 2+ knots.');
-        const frameRevision=this.frameSignature();
-        if(!this._frameCache||this._frameRevision!==frameRevision)
-            this.rebuild();
         const plan=parseGeometryGraph(this.activeGraphJson());
+        const slots=this.splineSlots(plan);
+        if(slots.some(slot=>this._splineFrameCache.get(slot)?.revision!==this.frameSignature(slot)))
+            this.rebuild();
+        const frameContext=this.splineFrameContext(plan,this._splineFrameCache);
         const selected=this.renderAllOutputs?'':
             (typeof this.outputId==='string'?this.outputId.trim():'');
         const runner=new GeometryGraphRunner();
         runner.setProfilingEnabled(true);
-        const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
+        const context={...frameContext,
             worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
         runner.evaluate(plan,context,selected||undefined);
@@ -190,16 +193,83 @@ export class SplineGeometryGraphRenderer extends Component {
     private source():SplineContainer|null{
         return this.spline||this.getComponent(SplineContainer);
     }
-    private frameSignature():string {
-        const source=this.source();
+    private splineSlot(slot:number):SplineContainer|null{
+        return slot===0?this.source():slot===1?this.splineB:this.splineC;
+    }
+    private splineSlots(plan:GeometryGraphPlan):number[]{
+        return plan.nodes.filter(n=>n.type==='spline').map(n=>n.slot??0).sort((a,b)=>a-b);
+    }
+    private splineIdentity(source:SplineContainer|null):number|null{
+        if(!source)return null;
+        let id=this._splineIds.get(source);
+        if(id===undefined){id=++this._nextSplineId;this._splineIds.set(source,id);}
+        return id;
+    }
+    private frameSignature(slot:number):string {
+        const source=this.splineSlot(slot);
         const matrix=(m:Mat4|undefined)=>m?[
             m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,
             m.m08,m.m09,m.m10,m.m12,m.m13,m.m14,
         ]:null;
         return JSON.stringify([
-            source?.node?.uuid,source?.getRevision(),matrix(source?.node.worldMatrix),
+            this.splineIdentity(source),source?.node?.uuid,source?.getRevision(),source?.closed,
+            source?.enabled,source?.node?.isValid,source?.node?.activeInHierarchy,matrix(source?.node.worldMatrix),
             matrix(this.node?.worldMatrix),this.samplesPerCurve,
         ]);
+    }
+    /** Prepare only referenced sources. Cache entries are committed with the mesh. */
+    private prepareSplineFrames(plan:GeometryGraphPlan):Map<number,GeometryGraphSplineSource>{
+        const next=new Map<number,GeometryGraphSplineSource>();
+        for(const slot of this.splineSlots(plan)){
+            const source=this.splineSlot(slot);
+            if(!source||source.count<2||source.segmentCount<1||source.enabled===false||
+               source.node?.isValid===false||source.node?.activeInHierarchy===false)
+                throw Error('Geometry Graph requires an active SplineContainer (2+ knots) in slot '+slot+'.');
+            const revision=this.frameSignature(slot),cached=this._splineFrameCache.get(slot);
+            if(cached?.revision===revision){next.set(slot,cached);continue;}
+            const samples=Math.max(2,Math.min(64,Math.floor(this.samplesPerCurve)));
+            const count=Math.min(1024,Math.max(2,source.segmentCount*samples));
+            const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
+            // Use Road's stable World frames and convert POSITION + BASIS to this
+            // renderer's local space before passing any data to the pure graph.
+            const worldFrames=createWorldFrameField(source,0,1,count);
+            const basisToLocal=(world:Vec3,v:Vec3,local:Vec3):Vec3=>{
+                const tip=Vec3.add(new Vec3(),world,v);
+                Vec3.transformMat4(tip,tip,inverse);
+                return Vec3.subtract(new Vec3(),tip,local);
+            };
+            const frames:RoadFrame[]=[];
+            let previous:Vec3|null=null,distance=0;
+            for(const f of worldFrames.frames){
+                const world=new Vec3(f.position.x,f.position.y,f.position.z);
+                const local=Vec3.transformMat4(new Vec3(),world,inverse);
+                if(previous)distance+=Vec3.subtract(new Vec3(),world,previous).length();
+                previous=world;
+                frames.push({
+                    position:{x:local.x,y:local.y,z:local.z},
+                    forward:basisToLocal(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local),
+                    right:basisToLocal(world,new Vec3(f.right.x,f.right.y,f.right.z),local),
+                    up:basisToLocal(world,new Vec3(f.up.x,f.up.y,f.up.z),local),
+                    distance,
+                });
+            }
+            next.set(slot,{frames,closed:source.closed,revision});
+        }
+        return next;
+    }
+    private splineFrameContext(plan:GeometryGraphPlan,cache:Map<number,GeometryGraphSplineSource>):
+        Pick<GeometryGraphContext,'frames'|'closed'|'revision'|'splineSources'>{
+        const slots=this.splineSlots(plan);
+        const splineSources:Array<GeometryGraphSplineSource|undefined>=[];
+        for(const slot of slots){
+            const frame=cache.get(slot);
+            if(!frame)throw Error('Missing sampled Spline source slot '+slot+'.');
+            splineSources[slot]=frame;
+        }
+        // Preserve legacy required fields and existing profile sampledFrames
+        // report (first active slot), while Core consumes the explicit slots.
+        const primary=splineSources[slots[0]]!;
+        return {...primary,splineSources};
     }
     /** Renderer local->world linear basis (column-major), no translation.
      * Used only by Profile UV opted into uWorldSpace; frame distances are
@@ -336,7 +406,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const plan=parseGeometryGraph(json);
         const profiles=this.graphProfileContext(plan);
         const activeProfileRevisions=Object.entries(profiles.profileRevisions||{});
-        return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
+        return JSON.stringify([this.splineSlots(plan).map(slot=>[slot,this.frameSignature(slot)]),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
             this.renderAllOutputs?this.outputOrder:null,
             this.renderAllOutputs?this.autoBindImportedMaterials:null,
             assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan)]);
@@ -380,7 +450,7 @@ export class SplineGeometryGraphRenderer extends Component {
         }
     }
     onEnable():void {
-        if(this.source()?.count && this.source()!.count>=2){
+        if([this.source(),this.splineB,this.splineC].some(s=>s&&s.count>=2)){
             try{this.rebuild();}
             catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
         }
@@ -394,8 +464,7 @@ export class SplineGeometryGraphRenderer extends Component {
                 this._lastMaterialWarning=String(error);
             }
         }
-        const source=this.source();
-        if(!this.rebuildOnChange||!source||source.count<2)return;
+        if(!this.rebuildOnChange)return;
         let signature:string;
         try{signature=this.signature();}
         catch(error){return;}
@@ -408,45 +477,13 @@ export class SplineGeometryGraphRenderer extends Component {
      * the previously rendered mesh and its wireframe intact.
      */
     public rebuild():void{
-        const source=this.source(),renderer=this.getComponent(MeshRenderer);
-        if(!source||source.count<2||source.segmentCount<1||!renderer)
-            throw Error('Geometry Graph requires an active SplineContainer (2+ knots) and MeshRenderer.');
+        const renderer=this.getComponent(MeshRenderer);
+        if(!renderer)throw Error('Geometry Graph requires a MeshRenderer.');
         const plan=parseGeometryGraph(this.activeGraphJson());
-        const frameRevision=this.frameSignature();
-        let frames:RoadFrame[];
-        if(this._frameCache&&this._frameRevision===frameRevision){
-            frames=this._frameCache;
-        }else{
-            const samples=Math.max(2,Math.min(64,Math.floor(this.samplesPerCurve)));
-            const count=Math.min(1024,Math.max(2,source.segmentCount*samples));
-            const inverse=Mat4.invert(new Mat4(),this.node.worldMatrix);
-            // Use Road's stable World frames and convert POSITION + BASIS to this
-            // renderer's local space before passing any data to the pure graph.
-            const worldFrames=createWorldFrameField(source,0,1,count);
-            const basisToLocal=(world:Vec3,v:Vec3,local:Vec3):Vec3=>{
-                const tip=Vec3.add(new Vec3(),world,v);
-                Vec3.transformMat4(tip,tip,inverse);
-                return Vec3.subtract(new Vec3(),tip,local);
-            };
-            frames=[];
-            let previous:Vec3|null=null,distance=0;
-            for(const f of worldFrames.frames){
-                const world=new Vec3(f.position.x,f.position.y,f.position.z);
-                const local=Vec3.transformMat4(new Vec3(),world,inverse);
-                if(previous)distance+=Vec3.subtract(new Vec3(),world,previous).length();
-                previous=world;
-                frames.push({
-                    position:{x:local.x,y:local.y,z:local.z},
-                    forward:basisToLocal(world,new Vec3(f.tangent.x,f.tangent.y,f.tangent.z),local),
-                    right:basisToLocal(world,new Vec3(f.right.x,f.right.y,f.right.z),local),
-                    up:basisToLocal(world,new Vec3(f.up.x,f.up.y,f.up.z),local),
-                    distance,
-                });
-            }
-        }
+        const nextFrames=this.prepareSplineFrames(plan);
         const signature=this.signature();
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
-        const context={frames,closed:source.closed,revision:frameRevision,
+        const context={...this.splineFrameContext(plan,nextFrames),
             worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
@@ -512,7 +549,7 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         this._mesh=mesh;this._gizmo=wire;
         this._renderedOutputIds=outputIds;
-        this._frameCache=frames;this._frameRevision=frameRevision;
+        this._splineFrameCache=nextFrames;
         this._revision=signature;this._lastAttempt='';this._lastMaterialWarning='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
     }
@@ -529,6 +566,6 @@ export class SplineGeometryGraphRenderer extends Component {
         this._fallback?.destroy();this._fallback=null;
         this._boundMaterials=[];this._subMeshCount=1;
         this._autoSourceSlots=[];this._renderedOutputIds=[];this._lastMaterialWarning='';
-        this._runner.clear();this._frameCache=null;this._frameRevision='';
+        this._runner.clear();this._splineFrameCache.clear();
     }
 }

@@ -90,7 +90,7 @@ async function run(){
      frameBuilds++;
      const frames=Array.from({length:steps+1},(_,i)=>({
       t:i/steps,
-      position:{x:0,y:0,z:10*i/steps},
+      position:{x:source.testOffset??0,y:0,z:10*i/steps},
       tangent:{x:0,y:0,z:1},
       right:{x:1,y:0,z:0},
       up:{x:0,y:1,z:0},
@@ -787,6 +787,39 @@ async function run(){
    missSurface=false;conformRenderer.conformColliders=[target,target];
    assert.throws(()=>conformRenderer.rebuild(),/unique/i);
    assert.equal(conformOut.mesh,conformedMesh);
+   const multiNode=new Node('multi-spline'),multiOut=new MeshRenderer();
+   multiOut.node=multiNode;
+   const multiRenderer=new SplineGeometryGraphRenderer();multiRenderer.node=multiNode;
+   multiNode.components=[multiOut,multiRenderer];
+   let revB=1;
+   multiRenderer.spline={count:2,segmentCount:1,closed:false,node:new Node('slotA'),getRevision:()=> 'A1'};
+   multiRenderer.splineB={count:2,segmentCount:1,closed:false,node:new Node('slotB'),getRevision:()=>String(revB),testOffset:10};
+   multiRenderer.graphJson=JSON.stringify({version:2,output:'oa',nodes:[
+    {id:'sa',type:'spline'},{id:'ra',type:'ribbon',input:'sa',width:2},{id:'oa',type:'output',input:'ra'},
+    {id:'sb',type:'spline',slot:1},{id:'rb',type:'ribbon',input:'sb',width:2},{id:'ob',type:'output',input:'rb'}]});
+   multiRenderer.outputId='ob';
+   const beforeMulti=frameBuilds;
+   multiRenderer.rebuild();
+   assert.equal(frameBuilds,beforeMulti+2);
+   assert.equal(multiOut.mesh.data.positions[0],9);
+   multiRenderer.splineB.testOffset=20;revB++;
+   multiRenderer.rebuild();
+   assert.equal(frameBuilds,beforeMulti+3,'Only changed Spline B resamples');
+   assert.equal(multiOut.mesh.data.positions[0],19);
+   assert.deepEqual(multiRenderer.getGraphMetrics(),{computed:3,reused:3,nodes:6});
+   const oldMulti=multiOut.mesh,oldB=multiRenderer.splineB;
+   multiRenderer.splineB=null;
+   assert.throws(()=>multiRenderer.rebuild(),/slot 1/i);
+   assert.equal(multiOut.mesh,oldMulti);
+   multiRenderer.splineB=oldB;
+   multiRenderer.rebuild();
+   assert.equal(frameBuilds,beforeMulti+3);
+   multiRenderer.outputId='oa';multiRenderer.rebuild();
+   assert.equal(multiOut.mesh.data.positions[0],-1);
+   multiRenderer.renderAllOutputs=true;multiRenderer.rebuild();
+   assert.deepEqual(multiRenderer.getRenderedOutputIds(),['oa','ob']);
+   assert.equal(frameBuilds,beforeMulti+3);
+   multiRenderer.onDestroy();
    console.log('GEOMETRY GRAPH RENDERER V2 PASS: atomic generated Mesh replacement, frame cache, source immutability, live updates, Inspector and ownership.');
   }finally{
    Module._load=original;globalThis.Editor=previousEditor;

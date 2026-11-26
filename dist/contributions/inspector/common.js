@@ -32,7 +32,7 @@ const configs={
   geometryGraph:{title:'Procedural Geometry Graph · V1/V2',
     
     groups:[
-        {title:'Spline & graph asset source',fields:['spline','useGraphAsset','graphAsset','outputId','renderAllOutputs','outputOrder','sourceMesh','sourceSubMesh','sourceMeshB','sourceSubMeshB','sourceMeshC','sourceSubMeshC','samplesPerCurve']},
+        {title:'Spline & graph asset source',fields:['spline','splineB','splineC','useGraphAsset','graphAsset','outputId','renderAllOutputs','outputOrder','sourceMesh','sourceSubMesh','sourceMeshB','sourceSubMeshB','sourceMeshC','sourceSubMeshC','samplesPerCurve']},
         {title:'Local graph JSON & canvas layout',fields:['graphJson','graphLayoutJson']},
         {title:'Conform Path targets',fields:['conformColliders']},
         {title:'Authored Extrude Profile Assets',fields:['profileAssetA','profileAssetB','profileAssetC']},

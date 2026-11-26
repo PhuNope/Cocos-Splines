@@ -174,6 +174,29 @@ try{
   {targetIndex:0,distance:o.y+1,point:v(o.x,-1,o.z),normal:v(0,1,0)}]}};
  const seam=process([{type:'conform'}],cclosed);
  seam.positions.slice(0,6).forEach((x,k)=>near(x,seam.positions.at(-6+k)));
+ // Independent spline source slots retain per-branch revision and closed state.
+ const multiSpline={version:2,output:'oa',nodes:[
+  {id:'sa',type:'spline'},{id:'ra',type:'ribbon',input:'sa',width:2},{id:'oa',type:'output',input:'ra'},
+  {id:'sb',type:'spline',slot:1},{id:'rb',type:'ribbon',input:'sb',width:2},{id:'ob',type:'output',input:'rb'}]};
+ const mrunner=new GeometryGraphRunner(),mplan=compileGeometryGraph(multiSpline);
+ const shifted=frames.map(f=>({...f,position:v(10,f.position.y,f.position.z)}));
+ const slotB={frames:shifted,closed:false,revision:'B1'};
+ const multiCtx={...ctx,splineSources:[ctx,slotB]};
+ const multiResult=mrunner.evaluateOutputs(mplan,multiCtx);
+ near(multiResult.oa.positions[0],-1);near(multiResult.ob.positions[0],9);
+ assert.equal(mrunner.metrics.computed,6);
+ const changeB={...multiCtx,splineSources:[ctx,{...slotB,revision:'B2',frames:shifted.map(f=>({...f,position:v(20,0,f.position.z)}))}]};
+ const nextMulti=mrunner.evaluateOutputs(mplan,changeB);
+ near(nextMulti.ob.positions[0],19);
+ assert.deepEqual(nextMulti.oa,multiResult.oa);
+ assert.deepEqual(mrunner.metrics,{computed:3,reused:3,nodes:6});
+ assert.throws(()=>mrunner.evaluateOutputs(mplan,ctx),/missing Spline source slot 1/i);
+ assert.throws(()=>mrunner.evaluateOutputs(mplan,{...ctx,splineSources:[ctx,{...slotB,frames:[]}]}));
+ assert.deepEqual(mrunner.evaluateOutputs(mplan,changeB),nextMulti);
+ assert.equal(mrunner.metrics.reused,6);
+ for(const slot of [0,3,1.5,null])assert.throws(()=>compileGeometryGraph({...multiSpline,nodes:multiSpline.nodes.map(n=>n.id==='sb'?{...n,slot}:n)}));
+ const onlyB={version:1,output:'ob',nodes:multiSpline.nodes.slice(3)};
+ near(mrunner.evaluate(compileGeometryGraph(onlyB),multiCtx).positions[0],9);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},
