@@ -8,6 +8,7 @@ declare module 'cc' {
         executeInEditMode(x?:any):any;
         requireComponent(type:Function):ClassDecorator;
     };
+    export const CCBoolean: string;
     export function Enum<T>(type:T):T;
     export class Vec3 {
         x:number;y:number;z:number;

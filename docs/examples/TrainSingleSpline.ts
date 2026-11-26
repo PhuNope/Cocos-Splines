@@ -1,4 +1,4 @@
-import { _decorator, Component } from 'cc';
+import { _decorator, CCBoolean, Component } from 'cc';
 import { SplineAnimate } from 'db://cocos-splines/splines/Components/SplineAnimate';
 import { SplinePositioner } from 'db://cocos-splines/splines/Components/SplinePositioner';
 import { SplinePositionMode } from 'db://cocos-splines/splines/Core/SplinePosition';
@@ -11,7 +11,7 @@ export class TrainSingleSpline extends Component {
     @property({ type: SplineAnimate }) locomotive: SplineAnimate | null = null;
     @property({ type: [SplinePositioner] }) wagons: SplinePositioner[] = [];
     @property({ min: 0.01 }) centerSpacing = 3;
-    @property() wrapClosed = false;
+    @property({ type: CCBoolean }) wrapClosed: boolean = false;
 
     start(): void {
         for (const wagon of this.wagons) {

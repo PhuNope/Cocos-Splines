@@ -1,7 +1,7 @@
 'use strict';
 /** Installs project-owned examples only on explicit menu action.
- * Existing user edits and Cocos .meta UUIDs are preserved. The one exception
- * is a byte-identical old Gallery, safely upgraded in place.
+ * Existing user edits and Cocos .meta UUIDs are preserved. Only known,
+ * byte-identical older example scripts may be safely upgraded in place.
  */
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PRISTINE_GALLERY_BLOBS=new Set([
@@ -12,33 +12,39 @@ const PRISTINE_GALLERY_BLOBS=new Set([
  'b9cfb9cd36a5c9ebaa5d60f708a26e93fb37b02b', // UV Atlas 14-mode
  '99870b8af9ffc9899f21f6c84e3026e4bb0b5dcf', // Triangle UV 15-mode
 ]);
-/** Hash the exact bytes of the previously bundled Gallery; user-edited files
+const PRISTINE_SCRIPT_BLOBS=new Map([
+ ['ExampleGallery.ts',PRISTINE_GALLERY_BLOBS],
+ ['Train/TrainSingleSpline.ts',new Set(['edd3be59b98d47141cdb32c49d5f80a8b75eea97'])],
+ ['Train/TrainRouteConsist.ts',new Set(['f7cb7685267cc507857ee05f9d0eee23f06c9cf2'])],
+]);
+/** Hash the exact bytes of previously bundled scripts; user-edited files
  * must never be rewritten, and the existing Creator .meta UUID is preserved.
  */
 function gitBlobSha(buffer){
  const bytes=Buffer.isBuffer(buffer)?buffer:Buffer.from(buffer);
  return crypto.createHash('sha1').update('blob '+bytes.length+String.fromCharCode(0)).update(bytes).digest('hex');
 }
-function upgradePristineGallery(filesystem,target,source){
+function upgradePristineScript(filesystem,target,source,knownBlobs){
+ if(!knownBlobs)return false;
  const old=filesystem.readFileSync(target);
- if(!PRISTINE_GALLERY_BLOBS.has(gitBlobSha(old)))return false;
+ if(!knownBlobs.has(gitBlobSha(old)))return false;
  const data=filesystem.readFileSync(source);
  if(data.equals(old))return false;
  // Atomic replacement of ONLY the known pristine script, never its .meta.
  const temp=target+'.cocos-splines-update-'+process.pid;
- let fd;
+ let fd,ownsTemp=false;
  try{
-  fd=filesystem.openSync(temp,'wx',0o644);
+  fd=filesystem.openSync(temp,'wx',0o644);ownsTemp=true;
   filesystem.writeFileSync(fd,data);
   filesystem.closeSync(fd);fd=undefined;
   // Do not overwrite an edit made after the first read.
-  if(!PRISTINE_GALLERY_BLOBS.has(gitBlobSha(filesystem.readFileSync(target))))
+  if(!filesystem.readFileSync(target).equals(old))
    return false;
   filesystem.renameSync(temp,target);
   return true;
  }finally{
   if(fd!==undefined)filesystem.closeSync(fd);
-  if(filesystem.existsSync(temp))filesystem.unlinkSync(temp);
+  if(ownsTemp&&filesystem.existsSync(temp))filesystem.unlinkSync(temp);
  }
 }
 const FOLDER='CocosSplinesExamples';
@@ -131,8 +137,7 @@ function installSplineExamples({projectPath,extensionRoot=path.resolve(__dirname
      const st=filesystem.lstatSync(target);
      if(!st.isFile()||st.isSymbolicLink())
        throw Error('Unsafe example destination path: '+target);
-     if(relative==='ExampleGallery.ts'&&
-        upgradePristineGallery(filesystem,target,absolute)){
+     if(upgradePristineScript(filesystem,target,absolute,PRISTINE_SCRIPT_BLOBS.get(relative))){
        updated.push(relative);continue;
      }
      skipped.push(relative);continue;

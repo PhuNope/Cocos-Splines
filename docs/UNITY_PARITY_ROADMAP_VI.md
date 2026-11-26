@@ -415,3 +415,5 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Phase 2.23: whitelist-only Container appearance cloning (Gizmos visibility/color/density), source metadata in topology fingerprint, and per-copy counts of omitted extra components/children. No generic component cloning or source references.
 - [ ] Native 3.8.8 acceptance: verify recreated handle refs persist through save/reopen, Prefab overrides and Undo/Redo. Extra components and unrelated child nodes are not copied.
 - [ ] Phase 2.20 acceptance: Cocos Creator 3.8.8 Undo/Redo, Prefab overrides, Scene save/reopen; performance on 128 Knot closed splines.
+
+- [x] Native 3.8.8 feedback — Train example Boolean decorator metadata: explicit CCBoolean for wrapClosed, backwards, loopRoute, playOnStart; safe byte-exact installer upgrade preserving UUIDs and user edits; native verification pending.

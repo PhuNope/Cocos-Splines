@@ -2,7 +2,11 @@
 
 Installed from **Extension → Cocos Splines → Install Examples**.
 
-These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples **skips existing files**; it never replaces changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
+These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples skips existing files except known, byte-identical legacy Gallery and Train scripts. It never overwrites user changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
+
+## Cocos Creator 3.8.8 Train script fix
+
+Run Install Examples again to upgrade unmodified TrainSingleSpline.ts and TrainRouteConsist.ts in place. For customized copies, import `CCBoolean` from `cc` and use `@property({ type: CCBoolean })` on `wrapClosed`, `backwards`, `loopRoute` and `playOnStart`, preserving their defaults and existing `.meta` files.
 
 ## Quick start: 19 runnable examples
 

@@ -234,6 +234,45 @@ try {
  const untouched=installSplineExamples({projectPath:priorProject,extensionRoot:root});
  assert.equal(untouched.updated,0);
  assert(fs.readFileSync(previousPath,'utf8').includes('project edit'));
+ // Cocos 3.8.8 reported undefined type metadata for the four Boolean
+ // fields in the original Train scripts. Upgrade only exact legacy bytes.
+ const trainProject=path.join(temp,'Legacy Train Project');
+ const trainFolder=path.join(trainProject,'assets',EXAMPLE_FOLDER,'Train');
+ fs.mkdirSync(trainFolder,{recursive:true});
+ const scripts={
+  'TrainSingleSpline.ts':['wrapClosed'],
+  'TrainRouteConsist.ts':['backwards','loopRoute','playOnStart'],
+ };
+ const originalTrains={};
+ for(const [name,fields] of Object.entries(scripts)){
+  const current=fs.readFileSync(path.join(root,'docs/examples',name),'utf8');
+  assert.match(current,/import \{ _decorator, CCBoolean,/);
+  assert(!current.includes('@property()'));
+  for(const field of fields)
+   assert(current.includes('@property({ type: CCBoolean }) '+field+': boolean = '));
+  const old=current.replace(' _decorator, CCBoolean,',' _decorator,')
+   .replace(/@property\(\{ type: CCBoolean \}\) (\w+): boolean = /g,'@property() $1 = ');
+  originalTrains[name]=old;
+  fs.writeFileSync(path.join(trainFolder,name),old);
+  fs.writeFileSync(path.join(trainFolder,name+'.meta'),galleryMeta);
+ }
+ const trainUpgrade=installSplineExamples({projectPath:trainProject,extensionRoot:root});
+ assert.equal(trainUpgrade.updated,2);
+ assert.deepEqual(trainUpgrade.updatedFiles,['Train/TrainSingleSpline.ts','Train/TrainRouteConsist.ts']);
+ for(const name of Object.keys(scripts)){
+  assert.equal(fs.readFileSync(path.join(trainFolder,name),'utf8'),
+   fs.readFileSync(path.join(root,'docs/examples',name),'utf8'));
+  assert.equal(fs.readFileSync(path.join(trainFolder,name+'.meta'),'utf8'),galleryMeta);
+ }
+ assert.equal(installSplineExamples({projectPath:trainProject,extensionRoot:root}).updated,0);
+ // Modified scripts must never be overwritten, even if their decorators are old.
+ for(const name of Object.keys(scripts))
+  fs.writeFileSync(path.join(trainFolder,name),originalTrains[name]+'\n// user customization\n');
+ assert.equal(installSplineExamples({projectPath:trainProject,extensionRoot:root}).updated,0);
+ for(const name of Object.keys(scripts)){
+  assert(fs.readFileSync(path.join(trainFolder,name),'utf8').includes('// user customization'));
+  assert.equal(fs.readFileSync(path.join(trainFolder,name+'.meta'),'utf8'),galleryMeta);
+ }
  // Directories must never be allowed to escape via symlinks.
  fs.rmSync(path.join(first.folder,'Train'),{recursive:true,force:true});
  const outside=path.join(temp,'outside');fs.mkdirSync(outside);

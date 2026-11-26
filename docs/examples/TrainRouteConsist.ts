@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Quat } from 'cc';
+import { _decorator, CCBoolean, Component, Node, Quat } from 'cc';
 import { SplineContainer } from 'db://cocos-splines/splines/Core/SplineContainer';
 
 const { ccclass, property } = _decorator;
@@ -7,7 +7,7 @@ const { ccclass, property } = _decorator;
 @ccclass('TrainRouteLeg')
 export class TrainRouteLeg {
     @property({ type: SplineContainer }) spline: SplineContainer | null = null;
-    @property() backwards = false;
+    @property({ type: CCBoolean }) backwards: boolean = false;
 }
 
 /** Route spans several splines: every wagon samples the same route history. */
@@ -18,8 +18,8 @@ export class TrainRouteConsist extends Component {
     @property({ min: 0.01 }) centerSpacing = 3;
     @property({ min: 0 }) speed = 4;
     @property({ min: 0 }) startDistance = 12;
-    @property() loopRoute = false;
-    @property() playOnStart = true;
+    @property({ type: CCBoolean }) loopRoute: boolean = false;
+    @property({ type: CCBoolean }) playOnStart: boolean = true;
 
     private headDistance = 0;
     private playing = false;
