@@ -53,7 +53,8 @@ async function run(){
   assert.equal(dump.value.sourceMesh.value,null,'Attaching graph slot never replaces source asset');
   assert(ui.$.vgStage.innerHTML.includes('data-socket="mesh-in"'));
   select('meshAsset');
-  assert.match(ui.$.vgProperties.innerHTML,/Source Mesh is assigned on each Renderer/);
+  assert.match(ui.$.vgProperties.innerHTML,/data-graph-param="slot"/);
+  assert.doesNotMatch(ui.$.vgProperties.innerHTML,/Source Mesh is assigned on each Renderer/);
   select('deform');
   ui.$.vgDetachMesh.events.click();
   assert.equal(value().map.has('meshAsset'),false);

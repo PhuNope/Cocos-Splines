@@ -312,8 +312,7 @@ function render(panel){
     panel.$.vgProfile.disabled=busy||!!draft||!!panel._vgProfileBusy;
   if(panel.$?.vgProfileReport)
     panel.$.vgProfileReport.textContent=panel._vgProfile?
-      formatGeometryGraphProfile(panel._vgProfile):
-      'Run Profile CPU to measure individual graph nodes. No Scene or JsonAsset changes.';
+      formatGeometryGraphProfile(panel._vgProfile):'';
   if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=draft?
     'Shared JsonAsset · UNSAVED DRAFT. Graph edits are temporary; node layout stays locked.':
     panel._vgShared?

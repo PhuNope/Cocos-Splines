@@ -42,7 +42,8 @@ try{
  assert.match(ui.$.vgProperties.innerHTML,/data-graph-param="midMultiplier"/);
  assert.match(ui.$.vgProperties.innerHTML,/data-graph-param="endMultiplier"/);
  assert.match(ui.$.vgProperties.innerHTML,/data-graph-param="taperMode"/);
- assert.match(ui.$.vgProperties.innerHTML,/closed splines/);
+ assert.match(ui.$.vgProperties.innerHTML,/data-width-action="enable"/);
+ assert.doesNotMatch(ui.$.vgProperties.innerHTML,/closed splines/);
  const source=original;
  update('multiplier','2');
  update('midMultiplier','0.7');

@@ -51,7 +51,7 @@ async function run(){
   panel.ready.call(ui);panel.update.call(ui,dump);
   assert(ui.$.vgProfile);
   assert.equal(ui.$.vgProfile.disabled,false);
-  assert.match(ui.$.vgProfileReport.textContent,/Run Profile CPU/);
+  assert.equal(ui.$.vgProfileReport.textContent,'');
   ui.$.vgProfile.events.click();await tick();
   assert(calls.includes('profile-geometry-graph'));
   assert.match(ui.$.vgProfileReport.textContent,/Cold CPU: 3.000 ms/);
@@ -63,8 +63,8 @@ async function run(){
   assert.equal(writes.length,1,'Only intentional graph edit creates a native dump');
   assert.deepEqual(graph.parseGraph(ui._vgGraphJson).ordered.map(n=>n.type),
    ['spline','width','ribbon','output']);
-  assert.match(ui.$.vgProfileReport.textContent,/Run Profile CPU/,
-   'Graph edit invalidates stale diagnostic timings');
+  assert.equal(ui.$.vgProfileReport.textContent,'',
+   'Graph edit clears stale diagnostic timings');
   assert.equal(ui._vgProfile,null);
   invalid=true;
   ui.$.vgProfile.events.click();await tick();
