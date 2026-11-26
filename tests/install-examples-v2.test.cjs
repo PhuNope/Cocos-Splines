@@ -93,6 +93,10 @@ try {
  const multiProfile=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/MultiContourProfile.json'),'utf8'));
  assert.equal(multiProfile.outerContours.length,2);
+ const multiHollow=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/MultiHollowProfile.json'),'utf8'));
+ assert.equal(multiHollow.holes.length,1);
+ assert.deepEqual(multiHollow.outerHoles.map(list=>list.length),[1,1]);
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');

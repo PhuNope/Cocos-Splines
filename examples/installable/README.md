@@ -4,7 +4,7 @@ Installed from **Extension → Cocos Splines → Install Examples**.
 
 These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples **skips existing files**; it never replaces changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
 
-## Quick start: 18 runnable examples
+## Quick start: 19 runnable examples
 
 1. Make or open a **3D Scene** in Cocos Creator 3.8.x and save it.
 2. Once script compilation finishes, choose **Extension → Cocos Splines → Create Example Gallery in Scene**. The Editor creates a Node with **CocosSplinesExampleGalleryV2**; clicking again selects the same Node.
@@ -32,6 +32,7 @@ These are **project-owned scripts** (not linked to the extension package). You c
 | GeometryGraphAdvancedAtlas | Per-triangle UV Atlas with 90-degree rotation and 4 px gutter at 1024 × 1024. No JSON drag/drop required. |
 | GeometryGraphProfileHoles | Solid and two-hole Profile Extrude comparison with open interior channels and perforated end caps. No JSON drag/drop required. |
 | GeometryGraphMultiContour | One versus three disconnected solid contours along a spline. No JSON drag/drop required. |
+| GeometryGraphMultiHollow | Three solid versus three hollow contours, one hole in each. No JSON drag/drop required. |
 
 ### Geometry Graph Triangle UV — no JsonAsset setup required
 
@@ -66,6 +67,7 @@ These scripts demonstrate serialized-component workflows where you provide refer
 - **GeometryGraph/UVIslandExtrudeGraph.json** — optional Profile Extrude graph v1. Assign either **UVEdgeIslandProfile.json** or **UVQuadIslandProfile.json** to Profile Asset A. The first mode restarts U on every profile edge without topology change; the second restarts U/V per spline-side quad, duplicating only side UV vertices. Authored Profile Editor → Side UV islands edits unsaved draft; Save Profile JSON requires confirmation. See `docs/GEOMETRY_GRAPH_PROFILE_UV_ISLANDS_V2_VI.md`.
 - **GeometryGraph/Profiles/UVEdgeIslandProfile.json** — square authored Profile with `uv.sideIslandMode: 1`, normalized U in [0,1] for each side and continuously repeated V.
 - **GeometryGraph/Profiles/UVAtlasProfile.json** — opt-in UV0 atlas demo for authored Extrude with `uv.sideIslandMode: 2`, `uv.atlasPacking:true` and 6% per-cell padding. Assign it to Profile Asset A with `UVIslandExtrudeGraph.json`; use the Profile Inspector draft controls **Pack UV0 islands into atlas** / **Atlas padding**. Side quads and endcaps receive nonoverlapping UV0 rectangles in [0,1] with one global UV scale. Native image atlas baking/per-triangle unwrap are not included.
+- **GeometryGraph/Profiles/MultiHollowProfile.json** — three independent hollow profiles; run GeometryGraphMultiHollow in the Gallery.
 - **GeometryGraph/Profiles/MultiContourProfile.json** — three disconnected CCW exteriors. Choose Gallery GeometryGraphMultiContour and Play, or assign as Profile Asset A.
 - **GeometryGraph/Profiles/HollowProfile.json** — two clockwise interior contours inside a CCW exterior. Select Gallery `GeometryGraphProfileHoles` and Play, or assign the JSON to Profile Asset A of a persistent Geometry Graph renderer.
 - **GeometryGraph/Profiles/UVAdvancedAtlasProfile.json** — triangle UV Atlas with rotation enabled and a 4 px gutter at 1024 × 1024. Select Gallery `GeometryGraphAdvancedAtlas` and Play (no asset references required); optionally assign this Profile to UV Atlas Profile; or edit the asset on a persistent Geometry Graph Renderer. Pixel padding assumes a square texture of the declared resolution.
@@ -111,7 +113,7 @@ Install Examples **skips existing files** except a byte-for-byte pristine legacy
 
 If the Gallery script is customized, merge the new enum mode and handler manually. **Deleting a script referenced by saved Scenes** can break component references; do not remove and recreate a Gallery script merely to upgrade it.
 
-### Imported asset workflows (18-mode Gallery)
+### Imported asset workflows (19-mode Gallery)
 
 **Mesh Deformation**: Press Play in MeshDeform mode to see a procedural ribbon input mesh deformed along a curved spline. To test an imported rope/pipe model instead, create a SplineContainer and a Node with MeshRenderer + SplineMeshDeform, then attach `CocosSplinesMeshDeformExampleV2` and bind its three Inspector references. Enable **Allow Data Access** on the imported Mesh, and subdivide the mesh along its Z axis.
 

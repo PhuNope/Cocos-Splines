@@ -73,13 +73,58 @@ try{
  }
  const multiDraft=editor.formatProfile(multiProfile);
  assert.match(editor.renderProfileControls(multiDraft,0,null,3),/Outer 2/);
- const editExtra=editor.applyProfileEdit(multiDraft,'move',{contour:3,index:0,x:.62,y:.3});
+ const editExtra=editor.applyProfileEdit(multiDraft,'move',{contour:3,index:0,x:.96,y:-.3});
  assert.deepEqual(editor.parseProfile(editExtra).points,outer);
  assert.deepEqual(editor.parseProfile(editExtra).holes,holes);
- assert.equal(editor.parseProfile(editExtra).outerContours[0][0].x,.62);
+ assert.equal(editor.parseProfile(editExtra).outerContours[0][0].x,.96);
  assert.equal(editor.applyProfileEdit(multiDraft,'remove-outer',{part:0}),editor.formatProfile(profile));
  const addOuter=editor.applyProfileEdit(editor.formatProfile(profile),'add-outer');
  assert.equal(editor.parseProfile(addOuter).outerContours.length,1);
+ const extraHole=rect(.72,-.15,.88,.15);
+ const allHollow={...multiProfile,outerHoles:[[extraHole]]};
+ assert.deepEqual(parseGraphProfileAsset(allHollow),allHollow);
+ assert.deepEqual(editor.parseProfile(allHollow),allHollow);
+ const hollowOpts={...multiOpts,profileOuterHoles:[[extraHole]]};
+ const allMesh=buildProfileExtrudeGeometry(frames,hollowOpts,false);
+ assert.equal(allMesh.bands,20);
+ const allSide=20*2*6;
+ assert.equal(allMesh.indices.length,allSide+2*(14+8)*3);
+ let allArea=0;
+ for(let t=allSide;t<allMesh.indices.length;t+=3){
+  const [a,b,c]=allMesh.indices.slice(t,t+3).map(i=>allMesh.positions.slice(i*3,i*3+3));
+  assert([a,b,c].every(p=>p[0]<=1)||[a,b,c].every(p=>p[0]>=1.3-1e-8));
+  const signed=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+  assert.equal(Math.sign(signed),a[2]===0?-1:1);
+  allArea+=Math.abs(signed)/2;
+  const x=(a[0]+b[0]+c[0])/6,y=(a[1]+b[1]+c[1])/3;
+  assert(!extraHole.some(()=>x>.72&&x<.88&&y>-.15&&y<.15));
+ }
+ near(allArea,4*(1-2*.3*.6+.3*.6-.16*.3));
+ for(const mode of [0,1,2]){
+  const packed=buildProfileExtrudeGeometry(frames,{...hollowOpts,profileUV:{sideIslandMode:mode,atlasPacking:true,atlasRotate:true,atlasPixelPadding:{resolution:1024,pixels:2}}},false);
+  const plain=buildProfileExtrudeGeometry(frames,{...hollowOpts,profileUV:{sideIslandMode:mode}},false);
+  assert.deepEqual(packed.positions,plain.positions);
+  assert.deepEqual(packed.normals,plain.normals);
+  assert.deepEqual(packed.indices,plain.indices);
+  assert(packed.uvs.every(x=>x>=0&&x<=1));
+ }
+ const splitHollow=buildProfileExtrudeGeometry(frames,{...hollowOpts,profileUV:{triangleUnwrap:true,atlasPacking:true}},false);
+ assert.equal(splitHollow.positions.length/3,allMesh.indices.length);
+ assert.equal(buildProfileExtrudeGeometry(frames,hollowOpts,true).indices.length,allSide);
+ for(const bad of [[],[[],[]],[[holes[0]]],[[extraHole.slice().reverse()]],[[extraHole,extraHole]],[[rect(.65,-.15,.8,.15)]],[[extraHole,extraHole,extraHole,extraHole]]]){
+  assert.throws(()=>parseGraphProfileAsset({...multiProfile,outerHoles:bad}),/Graph Profile Asset/);
+  assert.throws(()=>editor.parseProfile({...multiProfile,outerHoles:bad}),/Profile/);
+ }
+ const allDraft=editor.formatProfile(allHollow);
+ assert.match(editor.renderProfileControls(allDraft,0,null,4),/Outer 2 \/ Hole 1/);
+ const extraMoved=editor.applyProfileEdit(allDraft,'move',{contour:4,index:0,x:.71,y:-.15});
+ assert.deepEqual(editor.parseProfile(extraMoved).holes,holes);
+ assert.equal(editor.parseProfile(extraMoved).outerHoles[0][0][0].x,.71);
+ assert.equal(editor.applyProfileEdit(allDraft,'remove-outer',{part:0}),editor.formatProfile(profile));
+ assert.equal(editor.applyProfileEdit(allDraft,'remove-hole',{owner:1,hole:0}),multiDraft);
+ const addedExtraHole=editor.applyProfileEdit(multiDraft,'add-hole',{owner:1});
+ assert.equal(editor.parseProfile(addedExtraHole).outerHoles[0].length,1);
+ assert.deepEqual(editor.parseProfile(addedExtraHole).holes,holes);
  const original=JSON.stringify(profile);
  const removed=editor.applyProfileEdit(edited,'set-holes',{holes:[]});
  assert.equal(editor.parseProfile(removed).holes,undefined);
@@ -138,5 +183,7 @@ try{
  assert.equal(changed.output.bands,8);
  const multiOutput=runner.evaluateOutputs(plan,{...ctx,profileOuterContours:[[extra]],profileRevisions:['multi-outer']});
  assert.equal(multiOutput.output.bands,16);
+ const hollowOutput=runner.evaluateOutputs(plan,{...ctx,profileOuterContours:[[extra]],profileOuterHoles:[[[extraHole]]],profileRevisions:['multi-hollow']});
+ assert.equal(hollowOutput.output.bands,20);
  console.log('PROFILE HOLES V2 PASS: two contained CW contours, cap area, inner walls, UV modes, invalid topology, renderer graph context and draft parity.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

@@ -5,11 +5,11 @@ const MAX_POINTS=16;
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 function parseProfile(value){
  if(typeof value==='string'){
-  if(value.length<2||value.length>8192)throw Error('Profile JSON must be <= 8 KiB.');
+  if(value.length<2||value.length>32768)throw Error('Profile JSON must be <= 32 KiB.');
   try{value=JSON.parse(value);}catch{throw Error('Invalid Profile JSON syntax.');}
  }
  if(!value||typeof value!=='object'||Array.isArray(value)||
-    Object.keys(value).some(k=>!['format','version','points','holes','outerContours','uv'].includes(k))||
+    Object.keys(value).some(k=>!['format','version','points','holes','outerContours','outerHoles','uv'].includes(k))||
     value.format!==FORMAT||value.version!==1||!Array.isArray(value.points)||
     value.points.length<3||value.points.length>MAX_POINTS)
   throw Error('Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
@@ -49,30 +49,27 @@ function parseProfile(value){
   throw Error(hole?'Profile hole must be clockwise (CW).':'Profile polygon must be counter-clockwise (CCW).');
  };
  validateRing(points);
- let holes;
- if(Object.prototype.hasOwnProperty.call(value,'holes')){
-  if(!Array.isArray(value.holes)||value.holes.length<1||value.holes.length>3)
-   throw Error('Profile holes requires 1–3 clockwise contours.');
-  holes=value.holes.map(loop=>{
+ const inside=(p,ring)=>{
+  let result=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+   const a=ring[j],b=ring[i];
+   if(on(a,b,p))return false;
+   if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)result=!result;
+  }
+  return result;
+ };
+ const readHoles=(list,outer,allowEmpty=false)=>{
+  if(!Array.isArray(list)||(!allowEmpty&&list.length===0)||list.length>3)
+   throw Error('Profile holes requires up to three clockwise contours.');
+  const holes=list.map(loop=>{
    if(!Array.isArray(loop)||loop.length<3||loop.length>MAX_POINTS)
     throw Error('Profile hole requires 3–16 points.');
    const ring=loop.map(readPoint);validateRing(ring,true);return ring;
   });
-  const inside=(p,ring)=>{
-   let result=false;
-   for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-    const a=ring[j],b=ring[i];
-    if(on(a,b,p))return false;
-    if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)
-     result=!result;
-   }
-   return result;
-  };
-  const rings=[points,...holes];
+  const rings=[outer,...holes];
   for(let i=1;i<rings.length;i++){
    const ring=rings[i];
-   if(!ring.every(p=>inside(p,points)))
-    throw Error('Profile hole must be strictly inside outer contour.');
+   if(!ring.every(p=>inside(p,outer)))throw Error('Profile hole must be strictly inside outer contour.');
    for(let j=0;j<i;j++){
     const other=rings[j];
     for(let a=0;a<ring.length;a++)for(let b=0;b<other.length;b++)
@@ -82,7 +79,9 @@ function parseProfile(value){
      throw Error('Profile holes overlap or are nested.');
    }
   }
- }
+  return holes;
+ };
+ const holes=Object.prototype.hasOwnProperty.call(value,'holes')?readHoles(value.holes,points):undefined;
  let outerContours;
  if(Object.prototype.hasOwnProperty.call(value,'outerContours')){
   if(!Array.isArray(value.outerContours)||value.outerContours.length<1||value.outerContours.length>3)
@@ -92,15 +91,6 @@ function parseProfile(value){
     throw Error('Profile outer contour requires 3–16 points.');
    const ring=loop.map(readPoint);validateRing(ring);return ring;
   });
-  const inside=(p,ring)=>{
-   let result=false;
-   for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-    const a=ring[j],b=ring[i];
-    if(on(a,b,p))return false;
-    if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)result=!result;
-   }
-   return result;
-  };
   const outers=[points,...outerContours];
   for(let i=1;i<outers.length;i++)for(let j=0;j<i;j++){
    const a=outers[i],b=outers[j];
@@ -109,7 +99,13 @@ function parseProfile(value){
     throw Error('Profile outer contours must be disjoint and not nested.');
   }
  }
- const contours={...(holes?{holes}:{}),...(outerContours?{outerContours}:{})};
+ let outerHoles;
+ if(Object.prototype.hasOwnProperty.call(value,'outerHoles')){
+  if(!outerContours||!Array.isArray(value.outerHoles)||value.outerHoles.length!==outerContours.length)
+   throw Error('Profile outerHoles must align with outerContours.');
+  outerHoles=value.outerHoles.map((list,i)=>readHoles(list,outerContours[i],true));
+ }
+ const contours={...(holes?{holes}:{}),...(outerContours?{outerContours}:{}),...(outerHoles?{outerHoles}:{})};
  if(!Object.prototype.hasOwnProperty.call(value,'uv'))
   return {format:FORMAT,version:1,points,...contours};
  const raw=value.uv;
@@ -186,7 +182,25 @@ function parseProfile(value){
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
-const getProfileContours=profile=>[profile.points,...(profile.holes??[]),...(profile.outerContours??[])];
+// Preserve previous selector indices: main, main holes, extra exteriors,
+ // then their holes. Each entry names its owning solid explicitly.
+const getProfileContourEntries=profile=>[
+ {ring:profile.points,owner:0,hole:null},
+ ...(profile.holes??[]).map((ring,hole)=>({ring,owner:0,hole})),
+ ...(profile.outerContours??[]).map((ring,i)=>({ring,owner:i+1,hole:null})),
+ ...(profile.outerHoles??[]).flatMap((list,i)=>list.map((ring,hole)=>({ring,owner:i+1,hole}))),
+];
+const getProfileContours=profile=>getProfileContourEntries(profile).map(e=>e.ring);
+const ownerHoles=(profile,owner)=>owner===0?(profile.holes??[]):(profile.outerHoles?.[owner-1]??[]);
+function setOwnerHoles(profile,owner,list){
+ if(owner===0){
+  if(list.length)profile.holes=list;else delete profile.holes;
+ }else{
+  profile.outerHoles=profile.outerHoles??profile.outerContours.map(()=>[]);
+  profile.outerHoles[owner-1]=list;
+  if(profile.outerHoles.every(r=>!r.length))delete profile.outerHoles;
+ }
+}
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),index=Number(params.index);
  const geometryActions=['move','move-edge','insert','insert-edge','remove'];
@@ -195,7 +209,7 @@ function applyProfileEdit(value,action,params={}){
  if(!Number.isInteger(contour)||contour<0||contour>=rings.length)
   throw Error('Select a valid contour.');
  const p=rings[contour];
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole','set-outer-contours','add-outer','remove-outer'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole','set-outer-contours','add-outer','remove-outer','set-outer-holes'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -218,7 +232,10 @@ function applyProfileEdit(value,action,params={}){
  };
  if(action==='add-hole'||action==='add-outer'){
   const key=action==='add-hole'?'holes':'outerContours';
-  if((profile[key]?.length??0)>=3)throw Error(key==='holes'?'Profile supports up to three holes.':'Profile supports up to three additional outer contours.');
+  const owner=params.owner??0;
+  if(!Number.isInteger(owner)||owner<0||owner>(profile.outerContours?.length??0))throw Error('Select a valid outer contour.');
+  const existing=key==='holes'?ownerHoles(profile,owner):(profile.outerContours??[]);
+  if(existing.length>=3)throw Error(key==='holes'?'Profile supports up to three holes.':'Profile supports up to three additional outer contours.');
   // Find a valid small CW square, preferring the center and larger sizes.
   // Each candidate passes the same containment/intersection validation.
   const centers=[];
@@ -232,26 +249,46 @@ function applyProfileEdit(value,action,params={}){
      {x:round(x+radius),y:round(y+radius)},
      {x:round(x+radius),y:round(y-radius)}];
     if(key==='outerContours')ring.reverse();
-    try{return formatProfile({...profile,[key]:[...(profile[key]??[]),ring]});}
+    try{
+     const candidate=parseProfile(profile);
+     if(key==='holes')setOwnerHoles(candidate,owner,[...existing,ring]);
+     else{
+      candidate.outerContours=[...existing,ring];
+      if(candidate.outerHoles)candidate.outerHoles.push([]);
+     }
+     return formatProfile(candidate);
+    }
     catch{/* Try another location. */}
    }
   }
   throw Error('No room for a new contour. Adjust the profile.');
  }else if(action==='remove-hole'){
-  const hole=params.hole;
-  if(!Number.isInteger(hole)||hole<0||hole>=(profile.holes?.length??0))
-   throw Error('Select a hole to remove.');
-  profile.holes.splice(hole,1);
-  if(!profile.holes.length)delete profile.holes;
+  const hole=params.hole,owner=params.owner??0;
+  if(!Number.isInteger(owner)||owner<0||owner>(profile.outerContours?.length??0))throw Error('Select a valid outer contour.');
+  const list=ownerHoles(profile,owner);
+  if(!Number.isInteger(hole)||hole<0||hole>=list.length)throw Error('Select a hole to remove.');
+  list.splice(hole,1);setOwnerHoles(profile,owner,list);
  }else if(action==='remove-outer'){
   const part=params.part;
   if(!Number.isInteger(part)||part<0||part>=(profile.outerContours?.length??0))throw Error('Select an additional outer contour.');
   profile.outerContours.splice(part,1);
+  if(profile.outerHoles){
+   profile.outerHoles.splice(part,1);
+   if(profile.outerHoles.every(r=>!r.length))delete profile.outerHoles;
+  }
   if(!profile.outerContours.length)delete profile.outerContours;
  }else if(action==='set-outer-contours'){
   if(!Array.isArray(params.outerContours))throw Error('Profile outerContours must be an array.');
-  if(params.outerContours.length===0)delete profile.outerContours;
-  else profile.outerContours=params.outerContours;
+  if(params.outerContours.length===0){delete profile.outerContours;delete profile.outerHoles;}
+  else{
+   if(profile.outerHoles&&params.outerContours.length!==profile.outerContours.length)
+    throw Error('Use Add/Remove outer to preserve hole ownership.');
+   profile.outerContours=params.outerContours;
+  }
+ }else if(action==='set-outer-holes'){
+  if(!Array.isArray(params.outerHoles))throw Error('Profile outerHoles must be an array.');
+  if(params.outerHoles.length===0)delete profile.outerHoles;
+  else profile.outerHoles=params.outerHoles;
  }else if(action==='set-holes'){
   if(!Array.isArray(params.holes))throw Error('Profile holes must be an array.');
   if(params.holes.length===0)delete profile.holes;
@@ -403,9 +440,10 @@ function applyProfileEdit(value,action,params={}){
 function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
  const profile=parseProfile(value);
  const rings=getProfileContours(profile);
- const holeCount=profile.holes?.length??0,outerCount=profile.outerContours?.length??0;
+ const entries=getProfileContourEntries(profile),outerCount=profile.outerContours?.length??0;
  if(!Number.isInteger(contour)||contour<0||contour>=rings.length)contour=0;
  const points=rings[contour],pt=points[selected]||points[0];
+ const entry=entries[contour],holeCount=ownerHoles(profile,entry.owner).length;
  const map=point=>String(round(120+point.x*104))+','+String(round(120-point.y*104));
  const polygon=profile.points.map(map).join(' ');
  // Wider invisible line targets enable selecting/dragging an entire edge.
@@ -435,16 +473,16 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   '<path d="M120 0 V240 M0 120 H240" stroke="#345365" fill="none"/>'+
   '<polygon points="'+polygon+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>'+
   (profile.outerContours??[]).map(ring=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>').join('')+
-  (profile.holes??[]).map(ring=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#142a37" stroke="#f3bb78" stroke-width="2"/>').join('')+
+  entries.filter(e=>e.hole!==null).map(({ring})=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#142a37" stroke="#f3bb78" stroke-width="2"/>').join('')+
   edges+circles+'</svg>';
  return '<div class="spl-vg-toolbar"><label>Contour <select class="spl-profile-contour">'+
   rings.map((ring,i)=>'<option value="'+i+'"'+(i===contour?' selected':'')+'>'+
-   (i===0?'Outer 1':i<=holeCount?'Hole '+i:'Outer '+(i-holeCount+1))+'</option>').join('')+'</select></label>'+
+   (entries[i].hole===null?'Outer '+(entries[i].owner+1):entries[i].owner===0?'Hole '+(entries[i].hole+1):'Outer '+(entries[i].owner+1)+' / Hole '+(entries[i].hole+1))+'</option>').join('')+'</select></label>'+
   '<button type="button" class="spl-btn spl-profile-add-hole"'+(holeCount>=3?' disabled':'')+'>Add hole</button>'+
-  '<button type="button" class="spl-btn spl-profile-remove-hole"'+(contour===0||contour>holeCount?' disabled':'')+'>Remove hole</button>'+
+  '<button type="button" class="spl-btn spl-profile-remove-hole"'+(entry.hole===null?' disabled':'')+'>Remove hole</button>'+
   '<button type="button" class="spl-btn spl-profile-add-outer"'+(outerCount>=3?' disabled':'')+'>Add outer</button>'+
-  '<button type="button" class="spl-btn spl-profile-remove-outer"'+(contour<=holeCount?' disabled':'')+'>Remove outer</button></div>'+
-  '<div class="spl-profile-count">'+points.length+(contour>0&&contour<=holeCount?' CW':' CCW')+' points · selected #'+(selected+1)+
+  '<button type="button" class="spl-btn spl-profile-remove-outer"'+(entry.owner===0||entry.hole!==null?' disabled':'')+'>Remove outer</button></div>'+
+  '<div class="spl-profile-count">'+points.length+(entry.hole!==null?' CW':' CCW')+' points · selected #'+(selected+1)+
   (selectedEdge===null?'':' · edge #'+(selectedEdge+1)+' selected')+'</div>'+
   svg+'<div class="spl-profile-coordinates">'+
   '<label>X <input type="number" class="spl-profile-x" min="-1" max="1" step="0.01" value="'+pt.x+'"></label>'+
@@ -456,10 +494,11 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
    '>Insert at selected edge</button>'+
   '<button type="button" class="spl-btn spl-profile-remove"'+(points.length<=3?' disabled':'')+
   '>Remove selected point</button></div>'+
-  '<div class="spl-vg-toolbar"><label>Inner contours ('+(profile.holes?.length??0)+')</label></div>'+
+  '<div class="spl-vg-toolbar"><label>Inner contours ('+holeCount+')</label></div>'+
   '<details><summary>Hole JSON</summary><textarea class="spl-profile-holes" rows="3" style="width:100%;box-sizing:border-box" aria-label="Clockwise hole contours JSON">'+
   JSON.stringify(profile.holes??[])+'</textarea></details>'+
   '<details><summary>Outer contours JSON</summary><textarea class="spl-profile-outer-contours" rows="3" style="width:100%;box-sizing:border-box">'+JSON.stringify(profile.outerContours??[])+'</textarea></details>'+
+  (outerCount?'<details><summary>Additional hole JSON</summary><textarea class="spl-profile-outer-holes" rows="3" style="width:100%;box-sizing:border-box">'+JSON.stringify(profile.outerHoles??[])+'</textarea></details>':'')+
   '<div class="spl-profile-uv-controls">'+
   '<div class="spl-profile-uv-info">UV0 side bands · '+
    (profile.uv===undefined?'Default perimeter mapping':
@@ -532,4 +571,4 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   '<button type="button" class="spl-btn spl-profile-reset-uv"'+
    (profile.uv===undefined?' disabled':'')+'>Reset UV mapping</button></div></div>';
 }
-module.exports={FORMAT,MAX_POINTS,getProfileContours,parseProfile,formatProfile,applyProfileEdit,renderProfileControls};
+module.exports={FORMAT,MAX_POINTS,getProfileContours,getProfileContourEntries,parseProfile,formatProfile,applyProfileEdit,renderProfileControls};

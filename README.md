@@ -41,7 +41,7 @@ Authored Profile JsonAssets can now opt in with `uv.uWorldSpace: true` plus `uv.
 
 ### Disconnected outer contours — v2 preview
 
-Authored Profile JSON accepts optional `outerContours` (1–3 additional disjoint CCW solids). The Extrude creates separate side walls and caps, with separate cap UV atlas islands. The primary outer can retain its existing holes. Use the Contour selector and Add outer/Remove outer, or select Gallery `GeometryGraphMultiContour` and Play. See [profile contours guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).
+Authored Profile JSON accepts optional `outerContours` (1–3 additional disjoint CCW solids). The Extrude creates separate side walls and caps, with separate cap UV atlas islands. Each outer can contain up to three independent CW holes via `holes` (primary) and aligned `outerHoles` (additional). Select an outer or its hole before Add hole; the new hole belongs to that outer. `GeometryGraphMultiHollow` compares solid and hollow contours. Use the Contour selector and Add outer/Remove outer, or select Gallery `GeometryGraphMultiContour` and Play. See [profile contours guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).
 
 ### Profile Extrude with polygon holes — v2 preview
 
