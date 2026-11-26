@@ -24,7 +24,7 @@ export class SplineKnot extends Component {
     tangentOut:Vec3=new Vec3(1,0,0);
     @property({min:0,step:0.05, tooltip:'AutoSmooth tension; Unity default = 1/3'})
     tension=1/3;
-    @property({tooltip:'Unity-compatible knot-local tangents. Off by default to retain the transform behavior of v0.2 scenes.'})
+    @property({tooltip:'Unity-compatible knot-local tangents.'})
     tangentsInKnotSpace=false;
     /** Optional handle nodes (direct children of this knot). Their local positions override the vector fields. */
     @property({type:Node})
@@ -37,7 +37,7 @@ export class SplineKnot extends Component {
      * handle Nodes or alter the actual Bezier curve.
      * When disabled, selecting this knot still draws both tangents.
      */
-    @property({tooltip:'Only for knots with tangent handle Nodes: keep curve + tangents visible while editing (even if Container gizmos are off).'})
+    @property({tooltip:'Only for knots with tangent handle Nodes: keep curve + tangents visible while editing.'})
     editTangentHandles=false;
     public get hasTangentHandles():boolean {
         return !!((this.tangentInHandle&&this.tangentInHandle.isValid)||

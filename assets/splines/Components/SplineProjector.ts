@@ -25,11 +25,11 @@ export class SplineProjector extends Component {
     @property({type:Node,tooltip:'Optional separate marker to snap to the nearest spline point.'}) projectedNode:Node|null=null;
     @property({min:16,max:1024,step:1,tooltip:'Coarse samples in WORLD space; refined near candidates. Increase for long looping curves.'}) samples=128;
     @property({tooltip:'Continuously measure nearest point each frame. Call projectNow() manually otherwise.'}) autoProject=true;
-    @property({tooltip:'Place Projected Node at closest point (or component node if Projected Node is empty). Source Node is not moved unless same as target.'}) snapToSpline=false;
+    @property({tooltip:'Place Projected Node at closest point (or component node if Projected Node is empty).'}) snapToSpline=false;
     @property({tooltip:'Align the projected target along the nearest tangent.'}) alignToSpline=false;
     @property({type:Vec3,tooltip:'Offset relative to spline frame X(right) Y(up) Z(forward).'}) splineOffset=new Vec3();
     @property({min:0,tooltip:'When > 0, On Enter/On Exit fires as source enters/leaves this world-space radius.'}) enterExitRadius=0;
-    @property({tooltip:'Fire On Project and node.emit(\'spline-project\') for each gameplay evaluation. Off by default.'}) notifyOnProject=false;
+    @property({tooltip:'Fire On Project and node.emit(\\'spline-project\\') for each gameplay evaluation. Off by default.'}) notifyOnProject=false;
     @property({type:[EventHandler]}) onProject:EventHandler[]=[];
     @property({type:[EventHandler]}) onEnter:EventHandler[]=[];
     @property({type:[EventHandler]}) onExit:EventHandler[]=[];

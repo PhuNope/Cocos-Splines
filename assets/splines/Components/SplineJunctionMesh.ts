@@ -28,13 +28,13 @@ export class SplineJunctionMesh extends Component {
     @property({min:0.05,tooltip:'Fallback when no SplineRoad is found under branch container.'}) defaultWidth=6;
     @property({min:0.0001,tooltip:'Lift patch slightly to avoid z-fighting with road ends.'}) surfaceLift=0.015;
     @property({min:0.001,tooltip:'World units per texture repeat (World Projected mode only).'}) uvMetersPerRepeat=5;
-    @property({type:Enum(JunctionUVMode),tooltip:'World Projected: original XZ UV; Road Matched: copy UV from actual Road asphalt vertices at both patch rings and blend only near the junction center.'})
+    @property({type:Enum(JunctionUVMode),tooltip:'World Projected: original XZ UV.'})
     uvMode:JunctionUVMode=JunctionUVMode.WorldProjected;
-    @property({range:[.1,.9,.05],slide:true,tooltip:'Road Matched: fraction of patch radius with Road UV preserved at the inner ring. Lower value means a smaller central blending region.'})
+    @property({range:[.1,.9,.05],slide:true,tooltip:'Road Matched: fraction of patch radius with Road UV preserved at the inner ring.'})
     uvBlendStart=.55;
     @property({min:0.01,tooltip:'All connection points must lie close to same location.'}) tolerance=0.5;
     @property rebuildOnChange=true;
-    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected.'}) showMeshGizmos=true;
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private generated:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;

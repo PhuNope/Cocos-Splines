@@ -26,12 +26,12 @@ export class SplineJunctionLink {
     /** Opt-in admission gate. 0 = unlimited (backward-compatible).
      * Counts followers admitted through this exit, not all objects on spline.
      */
-    @property({min:0,step:1,tooltip:'Traffic capacity for this destination link. 0 = unlimited. Enforced only for SplineAnimate followers with Enable Traffic Capacity.'})
+    @property({min:0,step:1,tooltip:'Traffic capacity for this destination link.'})
     maxFollowers=0;
-    @property({type:Enum(JunctionTrafficSignal),tooltip:'Green (default): admit opted-in followers. Yellow and Red: block/queue new admission, even with Max Followers = 0. Controller or manual junction.setTrafficSignal(index, state).'})
+    @property({type:Enum(JunctionTrafficSignal),tooltip:'Green (default): admit opted-in followers.'})
     trafficSignal:JunctionTrafficSignal=JunctionTrafficSignal.Green;
     public getProgress():number{return this.spline?toNormalizedDistance(this.spline,this.positionMode,this.progress,this.distance):0;}
-    @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination. Preserve: keep incoming travel direction; Forward: increase destination progress (0 toward 1); Backward: decrease destination progress (1 toward 0). It does not choose a branch.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
+    @property({type:Enum(JunctionExitDirection),tooltip:'Applied when this link is chosen as destination.'}) exitDirection:JunctionExitDirection=JunctionExitDirection.Preserve;
 }
 
 export interface JunctionEvent {

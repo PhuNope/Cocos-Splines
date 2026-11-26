@@ -28,14 +28,14 @@ const {ccclass,property,menu,executeInEditMode,requireComponent}=_decorator;
 export class SplineGeometryGraphRenderer extends Component {
     @property({type:SplineContainer,tooltip:'Source spline. Never modified by graph execution.'})
     spline:SplineContainer|null=null;
-    @property({multiline:true,tooltip:'Versioned typed graph JSON v1/v2 (multi-output). Supported: spline, offset, width, ribbon, tube, extrude, meshDeform, output.'})
+    @property({multiline:true,tooltip:'Versioned typed graph JSON v1/v2 (multi-output).'})
     graphJson=DEFAULT_GEOMETRY_GRAPH;
     /** Editor canvas coordinates only. Kept separate from graphJson so dragging
      * cards never invalidates the geometry/frame cache. Serialized with Scene.
      */
     @property({tooltip:'Visual Graph layout only (positions JSON); does not change generated geometry.'})
     graphLayoutJson='{}';
-    @property({tooltip:'Opt-in: use a shared Cocos JsonAsset graph instead of local graphJson. Asset is never modified by this renderer.'})
+    @property({tooltip:'Opt-in: use a shared Cocos JsonAsset graph instead of local graphJson.'})
     useGraphAsset=false;
     @property({type:JsonAsset,tooltip:'Drag a .json graph from Assets. Shared and read-only for all referencing renderers.'})
     graphAsset:JsonAsset|null=null;
@@ -50,15 +50,15 @@ export class SplineGeometryGraphRenderer extends Component {
      * Material order defaults to lexicographically sorted Output IDs.
      * A renderer-local Output Order override can change the mapping.
      */
-    @property({tooltip:'V2 only: render all 2–4 graph outputs as material submeshes in one MeshRenderer. Output ID is ignored in this mode.'})
+    @property({tooltip:'V2 only: render all 2–4 graph outputs as material submeshes in one MeshRenderer.'})
     renderAllOutputs=false;
     /** Optional per-renderer permutation; never writes shared JsonAsset. */
-    @property({tooltip:'Render All Outputs: comma-separated Output Node IDs in Material A/B/C/D slot order. Empty = alphabetical. Use Inspector arrows to reorder.'})
+    @property({tooltip:'Render All Outputs: comma-separated Output Node IDs in Material A/B/C/D slot order.'})
     outputOrder='';
     /** Input slot for optional typed graph meshAsset nodes. This is a native
      * project Mesh reference, never raw vertex data in graph JSON.
      */
-    @property({type:Mesh,tooltip:'Readable Mesh Asset for slot A. Select one of up to four imported submeshes with Source Submesh; <=4096 vertices per selected submesh.'})
+    @property({type:Mesh,tooltip:'Readable Mesh Asset for slot A.'})
     sourceMesh:Mesh|null=null;
     @property({type:Mesh,tooltip:'Mesh Asset slot 1, for meshAsset node with Slot B (1).'})
     sourceMeshB:Mesh|null=null;
@@ -86,13 +86,13 @@ export class SplineGeometryGraphRenderer extends Component {
     /** Imported FBX/glTF Materials are on the model MeshRenderer, not the
      * Mesh geometry asset. These are read-only source renderer references.
      */
-    @property({tooltip:'Render All Outputs only: read matching submesh Materials from imported model MeshRenderer(s). Manual Material A/B/C/D overrides take precedence.'})
+    @property({tooltip:'Render All Outputs only: read matching submesh Materials from imported model MeshRenderer(s).'})
     autoBindImportedMaterials=false;
-    @property({type:MeshRenderer,tooltip:'Mesh slot A: imported model MeshRenderer using the SAME Source Mesh A; reads Source Submesh A material.'})
+    @property({type:MeshRenderer,tooltip:'Mesh slot A: imported model MeshRenderer using the SAME Source Mesh A.'})
     materialSourceRenderer:MeshRenderer|null=null;
-    @property({type:MeshRenderer,tooltip:'Mesh slot B: imported model MeshRenderer using the SAME Source Mesh B; reads Source Submesh B material.'})
+    @property({type:MeshRenderer,tooltip:'Mesh slot B: imported model MeshRenderer using the SAME Source Mesh B.'})
     materialSourceRendererB:MeshRenderer|null=null;
-    @property({type:MeshRenderer,tooltip:'Mesh slot C: imported model MeshRenderer using the SAME Source Mesh C; reads Source Submesh C material.'})
+    @property({type:MeshRenderer,tooltip:'Mesh slot C: imported model MeshRenderer using the SAME Source Mesh C.'})
     materialSourceRendererC:MeshRenderer|null=null;
     /** Active V1/V2 graph text for read-only export and rebuilding.
      * Serializing the asset is a content-based revision: updating its JSON

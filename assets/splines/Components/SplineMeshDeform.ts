@@ -32,12 +32,12 @@ export class SplineMeshDeform extends Component {
     @property({type:Material,tooltip:'Optional material; use tiled rope texture material here.'}) material:Material|null=null;
     @property({type:Enum(DeformAxis),tooltip:'Longitudinal axis of the source mesh; Z is default.'}) axis:DeformAxis=DeformAxis.Z;
     @property({type:Enum(DeformMode),tooltip:'Stretch deforms one source mesh; Repeat duplicates the source mesh along the curve.'}) mode:DeformMode=DeformMode.Stretch;
-    @property({type:Enum(DeformRepeatLayout),tooltip:'Count: legacy stretched sections. Source Length: auto repeat at imported mesh dimensions and clip only the last tile.'})
+    @property({type:Enum(DeformRepeatLayout),tooltip:'Count: legacy stretched sections.'})
     repeatLayout:DeformRepeatLayout=DeformRepeatLayout.Count;
     @property({min:1,max:256,step:1,tooltip:'Legacy Count mode: number of sections, each stretched to its route portion.'}) repeatCount=8;
-    @property({min:0,tooltip:'Source Length mode: world length per tile. 0 uses the source mesh longitudinal bounds (imported units). Set a positive override if mesh import units differ from spline units.'})
+    @property({min:0,tooltip:'Source Length mode: world length per tile.'})
     tileLength=0;
-    @property({tooltip:'Reverse triangle front faces AND normals for meshes with opposite winding. X/Y axes are already corrected automatically; normally leave OFF.'}) flipFaces=false;
+    @property({tooltip:'Reverse triangle front faces AND normals for meshes with opposite winding.'}) flipFaces=false;
     @property({min:0.001,tooltip:'Cross-sectional width multiplier.'}) widthScale=1;
     @property({min:0.001,tooltip:'Cross-sectional height multiplier.'}) heightScale=1;
     @property({range:[0,1,0.001],slide:true}) startProgress=0;
@@ -49,7 +49,7 @@ export class SplineMeshDeform extends Component {
     @property({type:Enum(DeformUV),tooltip:'Keep original mesh UV, continuous source UV across repeat segments, or path distance in V.'}) uvMode:DeformUV=DeformUV.Distance;
     @property({min:0.001,tooltip:'UV V cycles per world unit (Distance mode only). Shader/material is external to this library.'}) uvTilesPerUnit=1;
     @property({tooltip:'Auto regenerate when curve or inspector properties change.'}) rebuildOnChange=true;
-    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected.'}) showMeshGizmos=true;
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _generated:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;

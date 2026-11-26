@@ -26,7 +26,7 @@ interface Original {renderer:MeshRenderer; mesh:Mesh;positions:number[];indices:
 @executeInEditMode(true)
 export class SplineObjectBender extends Component {
     @property({type:SplineContainer}) spline:SplineContainer|null=null;
-    @property({type:Enum(BenderLayout),tooltip:'Keep Hierarchy uses each child transform; Sequential Meshes lays mesh parts end-to-end along Axis, without changing child Nodes.'}) layout:BenderLayout=BenderLayout.KeepHierarchy;
+    @property({type:Enum(BenderLayout),tooltip:'Keep Hierarchy uses each child transform.'}) layout:BenderLayout=BenderLayout.KeepHierarchy;
     @property({min:0,tooltip:'Distance between consecutive mesh parts when Sequential Meshes layout is selected.'}) partGap=0;
     @property({type:Enum(DeformAxis),tooltip:'Longitudinal axis of the original object hierarchy.'}) axis:DeformAxis=DeformAxis.Z;
     @property({type:Enum(SplinePositionMode)}) rangeMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;

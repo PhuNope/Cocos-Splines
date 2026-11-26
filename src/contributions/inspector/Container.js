@@ -6,7 +6,7 @@ const fields=['closed','reversed','samplesPerCurve','dimension','showGizmos','sh
 const $={info:'.spl-info',knots:'.spl-knots',add:'.spl-add',refresh:'.spl-refresh',reverse:'.spl-reverse',status:'.spl-status',json:'.spl-json',import:'.spl-import',nativeJson:'.spl-native-json',nativeJsonImport:'.spl-native-json-import',nativeJsonExport:'.spl-native-json-export',svg:'.spl-svg',svgImport:'.spl-svg-import',svgExport:'.spl-svg-export',svgScale:'.spl-svg-scale',list:'.spl-knot-list',road:'.spl-create-road',trigger:'.spl-create-trigger',junction:'.spl-create-junction',positioner:'.spl-create-positioner',projector:'.spl-create-projector',length:'.spl-create-length',path2d:'.spl-create-2d-path',deform:'.spl-create-deform',modifiers:'.spl-create-modifiers',noise:'.spl-create-noise',objectController:'.spl-create-objectcontroller',morph:'.spl-create-morph',bender:'.spl-create-bender',junctionMesh:'.spl-create-junctionmesh',gridStep:'.spl-grid-step',alignAxis:'.spl-align-axis',markAll:'.spl-mark-all',markNone:'.spl-mark-none',selectMarked:'.spl-select-marked',snapMarked:'.spl-snap-marked',alignMarked:'.spl-align-marked',distributeMarked:'.spl-distribute-marked',distributeArc:'.spl-distribute-arc',arcMetric:'.spl-arc-metric',resampleMode:'.spl-resample-mode',resampleTarget:'.spl-resample-target',resampleTolerance:'.spl-resample-tolerance',resampleSpace:'.spl-resample-space',resampleButton:'.spl-resample-create',coordinateSpace:'.spl-coordinate-space',moveX:'.spl-move-x',moveY:'.spl-move-y',moveZ:'.spl-move-z',moveMarked:'.spl-move-marked',surfaceTarget:'.spl-surface-target',surfaceRefresh:'.spl-surface-refresh',surfaceHeight:'.spl-surface-height',surfaceDrop:'.spl-surface-drop',surfaceSnap:'.spl-surface-snap',surfaceAlignNormal:'.spl-surface-align-normal',surfaceSmoothNormal:'.spl-surface-smooth-normal',surfaceCreaseAngle:'.spl-surface-crease-angle',surfaceWeldSeams:'.spl-surface-weld-seams'};
 for(const field of fields)$['p_'+field]='.spl-field-'+field;
 const template=`<div class="spl-inspector spl-container-inspector">
-  <div class="spl-header"><strong>∿ Spline Container</strong><p>Chỉnh toàn bộ đường cong trong Inspector. Kéo Knot bằng Move Gizmo (W) hoặc sửa tọa độ bên dưới.</p></div>
+  <div class="spl-header"><strong>∿ Spline Container</strong></div>
   <details class="spl-section" open><summary>Spline settings</summary>
     <ui-prop type="dump" class="spl-prop spl-field-closed"></ui-prop>
     <ui-prop type="dump" class="spl-prop spl-field-reversed"></ui-prop>
@@ -19,29 +19,29 @@ const template=`<div class="spl-inspector spl-container-inspector">
     <ui-prop type="dump" class="spl-prop spl-field-showTangentGizmos"></ui-prop>
     <ui-prop type="dump" class="spl-prop spl-field-gizmoSteps"></ui-prop>
     <ui-prop type="dump" class="spl-prop spl-field-gizmoColor"></ui-prop>
-    <p class="spl-note">Bật Cocos-Gizmos v3.0.3+. Chọn Knot sẽ luôn hiện tangent dù Show Tangent Gizmos tắt. Knot có handles: bật Edit Handles để luôn thấy đường + tangent khi chỉnh, không cần bật Show Gizmos Always.</p>
+
   </details>
   <div class="spl-info">Đang tải knots…</div>
-  <details class="spl-section" open><summary>Batch Knot Tools · Multi-select / Snap / Align / Distribute / Move</summary>
-    <p class="spl-note">Mark Knots below. Local works in all dimensions; World supports 3D splines, including rotated or non-uniformly scaled parents. Alignment uses the first marked Knot in Hierarchy.</p>
+  <details class="spl-section" open><summary>Batch Knot Tools</summary>
+
     <div class="spl-btns spl-batch-inputs"><label>Coordinate space <select class="spl-coordinate-space" aria-label="Knot coordinate space"><option value="local">Local (Container)</option><option value="world">World (3D only)</option></select></label></div>
     <div class="spl-btns"><button type="button" class="spl-btn spl-mark-all">✓ Mark all</button><button type="button" class="spl-btn spl-mark-none">Clear marks</button><button type="button" class="spl-btn spl-select-marked">Select in Scene</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Grid step <input class="spl-grid-step" type="number" min="0.0001" max="1000000" step="0.25" value="1" aria-label="Grid step (local units)"></label><button type="button" class="spl-btn spl-snap-marked">Snap marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Axis <select class="spl-align-axis" aria-label="Align axis"><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label><button type="button" class="spl-btn spl-align-marked">Align marked</button><button type="button" class="spl-btn spl-distribute-marked" title="Evenly space at least three marked Knots on this axis, preserving extremes and other coordinates">Distribute marked</button></div>
-    <p class="spl-note">Distribute uses the selected axis and coordinate space. At least three Knots; extreme Knots stay fixed. This changes the curve, not its Knot order.</p>
+
     <div class="spl-btns spl-batch-inputs"><label>ΔX <input class="spl-move-x" type="number" step="0.5" value="0" aria-label="Move delta X"></label><label>ΔY <input class="spl-move-y" type="number" step="0.5" value="0" aria-label="Move delta Y"></label><label>ΔZ <input class="spl-move-z" type="number" step="0.5" value="0" aria-label="Move delta Z"></label><button type="button" class="spl-btn spl-move-marked">Move marked</button></div>
     <div class="spl-btns spl-batch-inputs"><label>Arc metric <select class="spl-arc-metric" aria-label="Arc distance metric"><option value="local">Local</option><option value="world">World</option></select></label><button type="button" class="spl-btn spl-distribute-arc">Distribute along Arc</button></div>
-    <p class="spl-note">Mark 3+ consecutive active Knots (wrap across closed seam allowed). Full closed loop keeps its first traversal Knot fixed. Local/World measures the original curve; final shape may change.</p>
+
     <div class="spl-surface-panel">
-      <p class="spl-note">Surface Snap · 3D only. Choose a readable MeshRenderer (CPU raycast) or a 3D Physics Collider / TerrainCollider. Cast downward in World Y. Collider targets require an active Physics world.</p>
+
       <div class="spl-btns spl-batch-inputs"><label>Surface target <select class="spl-surface-target" aria-label="Surface target mesh or collider"><option value="">Find scene surfaces…</option></select></label><button type="button" class="spl-btn spl-surface-refresh">Refresh meshes</button></div>
-      <p class="spl-note"><label><input class="spl-surface-align-normal" type="checkbox"> Align Knot +Y to surface normal (changes Knot rotation; knot-space tangents may rotate the curve)</label></p>
+      <p class="spl-note"><label><input class="spl-surface-align-normal" type="checkbox"> Align to normal</label></p>
       <div class="spl-btns spl-batch-inputs"><label><input class="spl-surface-smooth-normal" type="checkbox" disabled> Smooth normals on shared mesh vertices</label><label><input class="spl-surface-weld-seams" type="checkbox" disabled> Weld UV-split positions for smoothing (1e-5 world units)</label><label>Crease angle (°) <input class="spl-surface-crease-angle" type="number" min="0" max="89" step="1" value="60" disabled aria-label="Surface normal smoothing crease angle"></label></div>
       <div class="spl-btns spl-batch-inputs"><label>Start above <input class="spl-surface-height" type="number" step="1" min="0" max="1000000" value="10" aria-label="Surface cast height"></label><label>Cast depth <input class="spl-surface-drop" type="number" step="1" min="0.01" max="1000000" value="100" aria-label="Surface max drop"></label><button type="button" class="spl-btn spl-surface-snap">Snap to Surface</button></div>
     </div>
   </details>
   <details class="spl-section"><summary>Resample Spline · new copy</summary>
-     <p class="spl-note">Resample fits cubics at even arc intervals; Simplify greedily removes redundant Knots and refits adjacent spans within tolerance. Your original spline/Prefab is never replaced. Approximation error is measured at dense samples and must be within tolerance. Resample does not copy Knot rotations. Simplify preserves retained Knot rotation, name, tension and tangent-space settings. It rebuilds independent child Tangent In/Out nodes for source handles; arbitrary extra components and non-handle children are not cloned. Container Gizmo visibility, color and density are preserved by a strict value-only allowlist; the result reports skipped components/children.</p>
+
      <div class="spl-btns spl-batch-inputs">
        <label>Mode <select class="spl-resample-mode" aria-label="Resample mode"><option value="count">Knot count</option><option value="spacing">Max spacing</option><option value="simplify">Simplify (remove redundant Knots)</option></select></label>
        <label>Target <input type="number" class="spl-resample-target" aria-label="Resample target" min="2" max="128" step="1" value="12"></label>
@@ -49,11 +49,11 @@ const template=`<div class="spl-inspector spl-container-inspector">
        <label>Arc metric <select class="spl-resample-space" aria-label="Resample distance metric"><option value="local">Local</option><option value="world">World</option></select></label>
        <button type="button" class="spl-btn spl-resample-create">Create resampled copy</button>
      </div>
-     <p class="spl-note">2–128 Knots for an open curve; 3–128 for closed. Spacing derives count from length; Simplify ignores Target and retains original endpoints/closed anchor. The original stays untouched, including its tangent handles and Prefab overrides.</p>
+
    </details>
    <div class="spl-btns"><button type="button" class="spl-btn spl-add">＋ Add Knot</button><button type="button" class="spl-btn spl-refresh">↻ Refresh mesh</button><button type="button" class="spl-btn spl-reverse">⇄ Reverse direction</button></div>
   <details class="spl-section" open><summary>Road · Trigger · Junction</summary>
-    <p class="spl-note">Dựng road mesh bằng Inspector, không cần code. Gắn Trigger để nhận event; Junction dùng để nối nhiều Spline.</p>
+
     <div class="spl-btns"><button type="button" class="spl-btn spl-create-2d-path">＋ Add 2D Path</button><button type="button" class="spl-btn spl-create-deform">＋ Add Mesh Deform</button></div>
     <div class="spl-btns"><button type="button" class="spl-btn spl-create-positioner">＋ Positioner</button><button type="button" class="spl-btn spl-create-projector">＋ Projector</button><button type="button" class="spl-btn spl-create-length">＋ Length Monitor</button></div>
     <div class="spl-btns"><button type="button" class="spl-btn spl-create-modifiers">＋ Modifiers</button><button type="button" class="spl-btn spl-create-noise">＋ Noise Layers</button><button type="button" class="spl-btn spl-create-objectcontroller">＋ Object Controller</button></div>
@@ -62,17 +62,17 @@ const template=`<div class="spl-inspector spl-container-inspector">
   </details>
   <details class="spl-section" open><summary>Bezier knots · chỉnh trực tiếp</summary><div class="spl-knot-list spl-knots"></div></details>
   <details class="spl-section"><summary>Import Unity Splines JSON</summary>
-    <p class="spl-note">Dán JSON từ UnitySplineJsonExporter.cs. Tạo spline mới cùng cấp với spline đang chọn, không ghi đè knot cũ.</p>
+
     <textarea class="spl-json" rows="5" spellcheck="false" placeholder='{"closed":false,"knots":[...]}'></textarea>
     <div class="spl-btns"><button type="button" class="spl-btn spl-import">Import as new spline</button></div>
   </details>
-  <details class="spl-section"><summary>Cocos Splines JSON · Round-trip (V1)</summary>
-    <p class="spl-note">Versioned Cocos geometry JSON: exact resolved Bezier controls in Container-local coordinates, 3D/XY2D/XZ2D, closed/reversed, samples per curve, and root local transform. Import creates a NEW sibling; original spline/Prefab is untouched. Same parent preserves World placement. This is not Unity JSON and does not clone Road, Junction, Knot rotations or custom components.</p>
+  <details class="spl-section"><summary>Cocos Splines JSON</summary>
+
     <textarea class="spl-native-json" rows="6" spellcheck="false" placeholder='{"format":"cocos-splines/geometry","version":1,...}'></textarea>
     <div class="spl-btns"><button type="button" class="spl-btn spl-native-json-import">Import JSON as new Spline</button><button type="button" class="spl-btn spl-native-json-export">Export selected Spline JSON</button></div>
   </details>
   <details class="spl-section"><summary>SVG Path · Import / Export (2D)</summary>
-    <p class="spl-note">Paste a single SVG &lt;path&gt; or its d attribute. Import creates a NEW sibling XY2D spline; SVG Y-down becomes Cocos Y-up. Supports M/L/H/V/C/S/Q/T/Z (relative/absolute). No transforms, arcs, multiple paths or external SVG resources. Export uses resolved local Bézier curves from XY2D/XZ2D only; use Copy to transfer the text.</p>
+
     <div class="spl-btns spl-batch-inputs"><label>Units per SVG pixel <input class="spl-svg-scale" type="number" min="0.000001" max="10000" step="0.1" value="1" aria-label="SVG import units per pixel"></label></div>
     <textarea class="spl-svg" rows="6" spellcheck="false" placeholder='M 0 0 C 50 0 50 80 100 80'></textarea>
     <div class="spl-btns"><button type="button" class="spl-btn spl-svg-import">Import SVG as new XY2D Spline</button><button type="button" class="spl-btn spl-svg-export">Export selected spline to SVG text</button></div>

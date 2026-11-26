@@ -436,9 +436,7 @@ function renderWidthKeyControls(n){
   const py=k=>(124-(k.multiplier-.01)/19.99*100).toFixed(3);
   const points=keys.map(k=>px(k)+','+py(k)).join(' ');
   return '<div class="spl-vg-width-keys">'+
-    '<div class="spl-vg-note">Multi-key Width: normalized physical arc progress (0–1), '+
-      'scale 0.01–20. Drag handles to preview; release commits one native Inspector edit. '+
-      'End keys remain fixed at 0 and 1. Closed splines require matching end scales.</div>'+
+    '<div class="spl-vg-note">Closed spline: start/end scale must match.</div>'+
     '<svg class="spl-vg-width-svg" viewBox="0 0 320 140" width="320" height="140" '+
       'role="img" aria-label="Width curve key editor">'+
     '<path d="M20 12V124H300" fill="none" stroke="#647c8b"/>'+
@@ -519,29 +517,8 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
-    (n.type==='width'&&!n.widthKeys?'<div class="spl-vg-note">'+
-      'Multiplier = Start scale. Optional Mid/End make a distance-based taper curve; '+
-      'blank Mid = average, blank End = Start (uniform). Smoothstep eases at control points. '+
-      'For closed splines, Start and End must match to avoid a seam jump.'+
-      '</div>':'')+
-    (n.type==='extrude'?'<div class="spl-vg-note">'+
-      (n.profileSlot===undefined?'Built-in profile: Rectangle, Beveled or U Channel.':
-       'Authored Profile Slot '+['A','B','C'][n.profileSlot]+
-       ': assign cocos-splines/profile v1 JsonAsset in this Renderer. Built-in shape ignored.')+
-      '</div>':'')+
-    (n.type==='meshDeform'?'<div class="spl-vg-note">'+
-      ((n.repeatLayout??0)===1?
-       'Source Length: 0 tileLength uses mesh axis bounds; last tile is clipped, not stretched.'+
-       ' Maximum 256 tiles and bounded mesh output.':
-       'Count: repeat count is stretched across the full spline.')+
-      '</div>':'')+
-    (rows?'<div class="spl-vg-params">'+rows+'</div>':
-      (n.type==='meshAsset'?'':'<div class="spl-vg-note">No editable properties.</div>'))+
-    (n.type==='width'?renderWidthKeyControls(n):'')+
-    (n.type==='meshAsset'?'<div class="spl-vg-note">'+
-      'Source Mesh is assigned on each Renderer (native Mesh Asset field). '+
-      'Use Slot A/B/C to select Source Mesh, Source Mesh B or Source Mesh C.'+
-      '</div>':'');
+    (rows?'<div class="spl-vg-params">'+rows+'</div>':'')+
+    (n.type==='width'?renderWidthKeyControls(n):'');
 }
 module.exports={TYPES,LIMITS,STAGE,parseGraph,validateGraph,applyGraphEdit,
   parseLayout,moveGraphNode,cleanGraphLayout,renderGraphCanvas,renderNodeParameters};

@@ -34,7 +34,7 @@ export class SplineExtrude extends Component {
     @property({type:Material,tooltip:'Optional override; otherwise uses a builtin unlit material'}) material:Material|null=null;
     @property({tooltip:'Rebuild on curve/parameter changes, including in Editor'}) rebuildOnChange=true;
     private _revision='';
-    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected.'}) showMeshGizmos=true;
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;

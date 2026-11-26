@@ -77,33 +77,33 @@ export class SplineObjectController extends Component {
     densityKeys:SplinePopulationDensityKey[]=[];
     @property({type:[SplinePopulationExclusion],tooltip:'Blocked normalized arc intervals; start > end wraps on CLOSED splines (max 64).'})
     exclusions:SplinePopulationExclusion[]=[];
-    @property({min:0,max:10000,tooltip:'Optional minimum WORLD distance between final placed prefab centers, after all jitter/noise (0 disables). Not collider overlap.'})
+    @property({min:0,max:10000,tooltip:'Optional minimum WORLD distance between final placed prefab centers.'})
     minWorldSpacing=0;
-    @property({tooltip:'Opt-in shared occupancy: reject candidates touching ALREADY SPAWNED instances from explicitly assigned lower-priority controllers. No other controller is respawned.'})
+    @property({tooltip:'Reject candidates overlapping spawned lower-priority peer controllers.'})
     avoidPeerPopulation=false;
-    @property({type:[Node],tooltip:'Explicit peer Nodes with SplineObjectController. Maximum 16, must be in the same Scene and have strictly lower Occupancy Priority.'})
+    @property({type:[Node],tooltip:'Explicit peer Nodes with SplineObjectController.'})
     occupancyPeerNodes:Node[]=[];
-    @property({min:0,max:32767,step:1,tooltip:'Explicit numeric order. Spawn smaller priorities first; referenced peer must have strictly lower priority. Prevents mutual dependency cycles.'})
+    @property({min:0,max:32767,step:1,tooltip:'Explicit numeric order.'})
     occupancyPriority=0;
-    @property({min:0,max:100,tooltip:'Published conservative World-space sphere radius of EVERY spawned instance, read by higher-priority peer controllers even after Save/Reopen. Use >= actual geometry radius.'})
+    @property({min:0,max:100,tooltip:'Published conservative World-space sphere radius of EVERY spawned instance.'})
     sharedOccupancyRadius=0;
-    @property({min:0,max:10000,tooltip:'Extra World-unit clearance from selected peer prefab footprints. Does not include physics Collider shape.'})
+    @property({min:0,max:10000,tooltip:'Extra World-unit clearance from selected peer prefab footprints.'})
     peerOccupancyClearance=0;
-    @property({tooltip:'Opt-in explicit Collider avoidance using conservative World AABB bounds. No physics simulation / auto-scene discovery.'})
+    @property({tooltip:'Opt-in explicit Collider avoidance using conservative World AABB bounds.'})
     avoidObstacleColliders=false;
     @property({type:[Collider],tooltip:'Only these assigned active Colliders are considered (max 64). Not a Physics overlap query.'})
     obstacleColliders:Collider[]=[];
     @property({min:0,max:10000,tooltip:'World-unit radius around each candidate center kept clear of assigned Collider World AABBs.'})
     obstacleClearance=0;
-    @property({tooltip:'Opt-in: use validated BoxCollider OBB / CapsuleCollider geometry for population clearance. Unsupported transforms and other Collider types fall back to conservative World AABB. Requires Avoid Obstacle Colliders.'})
+    @property({tooltip:'Opt-in: use validated BoxCollider OBB / CapsuleCollider geometry for population clearance.'})
     usePreciseObstacleShapes=false;
-    @property({min:0,max:100,tooltip:'Manual conservative prefab footprint SPHERE radius in World units, in addition to Obstacle Clearance. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes. Does not read prefab mesh dimensions.'})
+    @property({min:0,max:100,tooltip:'Manual conservative prefab footprint SPHERE radius in World units.'})
     placementFootprintRadius=0;
-    @property({tooltip:'Opt-in conservative sphere footprint per selected prefab. Reads supported static MeshRenderer and Collider geometry on prefab root and children and accounts for instance/parent scale. Unknown/missing bounds reject Respawn before old instances are cleared. Requires Avoid Obstacle Colliders + Precise Obstacle Shapes.'})
+    @property({tooltip:'Opt-in conservative sphere footprint per selected prefab.'})
     autoPrefabFootprint=false;
-    @property({tooltip:'Optional when Precise Obstacle Shapes is enabled: read a non-convex MeshCollider with CPU-accessible triangle data, build a static World BVH and check prefab sphere contact against triangles. Convex/unreadable/unsupported meshes fall back to AABB.'})
+    @property({tooltip:'Optional when Precise Obstacle Shapes is enabled: read a non-convex MeshCollider.'})
     useMeshColliderBVH=false;
-    @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces. No source geometry changes.'})
+    @property({tooltip:'Opt-in: drop prefab centers onto explicitly assigned Physics 3D Collider/TerrainCollider surfaces.'})
     conformToSurface=false;
     @property({type:[Collider],tooltip:'1–64 explicit target 3D Colliders including TerrainCollider. Other raycast hits are ignored.'})
     surfaceColliders:Collider[]=[];
@@ -117,13 +117,13 @@ export class SplineObjectController extends Component {
     minSurfaceNormalY=.3;
     @property({tooltip:'If no valid target hit, discard candidate. Off = keep unprojected candidate.'})
     skipMissingSurface=true;
-    @property({tooltip:'If Align To Spline is on, align prefab local Y to hit normal while keeping projected spline forward. Does not affect positional offsets.'})
+    @property({tooltip:'If Align To Spline is on, align prefab local Y to hit normal while keeping projected spline forward.'})
     alignToSurfaceNormal=false;
     @property alignToSpline=true;
     @property includeEndPoint=true;
     @property rebuildOnChange=false;
     @property({tooltip:'Spawn at Play only when the scene has no manually spawned instances.'}) spawnOnStart=true;
-    @property({tooltip:'Draw non-destructive accepted/rejected placement markers only when selected in Scene. Requires Cocos-Gizmos v3.'})
+    @property({tooltip:'Draw non-destructive accepted/rejected placement markers only when selected in Scene.'})
     showPlacementGizmos=false;
     @property({min:8,max:256,step:1,tooltip:'Maximum markers drawn; complete planning is evaluated before sampling.'})
     placementGizmoLimit=96;

@@ -18,7 +18,7 @@ const {ccclass,property,menu}= _decorator;
  */
 @ccclass('Splines.SplineTrafficPhase')
 export class SplineTrafficPhase {
-    @property({type:[Number],tooltip:'Serialized Junction Connections indices allowed Green together. Must not include a configured conflict pair.'})
+    @property({type:[Number],tooltip:'Serialized Junction Connections indices allowed Green together.'})
     greenExits:number[]=[];
     @property({min:.05,tooltip:'Seconds in Green for the listed destination exits.'})
     greenSeconds=8;
@@ -49,29 +49,29 @@ export class SplineTrafficController extends Component {
     conflicts:SplineTrafficConflict[]=[];
     @property({min:.05,tooltip:'All-Red clearance in seconds before phase 0 and after every phase; mandatory for safe changes.'})
     allRedSeconds=1;
-    @property({tooltip:'Opt-in demand-responsive phase selection using queued followers at the Junction exits. Off = original deterministic fixed cycle.'})
+    @property({tooltip:'Opt-in demand-responsive phase selection using queued followers at the Junction exits.'})
     adaptiveTraffic=false;
-    @property({min:.05,tooltip:'Adaptive only. Minimum Green seconds before another phase can interrupt. Does not shorten mandatory Yellow/All-Red.'})
+    @property({min:.05,tooltip:'Minimum Green seconds before another adaptive phase can interrupt.'})
     minGreenSeconds=2;
     @property({min:.05,tooltip:'Adaptive only. Maximum Green seconds per phase, even when the phase has the only waiting traffic.'})
     maxGreenSeconds=15;
-    @property({min:.05,tooltip:'Adaptive only. Waiting demand age that triggers urgent phase selection after the current minimum Green. Approximate fairness policy, not a hard individual vehicle wait guarantee.'})
+    @property({min:.05,tooltip:'Waiting demand age that triggers urgent adaptive phase selection.'})
     maxDemandWaitSeconds=30;
-    @property({min:.01,tooltip:'Read-only geometry diagnostic: flag sampled 3D centerlines this close in WORLD units. Not a physical collision guarantee.'})
+    @property({min:.01,tooltip:'Read-only geometry diagnostic: flag sampled 3D centerlines this close in WORLD units.'})
     conflictProbeTolerance=.75;
     @property({min:1,tooltip:'Read-only geometry diagnostic: sample this many WORLD units downstream from each Junction exit.'})
     conflictProbeLookahead=20;
     @property({min:0,tooltip:'Read-only geometry diagnostic: ignore the common junction origin for this distance (WORLD units).'})
     conflictProbeIgnoreOrigin=1;
-    @property({tooltip:'Read-only diagnostics only: use explicitly supplied per-exit World asphalt HALF widths. Off retains centerline-only behavior.'})
+    @property({tooltip:'Read-only diagnostics only: use explicitly supplied per-exit World asphalt HALF widths.'})
     conflictUseRoadWidths=false;
-    @property({tooltip:'Read-only probe only. Automatically sample nominal asphalt width from explicit SplineRoad components assigned by Junction Connection index. Requires Conflict Use Road Widths. Manual half-width array is ignored when enabled.'})
+    @property({tooltip:'Read-only probe only. Automatically sample nominal asphalt width from explicit SplineRoad.'})
     conflictAutoRoadWidths=false;
-    @property({type:[Component],tooltip:'Assign SplineRoad components by serialized Junction Connection index. Must match corresponding spline and cover each outgoing path; generic Component references avoid coupling Traffic Controller to Gizmos/mesh runtime.'})
+    @property({type:[Component],tooltip:'Assign SplineRoad components by serialized Junction Connection index.'})
     conflictRoadSources:Component[]=[];
-    @property({type:[Number],tooltip:'Half widths in WORLD units by serialized Junction Connections index; provide one nonnegative value per Connection. 0 uses centerline on that exit. This does not change the road Mesh.'})
+    @property({type:[Number],tooltip:'Half widths in WORLD units by serialized Junction Connections index.'})
     conflictRoadHalfWidths:number[]=[];
-    @property({min:.01,tooltip:'World height separation for road-width diagnostic. Roads above this vertical gap are not flagged just because asphalt footprints overlap in XZ.'})
+    @property({min:.01,tooltip:'World height separation for road-width diagnostic.'})
     conflictVerticalTolerance=.75;
 
     private _owned:SplineJunction|null=null;

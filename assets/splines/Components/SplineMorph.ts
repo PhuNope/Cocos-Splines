@@ -21,7 +21,7 @@ export class SplineMorph extends Component {
     @property({type:SplineContainer}) sourceB:SplineContainer|null=null;
     @property({type:SplineContainer}) outputSpline:SplineContainer|null=null;
     @property({range:[0,1,0.001],slide:true}) blend=0.5;
-    @property({type:Enum(MorphSpace),tooltip:'World: blend source knots in world coordinates, then convert to output local (legacy). Local: blend each source spline local coordinates directly into output local; ignore source node transforms.'})
+    @property({type:Enum(MorphSpace),tooltip:'World: blend source knots in world coordinates, then convert to output local (legacy).'})
     space:MorphSpace=MorphSpace.World;
     @property({tooltip:'On Editor, output knot transforms are edited temporarily and restored when Preview is off.'}) previewInEditor=false;
     @property({tooltip:'Update output when sources or Blend change.'}) updateOnChange=true;

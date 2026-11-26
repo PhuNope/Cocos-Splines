@@ -19,7 +19,7 @@ export class SplineContainer extends Component {
     @property({tooltip:'Connect final knot to first knot'}) closed=false;
     @property({tooltip:'Evaluate spline from last knot to first knot'}) reversed=false;
     @property({min:4,max:256,step:1,tooltip:'Arc-length accuracy per cubic segment'}) samplesPerCurve=32;
-    @property({type:Enum(SplineDimension),tooltip:'3D: full curve; XY: 2D/UI plane; XZ: ground plane. 2D modes project positions/tangents onto their plane without moving knot nodes.'})
+    @property({type:Enum(SplineDimension),tooltip:'3D: full curve; XY: 2D/UI plane; XZ: ground plane.'})
     dimension:SplineDimension=SplineDimension.Space3D;
     @property({tooltip:'Draw spline curve and knots when selected (requires Cocos-Gizmos extension).'}) showGizmos=true;
     @property({tooltip:'Show curve even when container is not selected. Requires Cocos-Gizmos.'}) showGizmosAlways=false;

@@ -52,13 +52,13 @@ export class SplineAnimate extends Component {
     @property({type:SplineModifiers,tooltip:'Optional path-local Offset, Speed, Roll keyframe modifiers.'}) modifiers:SplineModifiers|null=null;
     @property({type:Enum(AnimateMethod)}) method:AnimateMethod=AnimateMethod.Time;
     @property({min:0.001,tooltip:'Seconds to complete one traversal when Method = Time.'}) duration=4;
-    @property({min:0,tooltip:'Units per second. With Constant Speed with Offset enabled, uses the actual world-space offset trajectory.'}) speed=2;
+    @property({min:0,tooltip:'Units per second. With Constant Speed with Offset enabled.'}) speed=2;
     @property({type:Enum(LoopMode)}) loopMode:LoopMode=LoopMode.Loop;
     @property({type:Enum(Easing)}) easing:Easing=Easing.Linear;
     @property({tooltip:'Orient target local +Z along the spline tangent.'}) alignToSpline=true;
-    @property({type:Enum(SplineUpMode),tooltip:'Spline: knot Up; World: world +Y; TargetLocal: initial local +Y of Target or current +Y of Up Reference.'})
+    @property({type:Enum(SplineUpMode),tooltip:'Spline: knot Up; World: world +Y; TargetLocal: initial local +Y of Target or current +Y of Up.'})
     upMode:SplineUpMode=SplineUpMode.Spline;
-    @property({type:Node,tooltip:'Optional independent Up reference used in TargetLocal mode. Its local +Y becomes world Up. Leave blank to use the Target initial local +Y (captured before Animate moves it). Never assign the animated Target itself as Up Reference.'})
+    @property({type:Node,tooltip:'Optional independent Up reference used in TargetLocal mode.'})
     upReference:Node|null=null;
     @property({type:Enum(ForwardAxis),tooltip:'Which local axis of the target should point in the spline travel direction.'})
     forwardAxis:ForwardAxis=ForwardAxis.PositiveZ;
@@ -74,9 +74,9 @@ export class SplineAnimate extends Component {
     @property({range:[0,1,0.01],slide:true,tooltip:'Normalized Distance legacy raw progress, or geometric t when selected.'}) startProgress=0;
     @property({min:0,tooltip:'Start at this absolute spline-local distance when Start Position Mode = Distance.'}) startDistance=0;
     @property({type:Vec3}) worldOffset=new Vec3();
-    @property({type:Vec3,tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units). Applied after deformation; World Offset remains world-axis-aligned.'}) splineOffset=new Vec3();
-    @property({tooltip:'Compensate for the longer/shorter offset trajectory at bends. Linear easing then means uniform movement in world space, not just along the centerline. Uses a cached arc-length lookup.'}) constantSpeedWithOffset=true;
-    @property({min:0,tooltip:'World units traveled on the destination spline to smoothly settle into its local Spline Offset after a Junction switch. 0 = immediate offset switch.'})
+    @property({type:Vec3,tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units).'}) splineOffset=new Vec3();
+    @property({tooltip:'Compensate for the longer/shorter offset trajectory at bends.'}) constantSpeedWithOffset=true;
+    @property({min:0,tooltip:'World units traveled on the destination spline to smoothly settle into its local Spline Offset.'})
     junctionOffsetBlendDistance=1;
     @property({tooltip:'Temporary preview in the Scene Editor; turn off to restore original transform.'}) previewInEditor=false;
     @property({type:Enum(SplinePositionMode),tooltip:'Choose editor preview coordinate: normalized distance, absolute distance or geometric t.'})
@@ -84,65 +84,65 @@ export class SplineAnimate extends Component {
     @property({range:[0,1,0.001],slide:true,tooltip:'Normalized Distance (legacy raw) or geometric t.'}) previewProgress=0;
     @property({min:0,tooltip:'Preview this absolute spline-local distance; no gameplay events.'}) previewDistance=0;
 
-    @property({type:Enum(JunctionMode),tooltip:'Off: no switch; First Other / Round Robin: basic routing; Manual: requestJunctionExit; Shortest Route: choose next exit on the least-distance network route.'})
+    @property({type:Enum(JunctionMode),tooltip:'Off: no switch; First Other / Round Robin: basic routing; Manual: requestJunctionExit; Shortest.'})
     junctionMode:JunctionMode=JunctionMode.Off;
     @property({type:SplineContainer,tooltip:'Destination for Shortest Route. Leave unset to keep switching disabled in this mode.'})
     routeDestination:SplineContainer|null=null;
     @property({range:[0,1,0.001],slide:true,tooltip:'Destination normalized ARC distance (not geometric Bezier t).'})
     routeDestinationProgress=1;
-    @property({min:0,tooltip:'Optional cost per Junction switch in spline-local units. Favors fewer switches when paths are otherwise equally long.'})
+    @property({min:0,tooltip:'Optional cost per Junction switch in spline-local units.'})
     routeTransferPenalty=0.01;
-    @property({min:0,tooltip:'Maximum world gap allowed between link positions when >0. Set 0 to disable gap validation (teleports may occur).'})
+    @property({min:0,tooltip:'Maximum world gap allowed between link positions when >0.'})
     routeMaxWorldGap=0;
-    @property({type:Enum(RouteCostSpace),tooltip:'Local (default): use spline-local arc units. World: use sampled world arc length, including non-uniform parent scale; transfer penalty is in the selected unit.'})
+    @property({type:Enum(RouteCostSpace),tooltip:'Local (default): use spline-local arc units.'})
     routeCostSpace:RouteCostSpace=RouteCostSpace.Local;
-    @property({tooltip:'Opt-in: stop precisely at Route Destination Progress when reached. Off preserves legacy ShortestRoute movement, but On Arrived still fires.'})
+    @property({tooltip:'Opt-in: stop precisely at Route Destination Progress when reached.'})
     stopOnRouteArrival=false;
-    @property({type:[EventHandler],tooltip:'Fires once when Shortest Route reaches the configured SplineContainer + normalized distance, even if auto-stop is off.'})
+    @property({type:[EventHandler],tooltip:'Fires once when Shortest Route reaches the configured SplineContainer + normalized distance.'})
     onRouteArrived:EventHandler[]=[];
-    @property({tooltip:'Opt-in: enforce destination-link Max Followers on Junction switches. A full exit holds this follower at the Junction until another follower releases a slot. Off by default.'})
+    @property({tooltip:'Opt-in: enforce destination-link Max Followers on Junction switches.'})
     enableTrafficCapacity=false;
-    @property({tooltip:'Opt-in with Enable Traffic Capacity: Shortest Route tries a different reachable Junction exit when the preferred exit is full. Default waits in FIFO queue.'})
+    @property({tooltip:'Opt-in with Enable Traffic Capacity: Shortest Route tries a different reachable Junction exit.'})
     rerouteAroundTraffic=false;
-    @property({range:[0,10,1],slide:true,tooltip:'0..10. Traffic admission priority for opt-in followers: higher priority is served first; same priority remains FIFO. No preemption of occupied slots.'})
+    @property({range:[0,10,1],slide:true,tooltip:'0..10. Traffic admission priority for opt-in followers: higher priority is served first.'})
     trafficPriority=0;
-    @property({tooltip:'Opt-in centerline headway: prevent moving within Headway World Gap of another registered follower on the same spline. No 3D collision, no cross-spline detection.'})
+    @property({tooltip:'Opt-in centerline headway: prevent moving within Headway World Gap of another registered.'})
     enableHeadway=false;
-    @property({min:0,max:31,step:1,tooltip:'Logical lane ID (0..31) for opt-in headway. Only same SplineContainer AND same Lane ID interact. Default 0 preserves previous behavior; this does not move the follower to a physical lane.'})
+    @property({min:0,max:31,step:1,tooltip:'Logical lane ID (0..31) for opt-in headway.'})
     headwayLaneId=0;
-    @property({tooltip:'Opt-in physical lane placement: move the follower on spline-frame Right by the center of its Headway Lane ID. Requires Lane Count and Lane Width. Off preserves old positions.'})
+    @property({tooltip:'Opt-in physical lane placement: move the follower on spline-frame Right by the center of its.'})
     enableLanePlacement=false;
-    @property({min:1,max:32,step:1,tooltip:'Total parallel lane centers, 1..32. Headway Lane ID must be smaller than Lane Count for physical placement.'})
+    @property({min:1,max:32,step:1,tooltip:'Total parallel lane centers, 1..32.'})
     laneCount=2;
-    @property({min:.05,tooltip:'World spacing between neighboring lane centers. Follower offsets use the same spline-frame Right as Spline Offset X.'})
+    @property({min:.05,tooltip:'World spacing between neighboring lane centers.'})
     laneWidth=3.5;
-    @property({tooltip:'Opt-in swept-sphere proximity avoidance against other opted-in followers, including those on different splines/lanes. Uses last-known world positions, not dynamic rigid bodies.'})
+    @property({tooltip:'Opt-in swept-sphere proximity avoidance against other opted-in followers.'})
     enableProximityAvoidance=false;
     @property({min:.01,tooltip:'Approximate follower sphere radius in WORLD units. Actual Collider bounds are not read.'})
     proximityRadius=.5;
-    @property({tooltip:'Opt-in: use the world AABB of a 3D Cocos Collider to calculate a conservative bounding sphere around Target. Falls back to Proximity Radius when unavailable.'})
+    @property({tooltip:'Opt-in: use the world AABB of a 3D Cocos Collider to calculate a conservative bounding sphere.'})
     proximityUseColliderBounds=false;
-    @property({tooltip:'Preview opt-in: use a stationary World OBB for a valid 3D BoxCollider obstacle. Falls back to World AABB for unsupported transforms or bounds mismatches. Moving follower remains a conservative sphere.'})
+    @property({tooltip:'Preview opt-in: use a stationary World OBB for a valid 3D BoxCollider obstacle.'})
     proximityUseBoxObb=false;
-    @property({tooltip:'Preview opt-in: use a stationary World Capsule for a 3D CapsuleCollider with uniform scale and matching world bounds. Unsupported transforms fall back to AABB.'})
+    @property({tooltip:'Preview opt-in: use a stationary World Capsule for a 3D CapsuleCollider with uniform scale.'})
     proximityUseCapsule=false;
-    @property({tooltip:'Preview opt-in: use a static World triangle BVH from a readable non-convex 3D MeshCollider. Falls back to Collider.worldBounds if unreadable or unsupported. Rebuilds when transform changes.'})
+    @property({tooltip:'Preview opt-in: use a static World triangle BVH from a readable non-convex 3D MeshCollider.'})
     proximityUseMeshCollider=false;
-    @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child. When blank, reads 3D Collider on the Target node. Collider2D is not supported.'})
+    @property({type:Collider,tooltip:'Optional Cocos Physics 3D Collider on Target or a child.'})
     proximityCollider:Collider|null=null;
     @property({min:0,tooltip:'Additional world clearance between follower proximity spheres.'})
     proximitySafetyGap=.2;
-    @property({min:2,max:64,step:1,tooltip:'Samples per proximity movement sweep (2..64). Default 16. Higher values improve detection on sharp bends at extra CPU cost; shared spatial broadphase limits candidates.'})
+    @property({min:2,max:64,step:1,tooltip:'Samples per proximity movement sweep (2..64).'})
     proximitySweepSamples=16;
-    @property({tooltip:'Preview opt-in: predict other opted-in followers from their measured WORLD linear velocity. Static obstacle behavior is unchanged by default. Not a physics solver.'})
+    @property({tooltip:'Preview opt-in: predict other opted-in followers from their measured WORLD linear velocity.'})
     proximityPredictAgents=false;
-    @property({min:.01,max:1,tooltip:'Maximum future prediction horizon (seconds, 0.01–1). Actual sweep time and speed are bounded. Default 0.25 s.'})
+    @property({min:.01,max:1,tooltip:'Maximum future prediction horizon (seconds, 0.01–1).'})
     proximityPredictionHorizon=.25;
-    @property({tooltip:'Advanced preview, off by default. Predict constant WORLD acceleration from two consecutive measured velocity samples; uses a conservative curvature envelope.'})
+    @property({tooltip:'Advanced preview, off by default.'})
     proximityPredictAcceleration=false;
-    @property({tooltip:'Advanced preview, off by default. A rotating OBB/Capsule/Mesh/AABB is predicted via an enclosing sphere, not an exact rotated geometry sweep. May stop early.'})
+    @property({tooltip:'Advanced preview, off by default.'})
     proximityPredictRotationEnvelope=false;
-    @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units. Other opt-in followers, including paused followers, count as obstacles.'})
+    @property({min:0,tooltip:'Minimum separation along the shared spline CENTERLINE in WORLD units.'})
     headwayWorldGap=2;
     @property({min:0,tooltip:'Optional soft slowdown range in WORLD units above the minimum headway gap. 0 = hard clamp only.'})
     headwayBrakeDistance=4;

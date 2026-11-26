@@ -300,25 +300,23 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    '</div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Side UV islands <select class="spl-profile-uv-island-mode" '+
-   'title="Continuous keeps legacy mapping; Edge Islands reset U per edge; Quad Islands reset U/V per side quad">'+
+   'title="Select UV island layout">'+
    ['Continuous perimeter (legacy)','Edge Islands · U per edge','Quad Islands · U/V per face']
     .map((name,i)=>'<option value="'+i+'"'+
      ((profile.uv?.sideIslandMode??0)===i?' selected':'')+'>'+name+'</option>')
     .join('')+'</select></label>'+
   '</div>'+
   '<div class="spl-vg-toolbar">'+
-  '<label title="Opt-in deterministic UV0 atlas packing for side islands and separate endcap islands. Mesh geometry does not change.">'+
+  '<label title="Fit side and cap UV0 islands into [0,1]">'+
    '<input type="checkbox" class="spl-profile-uv-atlas"'+
     (profile.uv?.atlasPacking===true?' checked':'')+
     '> Pack UV0 islands into atlas</label>'+
-   '<label title="Fraction of each atlas cell reserved on every side as a gutter (0–0.2).">'+
+   '<label title="Island gutter (0–0.2)">'+
     'Atlas padding <input type="number" class="spl-profile-uv-padding" '+
     'min="0" max="0.2" step="0.005" placeholder="0.04" value="'+
     (profile.uv?.atlasPadding??'')+'"'+
     (profile.uv?.atlasPacking===true?'':' disabled')+'></label></div>'+
-   '<div class="spl-profile-uv-info">Atlas uses one shared UV scale and separate cap islands; '+
-    'Quad Islands pack each spline-span face. Default padding 0.04. '+
-    'Atlas changes texture repeats and requires nondegenerate UV extents.</div>'+
+
    '<div class="spl-vg-toolbar">'+
    '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
    'min="0.01" max="10000" step="0.1" placeholder="Normalized" value="'+
@@ -326,12 +324,12 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
   '<button type="button" class="spl-btn spl-profile-clear-uv-meters"'+
    (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
    '>Use Normalized U</button>'+
-  '<label title="Uses current frame widthFactor and right/up scale. Node world scale is not included.">'+
+  '<label title="Scale U with spline width">'+
    '<input type="checkbox" class="spl-profile-uv-follow-frame"'+
    (profile.uv?.uFollowFrameScale===true?' checked':'')+
    (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
    '> Follow taper / frame scale</label>'+
-  '<label title="World-space U uses Renderer Node transform and overrides frame-local U. V already follows world arc distance.">'+
+  '<label title="Use world-space edge lengths for U">'+
    '<input type="checkbox" class="spl-profile-uv-world-space"'+
    (profile.uv?.uWorldSpace===true?' checked':'')+
    (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+

@@ -43,6 +43,10 @@ Authored Profile JsonAssets can now opt in with `uv.uWorldSpace: true` plus `uv.
 
 Authored Profile JsonAsset v1 supports optional `uv.atlasPacking: true` with `uv.atlasPadding` (0–0.2, default 0.04). The deterministic Core grid packs **side + individual cap UV0 islands** into [0,1] with per-cell gutter and one uniform global scale, preserving topology/normals and avoiding overlap. Mode 0 packs the whole side perimeter, mode 1 packs each edge strip, mode 2 packs each spline-side quad. Existing profiles remain untouched by default. Edit via **Authored Profile Editor → Pack UV0 islands into atlas / Atlas padding** with draft Undo/Redo and explicit guarded Save. Examples include `UVAtlasProfile.json`; [Vietnamese atlas guide](docs/GEOMETRY_GRAPH_PROFILE_UV_ATLAS_V2_VI.md). Native 3.8.8 UV/PBR/Prefab testing pending; texture baking and per-triangle unwrap remain future work.
 
+### Compact Inspector copy — v2
+
+Component inspectors now show field controls and action/status UI without long embedded roadmap paragraphs. The 20 generated custom inspectors, Spline Container, Geometry Graph node/property editor and authored Profile editor were cleaned; runtime component tooltips are kept brief (up to 100 characters). Behavior and serialized properties are unchanged. See [Inspector copy cleanup](docs/INSPECTOR_COMPACT_COPY_V2_VI.md).
+
 ### Placement Statistics — exact Inspector reason counts (v2 preview)
 
 SplineObjectController Inspector now includes an on-demand **Analyze Placement** button. It returns exact totals, accepted/rejected counts and the seven reason categories from the same non-mutating preview used by Respawn, plus up to three rejected candidate indexes for each category. The full plan (up to 2048 candidates) is counted even if Debug Gizmos draws only 8–256 markers. Analyze does not spawn, clear, mutate Scene objects or make an Undo snapshot; the Inspector displays an explicit **manual snapshot** that you can refresh after edits. See [Placement Statistics guide](docs/POPULATION_PLACEMENT_SUMMARY_V2_VI.md).

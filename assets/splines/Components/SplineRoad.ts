@@ -36,9 +36,9 @@ export class SplineRoad extends Component {
     @property({min:0,tooltip:'Curb height above the road surface; 0 disables curbs.'}) curbHeight=0.15;
     @property({min:0,tooltip:'Road volume depth; 0 makes an open road surface.'}) thickness=0.25;
     @property({min:2,max:128,step:1,tooltip:'How many longitudinal mesh samples per Bezier segment.'}) samplesPerCurve=16;
-    @property({type:Enum(RoadCornerMode),tooltip:'Legacy: original ribbon mesh. Join And Trim: miter corners to close outside gaps, smoothly trim inner overlap when width exceeds bend radius. Not a full mesh Boolean for hairpins/crossings.'})
+    @property({type:Enum(RoadCornerMode),tooltip:'Legacy: original ribbon mesh.'})
     cornerMode:RoadCornerMode=RoadCornerMode.Legacy;
-    @property({range:[.5,.99,.01],slide:true,tooltip:'How close inner road edges may approach the center of a tight turn (0.5–0.99). Lower values trim more and reduce overlap; default 0.93.'})
+    @property({range:[.5,.99,.01],slide:true,tooltip:'How close inner road edges may approach the center of a tight turn (0.5–0.99).'})
     cornerTrimSafety=.93;
     @property({range:[0,1,.001],slide:true}) startProgress=0;
     @property({range:[0,1,.001],slide:true}) endProgress=1;
@@ -47,9 +47,9 @@ export class SplineRoad extends Component {
     @property({min:0,tooltip:'Start distance when Range Mode = Distance.'}) startDistance=0;
     @property({min:0,tooltip:'End distance when Range Mode = Distance. The interval is clamped to current spline length.'}) endDistance=10;
     @property({min:.001,tooltip:'World-space road distance per texture repetition along the selected Length UV axis (U or V).'}) uvMetersPerRepeat=5;
-    @property({type:Enum(RoadUvDirection),tooltip:'Length Along V: texture is vertical (legacy); Length Along U: texture is horizontal. UV axis for spline direction.'})
+    @property({type:Enum(RoadUvDirection),tooltip:'Length Along V: texture is vertical (legacy); Length Along U: texture is horizontal.'})
     uvDirection:RoadUvDirection=RoadUvDirection.LengthAlongV;
-    @property({min:.001,tooltip:'Number of texture repeats across the complete road width (default 1). Does not affect longitudinal repeat distance.'})
+    @property({min:.001,tooltip:'Number of texture repeats across the complete road width (default 1).'})
     uvWidthTiles=1;
     @property({tooltip:'Reverse texture direction across the width of the road.'}) uvReverseAcross=false;
     @property({tooltip:'Reverse texture direction along the spline. Requires Repeat wrapping for negative UV values.'}) uvReverseLength=false;
@@ -59,7 +59,7 @@ export class SplineRoad extends Component {
     @property({type:Color,tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
     @property({tooltip:'Close the start/end edges for open road slabs.'}) capEnds=true;
     @property({tooltip:'Recreate visual mesh on knot edits or changes to the properties, even in Scene Editor.'}) rebuildOnChange=true;
-    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected. Requires Cocos-Gizmos extension.'}) showMeshGizmos=true;
+    @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected.'}) showMeshGizmos=true;
     @property({min:24,max:1200,step:1,tooltip:'Maximum preview edges. High values can slow down Scene Editor.'}) gizmoEdgeLimit=240;
     private _mesh:Mesh|null=null;
     private _meshGizmo:MeshGizmoLines|null=null;
