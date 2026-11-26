@@ -97,6 +97,19 @@ try{
  assert(m.renderNodeParameters(joined,'mergePath').includes('Nearest endpoint'));
  joined=m.applyGraphEdit(joined,'remove',{id:'mergePath'});
  assert.equal(m.parseGraph(joined).ordered.length,3);
+ let meshJoined=m.applyGraphEdit(source,'add-merge-mesh',{before:'output'});
+ let meshView=m.parseGraph(meshJoined);
+ assert.equal(meshView.map.get('mergeMesh').input,'ribbon');
+ assert.equal(meshView.map.get('mergeMesh').meshInputB,'tube');
+ assert.equal(meshView.map.get('output').input,'mergeMesh');
+ assert.deepEqual(core.parseGeometryGraph(meshJoined).nodes.map(n=>n.id),meshView.ordered.map(n=>n.id));
+ assert(m.renderGraphCanvas(meshJoined,'{}',null,null).includes('data-port="meshInputB"'));
+ assert.throws(()=>m.applyGraphEdit(meshJoined,'connect',{source:'ribbon',target:'mergeMesh'}),/ambiguous/i);
+ assert.throws(()=>m.applyGraphEdit(meshJoined,'connect',{source:'ribbon',target:'mergeMesh',port:'meshInputB'}),/distinct/i);
+ assert.throws(()=>m.applyGraphEdit(meshJoined,'connect',{source:'source',target:'mergeMesh',port:'meshInputB'}),/socket/i);
+ assert(m.renderNodeParameters(meshJoined,'mergeMesh').includes('No vertex welding'));
+ meshJoined=m.applyGraphEdit(meshJoined,'remove',{id:'mergeMesh'});
+ assert.equal(m.parseGraph(meshJoined).ordered.length,3);
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

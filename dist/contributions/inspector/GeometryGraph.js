@@ -62,6 +62,7 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-add-clip">＋ Clip</button>',
  '<button type="button" class="spl-btn spl-vg-add-resample">＋ Resample</button>',
  '<button type="button" class="spl-btn spl-vg-add-merge-path">＋ Merge Path</button>',
+ '<button type="button" class="spl-btn spl-vg-add-merge-mesh">＋ Merge Mesh</button>',
  '<button type="button" class="spl-btn spl-vg-add-conform">＋ Conform</button>',
  '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-use-extrude">Use Extrude Profile</button>',
@@ -116,7 +117,7 @@ const style=base.style+[
 '.spl-vg-socket.in{left:3px}.spl-vg-socket.out{right:3px}',
 '.spl-vg-socket.mesh{border-color:#a68b63;color:#ffc98b}',
 '.spl-vg-socket.meshSource{border-color:#8fb18c;color:#b7edba}',
-'.spl-vg-socket.mesh-in,.spl-vg-socket.path-b-in{bottom:29px;left:3px}',
+'.spl-vg-socket.mesh-in,.spl-vg-socket.path-b-in,.spl-vg-socket.mesh-b-in{bottom:29px;left:3px}',
 '.spl-vg-socket:hover{filter:brightness(1.3)}',
 '.spl-vg-properties{margin:8px 0;padding:7px;border:1px solid #3b576b;border-radius:6px;font-size:11px}',
 '.spl-vg-source,.spl-vg-note{font-size:10px;color:#b0c4d0;margin:4px 0}',
@@ -160,7 +161,7 @@ const $={...base.$,
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
   vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',vgAddTransform:'.spl-vg-add-transform',vgAddNoise:'.spl-vg-add-noise',
-  vgAddReverse:'.spl-vg-add-reverse',vgAddClip:'.spl-vg-add-clip',vgAddResample:'.spl-vg-add-resample',vgAddMergePath:'.spl-vg-add-merge-path',vgAddConform:'.spl-vg-add-conform',
+  vgAddReverse:'.spl-vg-add-reverse',vgAddClip:'.spl-vg-add-clip',vgAddResample:'.spl-vg-add-resample',vgAddMergePath:'.spl-vg-add-merge-path',vgAddMergeMesh:'.spl-vg-add-merge-mesh',vgAddConform:'.spl-vg-add-conform',
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
   vgAttachMesh:'.spl-vg-attach-mesh',vgDetachMesh:'.spl-vg-detach-mesh',
@@ -341,7 +342,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgAddNoise','vgAddReverse','vgAddClip','vgAddResample','vgAddMergePath','vgAddConform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgAddSplineOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgAddNoise','vgAddReverse','vgAddClip','vgAddResample','vgAddMergePath','vgAddMergeMesh','vgAddConform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgAddSplineOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -428,7 +429,7 @@ function render(panel){
       panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
-      sharedLocked||busy||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','width'].includes(view.map.get(panel._vgSelected)?.type);
+      sharedLocked||busy||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','mergeMesh','width'].includes(view.map.get(panel._vgSelected)?.type);
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
@@ -510,10 +511,10 @@ function editGraph(panel,action,details){
     const output=graph.applyGraphEdit(panel._vgGraphJson,action,details);
     if(!commitProperty(panel,'graphJson',output))return;
     panel._vgPending=null;panel._vgPreviewLayout=null;
-    if(action==='insert'||action==='add-output'||action==='add-spline-output'||action==='add-merge-path'){
+    if(action==='insert'||action==='add-output'||action==='add-spline-output'||action==='add-merge-path'||action==='add-merge-mesh'){
       const next=graph.parseGraph(output);
       const created=next.ordered.find(n=>!prior.map.has(n.id)&&
-        (action==='insert'||(action==='add-merge-path'?n.type==='mergePath':n.type==='output')));
+        (action==='insert'||(action==='add-merge-path'?n.type==='mergePath':action==='add-merge-mesh'?n.type==='mergeMesh':n.type==='output')));
       panel._vgSelected=created?.id||null;
     }else if(action==='remove'||action==='remove-output')panel._vgSelected=null;
     else if(action==='set-default-output')panel._vgSelected=details.id;
@@ -1206,6 +1207,15 @@ const inspector={
       }catch(error){status(this,String(error?.message||error),true);}
     });
     this.$?.vgAddConform?.addEventListener('click',()=>insert('conform'));
+    this.$?.vgAddMergeMesh?.addEventListener('click',()=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
+      try{
+        const view=graph.parseGraph(this._vgGraphJson),selected=view.map.get(this._vgSelected);
+        const output=selected?.type==='output'?selected:view.map.get(view.graph.output);
+        const sourceId=selected&&selected.type!=='output'&&graph.TYPES[selected.type].output==='mesh'&&selected.id!==output.input?selected.id:undefined;
+        editGraph(this,'add-merge-mesh',{before:output.id,sourceId});
+      }catch(error){status(this,String(error?.message||error),true);}
+    });
     this.$?.vgSwitchGenerator?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       try{
@@ -1274,7 +1284,7 @@ const inspector={
         if(socket.dataset.socket==='out'){
           this._vgPending=id;this._vgSelected=id;render(this);
         }else if(this._vgPending){
-          const port=socket.dataset.port??(socket.dataset.socket==='mesh-in'?'meshInput':socket.dataset.socket==='path-b-in'?'pathInputB':'input');
+          const port=socket.dataset.port??(socket.dataset.socket==='mesh-in'?'meshInput':socket.dataset.socket==='path-b-in'?'pathInputB':socket.dataset.socket==='mesh-b-in'?'meshInputB':'input');
           editGraph(this,'connect',{source:this._vgPending,target:id,port});
         }else status(this,'Click an output socket first, then an input socket.',true);
         return;

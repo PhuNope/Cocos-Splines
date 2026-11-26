@@ -22,7 +22,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'mergePath'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'mergePath'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'mergeMesh'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -32,6 +32,8 @@ export interface GeometryGraphNode {
     meshInput?:string;
     /** Secondary required Path input for Merge Path. */
     pathInputB?:string;
+    /** Secondary generated Mesh input for Merge Mesh (not a MeshAsset). */
+    meshInputB?:string;
     mergeDirection?:number;mergeMaxGap?:number;mergeMaxAngle?:number;
     /** Slot 0–2 for meshAsset nodes; omitted means original Source Mesh slot 0. */
     slot?:number;
@@ -460,18 +462,19 @@ const meshCopy=(data:RoadGeometry):RoadGeometry=>({
 });
 const nodePort=(type:GeometryNodeType):GeometryPortType=>
     type==='meshAsset'?'meshSource':
-    type==='ribbon'||type==='tube'||type==='extrude'||type==='meshDeform'||type==='output'?'mesh':'path';
+    type==='ribbon'||type==='tube'||type==='extrude'||type==='meshDeform'||type==='mergeMesh'||type==='output'?'mesh':'path';
 /** Named typed inputs; order is stable for traversal, cache keys and Editor parity.
  * Keep the existing serialized input/meshInput fields, rather than introducing
  * an incompatible graph format. Additional named ports can extend this registry.
  */
-export type GeometryInputKey='input'|'meshInput'|'pathInputB';
+export type GeometryInputKey='input'|'meshInput'|'pathInputB'|'meshInputB';
 export interface GeometryInputPort {
     readonly key:GeometryInputKey;readonly type:GeometryPortType;readonly required:boolean;
 }
 export function geometryInputPorts(type:GeometryNodeType):ReadonlyArray<GeometryInputPort>{
     if(type==='spline'||type==='meshAsset')return [];
-    const primary:GeometryInputPort={key:'input',type:type==='output'?'mesh':'path',required:true};
+    const primary:GeometryInputPort={key:'input',type:type==='output'||type==='mergeMesh'?'mesh':'path',required:true};
+    if(type==='mergeMesh')return [primary,{key:'meshInputB',type:'mesh',required:true}];
     if(type==='mergePath')return [primary,{key:'pathInputB',type:'path',required:true}];
     return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false}]:[primary];
 }
@@ -518,7 +521,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>(),occupiedSplineSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','mergePath','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','mergePath','width','ribbon','tube','extrude','meshDeform','mergeMesh','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...geometryInputPorts(node.type).map(p=>p.key),...(node.type==='spline'?['slot']:
             node.type==='meshAsset'?['slot']:
@@ -594,6 +597,8 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 if(!Number.isInteger(n))throw Error('Geometry Graph Conform mode must be 0 or 1.');
             }
         }
+        if(node.type==='mergeMesh'&&node.input===node.meshInputB)
+            throw Error('Geometry Graph Merge Mesh requires distinct input nodes.');
         if(node.type==='mergePath'){
             const direction=bound(node.mergeDirection===undefined?0:node.mergeDirection,0,2,'Merge Path direction');
             if(!Number.isInteger(direction))throw Error('Geometry Graph Merge Path direction must be an integer.');
@@ -741,6 +746,26 @@ function validateMesh(m:RoadGeometry):void{
        ![...m.positions,...m.normals,...m.uvs].every(x=>finite(x)&&Math.abs(x)<=1e8)||
        m.indices.some(i=>!Number.isInteger(i)||i<0||i>=vertices))
         throw Error('Geometry Graph generated invalid or oversized mesh geometry.');
+}
+/** Combine generated meshes in their common renderer-local space. No welding,
+ * normal recomputation, UV remapping or material inference. Budget before
+ * allocating arrays; no spread into function arguments (large mesh safe).
+ */
+function mergeMeshGeometry(a:RoadGeometry,b:RoadGeometry):RoadGeometry{
+    const base=a.positions.length/3,vertices=base+b.positions.length/3;
+    const indices=a.indices.length+b.indices.length;
+    if(vertices>65536||indices>393216||vertices*32+indices*2>8*1024*1024)
+        throw Error('Geometry Graph Merge Mesh exceeds combined geometry budget (65536 vertices / 393216 indices).');
+    const result:RoadGeometry={
+        positions:a.positions.concat(b.positions),
+        normals:a.normals.concat(b.normals),
+        uvs:a.uvs.concat(b.uvs),
+        indices:a.indices.concat(b.indices.map(i=>i+base)),
+        // A merged mesh has no single ring/band topology.
+        bands:0,ringCount:0,
+    };
+    validateMesh(result);
+    return result;
 }
 export interface GeometryGraphMetrics {computed:number;reused:number;nodes:number}
 /** Timings measure synchronous per-node graph evaluation only; they exclude
@@ -1006,6 +1031,11 @@ export class GeometryGraphRunner {
                     },source.closed,meshSource?.kind==='meshSource'?meshSource.geometry:undefined);
                     validateMesh(geometry);
                     value={kind:'mesh',geometry};
+                }else if(node.type==='mergeMesh'){
+                    const second=inputs.get('meshInputB')?.value;
+                    if(source?.kind!=='mesh'||second?.kind!=='mesh')
+                        throw Error('Geometry Graph Merge Mesh requires two generated Mesh inputs.');
+                    value={kind:'mesh',geometry:mergeMeshGeometry(source.geometry,second.geometry)};
                 }else{
                     if(source?.kind!=='mesh')throw Error('Geometry Graph output input is not a mesh.');
                     value=source;

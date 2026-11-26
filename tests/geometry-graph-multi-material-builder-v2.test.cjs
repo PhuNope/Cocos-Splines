@@ -45,6 +45,11 @@ try{
     ['outputB','outputRibbon','outputA']),[1,null,0],
    'Imported Material sources follow graph dependencies, not material order');
   assert.throws(()=>graphOutputMeshSourceSlots(importPlan,['missing']),/Output Node/);
+  const mergedPlan={...importPlan,nodes:[...importPlan.nodes,
+   {id:'merged',type:'mergeMesh',input:'deformA',meshInputB:'deformB'},
+   {id:'outputMerged',type:'output',input:'merged'}]};
+  assert.deepEqual(graphOutputMeshSourceSlots(mergedPlan,['outputMerged','outputA']),[null,0],
+   'Merged geometry uses manual output material even when multiple imported assets contribute');
   const road={positions:[0,0,0,2,0,0,0,0,2,2,0,2],
    normals:[0,1,0,0,1,0,0,1,0,0,1,0],
    uvs:[0,0,1,0,0,1,1,1],indices:[0,2,1,1,2,3],

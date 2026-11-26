@@ -59,15 +59,20 @@ export function graphOutputMeshSourceSlots(
         if(map.get(id)?.type!=='output')
             throw Error('Imported Material binding requires a valid Output Node.');
         const visited=new Set<string>(),slots=new Set<number>();
+        let merged=false;
         const visit=(nodeId:string):void=>{
             if(visited.has(nodeId))return;
             visited.add(nodeId);
             const node=map.get(nodeId);
             if(!node)throw Error('Imported Material graph dependency is missing.');
             if(node.type==='meshAsset')slots.add(node.slot??0);
+            if(node.type==='mergeMesh')merged=true;
             for(const link of geometryInputLinks(node))visit(link.sourceId);
         };
         visit(id);
+        // One merged primitive has no unambiguous inherited material.
+        // Respect explicit/manual output material; never choose an input asset.
+        if(merged)return null;
         if(slots.size>1)throw Error(
             'Imported Material cannot infer a source from multiple Mesh Assets on one output.');
         return slots.size===1?[...slots][0]:null;

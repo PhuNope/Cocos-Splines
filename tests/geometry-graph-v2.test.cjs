@@ -233,6 +233,32 @@ try{
  assert.throws(()=>join({mergeDirection:1.5}));assert.throws(()=>join({mergeMaxGap:null}));
  assert.deepEqual(join(),welded);
  assert.equal(JSON.stringify(frames),beforeTransform);
+ // Merge Mesh preserves both vertex streams and remaps only B indices.
+ const mg={version:2,output:'out',nodes:[
+  {id:'sa',type:'spline'},{id:'sb',type:'spline',slot:1},
+  {id:'ra',type:'ribbon',input:'sa',width:2},{id:'rb',type:'tube',input:'sb',radius:.25,radialSegments:8},
+  {id:'merge',type:'mergeMesh',input:'ra',meshInputB:'rb'},
+  {id:'out',type:'output',input:'merge'},{id:'outA',type:'output',input:'ra'},{id:'outB',type:'output',input:'rb'}]};
+ const mr=new GeometryGraphRunner(),mp=compileGeometryGraph(mg);
+ const meshes=mr.evaluateOutputs(mp,multiCtx),ma=meshes.outA,mb=meshes.outB,merged=meshes.out;
+ assert.deepEqual(merged.positions,ma.positions.concat(mb.positions));
+ assert.deepEqual(merged.normals,ma.normals.concat(mb.normals));
+ assert.deepEqual(merged.uvs,ma.uvs.concat(mb.uvs));
+ assert.deepEqual(merged.indices,ma.indices.concat(mb.indices.map(i=>i+ma.positions.length/3)));
+ assert.equal(merged.ringCount,0);assert.equal(merged.bands,0);
+ assert.deepEqual(mr.evaluateOutputs(mp,multiCtx),meshes);
+ assert.equal(mr.metrics.reused,8);
+ const updatedMerged=mr.evaluateOutputs(mp,changeB);
+ assert.deepEqual(updatedMerged.outA,ma);
+ assert.notDeepEqual(updatedMerged.out.positions,merged.positions);
+ assert.deepEqual(mr.metrics,{computed:5,reused:3,nodes:8});
+ for(const meshInputB of ['ra','sb','merge','missing',undefined])
+  assert.throws(()=>compileGeometryGraph({...mg,nodes:mg.nodes.map(n=>n.id==='merge'?{...n,meshInputB}:n)}));
+ const manyFrames=Array.from({length:1025},(_,i)=>({position:v(0,0,i),right:v(1),up:v(0,1),forward:v(0,0,1),distance:i}));
+ const bigGraph={...mg,nodes:mg.nodes.map(n=>['ra','rb'].includes(n.id)?{id:n.id,type:'tube',input:n.input,radius:.2,radialSegments:32}:n)};
+ const largeCtx={...ctx,splineSources:[{frames:manyFrames,closed:false,revision:'largeA'},{frames:manyFrames,closed:false,revision:'largeB'}]};
+ assert.throws(()=>mr.evaluateOutputs(compileGeometryGraph(bigGraph),largeCtx),/Merge Mesh exceeds combined geometry budget/i);
+ assert.deepEqual(mr.evaluateOutputs(mp,changeB),updatedMerged);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},

@@ -23,6 +23,7 @@ const TYPES=Object.freeze({
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
   extrude:{input:'path',output:'mesh',params:['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']},
   meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']},
+  mergeMesh:{input:'mesh',output:'mesh',params:[]},
   output:{input:'mesh',output:'mesh',params:[]},
 });
 /** Mirror the Core named port registry. Preserve TYPES.input for existing
@@ -31,6 +32,7 @@ function inputPorts(type){
   const info=TYPES[type];
   if(!info||!info.input)return [];
   const primary={key:'input',type:info.input,required:true,socket:'in',label:info.input,offset:75};
+  if(type==='mergeMesh')return [{...primary,label:'Mesh A'},{key:'meshInputB',type:'mesh',required:true,socket:'mesh-b-in',label:'Mesh B',offset:51}];
   if(type==='mergePath')return [{...primary,label:'Path A'},{key:'pathInputB',type:'path',required:true,socket:'path-b-in',label:'Path B',offset:51}];
   return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false,
     socket:'mesh-in',label:'asset',offset:51}]:[primary];
@@ -59,7 +61,7 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
+const NODE_KEYS=new Set(['id','type','input','meshInput','meshInputB','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -129,6 +131,8 @@ function validateGraph(graph) {
     }
     if(node.type==='conform'&&(node.conformRayHeight??10)+(node.conformRayDepth??50)<=1e-6)
       throw Error('Conform requires a nonzero ray range.');
+    if(node.type==='mergeMesh'&&node.input===node.meshInputB)
+      throw Error('Merge Mesh requires distinct input nodes.');
     if(node.type==='mergePath'&&node.input===node.pathInputB)
       throw Error('Merge Path requires distinct input nodes.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
@@ -202,7 +206,27 @@ function applyGraphEdit(json,action,details={}) {
     for(const n of next.nodes)if(n.type==='output')mark(n.id);
     next.nodes=next.nodes.filter(n=>live.has(n.id));
   };
-  if(action==='add-merge-path'){
+  if(action==='add-merge-mesh'){
+    const target=find(details.before||next.output);
+    if(!target||target.type!=='output')throw Error('Select an Output Node for Merge Mesh.');
+    const first=find(target.input);
+    let second=details.sourceId?find(details.sourceId):null;
+    if(details.sourceId&&!second)throw Error('Unknown second Mesh source.');
+    if(!second){
+      if(!first||!['ribbon','tube','extrude','meshDeform'].includes(first.type))
+        throw Error('Select an existing second Mesh generator to extend a merged output.');
+      // Create a distinct procedural generator on the same input path.
+      // Use different geometry rather than duplicating identical triangles.
+      const type=first.type==='ribbon'?'tube':'ribbon';
+      second={id:unique(type),type,input:first.input};
+      next.nodes.push(second);
+    }
+    if(!first||second.type==='output'||TYPES[second.type].output!=='mesh'||first.id===second.id)
+      throw Error('Merge Mesh requires a distinct generated Mesh source.');
+    if(next.nodes.length>=32)throw Error('Graph node limit reached.');
+    const created={id:unique('mergeMesh'),type:'mergeMesh',input:first.id,meshInputB:second.id};
+    next.nodes.push(created);target.input=created.id;
+  }else if(action==='add-merge-path'){
     const target=find(details.before);
     if(!target||TYPES[target.type].input!=='path'||!target.input)
       throw Error('Select a Path consumer for Merge Path.');
@@ -247,7 +271,8 @@ function applyGraphEdit(json,action,details={}) {
     if(!target||target.type!=='output')
       throw Error('Select an existing output to branch from.');
     const producer=find(target.input);
-    if(!producer||!['ribbon','tube','extrude','meshDeform'].includes(producer.type))
+    if(!producer||!['ribbon','tube','extrude','meshDeform','mergeMesh'].includes(producer.type)||
+       (action==='add-spline-output'&&producer.type==='mergeMesh'))
       throw Error('Output must be connected to a mesh generator.');
     const meshId=unique(producer.type+'Branch');
     const outputId=unique('outputBranch');
@@ -302,12 +327,12 @@ function applyGraphEdit(json,action,details={}) {
     target.input=id;next.nodes.push(created);
   }else if(action==='remove'){
     const id=details.id,target=find(id);
-    if(!target||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','width'].includes(target.type))
+    if(!target||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','mergeMesh','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
     for(const node of next.nodes)for(const link of inputLinks(node))
       if(link.sourceId===id)node[link.port.key]=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
-    if(target.type==='mergePath')pruneUnused();
+    if(target.type==='mergePath'||target.type==='mergeMesh')pruneUnused();
   }else if(action==='connect'){
     const target=find(details.target),source=find(details.source);
     if(!target||!source)throw Error('Select a valid input and output socket.');
@@ -339,7 +364,7 @@ function applyGraphEdit(json,action,details={}) {
         }
       }
       target[port.key]=source.id;
-      if(target.type==='mergePath')pruneUnused();
+      if(target.type==='mergePath'||target.type==='mergeMesh')pruneUnused();
     }
   }else if(action==='replace-generator'){
     const kind=details.type;
@@ -363,7 +388,7 @@ function applyGraphEdit(json,action,details={}) {
        typeof current.height==='number')replacement.height=current.height;
     // Multi-output may share a producer. Preserve it if another output uses
     // that mesh; otherwise replace in place without orphaning the graph.
-    const shared=next.nodes.some(n=>n.id!==output.id&&n.input===current.id);
+    const shared=next.nodes.some(n=>n.id!==output.id&&inputLinks(n).some(l=>l.sourceId===current.id));
     if(shared)next.nodes.push(replacement);
     else next.nodes=next.nodes.map(n=>n.id===current.id?replacement:n);
     if(next.nodes.length>32)throw Error('Graph node limit reached.');
@@ -597,6 +622,7 @@ function renderNodeParameters(graphJson,id){
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
+    (n.type==='mergeMesh'?'<div class="spl-vg-note">One output material; positions, normals and UVs preserved. No vertex welding.</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':'')+
     (n.type==='width'?renderWidthKeyControls(n):'');
 }

@@ -44,6 +44,8 @@ try {
  assert.deepEqual(multiSpline.nodes.filter(n=>n.type==='spline').map(n=>n.slot??0),[0,1]);
  const mergePath=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/MergePathGraph.json'),'utf8'));
  assert.equal(mergePath.nodes.find(n=>n.type==='mergePath').pathInputB,'sourceB');
+ const mergeMesh=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/MergeMeshGraph.json'),'utf8'));
+ assert.equal(mergeMesh.nodes.find(n=>n.type==='mergeMesh').meshInputB,'tube');
  const extrude=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicProfileExtrudeGraph.json'),'utf8'));
  assert.equal(extrude.version,1);
