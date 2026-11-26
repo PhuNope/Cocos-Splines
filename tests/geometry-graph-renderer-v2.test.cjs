@@ -656,22 +656,36 @@ async function run(){
    renderer.rebuild();
    // World-space Profile U consumes the renderer matrix and preserves
    // prior mesh when the JsonAsset schema is invalid.
-   const localUv=out.mesh.data.uvs.slice();
+   // Multi-output uses an interleaved vertex bundle, not Mesh.data.uvs.
+   // Read UV0 from the second typed submesh vertex bundle (slot B).
+   const outputBUv=mesh=>{
+    const bundle=mesh.struct.vertexBundles[1];
+    const bytes=mesh.data;
+    const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    const result=[];
+    for(let i=0;i<bundle.view.count;i++){
+     const offset=bundle.view.offset+i*bundle.view.stride;
+     result.push(dv.getFloat32(offset+24,true),
+      dv.getFloat32(offset+28,true));
+    }
+    return result;
+   };
+   const localUv=outputBUv(out.mesh);
    squareProfile.uv.uWorldSpace=true;
    renderer.rebuild();
-   assert.deepEqual(out.mesh.data.uvs,localUv,
+   assert.deepEqual(outputBUv(out.mesh),localUv,
     'Identity renderer matrix reproduces nominal side metric U');
    assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5});
    const unchangedWorldFrames=frameBuilds;
    node.worldMatrix.m00=2;
    renderer.rebuild();
-   assert.notDeepEqual(out.mesh.data.uvs,localUv,
+   assert.notDeepEqual(outputBUv(out.mesh),localUv,
     'Renderer Node scale adjusts opted-in World-space U');
    assert.equal(frameBuilds,unchangedWorldFrames+1,
     'Transform change invalidates cached local spline frames');
    node.worldMatrix.m00=1;
    renderer.rebuild();
-   assert.deepEqual(out.mesh.data.uvs,localUv,
+   assert.deepEqual(outputBUv(out.mesh),localUv,
     'Reverting scale restores original UV metric');
    const lastWorldGood=out.mesh;
    squareProfile.uv.uWorldSpace='true';
