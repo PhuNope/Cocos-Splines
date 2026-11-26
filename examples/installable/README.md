@@ -8,7 +8,7 @@ These are **project-owned scripts** (not linked to the extension package). You c
 
 Run Install Examples again to upgrade unmodified TrainSingleSpline.ts and TrainRouteConsist.ts in place. For customized copies, import `CCBoolean` from `cc` and use `@property({ type: CCBoolean })` on `wrapClosed`, `backwards`, `loopRoute` and `playOnStart`, preserving their defaults and existing `.meta` files.
 
-## Quick start: 19 runnable examples
+## Quick start: 20 runnable examples
 
 1. Make or open a **3D Scene** in Cocos Creator 3.8.x and save it.
 2. Once script compilation finishes, choose **Extension → Cocos Splines → Create Example Gallery in Scene**. The Editor creates a Node with **CocosSplinesExampleGalleryV2**; clicking again selects the same Node.
@@ -37,6 +37,7 @@ Run Install Examples again to upgrade unmodified TrainSingleSpline.ts and TrainR
 | GeometryGraphProfileHoles | Solid and two-hole Profile Extrude comparison with open interior channels and perforated end caps. No JSON drag/drop required. |
 | GeometryGraphMultiContour | One versus three disconnected solid contours along a spline. No JSON drag/drop required. |
 | GeometryGraphMultiHollow | Three solid versus three hollow contours, one hole in each. No JSON drag/drop required. |
+| GeometryGraphAtlasPriority | Same hollow profile with equal vs weighted outer/inner/cap UV density. No JSON drag/drop required. |
 
 ### Geometry Graph Triangle UV — no JsonAsset setup required
 
@@ -74,6 +75,7 @@ These scripts demonstrate serialized-component workflows where you provide refer
 - **GeometryGraph/Profiles/MultiHollowProfile.json** — three independent hollow profiles; run GeometryGraphMultiHollow in the Gallery.
 - **GeometryGraph/Profiles/MultiContourProfile.json** — three disconnected CCW exteriors. Choose Gallery GeometryGraphMultiContour and Play, or assign as Profile Asset A.
 - **GeometryGraph/Profiles/HollowProfile.json** — two clockwise interior contours inside a CCW exterior. Select Gallery `GeometryGraphProfileHoles` and Play, or assign the JSON to Profile Asset A of a persistent Geometry Graph renderer.
+- **GeometryGraph/Profiles/UVAtlasPriorityProfile.json** — outer wall density 2, inner wall 0.5, caps 1. Gallery GeometryGraphAtlasPriority demonstrates the comparison.
 - **GeometryGraph/Profiles/UVAdvancedAtlasProfile.json** — triangle UV Atlas with rotation enabled and a 4 px gutter at 1024 × 1024. Select Gallery `GeometryGraphAdvancedAtlas` and Play (no asset references required); optionally assign this Profile to UV Atlas Profile; or edit the asset on a persistent Geometry Graph Renderer. Pixel padding assumes a square texture of the declared resolution.
 - **GeometryGraph/Profiles/UVTriangleUnwrapProfile.json** — opt-in per-triangle UV0 islands, each side/cap triangle duplicated into 3 independent vertices and optionally packed into [0,1] with 6% padding. Example Gallery has an automatic **GeometryGraphTriangleUV** Play mode; the file is only for a persistent Profile Asset A workflow. See `docs/GEOMETRY_GRAPH_PROFILE_TRIANGLE_UV_V2_VI.md`.
 - **GeometryGraph/Profiles/UVWorldSpaceProfile.json** — optional authored Profile with `uv.uWorldSpace: true` and `uv.uMetersPerRepeat: 1.5`. Assign to Profile Asset A on `UVIslandExtrudeGraph.json`, toggle world/non-world U in Profile Editor, and change the output Node nonuniform scale. World mode derives U from physical edge lengths of the generated mesh after renderer Node scale; spline V already uses physical arc distance. Note: a Profile JsonAsset save is explicit and not tracked by Scene Undo.
@@ -117,7 +119,7 @@ Install Examples **skips existing files** except a byte-for-byte pristine legacy
 
 If the Gallery script is customized, merge the new enum mode and handler manually. **Deleting a script referenced by saved Scenes** can break component references; do not remove and recreate a Gallery script merely to upgrade it.
 
-### Imported asset workflows (19-mode Gallery)
+### Imported asset workflows (20-mode Gallery)
 
 **Mesh Deformation**: Press Play in MeshDeform mode to see a procedural ribbon input mesh deformed along a curved spline. To test an imported rope/pipe model instead, create a SplineContainer and a Node with MeshRenderer + SplineMeshDeform, then attach `CocosSplinesMeshDeformExampleV2` and bind its three Inspector references. Enable **Allow Data Access** on the imported Mesh, and subdivide the mesh along its Z axis.
 

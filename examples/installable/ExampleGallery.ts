@@ -27,7 +27,7 @@ export enum SplineExampleKind {
     Follower=0, Road=1, Extrude=2, Junction=3, Proximity=4, Positioner=5,
     Projector=6, Triggers=7, Modifiers=8, Morph=9,
     MeshDeform=10, TrafficController=11, PrefabSpawning=12,
-    GeometryGraphUVAtlas=13, GeometryGraphTriangleUV=14, GeometryGraphAdvancedAtlas=15, GeometryGraphProfileHoles=16, GeometryGraphMultiContour=17, GeometryGraphMultiHollow=18,
+    GeometryGraphUVAtlas=13, GeometryGraphTriangleUV=14, GeometryGraphAdvancedAtlas=15, GeometryGraphProfileHoles=16, GeometryGraphMultiContour=17, GeometryGraphMultiHollow=18, GeometryGraphAtlasPriority=19,
 }
 Enum(SplineExampleKind);
 
@@ -36,11 +36,11 @@ export class CocosSplinesExampleGalleryV2 extends Component {
     @property({type:Enum(SplineExampleKind),tooltip:'Choose a feature, then press Play. Nodes are created only at runtime.'})
     example:SplineExampleKind=SplineExampleKind.Follower;
     /** Optional project-authored overrides; default demo needs no asset drag/drop. */
-    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas;},tooltip:'Optional UV Atlas Profile JSON.'})
+    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas||this.example===SplineExampleKind.GeometryGraphAtlasPriority;},tooltip:'Optional UV Atlas Profile JSON.'})
     uvAtlasProfile:JsonAsset|null=null;
-    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas;},tooltip:'Optional UV Atlas Geometry Graph JSON.'})
+    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas||this.example===SplineExampleKind.GeometryGraphAtlasPriority;},tooltip:'Optional UV Atlas Geometry Graph JSON.'})
     uvAtlasGraph:JsonAsset|null=null;
-    @property({type:Material,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas;},tooltip:'Optional UV checker material for both previews.'})
+    @property({type:Material,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas||this.example===SplineExampleKind.GeometryGraphTriangleUV||this.example===SplineExampleKind.GeometryGraphAdvancedAtlas||this.example===SplineExampleKind.GeometryGraphAtlasPriority;},tooltip:'Optional UV checker material for both previews.'})
     uvAtlasPreviewMaterial:Material|null=null;
     private created=false;
 
@@ -68,6 +68,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             case SplineExampleKind.GeometryGraphProfileHoles:this.showGeometryGraphProfileHoles();break;
             case SplineExampleKind.GeometryGraphMultiContour:this.showGeometryGraphMultiContour();break;
             case SplineExampleKind.GeometryGraphMultiHollow:this.showGeometryGraphMultiHollow();break;
+            case SplineExampleKind.GeometryGraphAtlasPriority:this.showGeometryGraphAtlasPriority();break;
         }
     }
     private child(parent:Node,name:string,at?:Vec3):Node {
@@ -440,7 +441,10 @@ export class CocosSplinesExampleGalleryV2 extends Component {
     private showGeometryGraphMultiHollow():void {
         this.showGeometryGraphUVAtlas(false,false,false,true,true);
     }
-    private showGeometryGraphUVAtlas(triangle=false,advanced=false,hollow=false,multi=false,multiHollow=false):void {
+    private showGeometryGraphAtlasPriority():void {
+        this.showGeometryGraphUVAtlas(true,true,false,false,false,true);
+    }
+    private showGeometryGraphUVAtlas(triangle=false,advanced=false,hollow=false,multi=false,multiHollow=false,priority=false):void {
         const graphData=this.uvAtlasGraph?.json??{
             version:1,nodes:[
                 {id:'source',type:'spline'},
@@ -467,7 +471,10 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             throw Error('UV Atlas Gallery needs a polygon Profile with UV settings.');
         const variants:[
             string,number,boolean,Color,
-        ][]=multi?[
+        ][]=priority?[
+            ['Equal UV density',-4.7,false,new Color(80,175,240)],
+            ['Outer ×2 / Inner ×0.5 / Caps ×1',4.7,true,new Color(250,175,75)],
+        ]:multi?[
             [multiHollow?'Three Solid Outers':'Single Outer',-4.7,false,new Color(80,175,240)],
             [multiHollow?'Three Hollow Outers':'Three Independent Outers',4.7,true,new Color(250,175,75)],
         ]:hollow?[
@@ -481,7 +488,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             ['UV Atlas / Packed',4.7,true,new Color(250,175,75)],
         ];
         for(const [label,x,packed,color] of variants){
-            const spline=this.spline((multiHollow?'19':multi?'18':hollow?'17':advanced?'16':triangle?'15':'14')+' — '+label,[
+            const spline=this.spline((priority?'20':multiHollow?'19':multi?'18':hollow?'17':advanced?'16':triangle?'15':'14')+' — '+label,[
                 new Vec3(x-3.5,1,-1.2),
                 new Vec3(x-1.1,2.3,-3),
                 new Vec3(x+1.1,1.6,2.7),
@@ -511,6 +518,15 @@ export class CocosSplinesExampleGalleryV2 extends Component {
                 delete profileData.uv.atlasPadding;
                 delete profileData.uv.atlasRotate;
                 delete profileData.uv.atlasPixelPadding;
+                delete profileData.uv.atlasPriority;
+            }
+            if(priority){
+                profileData.points=[{x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:-.5,y:.5}];
+                profileData.holes=[[{x:-.25,y:-.25},{x:-.25,y:.25},{x:.25,y:.25},{x:.25,y:-.25}]];
+                delete profileData.outerContours;delete profileData.outerHoles;
+                profileData.uv={sideIslandMode:2,triangleUnwrap:true,atlasPacking:true,
+                    atlasRotate:true,atlasPixelPadding:{resolution:1024,pixels:2}};
+                if(packed)profileData.uv.atlasPriority={outer:2,inner:.5,cap:1};
             }
             if(hollow){
                 profileData.points=[{x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:-.5,y:.5}];
@@ -556,6 +572,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
                 console.warn('[Cocos Splines Example] UV Atlas graph failed ('+label+'):',error);
             }
         }
+        if(priority){console.log('[Cocos Splines Example] Equal vs weighted atlas density.');return;}
         if(multi){console.log('[Cocos Splines Example] Single vs disconnected outer contours.');return;}
         if(hollow){console.log('[Cocos Splines Example] Solid vs two-hole Profile Extrude.');return;}
         console.log('[Cocos Splines Example] '+(advanced?'GeometryGraphAdvancedAtlas':triangle?'GeometryGraphTriangleUV':'GeometryGraphUVAtlas')+

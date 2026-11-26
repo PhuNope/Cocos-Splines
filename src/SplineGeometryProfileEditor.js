@@ -110,7 +110,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points,...contours};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','triangleUnwrap'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','atlasPriority','triangleUnwrap'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -173,6 +173,14 @@ function parseProfile(value){
    throw Error('Profile UV atlasPixelPadding requires Atlas, resolution 16–16384 and pixels 0–64 with room for gutters.');
   uv.atlasPixelPadding={resolution:p.resolution,pixels:p.pixels};
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'atlasPriority')){
+  const p=raw.atlasPriority;
+  if(uv.atlasPacking!==true||!p||typeof p!=='object'||Array.isArray(p)||
+     Object.keys(p).some(k=>!['outer','inner','cap'].includes(k))||
+     !['outer','inner','cap'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k])&&p[k]>=.25&&p[k]<=4))
+   throw Error('Profile UV atlasPriority requires Atlas and outer/inner/cap densities in [0.25,4].');
+  uv.atlasPriority={outer:p.outer,inner:p.inner,cap:p.cap};
+ }
  if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
   if(typeof raw.triangleUnwrap!=='boolean')
    throw Error('Profile UV triangleUnwrap must be boolean.');
@@ -209,7 +217,7 @@ function applyProfileEdit(value,action,params={}){
  if(!Number.isInteger(contour)||contour<0||contour>=rings.length)
   throw Error('Select a valid contour.');
  const p=rings[contour];
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole','set-outer-contours','add-outer','remove-outer','set-outer-holes'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-atlas-priority','clear-atlas-priority','set-holes','add-hole','remove-hole','set-outer-contours','add-outer','remove-outer','set-outer-holes'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -329,6 +337,7 @@ function applyProfileEdit(value,action,params={}){
    delete profile.uv.atlasPadding;
    delete profile.uv.atlasRotate;
    delete profile.uv.atlasPixelPadding;
+   delete profile.uv.atlasPriority;
    if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-atlas-rotate'){
@@ -342,6 +351,11 @@ function applyProfileEdit(value,action,params={}){
   profile.uv.atlasPixelPadding={resolution:params.resolution,pixels:params.pixels};
  }else if(action==='clear-atlas-pixel-padding'){
   if(profile.uv)delete profile.uv.atlasPixelPadding;
+ }else if(action==='set-atlas-priority'){
+  if(profile.uv?.atlasPacking!==true)throw Error('Profile UV priority requires Atlas.');
+  profile.uv.atlasPriority={outer:params.outer,inner:params.inner,cap:params.cap};
+ }else if(action==='clear-atlas-priority'){
+  if(profile.uv)delete profile.uv.atlasPriority;
  }else if(action==='set-atlas-padding'){
   if(!finite(params.padding)||params.padding<0||params.padding>.2||
      profile.uv?.atlasPacking!==true)
@@ -543,6 +557,11 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   (profile.uv?.atlasPixelPadding?
    '<label>Resolution <input type="number" class="spl-profile-uv-atlas-resolution" min="16" max="16384" step="1" value="'+profile.uv.atlasPixelPadding.resolution+'"></label>'+
    '<label>Gutter (px) <input type="number" class="spl-profile-uv-atlas-pixels" min="0" max="64" step="1" value="'+profile.uv.atlasPixelPadding.pixels+'"></label>':'')+'</div>'+
+  '<div class="spl-vg-toolbar"><label title="Relative linear UV density">'+
+   '<input type="checkbox" class="spl-profile-uv-atlas-priority"'+
+   (profile.uv?.atlasPriority?' checked':'')+(profile.uv?.atlasPacking===true?'':' disabled')+'> Atlas priority</label>'+
+   (profile.uv?.atlasPriority?['outer','inner','cap'].map(key=>
+    '<label>'+({outer:'Outer',inner:'Inner',cap:'Caps'}[key])+' <input type="number" class="spl-profile-uv-priority-'+key+'" min="0.25" max="4" step="0.25" value="'+profile.uv.atlasPriority[key]+'"></label>').join(''):'')+'</div>'+
 
    '<div class="spl-vg-toolbar">'+
    '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+

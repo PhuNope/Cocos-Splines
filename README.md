@@ -47,6 +47,10 @@ Authored Profile JSON accepts optional `outerContours` (1–3 additional disjoin
 
 Authored Profile JSON v1 supports optional `holes`, an array of 1–3 clockwise interior contours (3–16 vertices each), strictly inside the existing CCW exterior. Caps are triangulated without filling holes; inner walls face the void. Existing UV mapping and atlas modes support separate contour seams. The Profile editor supports an active outer/inner contour selector, draggable point and edge handles, snap, numeric coordinates, point insertion/deletion and hole creation/removal with draft Undo/Redo. Advanced hole JSON remains collapsed by default. Choose Example Gallery `GeometryGraphProfileHoles` and Play. See [profile holes guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).
 
+### UV Atlas Priority — v2 preview
+
+Opt-in `uv.atlasPriority` sets relative linear texel-density multipliers for `outer`, `inner`, `cap` (each 0.25–4). Requires atlasPacking; all-one preserves the previous packing. Higher weights allocate more UV area relative to other surface groups while preserving island aspect and gutters. Configure in Profile Editor or run Gallery `GeometryGraphAtlasPriority`. No texture baking. See [advanced atlas guide](docs/GEOMETRY_GRAPH_PROFILE_UV_ATLAS_ADVANCED_V2_VI.md).
+
 ### Advanced UV Atlas — v2 preview
 
 Opt-in Profile UV fields `atlasRotate: true` and `atlasPixelPadding: {resolution: 1024, pixels: 2}` allow proper 90-degree island rotation and minimum pixel gutters for a square atlas. Candidate search compares input and size-sorted layouts, preserving a common UV scale and winding. Pixel gutters override fractional padding while enabled. Edit in Authored Profile Editor; disable Atlas to clear dependent settings. Texture baking is not included. See [advanced atlas guide](docs/GEOMETRY_GRAPH_PROFILE_UV_ATLAS_ADVANCED_V2_VI.md).

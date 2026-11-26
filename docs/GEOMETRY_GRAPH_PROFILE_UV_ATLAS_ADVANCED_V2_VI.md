@@ -18,3 +18,7 @@ Chạy Install Examples. Chọn Example Gallery → GeometryGraphAdvancedAtlas, 
 ```
 
 Giới hạn: grid search có tối đa 64 cột, thử 6 tập ứng viên; không phải MaxRects/skyline tối ưu toàn cục. Không tạo texture, không bake, không dự đoán mip bleed; gutter theo đúng resolution do người dùng khai báo. Cần kiểm thử native Creator 3.8.8 với material/GPU.
+
+## Atlas Priority
+
+Bật **Atlas priority** trong Authored Profile Editor sau khi bật Atlas. Outer (thành ngoài), Inner (thành lỗ), Caps có trọng số mật độ UV tuyến tính 0.25–4. Ví dụ 2 / 0.5 / 1 cho mật độ tương đối 4:1 giữa thành ngoài và thành lỗ (so với UV gốc), không phải tỷ lệ diện tích tuyệt đối của texture. Tỷ lệ diện tích thay đổi theo bình phương trọng số; layout còn phụ thuộc kích thước UV gốc. Packer giữ aspect, winding, pixel gutter và hình học, không bake texture. Tất cả bằng 1 cho kết quả cũ. Gallery `GeometryGraphAtlasPriority` tạo cùng tiết diện rỗng với hai cấu hình để so sánh.

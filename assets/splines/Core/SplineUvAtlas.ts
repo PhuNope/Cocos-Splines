@@ -3,7 +3,8 @@
  * and each island's U/V aspect (including nonuniform taper/shear).
  * No geometry, normals, topology, source Profile or material assets are touched.
  */
-export interface UvAtlasIsland {firstVertex:number;vertexCount:number}
+export interface UvAtlasIsland {firstVertex:number;vertexCount:number;density?:number}
+export interface UvAtlasPriority {outer:number;inner:number;cap:number}
 interface MeasuredIsland extends UvAtlasIsland {
     minU:number;maxU:number;minV:number;maxV:number;width:number;height:number;
 }
@@ -89,8 +90,8 @@ function packAdvancedAtlas(
         const source=islands.map(island=>{
             const rotated=orientation===1?island.height>island.width:
                 orientation===2?island.width>island.height:false;
-            return {island,rotated,w:rotated?island.height:island.width,
-                h:rotated?island.width:island.height};
+            return {island,rotated,w:(rotated?island.height:island.width)*(island.density??1),
+                h:(rotated?island.width:island.height)*(island.density??1)};
         });
         for(const sorted of [false,true]){
             const items=sorted?source.slice().sort((a,b)=>
@@ -131,8 +132,9 @@ function packAdvancedAtlas(
         for(let j=a.firstVertex;j<a.firstVertex+a.vertexCount;j++){
             const du=uvs[j*2]-midU,dv=uvs[j*2+1]-midV;
             // Proper 90-degree rotation: determinant +1, no mirrored UVs.
-            const u=centerU+(item.rotated?-dv:du)*scale*shrink;
-            const v=centerV+(item.rotated?du:dv)*scale*shrink;
+            const density=a.density??1;
+            const u=centerU+(item.rotated?-dv:du)*scale*shrink*density;
+            const v=centerV+(item.rotated?du:dv)*scale*shrink*density;
             if(!Number.isFinite(u)||!Number.isFinite(v)||
                u< -1e-8||u>1+1e-8||v< -1e-8||v>1+1e-8)
                 throw Error('Graph Profile UV Atlas produced out-of-range UV0.');
@@ -169,6 +171,9 @@ export function packProfileUvAtlas(
            group.firstVertex!==nextVertex||
            group.firstVertex+group.vertexCount>uvs.length/2)
             throw Error('Graph Profile UV Atlas islands must be consecutive nonempty vertex spans.');
+        const density=group.density??1;
+        if(typeof density!=='number'||!Number.isFinite(density)||density<.25||density>4||group.density===null)
+            throw Error('Graph Profile UV Atlas island density must be in [0.25,4].');
         nextVertex=group.firstVertex+group.vertexCount;
         let minU=Infinity,maxU=-Infinity,minV=Infinity,maxV=-Infinity;
         for(let i=group.firstVertex;i<nextVertex;i++){
@@ -183,11 +188,11 @@ export function packProfileUvAtlas(
            width<EPS||height<EPS)
             throw Error('Graph Profile UV Atlas cannot pack degenerate UV islands.');
         return {firstVertex:group.firstVertex,vertexCount:group.vertexCount,
-            minU,maxU,minV,maxV,width,height};
+            minU,maxU,minV,maxV,width,height,density};
     });
     if(nextVertex!==uvs.length/2)
         throw Error('Graph Profile UV Atlas island groups must cover all vertices.');
-    if(options.rotate===true||pixel!==undefined){
+    if(options.rotate===true||pixel!==undefined||islands.some(i=>i.density!==1)){
         packAdvancedAtlas(uvs,islands,padding,options);
         return;
     }

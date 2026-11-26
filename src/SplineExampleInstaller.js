@@ -5,6 +5,7 @@
  */
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PRISTINE_GALLERY_BLOBS=new Set([
+ '8409dfab478a7cb3f4be983b9dcc4b4990b87d75', // Multi Hollow 19-mode
  'fb7636bf1b0f5f4abf41a5a732465dd61df169a8', // Multi Contour 18-mode
  'c0d728b91ba6454c4b2a69f207ecfc9fd1074892', // Profile Holes 17-mode
  '13e6464755a622979bab70363166b934e8a1964d', // Advanced Atlas 16-mode
@@ -78,6 +79,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/Profiles/HollowProfile.json','examples/installable/GeometryGraph/Profiles/HollowProfile.json'],
  ['GeometryGraph/Profiles/MultiContourProfile.json','examples/installable/GeometryGraph/Profiles/MultiContourProfile.json'],
  ['GeometryGraph/Profiles/MultiHollowProfile.json','examples/installable/GeometryGraph/Profiles/MultiHollowProfile.json'],
+ ['GeometryGraph/Profiles/UVAtlasPriorityProfile.json','examples/installable/GeometryGraph/Profiles/UVAtlasPriorityProfile.json'],
  ['GeometryGraph/Profiles/UVMetricProfile.json','examples/installable/GeometryGraph/Profiles/UVMetricProfile.json'],
  ['GeometryGraph/Profiles/UVTaperProfile.json','examples/installable/GeometryGraph/Profiles/UVTaperProfile.json'],
  ['GeometryGraph/BasicMeshDeformGraph.json','examples/installable/GeometryGraph/BasicMeshDeformGraph.json'],

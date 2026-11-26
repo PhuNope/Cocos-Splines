@@ -1,0 +1,57 @@
+{
+  "format": "cocos-splines/profile",
+  "version": 1,
+  "points": [
+    {
+      "x": -0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": 0.5
+    },
+    {
+      "x": -0.5,
+      "y": 0.5
+    }
+  ],
+  "holes": [
+    [
+      {
+        "x": -0.25,
+        "y": -0.25
+      },
+      {
+        "x": -0.25,
+        "y": 0.25
+      },
+      {
+        "x": 0.25,
+        "y": 0.25
+      },
+      {
+        "x": 0.25,
+        "y": -0.25
+      }
+    ]
+  ],
+  "uv": {
+    "sideIslandMode": 2,
+    "triangleUnwrap": true,
+    "atlasPacking": true,
+    "atlasRotate": true,
+    "atlasPixelPadding": {
+      "resolution": 1024,
+      "pixels": 2
+    },
+    "atlasPriority": {
+      "outer": 2,
+      "inner": 0.5,
+      "cap": 1
+    }
+  }
+}

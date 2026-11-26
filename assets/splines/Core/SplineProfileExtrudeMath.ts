@@ -7,7 +7,7 @@
  * Separate side bands provide crisp profile corners and independent cap UVs.
  */
 import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
-import {packProfileUvAtlas,unwrapProfileUvTriangles,UvAtlasIsland,UvAtlasPixelPadding} from './SplineUvAtlas';
+import {packProfileUvAtlas,unwrapProfileUvTriangles,UvAtlasIsland,UvAtlasPixelPadding,UvAtlasPriority} from './SplineUvAtlas';
 
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
@@ -47,6 +47,8 @@ export interface GraphProfileUV {
     atlasRotate?:boolean;
     /** Optional square atlas resolution and exact minimum pixel gutter per side. */
     atlasPixelPadding?:UvAtlasPixelPadding;
+    /** Relative linear texel density by surface group, default 1 each. */
+    atlasPriority?:UvAtlasPriority;
     /** Split each side/cap triangle into independent UV0 vertices.
      * Keeps world geometry, normals and triangle winding unchanged.
      * Triangle UVs are rebased to their own local origin (not rescaled).
@@ -135,7 +137,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points,...contours};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','triangleUnwrap'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','atlasPriority','triangleUnwrap'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -203,6 +205,15 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            p.pixels<0||p.pixels>64||2*p.pixels>=p.resolution)
             throw Error('Graph Profile Asset UV atlasPixelPadding requires enabled atlasPacking, resolution 16–16384 and pixels 0–64 with room for gutters.');
         uv.atlasPixelPadding={resolution:p.resolution,pixels:p.pixels};
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'atlasPriority')){
+        const p=raw.atlasPriority as Record<string,unknown>;
+        if(uv.atlasPacking!==true||!p||typeof p!=='object'||Array.isArray(p)||
+           Object.keys(p).some(k=>!['outer','inner','cap'].includes(k))||
+           !['outer','inner','cap'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k])&&
+               (p[k] as number)>=.25&&(p[k] as number)<=4))
+            throw Error('Graph Profile Asset UV atlasPriority requires Atlas and outer/inner/cap densities in [0.25,4].');
+        uv.atlasPriority={outer:p.outer as number,inner:p.inner as number,cap:p.cap as number};
     }
     if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
         if(typeof raw.triangleUnwrap!=='boolean')
@@ -696,6 +707,28 @@ export function buildProfileExtrudeGeometry(
                 let first=sideVertices;
                 for(let end=0;end<2;end++)for(const count of capParts){
                     groups.push({firstVertex:first,vertexCount:count});first+=count;
+                }
+            }
+        }
+        const priority=authored.uv.atlasPriority;
+        if(priority){
+            // Side indices are emitted edge-major; each edge has two triangles
+            // per span. Cap vertices/triangles follow all side geometry.
+            const edgeDensity=parts.flatMap(part=>part.flatMap((ring,i)=>
+                ring.map(()=>i===0?priority.outer:priority.inner)));
+            const sideTriangleCount=bands*(frames.length-1)*2;
+            let ringEdge=0;
+            for(let i=0;i<groups.length;i++){
+                const g=groups[i];
+                if(triangleGroups)
+                    g.density=i<sideTriangleCount?
+                        edgeDensity[Math.floor(i/((frames.length-1)*2))]:priority.cap;
+                else if(g.firstVertex>=sideVertices)g.density=priority.cap;
+                else if(sideIslandMode===2)g.density=edgeDensity[Math.floor(i/(frames.length-1))];
+                else if(sideIslandMode===1)g.density=edgeDensity[i];
+                else{
+                    g.density=edgeDensity[ringEdge];
+                    ringEdge+=g.vertexCount/(frames.length*2);
                 }
             }
         }

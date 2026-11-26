@@ -827,6 +827,22 @@ const inspector={
           enabled:event.target.checked===true});
         return;
       }
+      if(cls?.contains('spl-profile-uv-atlas-priority')){
+        if(event.target.checked===true)
+          applyAuthoredEdit(this,'set-atlas-priority',{outer:1,inner:1,cap:1});
+        else applyAuthoredEdit(this,'clear-atlas-priority',{});
+        return;
+      }
+      for(const key of ['outer','inner','cap']){
+        if(cls?.contains('spl-profile-uv-priority-'+key)){
+          const current=authored.parseProfile(this._vgAuthoredDraft.profileJson).uv?.atlasPriority;
+          if(!current)return;
+          const raw=String(event.target.value??'').trim();
+          const value=raw===''?NaN:Number(raw);
+          applyAuthoredEdit(this,'set-atlas-priority',{...current,[key]:value});
+          return;
+        }
+      }
       if(cls?.contains('spl-profile-uv-atlas-rotate')){
         applyAuthoredEdit(this,'set-atlas-rotate',{enabled:event.target.checked===true});
         return;

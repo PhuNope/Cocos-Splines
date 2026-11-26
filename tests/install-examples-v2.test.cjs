@@ -97,6 +97,8 @@ try {
   'GeometryGraph/Profiles/MultiHollowProfile.json'),'utf8'));
  assert.equal(multiHollow.holes.length,1);
  assert.deepEqual(multiHollow.outerHoles.map(list=>list.length),[1,1]);
+ const priority=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/Profiles/UVAtlasPriorityProfile.json'),'utf8'));
+ assert.deepEqual(priority.uv.atlasPriority,{outer:2,inner:.5,cap:1});
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');
