@@ -43,5 +43,14 @@ movedSource.nodes.find(n=>n.type==='spline').slot=1;
 const slotReview=analyzeSharedGraphChanges(original,JSON.stringify(movedSource),remote);
 assert.equal(slotReview.structuralConflict,true,'Changing a native source slot is a topology change');
 assert.equal(slotReview.canRebase,false);
+const profileBase={version:1,output:'output',nodes:[baseline.nodes[0],
+ {id:'extrude',type:'extrude',input:'source',profileKeys:[{progress:0,slot:0},{progress:1,slot:1}]},
+ {id:'output',type:'output',input:'extrude'}]};
+const profileEdit=JSON.parse(json(profileBase));profileEdit.nodes[1].profileKeys[1].slot=2;
+const profileRemote=JSON.parse(json(profileBase));profileRemote.nodes[1].width=3;
+const keyReview=analyzeSharedGraphChanges(json(profileBase),json(profileEdit),json(profileRemote));
+assert.equal(keyReview.canRebase,true);
+assert.deepEqual(keyReview.draftChanges,['extrude.profileKeys']);
+assert.equal(JSON.parse(keyReview.mergedGraphJson).nodes[1].profileKeys[1].slot,2);
 assert.throws(()=>analyzeSharedGraphChanges(original,'{invalid',remote),/Malformed/);
 console.log('SHARED GRAPH CONFLICT V2 PASS: nonoverlapping parameter rebase, same-value merge, collision, structural fail-closed.');

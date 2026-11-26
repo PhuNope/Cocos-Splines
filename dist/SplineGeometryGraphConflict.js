@@ -8,6 +8,7 @@
 const {parseGraph,validateGraph,TYPES,inputPorts}=require('./SplineGeometryGraphVisualModel');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const label=(id,key)=>id+'.'+key;
+const params=type=>[...(TYPES[type]?.params||[]),...(type==='width'?['widthKeys']:type==='extrude'?['profileKeys']:[])];
 const topology=g=>JSON.stringify({
   version:g.version,output:g.output,
   nodes:g.nodes.map(n=>({id:n.id,type:n.type,ports:inputPorts(n.type).map(p=>[p.key,n[p.key]??null]),slot:['meshAsset','spline'].includes(n.type)?(n.slot??0):null}))
@@ -25,7 +26,7 @@ function changeList(before,after){
     if(left.type!==right.type)paths.push(label(id,'type'));
     const ports=new Set([...inputPorts(left.type),...inputPorts(right.type)].map(p=>p.key));
     for(const key of ports)if(left[key]!==right[key])paths.push(label(id,key));
-    for(const key of TYPES[left.type]?.params||[]){
+    for(const key of params(left.type)){
       if(!same(left[key],right[key]))paths.push(label(id,key));
     }
   }
@@ -47,7 +48,7 @@ function analyzeSharedGraphChanges(baselineJson,draftJson,latestJson){
     const right=new Map(draft.nodes.map(n=>[n.id,n]));
     for(const node of merged.nodes){
       const old=left.get(node.id),edited=right.get(node.id);
-      for(const key of TYPES[node.type].params){
+      for(const key of params(node.type)){
         if(same(old[key],edited[key]))continue;
         const theirChange=!same(old[key],node[key]);
         if(theirChange&&!same(edited[key],node[key])){
@@ -59,8 +60,8 @@ function analyzeSharedGraphChanges(baselineJson,draftJson,latestJson){
       }
     }
     if(conflicts.length===0){
-      validateGraph(merged);
-      mergedGraphJson=JSON.stringify(merged,null,2);
+      try{validateGraph(merged);mergedGraphJson=JSON.stringify(merged,null,2);}
+      catch{conflicts.push('graph.parameterCompatibility');}
     }
   }
   return {

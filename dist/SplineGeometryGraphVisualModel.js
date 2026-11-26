@@ -63,7 +63,7 @@ const LIMITS=Object.freeze({
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','meshInputB','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
+  'height','profileShape','profileSlot','profileKeys','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -84,6 +84,18 @@ function validateWidthKeys(keys){
     prev=key.progress;
   });
 }
+function validateProfileKeys(keys){
+  if(!Array.isArray(keys)||keys.length<2||keys.length>16)
+    throw Error('Profile keys require 2–16 ordered keys.');
+  let prev=-1;
+  keys.forEach((key,i)=>{
+    if(!object(key)||Object.keys(key).length!==2||Object.keys(key).some(k=>k!=='progress'&&k!=='slot')||
+       !finite(key.progress)||key.progress<0||key.progress>1||!Number.isInteger(key.slot)||key.slot<0||key.slot>2||
+       (i===0&&key.progress!==0)||(i===keys.length-1&&key.progress!==1)||(i>0&&key.progress-prev<.001-1e-9))
+      throw Error('Profile keys require endpoints 0/1, integer slots 0–2 and gaps >= 0.001.');
+    prev=key.progress;
+  });
+}
 const escapeHtml=text=>String(text).replace(/[&<>"']/g,
   ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 function validateGraph(graph) {
@@ -99,7 +111,7 @@ function validateGraph(graph) {
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
     const info=TYPES[node.type];
     const allowed=new Set(['id','type',...inputPorts(node.type).map(p=>p.key),
-      ...(node.type==='width'?['widthKeys']:[]),...info.params]);
+      ...(node.type==='width'?['widthKeys']:node.type==='extrude'?['profileKeys']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
     if(node.type==='spline'){
@@ -137,6 +149,10 @@ function validateGraph(graph) {
       throw Error('Merge Path requires distinct input nodes.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
       throw Error('Clip end must be at least 0.001 above start.');
+    if(node.type==='extrude'&&node.profileKeys!==undefined){
+      if(node.profileSlot!==undefined)throw Error('Profile keys cannot mix with profileSlot.');
+      validateProfileKeys(node.profileKeys);
+    }
     if(node.type==='width'&&node.widthKeys!==undefined){
       if(['multiplier','midMultiplier','endMultiplier'].some(k=>node[k]!==undefined))
         throw Error('Width keys cannot mix with legacy multipliers.');
@@ -396,6 +412,33 @@ function applyGraphEdit(json,action,details={}) {
     if(current.type==='meshDeform'&&current.meshInput&&
        !next.nodes.some(n=>n.meshInput===current.meshInput))
       next.nodes=next.nodes.filter(n=>n.id!==current.meshInput);
+  }else if(['profile-keys-enable','profile-keys-disable','profile-key-add','profile-key-remove','profile-key-set'].includes(action)){
+    const target=find(details.id);
+    if(!target||target.type!=='extrude')throw Error('Select an Extrude node.');
+    if(action==='profile-keys-enable'){
+      if(!target.profileKeys){
+        const slot=target.profileSlot??0;
+        target.profileKeys=[{progress:0,slot},{progress:1,slot}];delete target.profileSlot;
+      }
+    }else{
+      const keys=target.profileKeys;
+      if(!keys)throw Error('Enable Profile Keys first.');
+      if(action==='profile-keys-disable'){
+        target.profileSlot=keys[0].slot;delete target.profileKeys;
+      }else if(action==='profile-key-add'){
+        if(keys.length>=16)throw Error('Profile keys maximum is 16.');
+        let index=1;
+        for(let i=2;i<keys.length;i++)if(keys[i].progress-keys[i-1].progress>keys[index].progress-keys[index-1].progress)index=i;
+        keys.splice(index,0,{progress:(keys[index-1].progress+keys[index].progress)/2,slot:keys[index-1].slot});
+      }else{
+        const index=details.index;
+        if(!Number.isInteger(index)||index<0||index>=keys.length)throw Error('Invalid Profile key index.');
+        if(action==='profile-key-remove'){
+          if(index===0||index===keys.length-1)throw Error('Profile endpoint keys cannot be removed.');
+          keys.splice(index,1);
+        }else keys[index]={progress:details.progress,slot:details.slot};
+      }
+    }
   }else if(action==='width-keys-enable'){
     const target=find(details.id);
     if(!target||target.type!=='width')throw Error('Select a Width node.');
@@ -433,6 +476,7 @@ function applyGraphEdit(json,action,details={}) {
   }else if(action==='param'){
     const target=find(details.id),key=details.key;
     if(!target||!TYPES[target.type].params.includes(key)||
+      (target.type==='extrude'&&target.profileKeys&&['profileSlot','profileShape'].includes(key))||
       target.type==='width'&&target.widthKeys&&
       ['multiplier','midMultiplier','endMultiplier'].includes(key))
       throw Error('Selected node does not support '+key+'.');
@@ -641,11 +685,23 @@ function renderWidthKeyControls(n){
     '<button type="button" data-width-action="add"'+(keys.length>=16?' disabled':'')+
       '>＋ Insert key in largest interval</button></div>';
 }
+function renderProfileKeyControls(n){
+  if(!n.profileKeys)return '<button type="button" data-profile-action="enable">Enable Profile Keys (2–16)</button>';
+  const keys=n.profileKeys;
+  return '<div class="spl-vg-width-keys"><strong>Profile Keys · Step</strong>'+
+    '<div>Normalized path distance. Assign compatible simple Profile Assets A/B/C. Same first/last slot on closed paths.</div>'+
+    keys.map((k,i)=>'<div class="spl-vg-width-row"><label>Progress <input type="number" min="0" max="1" step=".001" data-profile-field="progress" data-profile-index="'+i+'" value="'+k.progress+'"'+
+      (i===0||i===keys.length-1?' disabled':'')+'></label><label>Slot <select data-profile-field="slot" data-profile-index="'+i+'">'+
+      ['A','B','C'].map((s,j)=>'<option value="'+j+'"'+(j===k.slot?' selected':'')+'>'+s+'</option>').join('')+
+      '</select></label><button type="button" data-profile-action="remove" data-profile-index="'+i+'"'+(i===0||i===keys.length-1?' disabled':'')+'>Remove</button></div>').join('')+
+    '<button type="button" data-profile-action="add"'+(keys.length>=16?' disabled':'')+'>＋ Key</button> '+
+    '<button type="button" data-profile-action="disable">Use First Slot Only</button></div>';
+}
 function renderNodeParameters(graphJson,id){
   const {map}=parseGraph(graphJson),n=map.get(id);
   if(!n)return '<div>Select a node to edit its parameters.</div>';
   const info=TYPES[n.type];
-  const rows=info.params.filter(key=>!(n.type==='width'&&n.widthKeys&&
+  const rows=info.params.filter(key=>!(n.type==='extrude'&&n.profileKeys&&['profileSlot','profileShape'].includes(key))&&!(n.type==='width'&&n.widthKeys&&
     ['multiplier','midMultiplier','endMultiplier'].includes(key))).map(key=>{
     const value=n[key]??(key==='capEnds'?false:LIMITS[key][2]);
     if(key==='capEnds')
@@ -707,7 +763,7 @@ function renderNodeParameters(graphJson,id){
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
     (n.type==='mergeMesh'?'<div class="spl-vg-note">One output material; positions, normals and UVs preserved. No vertex welding.</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':'')+
-    (n.type==='width'?renderWidthKeyControls(n):'');
+    (n.type==='width'?renderWidthKeyControls(n):n.type==='extrude'?renderProfileKeyControls(n):'');
 }
 module.exports={TYPES,LIMITS,STAGE,inputPorts,inputLinks,parseGraph,validateGraph,applyGraphEdit,
   autoGraphLayout,graphCanvasSize,graphOutputIdsForNode,activeGraphOutputId,

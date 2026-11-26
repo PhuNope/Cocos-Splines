@@ -4,7 +4,7 @@ import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
-import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext,GeometryGraphSplineSource}
+import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext,GeometryGraphSplineSource,graphProfileSlots}
     from '../Core/SplineGeometryGraph';
 import {parseGraphProfileAsset} from '../Core/SplineProfileExtrudeMath';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
@@ -295,8 +295,7 @@ export class SplineGeometryGraphRenderer extends Component {
      */
     private graphProfileContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'profileSources'|'profileUVs'|'profileHoles'|'profileOuterContours'|'profileOuterHoles'|'profileRevisions'>{
-        const slots=[...new Set(plan.nodes.filter(n=>n.type==='extrude'&&
-            n.profileSlot!==undefined).map(n=>n.profileSlot!))];
+        const slots=[...new Set(plan.nodes.flatMap(graphProfileSlots))];
         if(slots.length===0)return {};
         const sources:NonNullable<GeometryGraphContext['profileSources']>[number][]=[];
         const uvs:NonNullable<GeometryGraphContext['profileUVs']>[number][]=[];

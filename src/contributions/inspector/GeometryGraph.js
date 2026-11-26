@@ -1320,6 +1320,14 @@ const inspector={
       if(card){this._vgSelected=card.dataset.node;render(this);}
     });
     this.$.vgProperties.addEventListener('click',event=>{
+      const profileButton=closest(event.target,'[data-profile-action]');
+      if(profileButton){
+        if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!this._vgSelected||profileButton.disabled)return;
+        const kind=profileButton.dataset.profileAction;
+        if(kind==='enable'||kind==='disable')editGraph(this,'profile-keys-'+kind,{id:this._vgSelected});
+        else if(kind==='add'||kind==='remove')editGraph(this,'profile-key-'+kind,{id:this._vgSelected,index:Number(profileButton.dataset.profileIndex)});
+        return;
+      }
       const button=closest(event.target,'[data-width-action]');
       if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||
          !button||!this._vgSelected||button.disabled)return;
@@ -1331,6 +1339,17 @@ const inspector={
     });
     this.$.vgProperties.addEventListener('change',event=>{
       if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!this._vgSelected)return;
+      const profileInput=closest(event.target,'[data-profile-field]');
+      if(profileInput){
+        const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.profileKeys;
+        const index=Number(profileInput.dataset.profileIndex),field=profileInput.dataset.profileField;
+        if(!keys||!Number.isInteger(index)||!keys[index]||!['progress','slot'].includes(field)||
+           profileInput.value===''||!Number.isFinite(Number(profileInput.value))){
+          status(this,'Invalid Profile key input.',true);return;
+        }
+        editGraph(this,'profile-key-set',{id:this._vgSelected,index,...keys[index],[field]:Number(profileInput.value)});
+        return;
+      }
       const widthInput=closest(event.target,'[data-width-field]');
       if(widthInput){
         const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.widthKeys;

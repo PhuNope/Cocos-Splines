@@ -277,7 +277,10 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 
 #### Next Geometry Graph expansion
 
-- [ ] Phase 4.6 — advanced profile extrusion: profile keys/morph, compatible contour topology, advanced per-edge material mapping.
+- [x] Phase 4.6a — Profile Keys: 2–16 normalized sampled-arc keys selecting authored slots A/B/C, step selection per ring, strict matching vertex counts and simple outer polygons, closed first/last slot guard, per-ring perimeter UV, endpoint cap triangulation, transition normals, slot-aware revisions and native inspector key table, shared asset conflict review, installable examples and headless regressions. Native acceptance pending.
+- [ ] Phase 4.6b — continuous profile morph interpolation and sampled-key transitions.
+- [ ] Phase 4.6c — compatible contour topology (holes, disconnected solids, UV metadata and point correspondence).
+- [ ] Phase 4.6d — advanced per-edge material mapping.
 - [ ] Phase 4.7 — production mesh workflows: explicit bake/export, collider generation, chunking and LOD.
 - [ ] Phase 4.8 — population/scatter graph processing.
 

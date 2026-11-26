@@ -127,6 +127,43 @@ try{
  assert.equal(model.parseGraph(preset).map.get('extrudeA').profileSlot,undefined);
  assert.equal(compileGeometryGraph(JSON.parse(preset)).nodes.length,5);
  assert.equal(JSON.stringify(snapshot.points),context.profileRevisions[0]);
+ // Ordered authored profile keys (step at existing arc samples).
+ const keyGraph={version:1,output:'out',nodes:[{id:'source',type:'spline'},
+  {id:'extrude',type:'extrude',input:'source',width:2,height:1,capEnds:true,
+   profileKeys:[{progress:0,slot:0},{progress:.5,slot:1},{progress:1,slot:1}]},
+  {id:'out',type:'output',input:'extrude'}]};
+ const keyedRunner=new GeometryGraphRunner(),keyPlan=compileGeometryGraph(keyGraph);
+ const wider=square.points.map(p=>({x:p.x*1.5,y:p.y}));
+ const keyCtx={...context,profileSources:[square.points,wider],profileRevisions:['square','wide']};
+ const keyed=keyedRunner.evaluate(keyPlan,keyCtx);
+ assert.equal(keyed.bands,4);assert.equal(keyed.ringCount,8);
+ assert.equal(keyed.positions[0],-1);assert.equal(keyed.positions[4*6],-1.5);
+ assert(keyed.normals.every(Number.isFinite));assert(keyed.uvs.every(Number.isFinite));
+ assert.deepEqual(keyedRunner.evaluate(keyPlan,keyCtx),keyed);
+ assert.equal(keyedRunner.metrics.reused,3);
+ const shorter=wider.map(p=>({x:p.x,y:p.y*.5}));
+ const updatedCtx={...keyCtx,profileSources:[square.points,shorter],profileRevisions:['square','short']};
+ const nextKeyed=keyedRunner.evaluate(keyPlan,updatedCtx);
+ assert.notDeepEqual(nextKeyed.positions,keyed.positions);
+ assert.deepEqual(keyedRunner.metrics,{computed:2,reused:1,nodes:3});
+ assert.throws(()=>keyedRunner.evaluate(keyPlan,{...keyCtx,profileSources:[square.points,lShape.points],profileRevisions:['square','bad-count']}),/matching vertex counts/i);
+ assert.throws(()=>keyedRunner.evaluate(keyPlan,{...keyCtx,profileRevisions:['square',undefined]}),/slot 1/i);
+ assert.throws(()=>keyedRunner.evaluate(keyPlan,{...keyCtx,profileUVs:[undefined,{seamEdge:0}],profileRevisions:['square','uv']}),/custom UV/i);
+ assert.throws(()=>keyedRunner.evaluate(keyPlan,{...keyCtx,closed:true}),/first\/last/i);
+ assert.deepEqual(keyedRunner.evaluate(keyPlan,updatedCtx),nextKeyed);
+ for(const invalid of [[{progress:.1,slot:0},{progress:1,slot:1}],
+  [{progress:0,slot:0},{progress:1,slot:3}],[{progress:0,slot:0},{progress:0,slot:1},{progress:1,slot:1}]]){
+  const bad={...keyGraph,nodes:keyGraph.nodes.map(n=>n.type==='extrude'?{...n,profileKeys:invalid}:n)};
+  assert.throws(()=>compileGeometryGraph(bad));assert.throws(()=>model.parseGraph(JSON.stringify(bad)));
+ }
+ let edit=model.applyGraphEdit(JSON.stringify(dual()),'profile-keys-enable',{id:'extrudeB'});
+ assert.deepEqual(model.parseGraph(edit).map.get('extrudeB').profileKeys,[{progress:0,slot:1},{progress:1,slot:1}]);
+ edit=model.applyGraphEdit(edit,'profile-key-add',{id:'extrudeB'});
+ edit=model.applyGraphEdit(edit,'profile-key-set',{id:'extrudeB',index:1,progress:.5,slot:2});
+ assert(model.renderNodeParameters(edit,'extrudeB').includes('data-profile-field="slot"'));
+ assert.throws(()=>model.applyGraphEdit(edit,'profile-key-remove',{id:'extrudeB',index:0}));
+ edit=model.applyGraphEdit(edit,'profile-keys-disable',{id:'extrudeB'});
+ assert.equal(model.parseGraph(edit).map.get('extrudeB').profileSlot,1);
  const pkg=require(root+'/package.json');
  assert(pkg.scripts.test.includes('geometry-graph-authored-profile-v2.test.cjs'));
  console.log('AUTHORED PROFILE V2 PASS: strict CCW simple polygon, concave triangulation, profile slots, dirty propagation, safe rollback and Visual Graph preset reset.');

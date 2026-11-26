@@ -369,6 +369,8 @@ function triangulateContours(rings:ReadonlyArray<ReadonlyArray<GraphProfilePoint
 export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
+    /** Optional one simple, index-compatible authored polygon per path frame. */
+    profileRings?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     profileHoles?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     profileOuterContours?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     profileOuterHoles?:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>>;
@@ -462,7 +464,23 @@ export function buildProfileExtrudeGeometry(
             ...(settings.profileOuterContours===undefined?{}:{outerContours:settings.profileOuterContours}),
             ...(settings.profileOuterHoles===undefined?{}:{outerHoles:settings.profileOuterHoles}),
             ...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
-    const outer=authored?.points??PROFILES[profileShape];
+    const keyed=settings.profileRings;
+    if(keyed!==undefined){
+        if(!Array.isArray(keyed)||keyed.length!==frames.length||authored)
+            throw Error('Graph Profile keys require exactly one polygon per frame and no static authored profile.');
+        const checked=new Set<ReadonlyArray<Readonly<GraphProfilePoint>>>();
+        for(const ring of keyed){
+            if(!Array.isArray(ring)||ring.length!==keyed[0].length)
+                throw Error('Graph Profile keys require matching vertex counts.');
+            if(!checked.has(ring)){
+                parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:ring});
+                checked.add(ring);
+            }
+        }
+        if(closed&&keyed[0].some((p,i)=>p.x!==keyed[keyed.length-1][i].x||p.y!==keyed[keyed.length-1][i].y))
+            throw Error('Graph Profile keys require identical closed seam polygons.');
+    }
+    const outer=keyed?.[0]??authored?.points??PROFILES[profileShape];
     const mainRings=[outer,...(authored?.holes??[])];
     const extra=authored?.outerContours??[];
     const parts=[mainRings,...extra.map((ring,i)=>[ring,...(authored?.outerHoles?.[i]??[])])];
@@ -581,6 +599,19 @@ export function buildProfileExtrudeGeometry(
         }
         return {start,end};
     }):null;
+    // For keys, each polygon has normalized perimeter U; cache by polygon
+    // identity rather than allocating per frame. Legacy authored UV is unchanged.
+    const keyedUv=new Map<ReadonlyArray<Readonly<P2>>,{start:number[];end:number[]}>();
+    if(keyed)for(const ring of keyed)if(!keyedUv.has(ring)){
+        const lengths=ring.map((p,i)=>{
+            const q=ring[(i+1)%ring.length];return Math.hypot((q.x-p.x)*width,(q.y-p.y)*height);
+        });
+        const total=lengths.reduce((a,b)=>a+b,0);
+        let cursor=0;
+        const start:number[]=[],end:number[]=[];
+        for(const l of lengths){start.push(cursor/total);cursor+=l;end.push(cursor/total);}
+        keyedUv.set(ring,{start,end});
+    }
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};
     const push=(p:V3,n:V3,u:number,v:number):number=>{
@@ -649,11 +680,25 @@ export function buildProfileExtrudeGeometry(
             if(handedness!==0&&handedness!==sign)
                 throw Error('Geometry Graph Extrude frame handedness changed.');
             handedness=sign;
-            const edge=add(mul(f.right,(B.x-A.x)*width*f.widthFactor),
-                mul(f.up,(B.y-A.y)*height*f.widthFactor));
-            const n=unit(mul(cross(edge,f.forward),handedness));
-            push(at(f,A),n,ringUV?.[fi].start[j]??uvStart[j],f.distance/uvMetersPerRepeat);
-            push(at(f,B),n,ringUV?.[fi].end[j]??uvEnd[j],f.distance/uvMetersPerRepeat);
+            const ring=keyed?.[fi],a=ring?.[j]??A,b=ring?.[nextEdge[j]]??B;
+            const edge=add(mul(f.right,(b.x-a.x)*width*f.widthFactor),
+                mul(f.up,(b.y-a.y)*height*f.widthFactor));
+            let longitudinal=f.forward;
+            // For a section transition, use the neighboring edge midpoints to
+            // account for cross-section slope. Constant sections keep legacy normals.
+            if(keyed&&ring){
+                const prev=fi===0?(closed?frames.length-2:0):fi-1;
+                const next=fi===frames.length-1?(closed?1:fi):fi+1;
+                if(keyed[prev]!==ring||keyed[next]!==ring){
+                    const mid=(i:number)=>mul(add(at(frames[i],keyed[i][j]),at(frames[i],keyed[i][nextEdge[j]])),.5);
+                    const p=mid(prev),q=mid(next);
+                    longitudinal={x:q.x-p.x,y:q.y-p.y,z:q.z-p.z};
+                }
+            }
+            const n=unit(mul(cross(edge,longitudinal),handedness));
+            const uv=ring?keyedUv.get(ring):undefined;
+            push(at(f,a),n,uv?.start[j]??ringUV?.[fi].start[j]??uvStart[j],f.distance/uvMetersPerRepeat);
+            push(at(f,b),n,uv?.end[j]??ringUV?.[fi].end[j]??uvEnd[j],f.distance/uvMetersPerRepeat);
         }
         const first=j*frames.length*2;
         for(let i=0;i<frames.length-1;i++){
@@ -668,12 +713,14 @@ export function buildProfileExtrudeGeometry(
             const outward=unit(mul(cross(f.right,f.up),
                 handedness*(end===0?-1:1)));
             const offset=positions.length/3;
-            for(const point of profile)
+            const capProfile=keyed?.[end===0?0:frames.length-1]??profile;
+            const capTriangles=keyed?profileTriangles(capProfile):triangles;
+            for(const point of capProfile)
                 push(at(f,point),outward,point.x+.5,point.y+.5);
             const ccw=(end===1)===(handedness>0);
-            for(let t=0;t<triangles.length;t+=3){
-                const a=offset+triangles[t],b=offset+triangles[t+1],
-                    c=offset+triangles[t+2];
+            for(let t=0;t<capTriangles.length;t+=3){
+                const a=offset+capTriangles[t],b=offset+capTriangles[t+1],
+                    c=offset+capTriangles[t+2];
                 if(ccw)indices.push(a,b,c);
                 else indices.push(a,c,b);
             }

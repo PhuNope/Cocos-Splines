@@ -25,6 +25,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
 export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'mergePath'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'mergeMesh'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
+export interface GeometryProfileKey {progress:number;slot:number}
 export interface GeometryGraphNode {
     id:string;type:GeometryNodeType;
     input?:string;
@@ -65,6 +66,8 @@ export interface GeometryGraphNode {
     thickness?:number;capEnds?:boolean;cornerMode?:number;
     radius?:number;radialSegments?:number;
     height?:number;profileShape?:number;profileSlot?:number;
+    /** Ordered authored profile selection in normalized sampled arc distance. */
+    profileKeys?:GeometryProfileKey[];
     deformShape?:number;segments?:number;repeats?:number;
     /** 0 Count (legacy), 1 physical length with clipped final tile. */
     repeatLayout?:number;
@@ -150,6 +153,28 @@ function validateWidthKeys(value:unknown):GeometryWidthKey[]{
         previous=key.progress;
     });
     return value as GeometryWidthKey[];
+}
+function validateProfileKeys(value:unknown):void{
+    if(!Array.isArray(value)||value.length<2||value.length>16)
+        throw Error('Geometry Graph Profile keys require 2–16 ordered keys.');
+    let previous=-1;
+    value.forEach((key,i)=>{
+        if(!key||typeof key!=='object'||Array.isArray(key)||Object.keys(key).length!==2||
+           Object.keys(key).some(k=>k!=='progress'&&k!=='slot'))
+            throw Error('Geometry Graph Profile key requires progress and slot.');
+        bound(key.progress,0,1,'Profile key progress');
+        bound(key.slot,0,2,'Profile key slot');
+        if(!Number.isInteger(key.slot)||(i===0&&key.progress!==0)||
+           (i===value.length-1&&key.progress!==1)||(i>0&&key.progress-previous<.001-1e-9))
+            throw Error('Geometry Graph Profile keys require endpoints 0/1, integer slots 0–2 and gaps >= 0.001.');
+        previous=key.progress;
+    });
+}
+/** Renderer and runner share exactly the same authored profile dependencies. */
+export function graphProfileSlots(node:GeometryGraphNode):number[]{
+    if(node.type!=='extrude')return [];
+    return node.profileKeys?[...new Set(node.profileKeys.map(k=>k.slot))].sort((a,b)=>a-b):
+        node.profileSlot===undefined?[]:[node.profileSlot];
 }
 const onlyKeys=(object:Record<string,unknown>,keys:ReadonlyArray<string>):void=>{
     if(Object.keys(object).some(k=>!keys.includes(k)))throw Error('Unknown Geometry Graph node property.');
@@ -455,6 +480,36 @@ function mergePaths(a:GraphPath,b:GraphPath,node:GeometryGraphNode,linear?:Reado
     const source:GraphPath={kind:'path',closed:false,frames:combined.map((f,i)=>i===0?{...f,distance:0}:f)};
     return rebuildDisplacedPath(source,positions,origin,basis);
 }
+/** Phase 4.6a: hold the most recent key at each existing path sample.
+ * Compatible simple outer polygons only. Corresponding point indices are
+ * authored explicitly; no rematching, contour changes or morph interpolation.
+ */
+function sampleProfileKeys(node:GeometryGraphNode,source:GraphPath,context:GeometryGraphContext):
+    ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>{
+    const keys=node.profileKeys!,profiles=new Map<number,GraphProfilePoint[]>();
+    let count=0;
+    for(const slot of graphProfileSlots(node)){
+        const revision=context.profileRevisions?.[slot];
+        if(typeof revision!=='string'||!revision||revision.length>32768)
+            throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
+        if(context.profileHoles?.[slot]!==undefined||context.profileOuterContours?.[slot]!==undefined||
+           context.profileOuterHoles?.[slot]!==undefined||context.profileUVs?.[slot]!==undefined)
+            throw Error('Geometry Graph Profile keys currently require simple outer polygons without custom UV metadata.');
+        const profile=parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:context.profileSources?.[slot]});
+        if(count&&count!==profile.points.length)throw Error('Geometry Graph Profile keys require matching vertex counts.');
+        count=profile.points.length;profiles.set(slot,profile.points);
+    }
+    if(source.closed&&keys[0].slot!==keys[keys.length-1].slot)
+        throw Error('Geometry Graph closed Profile keys require matching first/last slots.');
+    const frames=source.frames,first=frames[0].distance,span=frames[frames.length-1].distance-first;
+    if(span<=1e-9)throw Error('Geometry Graph Profile keys require nonzero sampled arc length.');
+    let current=0;
+    return frames.map(f=>{
+        const progress=(f.distance-first)/span;
+        while(current+1<keys.length&&keys[current+1].progress<=progress+1e-10)current++;
+        return profiles.get(keys[current].slot)!;
+    });
+}
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
@@ -535,7 +590,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='width'?['multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['radius','radialSegments','uvMetersPerRepeat','capEnds']:
-            node.type==='extrude'?['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
+            node.type==='extrude'?['width','height','profileShape','profileSlot','profileKeys','uvMetersPerRepeat','capEnds']:
             node.type==='meshDeform'?['axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
             [])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
@@ -644,6 +699,10 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph Tube capEnds must be a boolean.');
         }
         if(node.type==='extrude'){
+            if(node.profileKeys!==undefined){
+                if(node.profileSlot!==undefined)throw Error('Geometry Graph Profile keys cannot mix with profileSlot.');
+                validateProfileKeys(node.profileKeys);
+            }
             if(node.profileSlot!==undefined){
                 const slot=bound(node.profileSlot,0,2,'Extrude profileSlot');
                 if(!Number.isInteger(slot))throw Error('Geometry Graph Extrude profileSlot must be an integer.');
@@ -677,7 +736,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph tileLength must be 0 or >= 0.01.');
             bound(node.uvMetersPerRepeat??5,.01,10000,'Mesh Deform UV length');
         }
-        table.set(node.id,{...node});
+        table.set(node.id,{...node,...(node.profileKeys===undefined?{}:{profileKeys:node.profileKeys.map(k=>({...k}))})});
     }
     if(sources<1||sources>3||meshAssets>3||(!multi&&outputs!==1)||
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
@@ -847,8 +906,7 @@ export class GeometryGraphRunner {
                         (context.meshRevisions?.[node.slot??0]??
                          ((node.slot??0)===0?context.meshRevision:null)):null,
                     geometryInputPorts(node.type).map(port=>[port.key,inputs.get(port.key)?.version??null]),
-                    node.type==='extrude'&&node.profileSlot!==undefined?
-                        context.profileRevisions?.[node.profileSlot]??null:null,
+                    graphProfileSlots(node).map(slot=>[slot,context.profileRevisions?.[slot]??null]),
                     ['transform','noise','clip','resample','conform','mergePath'].includes(node.type)?context.worldUvLinear??null:null,
                     node.type==='conform'?[context.conformSurface?.revision??null,context.conformSurface?.origin??null,context.conformSurface?.targetCount??null]:null,
                     // World-space Profile UV also depends on this transform.
@@ -990,7 +1048,10 @@ export class GeometryGraphRunner {
                     let authoredHoles:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
                     let authoredOuterContours:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
                     let authoredOuterHoles:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>>|undefined;
-                    if(node.profileSlot!==undefined){
+                    let profileRings:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
+                    if(node.profileKeys){
+                        profileRings=sampleProfileKeys(node,source,context);
+                    }else if(node.profileSlot!==undefined){
                         const slot=node.profileSlot,revision=context.profileRevisions?.[slot];
                         if(typeof revision!=='string'||!revision||revision.length>32768)
                             throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
@@ -1005,7 +1066,7 @@ export class GeometryGraphRunner {
                     const geometry=buildProfileExtrudeGeometry(source.frames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
-                        profile:authored,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
+                        profile:authored,profileRings,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
                         worldUvLinear:context.worldUvLinear,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
