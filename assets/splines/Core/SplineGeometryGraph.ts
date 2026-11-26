@@ -8,6 +8,8 @@ import {buildTubeGeometry} from './SplineTubeMath';
 import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
+import {sampleNoiseLayers,NoiseLayerConfig} from './SplineNoiseMath';
+import {buildStableFrames,FrameVec3} from './SplineStableFrames';
 
 export const GEOMETRY_GRAPH_VERSION=1;
 /** Multi-output opt-in; v1 scenes/assets remain unchanged. */
@@ -19,7 +21,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -35,6 +37,10 @@ export interface GeometryGraphNode {
     /** Renderer-local translation and XYZ Euler degrees; scale affects path positions, not profile size. */
     translateX?:number;translateY?:number;translateZ?:number;
     rotateX?:number;rotateY?:number;rotateZ?:number;pathScale?:number;
+    /** Noise amplitudes are offsets along the upstream right/up/forward basis. */
+    noiseRight?:number;noiseUp?:number;noiseForward?:number;
+    noiseFrequency?:number;noiseOctaves?:number;noisePersistence?:number;
+    noisePhase?:number;noiseSeed?:number;noiseFadeEnds?:number;
     multiplier?:number;
     /** Optional Width scale across normalized physical distance.
      * Unspecified middle = mean of start/end; unspecified end = start.
@@ -187,6 +193,70 @@ function transformPath(source:GraphPath,node:GeometryGraphNode,worldLinear?:Read
     }
     return {kind:'path',closed:source.closed,frames};
 }
+/** Rebuild stable physical-world frames after deterministic path displacement.
+ * The renderer supplies its local->world basis; converting back preserves
+ * profile size under mirrored and nonuniform renderer transforms.
+ * Zero amplitude is an exact no-op and leaves the upstream metric intact.
+ */
+function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray<number>):GraphPath{
+    const amplitude={x:node.noiseRight??0,y:node.noiseUp??0,z:node.noiseForward??0};
+    if(amplitude.x===0&&amplitude.y===0&&amplitude.z===0)return source;
+    const m=linear??[1,0,0,0,1,0,0,0,1];
+    if(!Array.isArray(m)||m.length!==9||!m.every(v=>finite(v)&&Math.abs(v)<=1e7))
+        throw Error('Geometry Graph Noise requires a valid world linear matrix.');
+    const V=(x:number,y:number,z:number):FrameVec3=>({x,y,z});
+    const add=(a:FrameVec3,b:FrameVec3)=>V(a.x+b.x,a.y+b.y,a.z+b.z);
+    const sub=(a:FrameVec3,b:FrameVec3)=>V(a.x-b.x,a.y-b.y,a.z-b.z);
+    const mul=(a:FrameVec3,k:number)=>V(a.x*k,a.y*k,a.z*k);
+    const dot=(a:FrameVec3,b:FrameVec3)=>a.x*b.x+a.y*b.y+a.z*b.z;
+    const cross=(a:FrameVec3,b:FrameVec3)=>V(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);
+    const len=(a:FrameVec3)=>Math.hypot(a.x,a.y,a.z);
+    const unit=(a:FrameVec3)=>{const d=len(a);if(!finite(d)||d<1e-9)throw Error('Geometry Graph Noise produced a degenerate path segment.');return mul(a,1/d);};
+    const a=V(m[0],m[1],m[2]),b=V(m[3],m[4],m[5]),c=V(m[6],m[7],m[8]);
+    const bc=cross(b,c),ca=cross(c,a),ab=cross(a,b),det=dot(a,bc);
+    if(!finite(det)||Math.abs(det)<1e-12*Math.max(1e-18,len(a)*len(b)*len(c)))
+        throw Error('Geometry Graph Noise requires an invertible world linear matrix.');
+    const world=(v:FrameVec3)=>add(add(mul(a,v.x),mul(b,v.y)),mul(c,v.z));
+    const local=(v:FrameVec3)=>V(dot(bc,v)/det,dot(ca,v)/det,dot(ab,v)/det);
+    const frames=source.frames,last=frames.length-1;
+    const start=frames[0].distance,span=frames[last].distance-start;
+    if(span<=1e-9||source.closed&&last<3)throw Error('Geometry Graph Noise requires a nonzero sampled path.');
+    if(source.closed&&len(world(sub(frames[last].position,frames[0].position)))>1e-4)
+        throw Error('Geometry Graph Noise requires coincident closed-loop endpoints.');
+    const layer:NoiseLayerConfig={enabled:true,frequency:node.noiseFrequency??4,
+        octaves:node.noiseOctaves??2,persistence:node.noisePersistence??.5,
+        phase:node.noisePhase??0,seed:0,amplitude,fadeEnds:node.noiseFadeEnds??.1};
+    const origin=frames[0].position;
+    const positions=frames.map((f,i)=>{
+        if(source.closed&&i===last)return V(0,0,0); // replaced with exact first displaced point
+        const n=sampleNoiseLayers([layer],(f.distance-start)/span,node.noiseSeed??12345,source.closed);
+        const p=add(sub(f.position,origin),add(add(mul(f.right,n.x),mul(f.up,n.y)),mul(f.forward,n.z)));
+        return world(p);
+    });
+    if(source.closed)positions[last]=positions[0];
+    const segments=positions.slice(1).map((p,i)=>sub(p,positions[i]));
+    const directions=segments.map(unit);
+    const samples=positions.map((position,i)=>{
+        const index=source.closed&&i===last?0:i;
+        const before=index>0?directions[index-1]:source.closed?directions[last-1]:directions[0];
+        const after=index<last?directions[index]:directions[last-1];
+        const blended=add(before,after);
+        const tangent=len(blended)>1e-9?unit(blended):after;
+        return {t:i/last,position,tangent,up:world(frames[index].up)};
+    });
+    const stable=buildStableFrames(samples,source.closed);
+    let distance=start;
+    const output=stable.map((f,i)=>{
+        if(i>0)distance+=len(segments[i-1]);
+        const basis=source.closed&&i===last?stable[0]:f;
+        const next:GraphFrame={...frames[i],position:add(origin,local(f.position)),
+            forward:local(basis.tangent),right:local(basis.right),up:local(basis.up),distance};
+        if(![next.position,next.forward,next.right,next.up].every(vec)||!finite(distance)||distance>1e9)
+            throw Error('Geometry Graph Noise produced invalid or oversized frames.');
+        return next;
+    });
+    return {kind:'path',closed:source.closed,frames:output};
+}
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
@@ -232,12 +302,13 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','transform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','noise','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
             node.type==='transform'?['input','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
+            node.type==='noise'?['input','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']:
             node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
@@ -264,6 +335,18 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             for(const k of ['rotateX','rotateY','rotateZ'] as const)
                 bound(node[k]??0,-360,360,'Transform '+k);
             bound(node.pathScale??1,.01,100,'Transform pathScale');
+        }
+        if(node.type==='noise'){
+            const rules:Array<[keyof GeometryGraphNode,number,number,number,boolean?]>=[
+                ['noiseRight',-1000,1000,0],['noiseUp',-1000,1000,0],['noiseForward',-1000,1000,0],
+                ['noiseFrequency',1,64,4,true],['noiseOctaves',1,6,2,true],
+                ['noisePersistence',0,1,.5],['noisePhase',-1000,1000,0],
+                ['noiseSeed',-2147483647,2147483647,12345,true],['noiseFadeEnds',0,.5,.1],
+            ];
+            for(const [key,min,max,def,integer] of rules){
+                const n=bound(node[key]===undefined?def:node[key],min,max,'Noise '+key);
+                if(integer&&!Number.isInteger(n))throw Error('Geometry Graph Noise '+key+' must be an integer.');
+            }
         }
         if(node.type==='width'){
             if(node.widthKeys!==undefined){
@@ -483,7 +566,7 @@ export class GeometryGraphRunner {
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
-                    node.type==='transform'?context.worldUvLinear??null:null,
+                    node.type==='transform'||node.type==='noise'?context.worldUvLinear??null:null,
                     // World-space Profile UV also depends on this transform.
                     // It invalidates its Extrude branch even when a pure Core
                     // caller changes matrix without changing frame revision.
@@ -529,6 +612,9 @@ export class GeometryGraphRunner {
                 }else if(node.type==='transform'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Transform input is not a path.');
                     value=transformPath(source,node,context.worldUvLinear);
+                }else if(node.type==='noise'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Noise input is not a path.');
+                    value=noisePath(source,node,context.worldUvLinear);
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
                     const keys=node.widthKeys;

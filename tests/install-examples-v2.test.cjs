@@ -31,6 +31,10 @@ try {
  assert.equal(tube.version,1);
  assert.deepEqual(tube.nodes.map(n=>n.type),['spline','offset','width','tube','output']);
  assert.equal(tube.nodes.find(n=>n.type==='tube').radialSegments,16);
+ for(const [file,type] of [['TransformPathGraph','transform'],['NoisePathGraph','noise']]){
+  const graph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/'+file+'.json'),'utf8'));
+  assert(graph.nodes.some(n=>n.type===type));
+ }
  const extrude=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicProfileExtrudeGraph.json'),'utf8'));
  assert.equal(extrude.version,1);

@@ -266,7 +266,7 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 #### Phase 4.4 — Geometry Graph Processing Nodes
 
 - [x] Phase 4.4a — typed Transform Path node in Graph v1/v2: renderer-local XYZ translation, ordered X/Y/Z Euler rotation in degrees, positive uniform path-only scale about renderer origin; preserve profile size, rotate basis vectors, update sampled world-arc metric, strict bounds and atomic cache behavior. Visual Inspector insertion/removal/reconnection and editable parameters, installable JSON example and offline regression coverage. Native Creator 3.8.8 validation pending.
-- [ ] Phase 4.4b — deterministic Noise Path node with stable frames and closed-seam behavior.
+- [x] Phase 4.4b — typed deterministic Noise Path node (Graph v1/v2): Right/Up/Forward amplitude, bounded integer frequency/octaves/seed, persistence/phase/open endpoint fade, reused SplineNoiseMath and stable World frames, physical sampled distance recomputation, exact closed-loop ring seam, zero-amplitude passthrough, strict schema and failure-safe cache; Visual Inspector, installer examples and offline runtime/model tests. Native 3.8.8 acceptance pending. Transform example also registered in installer.
 - [ ] Phase 4.4c — Reverse, Clip and Resample Path nodes.
 - [ ] Phase 4.4d — Conform Path using explicitly assigned native collider targets.
 - [ ] Phase 4.5 — Multi-input Path/Mesh processing and merge operations.

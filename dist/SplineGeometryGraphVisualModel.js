@@ -12,6 +12,7 @@ const TYPES=Object.freeze({
   meshAsset:{input:null,output:'meshSource',params:['slot']},
   offset:{input:'path',output:'path',params:['right','up']},
   transform:{input:'path',output:'path',params:['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']},
+  noise:{input:'path',output:'path',params:['noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']},
   width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
@@ -23,6 +24,9 @@ const LIMITS=Object.freeze({
   right:[-1000,1000,0],up:[-1000,1000,0],
   translateX:[-1000,1000,0],translateY:[-1000,1000,0],translateZ:[-1000,1000,0],
   rotateX:[-360,360,0],rotateY:[-360,360,0],rotateZ:[-360,360,0],pathScale:[.01,100,1],
+  noiseRight:[-1000,1000,0],noiseUp:[-1000,1000,0],noiseForward:[-1000,1000,0],
+  noiseFrequency:[1,64,4],noiseOctaves:[1,6,2],noisePersistence:[0,1,.5],noisePhase:[-1000,1000,0],
+  noiseSeed:[-2147483647,2147483647,12345],noiseFadeEnds:[0,.5,.1],
   multiplier:[.01,20,1],midMultiplier:[.01,20,1],
   endMultiplier:[.01,20,1],taperMode:[0,1,0],
   width:[.05,100,4],endWidth:[0,100,0],
@@ -32,7 +36,7 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -91,7 +95,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -225,7 +229,7 @@ function applyGraphEdit(json,action,details={}) {
     next.output=target.id;
   }else if(action==='insert'){
     const type=details.type,target=find(details.before||'ribbon');
-    if(!['offset','transform','width'].includes(type)||!target||!target.input||
+    if(!['offset','transform','noise','width'].includes(type)||!target||!target.input||
        TYPES[target.type].input!=='path')
       throw Error('Only path-transform nodes may be inserted before a Path consumer.');
     const prefix=type;
@@ -236,7 +240,7 @@ function applyGraphEdit(json,action,details={}) {
     target.input=id;next.nodes.push(created);
   }else if(action==='remove'){
     const id=details.id,target=find(id);
-    if(!target||!['offset','transform','width'].includes(target.type))
+    if(!target||!['offset','transform','noise','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
     for(const node of next.nodes)if(node.input===id)node.input=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
@@ -256,7 +260,7 @@ function applyGraphEdit(json,action,details={}) {
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
     if(target.id===source.id)throw Error('Cannot connect a node to itself.');
-    if(source.input&&['offset','transform','width'].includes(source.type)&&
+    if(source.input&&['offset','transform','noise','width'].includes(source.type)&&
        target.input!==source.id){
       // V1 is one output and single-input path operations. A simple relink
       // would orphan a path node. Move the chosen transform immediately
@@ -354,7 +358,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -515,7 +519,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+

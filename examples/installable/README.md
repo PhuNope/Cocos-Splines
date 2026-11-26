@@ -126,3 +126,8 @@ If the Gallery script is customized, merge the new enum mode and handler manuall
 **Traffic Controller**: TrafficController mode creates an incoming route, two outgoing routes, two exclusive green phases (exit 1 and 2), yellow and all-red clearance. A follower must enable **Traffic Capacity** to obey traffic signals. For your own Junction, use `CocosSplinesTrafficSignalsExampleV2` with three ordered links and an assigned controller.
 
 **Prefab Spawning**: The Gallery builds a transient runtime Prefab template and scatters up to 14 instances; it writes **no .prefab asset**. For actual asset selection, assign one or more .prefab files to `CocosSplinesPrefabSpawningExampleV2` and a SplineObjectController. The controller owns only the runtime-created instances and clears them on disable.
+
+### Geometry Graph Path Processing (V2)
+
+- `GeometryGraph/TransformPathGraph.json`: renderer-local XYZ translation/rotation and uniform path scale.
+- `GeometryGraph/NoisePathGraph.json`: seeded Right/Up/Forward noise before Tube generation. Import the JSON or assign it as a shared graph asset on SplineGeometryGraphRenderer. Increase Samples Per Curve for higher frequency/octaves. Zero amplitudes preserve the input exactly; Fade Ends (0–0.5) applies only to open paths. Closed paths use periodic noise and a matching end ring. Noise rebuilds stable world-space basis vectors and sampled arc distance, but does not edit source Knots or guarantee self-intersection-free geometry.

@@ -63,6 +63,8 @@ const FILES=Object.freeze([
  ['Population/PrefabSpawningSetup.ts','examples/installable/Population/PrefabSpawningSetup.ts'],
  ['GeometryGraph/BasicRibbonGraph.json','examples/installable/GeometryGraph/BasicRibbonGraph.json'],
  ['GeometryGraph/BasicTubeGraph.json','examples/installable/GeometryGraph/BasicTubeGraph.json'],
+ ['GeometryGraph/TransformPathGraph.json','examples/installable/GeometryGraph/TransformPathGraph.json'],
+ ['GeometryGraph/NoisePathGraph.json','examples/installable/GeometryGraph/NoisePathGraph.json'],
  ['GeometryGraph/BasicProfileExtrudeGraph.json','examples/installable/GeometryGraph/BasicProfileExtrudeGraph.json'],
  ['GeometryGraph/TaperWidthExtrudeGraph.json','examples/installable/GeometryGraph/TaperWidthExtrudeGraph.json'],
  ['GeometryGraph/AuthoredProfileExtrudeGraph.json','examples/installable/GeometryGraph/AuthoredProfileExtrudeGraph.json'],

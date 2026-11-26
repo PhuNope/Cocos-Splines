@@ -23,6 +23,16 @@ try{
  assert.throws(()=>m.applyGraphEdit(transform,'param',{id:'transform1',key:'pathScale',value:0}));
  transform=m.applyGraphEdit(transform,'remove',{id:'transform1'});
  assert.equal(m.parseGraph(transform).map.get('ribbon').input,'source');
+ let noise=m.applyGraphEdit(source,'insert',{type:'noise',before:'ribbon'});
+ noise=m.applyGraphEdit(noise,'param',{id:'noise1',key:'noiseRight',value:.5});
+ noise=m.applyGraphEdit(noise,'param',{id:'noise1',key:'noiseSeed',value:17});
+ assert.equal(m.parseGraph(noise).map.get('noise1').noiseSeed,17);
+ for(const key of ['noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds'])
+  assert(m.renderNodeParameters(noise,'noise1').includes('data-graph-param="'+key+'"'));
+ for(const [key,value] of [['noiseSeed',1.2],['noiseFrequency',1.5],['noiseOctaves',7],['noiseFadeEnds',.6]])
+  assert.throws(()=>m.applyGraphEdit(noise,'param',{id:'noise1',key,value}));
+ noise=m.applyGraphEdit(noise,'remove',{id:'noise1'});
+ assert.equal(m.parseGraph(noise).map.get('ribbon').input,'source');
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "noise",
+      "type": "noise",
+      "input": "source",
+      "noiseRight": 0.4,
+      "noiseUp": 0.3,
+      "noiseFrequency": 3,
+      "noiseOctaves": 2,
+      "noisePersistence": 0.5,
+      "noiseSeed": 42,
+      "noiseFadeEnds": 0.15
+    },
+    {
+      "id": "tube",
+      "type": "tube",
+      "input": "noise",
+      "radius": 0.12,
+      "radialSegments": 12,
+      "uvMetersPerRepeat": 2
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "tube"
+    }
+  ],
+  "output": "output"
+}

@@ -63,6 +63,49 @@ try{
   assert.throws(()=>evaluateTransform(params));
  assert.throws(()=>evaluateTransform({rotateY:90},{...ctx,worldUvLinear:[1]}));
  assert.deepEqual(evaluateTransform({rotateY:90},{...ctx,worldUvLinear:[2,0,0,0,1,0,0,0,1]}),anisotropic);
+ // Noise Path: deterministic displacement, metric, seam, nonuniform world frame, cache.
+ const noiseGraph={version:1,output:'output',nodes:[
+  {id:'source',type:'spline'},{id:'noise',type:'noise',input:'source'},
+  {id:'ribbon',type:'ribbon',input:'noise',width:4,uvMetersPerRepeat:1},
+  {id:'output',type:'output',input:'ribbon'}]};
+ const dense=Array.from({length:33},(_,i)=>({position:v(0,0,i/4),
+  right:v(1),up:v(0,1),forward:v(0,0,1),distance:i/4}));
+ const nctx={frames:dense,closed:false,revision:'noise-open'};
+ const nr=new GeometryGraphRunner();
+ const runNoise=(params={},context=nctx)=>nr.evaluate(compileGeometryGraph({
+  ...noiseGraph,nodes:noiseGraph.nodes.map(n=>n.id==='noise'?{...n,...params}:n)
+ }),context);
+ const plain=runNoise(),snapshotFrames=JSON.stringify(dense);
+ const settings={noiseRight:.5,noiseUp:.3,noiseFrequency:2,noiseOctaves:2,noiseSeed:7,noiseFadeEnds:.15};
+ const noisy=runNoise(settings);
+ assert.notDeepEqual(noisy.positions,plain.positions);
+ assert.deepEqual(nr.metrics,{computed:3,reused:1,nodes:4});
+ assert.deepEqual(runNoise(settings),noisy);
+ assert.equal(nr.metrics.reused,4);
+ assert.notDeepEqual(runNoise({...settings,noiseSeed:8}).positions,noisy.positions);
+ assert.deepEqual(runNoise(settings),noisy);
+ const centers=m=>Array.from({length:m.ringCount},(_,i)=>[0,1,2].map(k=>(m.positions[6*i+k]+m.positions[6*i+k+3])/2));
+ const nc=centers(noisy);
+ nc[0].forEach((x,k)=>near(x,[0,0,0][k]));
+ nc.at(-1).forEach((x,k)=>near(x,[0,0,8][k]));
+ assert(Math.max(...noisy.uvs)>Math.max(...plain.uvs));
+ assert.equal(JSON.stringify(dense),snapshotFrames);
+ for(const params of [{noiseSeed:1.5},{noiseFrequency:0},{noiseOctaves:7},{noiseFadeEnds:.6},{noiseUp:null},{noisePersistence:2}])
+  assert.throws(()=>runNoise(params));
+ assert.throws(()=>runNoise(settings,{...nctx,worldUvLinear:[0,0,0,0,1,0,0,0,1]}));
+ const anis=runNoise(settings,{...nctx,worldUvLinear:[-2,0,0,0,3,0,0,0,1]});
+ for(let i=0;i<anis.ringCount;i++){
+  const p=anis.positions.slice(i*6,i*6+6);
+  near(Math.hypot((p[3]-p[0])*2,(p[4]-p[1])*3,p[5]-p[2]),4);
+ }
+ const loop=Array.from({length:65},(_,i)=>{
+  const t=i===64?0:i*Math.PI/32;
+  return {position:v(4*Math.sin(t),0,4*Math.cos(t)),forward:v(Math.cos(t),0,-Math.sin(t)),
+   right:v(-Math.sin(t),0,-Math.cos(t)),up:v(0,1),distance:i*8*Math.PI/64};
+ });
+ const loopMesh=runNoise(settings,{frames:loop,closed:true,revision:'noise-loop'});
+ loopMesh.positions.slice(0,6).forEach((x,k)=>near(x,loopMesh.positions.at(-6+k)));
+ assert.deepEqual(runNoise(settings,{frames:loop,closed:true,revision:'noise-loop'}),loopMesh);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},
