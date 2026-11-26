@@ -273,7 +273,13 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 - [x] Phase 4.5b — named typed input-port registry (required/optional, Path/Mesh/MeshSource), Core/editor parity, generic dependency traversal, per-port upstream cache keys, cycle/dead-node checks, explicit clicked socket targeting (legacy inference only for unique compatible port), per-socket wire routing, material dependency tracing, conservative shared JSON topology review. Existing serialized input/meshInput unchanged. Regression coverage using current Mesh Deform dual inputs. Merge Path/Mesh nodes and additional same-type ports follow in 4.5c/d; native 3.8.8 validation pending.
 - [x] Phase 4.5c — binary Merge Path with named required Path A/B ports, 1–3 sources also allowed in single-output V1. Forward/reverse/nearest B, World gap/angle guard, exact-near weld or bounded straight bridge, shared stable frame rebuild and continuous sampled World UV distance, width preservation (averaged welded ring), open-path only, 1025-frame cap, Visual Graph add/remove/reconnect, installable example and headless regression tests. Fixed 4.5b legacy socket diagnostic; native validation pending.
 - [x] Phase 4.5d — binary Merge Mesh with named required Mesh A/B ports, deterministic concatenation in common renderer-local space, preserve position/normal/UV, offset B indices, combined preallocation budgets (65536 vertices / 393216 indices), atomic cache, one output material (no imported material inference for merged branches), Visual Graph add/remove/reconnect, example and headless regression tests. No vertex weld, boolean union or per-input submesh preservation; use separate outputs for multiple materials. Native acceptance pending.
-- [ ] Phase 4.5e — branching and visual graph auto layout.
+- [x] Phase 4.5e — dependency-layered deterministic Visual Graph layout with parent barycenter ordering, nonoverlapping automatic cards for all 32 nodes, bounded dynamic canvas extents, legacy manual position preservation and collision-free placement of new nodes, named-port wire routing metadata, find/jump-to-node navigation, scroll-aware drag and branch-aware toolbar targeting/selection (shared nodes prefer default output). Auto Layout writes only graphLayoutJson; shared asset layout remains read-only. Offline regression tests; native Creator 3.8.8 acceptance pending.
+
+#### Next Geometry Graph expansion
+
+- [ ] Phase 4.6 — advanced profile extrusion: profile keys/morph, compatible contour topology, advanced per-edge material mapping.
+- [ ] Phase 4.7 — production mesh workflows: explicit bake/export, collider generation, chunking and LOD.
+- [ ] Phase 4.8 — population/scatter graph processing.
 
 ### Phase 5 — Runtime networks & controllers
 

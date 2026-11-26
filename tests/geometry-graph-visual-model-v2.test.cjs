@@ -170,7 +170,7 @@ try{
  assert.equal(m.parseLayout(moved,json).width1.y,240);
  assert.equal(JSON.stringify(m.parseGraph(json).graph),originalGraph,
   'Moving node positions cannot alter graph geometry JSON');
- const clamped=m.moveGraphNode(moved,json,'width1',999,999);
+ const clamped=m.moveGraphNode(moved,json,'width1',99999,99999);
  assert.equal(m.parseLayout(clamped,json).width1.x,
    m.STAGE.width-m.STAGE.cardWidth);
  assert.equal(m.parseLayout(clamped,json).width1.y,
@@ -191,6 +191,35 @@ try{
  assert(canvas.includes('class="spl-vg-card selected"'));
  assert(canvas.includes('class="spl-vg-card pending"'));
  assert(canvas.includes('data-node="width1"'));
+ // Depth-based deterministic layout, fan-out/fan-in and partial saved positions.
+ const layoutsGraph=m.applyGraphEdit(source,'add-spline-output',{fromOutputId:'output'});
+ const layoutMerged=m.applyGraphEdit(layoutsGraph,'add-merge-mesh',{before:'output',sourceId:'ribbonBranch'});
+ function checkAutoLayout(graphJson){
+  const view=m.parseGraph(graphJson),pos=m.parseLayout('{}',graphJson);
+  for(const n of view.ordered)for(const link of m.inputLinks(n))
+   assert(pos[n.id].x>=pos[link.sourceId].x+m.STAGE.cardWidth,'Dependencies run left to right');
+  const nodes=Object.values(pos);
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++)
+   assert(Math.abs(nodes[i].x-nodes[j].x)>=m.STAGE.cardWidth||Math.abs(nodes[i].y-nodes[j].y)>=m.STAGE.cardHeight,'Auto cards cannot overlap');
+  const size=m.graphCanvasSize(pos);
+  assert(size.width<=m.STAGE.width&&size.height<=m.STAGE.height);
+  for(const p of nodes)assert(p.x>=0&&p.y>=0&&p.x+m.STAGE.cardWidth<=size.width&&p.y+m.STAGE.cardHeight<=size.height);
+  const reversed={...view.graph,nodes:view.graph.nodes.slice().reverse()};
+  assert.deepEqual(m.parseLayout('{}',JSON.stringify(reversed)),pos);
+  return pos;
+ }
+ const layoutPositions=checkAutoLayout(layoutMerged);
+ assert.notEqual(layoutPositions.ribbon.y,layoutPositions.ribbonBranch.y);
+ const partial=m.parseLayout(JSON.stringify({source:layoutPositions.ribbon}),layoutMerged);
+ assert.deepEqual(partial.source,layoutPositions.ribbon,'Existing manual position remains fixed');
+ assert(Math.abs(partial.ribbon.y-partial.source.y)>=m.STAGE.cardHeight||Math.abs(partial.ribbon.x-partial.source.x)>=m.STAGE.cardWidth);
+ const chain={version:1,output:'out',nodes:[{id:'s',type:'spline'}]};
+ for(let i=0;i<29;i++)chain.nodes.push({id:'p'+i,type:'offset',input:i?'p'+(i-1):'s'});
+ chain.nodes.push({id:'r',type:'ribbon',input:'p28'},{id:'out',type:'output',input:'r'});
+ const chainJson=JSON.stringify(chain),chainPos=checkAutoLayout(chainJson);
+ assert(m.graphCanvasSize(chainPos).width>m.STAGE.minWidth);
+ assert(chainPos.out.x>chainPos.s.x+5000);
+ assert(m.renderGraphCanvas(chainJson,'{}',null,null).includes('data-target-node="out"'));
  const panel=m.renderNodeParameters(json,'ribbon');
  for(const name of ['width','endWidth','uvMetersPerRepeat','thickness',
    'cornerMode','capEnds'])assert(panel.includes('data-graph-param="'+name+'"'));

@@ -75,9 +75,14 @@ async function run(){
   ui.$.vgAddOutput.events.click();
   assert.equal(graph().outputs.length,2);
   assert.equal(ui._vgSelected,'outputBranch1');
+  const secondaryGenerator=graph().map.get('outputBranch1').input;
+  select(secondaryGenerator);
+  assert(ui.$.vgStatus.textContent.includes('editing: outputBranch1'));
   ui.$.vgSwitchGenerator.events.click();
   const branch=graph().map.get('outputBranch1');
   assert.equal(graph().map.get(branch.input).type,'tube');
+  assert.equal(ui._vgSelected,branch.input,'Generator switch retains the edited branch selection');
+  assert.equal(ui.$.vgSwitchGenerator.textContent,'Switch to Ribbon');
   assert.equal(graph().map.get(graph().map.get(graph().graph.output).input).type,'ribbon',
    'Switching secondary output generator cannot modify default mesh');
   assert.equal(writes.length,5);

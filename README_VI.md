@@ -170,3 +170,5 @@ merge bản mới để giữ UUID của component tham chiếu từ Scene/Prefa
 ### Junction Join: tùy chọn làm mượt G1/C1
 
 Trong Inspector của `SplineJunction` chọn **Join seam treatment**: Preserve (mặc định không sửa đường gốc), G1 (chỉnh hướng tangent của đoạn ra), C1 (chỉnh cả hướng và độ dài). Áp dụng riêng cho spline kết quả của Join hai link, Fan-out hoặc Join qua nhiều Junction. Source splines luôn giữ nguyên. Tangent degenerate sẽ bị từ chối nếu bật G1/C1; xem `docs/Junction_Position_VI.md`.
+
+**Geometry Graph Visual Layout (Phase 4.5e):** Auto Layout phân tầng dependency trái sang phải, tách các nhánh, canvas tự mở rộng trong giới hạn 32 nodes, Find node cuộn đến node được chọn. Vị trí thủ công vẫn được giữ; chỉ thay đổi `graphLayoutJson`, không làm dirty geometry. Toolbar nhận diện output của nhánh đang chọn; node dùng chung ưu tiên default output. Native Creator 3.8.8 acceptance còn chờ.

@@ -462,9 +462,43 @@ function applyGraphEdit(json,action,details={}) {
   validateGraph(next);
   return formatGraph(next);
 }
-const STAGE={width:860,height:410,cardWidth:144,cardHeight:90,margin:12};
+/** Bounded logical coordinate space; actual viewport content grows with
+ * graph depth, branch width and saved positions. No runtime/geometry writes. */
+const STAGE=Object.freeze({width:6600,height:4400,minWidth:860,minHeight:410,
+  cardWidth:144,cardHeight:90,margin:12,columnStep:196,rowStep:128});
+function autoGraphLayout(view){
+  const depths=new Map(),layers=new Map(),positions={};
+  for(const node of view.ordered){
+    const links=inputLinks(node);
+    const depth=links.length?1+Math.max(...links.map(l=>depths.get(l.sourceId))):0;
+    depths.set(node.id,depth);
+    if(!layers.has(depth))layers.set(depth,[]);
+    layers.get(depth).push(node);
+  }
+  const maxRows=Math.max(...Array.from(layers.values(),nodes=>nodes.length));
+  const centerY=Math.max(STAGE.minHeight/2,STAGE.margin+STAGE.cardHeight/2+
+    (maxRows-1)*STAGE.rowStep/2);
+  for(const [depth,nodes] of layers){
+    // Parent barycenter groups related paths before assigning nonoverlapping
+    // rows. ID tie break makes layout independent of serialized node order.
+    const score=n=>{
+      const links=inputLinks(n);
+      return links.length?links.reduce((sum,l)=>sum+positions[l.sourceId].y,0)/links.length:0;
+    };
+    nodes.sort((a,b)=>score(a)-score(b)||(a.id<b.id?-1:a.id>b.id?1:0));
+    nodes.forEach((node,i)=>{
+      positions[node.id]={
+        x:STAGE.margin+depth*STAGE.columnStep,
+        y:Math.round(centerY-STAGE.cardHeight/2+(i-(nodes.length-1)/2)*STAGE.rowStep),
+      };
+    });
+  }
+  return positions;
+}
+const overlaps=(a,b)=>a.x<b.x+STAGE.cardWidth+8&&a.x+STAGE.cardWidth+8>b.x&&
+  a.y<b.y+STAGE.cardHeight+8&&a.y+STAGE.cardHeight+8>b.y;
 function parseLayout(layoutJson,graphJson){
-  const {ordered,map}=parseGraph(graphJson);
+  const view=parseGraph(graphJson),defaults=autoGraphLayout(view);
   let parsed;
   if(layoutJson===undefined||layoutJson===null||layoutJson==='')parsed={};
   else {
@@ -473,20 +507,68 @@ function parseLayout(layoutJson,graphJson){
     try{parsed=JSON.parse(layoutJson);}catch{throw Error('Graph layout JSON syntax error.');}
     if(!object(parsed))throw Error('Graph layout must be a JSON object.');
   }
-  const positions={};
-  for(let i=0;i<ordered.length;i++){
-    const node=ordered[i],saved=Object.hasOwn(parsed,node.id)?parsed[node.id]:null;
-    if(saved!==null&&(!object(saved)||!finite(saved.x)||!finite(saved.y)||
-      saved.x<0||saved.x>STAGE.width-STAGE.cardWidth||
-      saved.y<0||saved.y>STAGE.height-STAGE.cardHeight))
+  const positions={},occupied=[];
+  // Preserve explicitly saved positions, even intentionally overlapping cards.
+  for(const node of view.ordered){
+    if(!Object.hasOwn(parsed,node.id))continue;
+    const saved=parsed[node.id];
+    if(!object(saved)||!finite(saved.x)||!finite(saved.y)||
+       saved.x<0||saved.x>STAGE.width-STAGE.cardWidth||
+       saved.y<0||saved.y>STAGE.height-STAGE.cardHeight)
       throw Error('Invalid canvas position for '+node.id+'.');
-    const defaultX=Math.min(STAGE.width-STAGE.cardWidth,
-      STAGE.margin+Math.round(i*(STAGE.width-STAGE.cardWidth-2*STAGE.margin)/
-      Math.max(1,ordered.length-1)));
-    positions[node.id]=saved?{x:saved.x,y:saved.y}:{x:defaultX,y:144};
+    positions[node.id]={x:saved.x,y:saved.y};occupied.push(positions[node.id]);
   }
-  // Unknown layout IDs are ignored on render; they'll be discarded on save.
-  return positions;
+  // Newly added nodes avoid existing saved cards without moving those cards.
+  for(const node of view.ordered){
+    if(Object.hasOwn(positions,node.id))continue;
+    const ideal=defaults[node.id];
+    let placed=null;
+    const available=p=>!occupied.some(other=>overlaps(p,other));
+    if(available(ideal))placed=ideal;
+    else{
+      for(let y=ideal.y+STAGE.rowStep;y<=STAGE.height-STAGE.cardHeight;y+=STAGE.rowStep){
+        const p={x:ideal.x,y};if(available(p)){placed=p;break;}
+      }
+      if(!placed)for(let y=STAGE.margin;y<ideal.y;y+=STAGE.rowStep){
+        const p={x:ideal.x,y};if(available(p)){placed=p;break;}
+      }
+      if(!placed)for(let x=STAGE.margin;x<=STAGE.width-STAGE.cardWidth&&!placed;x+=STAGE.columnStep)
+        for(let y=STAGE.margin;y<=STAGE.height-STAGE.cardHeight;y+=STAGE.rowStep){
+          const p={x,y};if(available(p)){placed=p;break;}
+        }
+    }
+    if(!placed)throw Error('Graph canvas has no free node position.');
+    positions[node.id]=placed;occupied.push(placed);
+  }
+  // Unknown layout IDs are ignored; stable key order simplifies undo/redo.
+  return Object.fromEntries(view.ordered.map(n=>[n.id,positions[n.id]]));
+}
+function graphCanvasSize(positions){
+  const values=Object.values(positions);
+  return {
+    width:Math.min(STAGE.width,Math.max(STAGE.minWidth,...values.map(p=>Math.ceil(p.x+STAGE.cardWidth+STAGE.columnStep)))),
+    height:Math.min(STAGE.height,Math.max(STAGE.minHeight,...values.map(p=>Math.ceil(p.y+STAGE.cardHeight+STAGE.rowStep)))),
+  };
+}
+/** Determine which outputs consume a selected node via any named input.
+ * Prefer the explicit default for a shared node, otherwise stable output ID.
+ * Selecting an Output itself is always unambiguous. */
+function graphOutputIdsForNode(view,id){
+  if(!view.map.has(id))return [];
+  return view.outputs.filter(outputId=>{
+    const visited=new Set();
+    function contains(current){
+      if(current===id)return true;
+      if(visited.has(current))return false;
+      visited.add(current);
+      return inputLinks(view.map.get(current)).some(link=>contains(link.sourceId));
+    }
+    return contains(outputId);
+  });
+}
+function activeGraphOutputId(view,id){
+  const outputs=graphOutputIdsForNode(view,id);
+  return outputs.includes(view.graph.output)?view.graph.output:outputs[0]??view.graph.output;
 }
 function moveGraphNode(layoutJson,graphJson,id,x,y){
   if(!safeId(id)||!finite(x)||!finite(y))throw Error('Invalid Graph node move.');
@@ -503,13 +585,14 @@ function cleanGraphLayout(layoutJson,graphJson){
 }
 function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
   const {ordered,map}=parseGraph(graphJson),positions=parseLayout(layoutJson,graphJson);
+  const size=graphCanvasSize(positions);
   const links=ordered.flatMap(n=>inputLinks(n).map(link=>({node:n,fromId:link.sourceId,port:link.port}))).map(({node,fromId,port})=>{
     const from=positions[fromId],to=positions[node.id];
     const sx=from.x+STAGE.cardWidth,sy=from.y+75,
       tx=to.x,ty=to.y+port.offset;
     const dx=Math.max(28,Math.abs(tx-sx)*.42);
     return '<path class="spl-vg-wire spl-vg-wire-'+TYPES[map.get(fromId).type].output+
-      '" data-target-port="'+port.key+'" d="M '+sx+' '+sy+' C '+(sx+dx)+' '+sy+' '+(tx-dx)+' '+ty+' '+tx+' '+ty+
+      '" data-source-node="'+fromId+'" data-target-node="'+node.id+'" data-target-port="'+port.key+'" d="M '+sx+' '+sy+' C '+(sx+dx)+' '+sy+' '+(tx-dx)+' '+ty+' '+tx+' '+ty+
       '" fill="none"/>';
   }).join('');
   const nodes=ordered.map(n=>{
@@ -526,8 +609,8 @@ function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
         '" data-socket="out" data-node="'+n.id+'" title="Output '+info.output+'">'+info.output+' ▶</button>'+
       '</div>';
   }).join('');
-  return '<svg class="spl-vg-wires" width="'+STAGE.width+'" height="'+STAGE.height+
-    '" viewBox="0 0 '+STAGE.width+' '+STAGE.height+'" aria-hidden="true">'+links+'</svg>'+nodes;
+  return '<svg class="spl-vg-wires" width="'+size.width+'" height="'+size.height+
+    '" viewBox="0 0 '+size.width+' '+size.height+'" aria-hidden="true">'+links+'</svg>'+nodes;
 }
 function renderWidthKeyControls(n){
   if(!n.widthKeys)return '<button type="button" data-width-action="enable">'+
@@ -627,4 +710,5 @@ function renderNodeParameters(graphJson,id){
     (n.type==='width'?renderWidthKeyControls(n):'');
 }
 module.exports={TYPES,LIMITS,STAGE,inputPorts,inputLinks,parseGraph,validateGraph,applyGraphEdit,
+  autoGraphLayout,graphCanvasSize,graphOutputIdsForNode,activeGraphOutputId,
   parseLayout,moveGraphNode,cleanGraphLayout,renderGraphCanvas,renderNodeParameters};

@@ -75,6 +75,7 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-vg-remove-output">✕ Remove Output</button>',
  '<button type="button" class="spl-btn spl-vg-remove">✕ Remove</button>',
  '<button type="button" class="spl-btn spl-vg-auto-layout">⇱ Auto Layout</button>',
+ '<select class="spl-vg-jump" aria-label="Find graph node"><option value="">Find node…</option></select>',
  '</div>',
  '<div class="spl-vg-viewport" tabindex="0" aria-label="Scrollable typed node graph">',
  '<div class="spl-vg-stage" role="group" aria-label="Geometry graph nodes"></div>',
@@ -103,7 +104,9 @@ const style=base.style+[
 '.spl-profile-uv-info{font-size:11px;color:#b5d3e1;line-height:1.6}',
 '.spl-profile-uv-controls input{width:80px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
 '.spl-vg-viewport{overflow:auto;max-width:100%;height:360px;border:1px solid #3c6172;border-radius:6px;background:rgba(18,26,36,.65);touch-action:pan-x pan-y}',
-'.spl-vg-stage{position:relative;width:860px;height:410px;min-width:860px;min-height:410px}',
+'.spl-vg-stage{position:relative;min-width:860px;min-height:410px}',
+'.spl-vg-jump{max-width:100%;min-width:120px;color:inherit;background:#263746;border:1px solid #53728a;border-radius:4px;padding:3px}',
+'.spl-vg-wire-meshSource{stroke:#8fb18c}',
 '.spl-vg-wires{position:absolute;inset:0;pointer-events:none}',
 '.spl-vg-wire{stroke-width:2.5;stroke:#64a8cf;opacity:.9}',
 '.spl-vg-wire-mesh{stroke:#dbad69}',
@@ -168,7 +171,7 @@ const $={...base.$,
   vgAddOutput:'.spl-vg-add-output',vgAddSplineOutput:'.spl-vg-add-spline-output',
   vgDefaultOutput:'.spl-vg-default-output',
   vgRemoveOutput:'.spl-vg-remove-output',
-  vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout'};
+  vgRemove:'.spl-vg-remove',vgAuto:'.spl-vg-auto-layout',vgJump:'.spl-vg-jump'};
 function status(panel,message,isError=false){
   panel._vgStatusError=!!isError;
   if(!panel.$?.vgStatus)return;
@@ -390,7 +393,8 @@ function render(panel){
         }
       }else panel.$.vgOrderList.innerHTML='';
     }
-    const finalGenerator=view.map.get(view.map.get(view.graph.output)?.input);
+    const activeOutput=activeOutputId(view,panel._vgSelected);
+    const finalGenerator=view.map.get(view.map.get(activeOutput)?.input);
     if(panel.$?.vgSwitchGenerator){
       panel.$.vgSwitchGenerator.textContent=finalGenerator?.type==='tube'?'Switch to Ribbon':'Switch to Tube';
       panel.$.vgSwitchGenerator.disabled=sharedLocked||busy||
@@ -413,10 +417,12 @@ function render(panel){
       panel._vgSelected:null;
     if(panel.$?.vgAddOutput)
       panel.$.vgAddOutput.disabled=sharedLocked||busy||
-        view.outputs.length>=4||view.ordered.length>30;
+        view.outputs.length>=4||view.ordered.length>30||
+        !['ribbon','tube','extrude','meshDeform','mergeMesh'].includes(finalGenerator?.type);
     if(panel.$?.vgAddSplineOutput)
       panel.$.vgAddSplineOutput.disabled=sharedLocked||busy||view.outputs.length>=4||
-        view.ordered.length>29||view.ordered.filter(n=>n.type==='spline').length>=3;
+        view.ordered.length>29||view.ordered.filter(n=>n.type==='spline').length>=3||
+        !['ribbon','tube','extrude','meshDeform'].includes(finalGenerator?.type);
     if(panel.$?.vgDefaultOutput)
       panel.$.vgDefaultOutput.disabled=sharedLocked||busy||
         !selectedOutput||selectedOutput===view.graph.output;
@@ -425,8 +431,17 @@ function render(panel){
         !selectedOutput||selectedOutput===view.graph.output;
     if(panel._vgSelected&&!view.map.has(panel._vgSelected))
       panel._vgSelected=null;
-    stage.innerHTML=graph.renderGraphCanvas(panel._vgGraphJson,
-      panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
+    const layout=panel._vgPreviewLayout||panel._vgLayoutJson;
+    const positions=graph.parseLayout(layout,panel._vgGraphJson),size=graph.graphCanvasSize(positions);
+    if(stage.style){stage.style.width=size.width+'px';stage.style.height=size.height+'px';}
+    stage.innerHTML=graph.renderGraphCanvas(panel._vgGraphJson,layout,panel._vgSelected,panel._vgPending);
+    if(panel.$?.vgJump){
+      const jump=panel.$.vgJump;
+      jump.innerHTML='<option value="">Find node…</option>'+view.ordered.map(n=>
+        '<option value="'+n.id+'">'+n.id+' · '+n.type+'</option>').join('');
+      jump.value=panel._vgSelected||'';
+      jump.disabled=false;
+    }
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
       sharedLocked||busy||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','mergeMesh','width'].includes(view.map.get(panel._vgSelected)?.type);
@@ -435,10 +450,11 @@ function render(panel){
         'Connecting from '+panel._vgPending+': click a matching input socket.':
         'Graph v'+view.graph.version+' valid · '+view.ordered.length+
         ' nodes · '+view.outputs.length+' output(s) · default: '+view.graph.output+
-        ' · drag headers to arrange.');
+        ' · editing: '+activeOutput+' · drag headers to arrange.');
   }catch(error){
     stage.textContent='Graph unavailable. Fix graphJson/layout JSON in the property Inspector.';
     properties.textContent='';
+    if(panel.$?.vgJump){panel.$.vgJump.innerHTML='<option value="">Find node…</option>';panel.$.vgJump.disabled=true;}
     if(panel.$?.vgOrderSection)panel.$.vgOrderSection.hidden=true;
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=true;
     status(panel,String(error?.message||error),true);
@@ -496,13 +512,17 @@ function commitOutputOrder(panel,value){
   return true;
 }
 function activeOutputId(view,selectedId){
-  const node=view.map.get(selectedId);
-  if(node?.type==='output')return node.id;
-  if(['ribbon','tube','extrude','meshDeform'].includes(node?.type)){
-    const consumer=view.ordered.find(n=>n.type==='output'&&n.input===node.id);
-    if(consumer)return consumer.id;
+  return graph.activeGraphOutputId(view,selectedId);
+}
+function focusGraphNode(panel,id){
+  const positions=graph.parseLayout(panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgGraphJson);
+  if(!Object.hasOwn(positions,id))return;
+  panel._vgPending=null;panel._vgSelected=id;render(panel);
+  const viewport=panel.$?.vgViewport,p=positions[id];
+  if(viewport){
+    viewport.scrollLeft=Math.max(0,p.x+graph.STAGE.cardWidth/2-(viewport.clientWidth||0)/2);
+    viewport.scrollTop=Math.max(0,p.y+graph.STAGE.cardHeight/2-(viewport.clientHeight||0)/2);
   }
-  return view.graph.output;
 }
 function editGraph(panel,action,details){
   try{
@@ -520,7 +540,7 @@ function editGraph(panel,action,details){
     else if(action==='set-default-output')panel._vgSelected=details.id;
     else if(action==='replace-generator'){
       const next=graph.parseGraph(output);
-      panel._vgSelected=next.map.get(next.graph.output)?.input||null;
+      panel._vgSelected=next.map.get(details.outputId||next.graph.output)?.input||null;
     }else if(action==='connect')panel._vgSelected=details.target;
     render(panel);
   }catch(error){status(panel,String(error?.message||error),true);}
@@ -1211,7 +1231,7 @@ const inspector={
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       try{
         const view=graph.parseGraph(this._vgGraphJson),selected=view.map.get(this._vgSelected);
-        const output=selected?.type==='output'?selected:view.map.get(view.graph.output);
+        const output=view.map.get(activeOutputId(view,this._vgSelected));
         const sourceId=selected&&selected.type!=='output'&&graph.TYPES[selected.type].output==='mesh'&&selected.id!==output.input?selected.id:undefined;
         editGraph(this,'add-merge-mesh',{before:output.id,sourceId});
       }catch(error){status(this,String(error?.message||error),true);}
@@ -1254,9 +1274,8 @@ const inspector={
     this.$?.vgAddOutput?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       const view=graph.parseGraph(this._vgGraphJson);
-      const selected=view.map.get(this._vgSelected);
       editGraph(this,'add-output',{
-        fromOutputId:selected?.type==='output'?selected.id:view.graph.output,
+        fromOutputId:activeOutputId(view,this._vgSelected),
       });
     });
     this.$?.vgAddSplineOutput?.addEventListener('click',()=>{
@@ -1274,7 +1293,15 @@ const inspector={
     this.$.vgRemove.addEventListener('click',()=>{
       if(this._vgSelected)editGraph(this,'remove',{id:this._vgSelected});
     });
-    this.$.vgAuto.addEventListener('click',()=>commitLayout(this,'{}'));
+    this.$.vgAuto.addEventListener('click',()=>{
+      if(this._vgShared||this._vgSharedBusy)return;
+      commitLayout(this,'{}');
+      if(this.$?.vgViewport){this.$.vgViewport.scrollLeft=0;this.$.vgViewport.scrollTop=0;}
+    });
+    this.$?.vgJump?.addEventListener('change',event=>{
+      try{focusGraphNode(this,event?.target?.value??this.$.vgJump.value);}
+      catch(error){status(this,String(error?.message||error),true);}
+    });
     this.$.vgStage.addEventListener('click',event=>{
       if(this._vgIgnoreClick){this._vgIgnoreClick=false;return;}
       if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy)return;
@@ -1392,6 +1419,7 @@ const inspector={
         this._vgSelected=id;
         this._vgDrag={id,startX:event.clientX,startY:event.clientY,
           x:positions[id].x,y:positions[id].y,preview:null,moved:false,
+          scrollX:this.$?.vgViewport?.scrollLeft||0,scrollY:this.$?.vgViewport?.scrollTop||0,
           pointerId:event.pointerId};
         this.$.vgStage.setPointerCapture?.(event.pointerId);
         event.preventDefault?.();
@@ -1400,10 +1428,9 @@ const inspector={
     this.$.vgStage.addEventListener('pointermove',event=>{
       const drag=this._vgDrag;
       if(!drag||drag.pointerId!==event.pointerId)return;
-      const x=drag.x+event.clientX-drag.startX,
-        y=drag.y+event.clientY-drag.startY;
-      if(Math.abs(event.clientX-drag.startX)>2||
-         Math.abs(event.clientY-drag.startY)>2)drag.moved=true;
+      const x=drag.x+event.clientX-drag.startX+(this.$?.vgViewport?.scrollLeft||0)-drag.scrollX,
+        y=drag.y+event.clientY-drag.startY+(this.$?.vgViewport?.scrollTop||0)-drag.scrollY;
+      if(Math.abs(x-drag.x)>2||Math.abs(y-drag.y)>2)drag.moved=true;
       try{
         drag.preview=graph.moveGraphNode(this._vgLayoutJson,
           this._vgGraphJson,drag.id,x,y);

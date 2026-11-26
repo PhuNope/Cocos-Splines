@@ -7,7 +7,7 @@ const panel=require(root+'/dist/contributions/inspector/GeometryGraph.js');
 function el(){
  return {
   events:{},innerHTML:'',textContent:'',value:'',disabled:false,
-  classList:{toggle(){}},
+  classList:{toggle(){}},style:{},scrollLeft:0,scrollTop:0,clientWidth:300,clientHeight:220,
   addEventListener(name,callback){this.events[name]=callback;},
   dispatch(){},
   setPointerCapture(){},releasePointerCapture(){},
@@ -41,6 +41,13 @@ assert(panel.template.includes('spl-field-graphLayoutJson'));
 assert(panel.template.includes('spl-vg-properties'));
 assert.equal(ui.$.vgRemove.disabled,true);
 assert(ui.$.vgStage.innerHTML.includes('data-node="ribbon"'));
+assert(ui.$.vgStage.style.width.endsWith('px'));
+assert(ui.$.vgJump.innerHTML.includes('value="ribbon"'));
+ui.$.vgJump.events.change({target:{value:'output'}});
+assert.equal(ui._vgSelected,'output');
+assert(ui.$.vgViewport.scrollLeft>0);
+assert.equal(commits.length,0,'Jump to node is view-only');
+ui.$.vgViewport.scrollLeft=0;ui.$.vgViewport.scrollTop=0;
 assert(ui.$.r_graphLayoutJson.hidden,'Layout dump widget hidden from manual UI, but retained');
 function click(name){ui.$[name].events.click();}
 function element(selector,id,property){
@@ -96,6 +103,7 @@ ui.$.vgStage.events.pointerdown({
  preventDefault(){}
 });
 assert(ui._vgDrag);
+ui.$.vgViewport.scrollLeft=20;
 ui.$.vgStage.events.pointermove({pointerId:5,clientX:144,clientY:125});
 assert.equal(commits.length,4,'Pointermove must not persist any draft');
 assert.equal(dump.value.graphJson.value,stableGeometry);
@@ -104,7 +112,7 @@ assert.equal(commits.length,5);
 assert.equal(commits.at(-1).key,'graphLayoutJson');
 assert.equal(dump.value.graphJson.value,stableGeometry);
 let position=model.parseLayout(dump.value.graphLayoutJson.value,stableGeometry).offset1;
-assert.equal(position.x,initialPos.x+44);
+assert.equal(position.x,initialPos.x+64);
 assert.equal(position.y,initialPos.y+25);
 const afterDrag=commits.length;
 ui.$.vgStage.events.pointerdown({
@@ -118,11 +126,12 @@ ui.$.vgStage.events.keydown({key:'ArrowRight',shiftKey:true,preventDefault(){}})
 assert.equal(commits.length,6);
 assert.equal(commits.at(-1).key,'graphLayoutJson');
 position=model.parseLayout(dump.value.graphLayoutJson.value,stableGeometry).offset1;
-assert.equal(position.x,initialPos.x+44+24);
+assert.equal(position.x,initialPos.x+64+24);
 assert.equal(dump.value.graphJson.value,stableGeometry);
 click('vgAuto');
 assert.equal(commits.length,7);
 assert.equal(dump.value.graphLayoutJson.value,'{}');
+assert.equal(ui.$.vgViewport.scrollLeft,0);
 ui.$.vgStage.events.click({target:card('offset1')});
 click('vgRemove');
 assert.equal(commits.length,8);
