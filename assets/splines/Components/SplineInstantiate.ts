@@ -25,9 +25,9 @@ export class SplineInstantiate extends Component {
     rangeMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({min:0,tooltip:'Start distance when Range Mode = Distance.'}) startDistance=0;
     @property({min:0,tooltip:'End distance when Range Mode = Distance. The interval is clamped to current spline length.'}) endDistance=10;
-    @property({type:Vec3,tooltip:'Offset in spline orientation space (right/up/forward), applied in world.'}) positionOffset=new Vec3();
-    @property({type:Vec3,tooltip:'Euler orientation offset, degrees.'}) rotationOffset=new Vec3();
-    @property({type:Vec3,tooltip:'Deterministic random local position offsets, symmetric about zero.'}) randomOffset=new Vec3();
+    @property({tooltip:'Offset in spline orientation space (right/up/forward), applied in world.'}) positionOffset=new Vec3();
+    @property({tooltip:'Euler orientation offset, degrees.'}) rotationOffset=new Vec3();
+    @property({tooltip:'Deterministic random local position offsets, symmetric about zero.'}) randomOffset=new Vec3();
     @property({tooltip:'Seed used to vary random offsets, stable across rebuilds.'}) seed=12345;
     @property({min:0.01,tooltip:'Scale each generated prefab uniformly by this factor.'}) scaleMultiplier=1;
     @property alignToSpline=true;

@@ -25,7 +25,7 @@ export class SplineContainer extends Component {
     @property({tooltip:'Show curve even when container is not selected. Requires Cocos-Gizmos.'}) showGizmosAlways=false;
     @property({tooltip:'Draw tangent handles on selected knots.'}) showTangentGizmos=true;
     @property({min:2,max:64,step:1,tooltip:'Visualization density per cubic segment.'}) gizmoSteps=12;
-    @property({type:Color,tooltip:'Editor-only curve color.'}) gizmoColor:Color=new Color(45,208,255,255);
+    @property({tooltip:'Editor-only curve color.'}) gizmoColor:Color=new Color(45,208,255,255);
     private _lut:M.ArcLUT|null=null;
     private _signature='';
 

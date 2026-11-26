@@ -420,3 +420,5 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [x] Native 3.8.8 feedback — Train example Boolean decorator metadata: explicit CCBoolean for wrapClosed, backwards, loopRoute, playOnStart; safe byte-exact installer upgrade preserving UUIDs and user edits; native verification pending.
 
 - [x] Native 3.8.8 feedback — audit all serialized component/example property decorators: CCFloat for prefabWeights and conflictRoadHalfWidths, CCInteger for greenExits, correct stale Train HTML examples; TypeScript AST regression rejects JS primitive constructors, empty decorator calls and ambiguous array/null defaults. Native verification pending.
+
+- [x] Native 3.8.8 feedback — remove redundant scalar ValueType decorator metadata on 20 instantiated Vec3/Color properties across 11 runtime files; preserve tooltip, names, initial values, array/reference metadata and .meta UUIDs. Extend AST property regression with positive and negative fixtures. Native verification pending.

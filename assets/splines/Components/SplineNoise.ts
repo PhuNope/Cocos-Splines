@@ -15,7 +15,7 @@ export class SplineNoiseLayer implements NoiseLayerConfig {
     @property({range:[0,1,0.01],slide:true}) persistence=.5;
     @property({min:-1000,max:1000,tooltip:'Phase shift in lattice coordinates.'}) phase=0;
     @property({tooltip:'Additional integer seed for this layer.'}) seed=0;
-    @property({type:Vec3,tooltip:'Right/Up/Forward maximum displacement in spline frame.'})
+    @property({tooltip:'Right/Up/Forward maximum displacement in spline frame.'})
     amplitude=new Vec3();
     @property({range:[0,.5,.01],slide:true,tooltip:'For OPEN splines only: smoothly fade to zero at both endpoints.'})
     fadeEnds=.1;

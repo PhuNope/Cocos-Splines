@@ -56,7 +56,7 @@ export class SplineRoad extends Component {
     @property({tooltip:'Offset the final texture U coordinate.'}) uvOffsetU=0;
     @property({tooltip:'Offset the final texture V coordinate.'}) uvOffsetV=0;
     @property({type:Material,tooltip:'Assign asphalt / road material with tiled texture. Uses default dark asphalt color when empty.'}) roadMaterial:Material|null=null;
-    @property({type:Color,tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
+    @property({tooltip:'Fallback unlit asphalt color when no custom material is supplied.'}) asphaltColor:Color=new Color(48,53,60,255);
     @property({tooltip:'Close the start/end edges for open road slabs.'}) capEnds=true;
     @property({tooltip:'Recreate visual mesh on knot edits or changes to the properties, even in Scene Editor.'}) rebuildOnChange=true;
     @property({tooltip:'Draw a bounded preview wireframe when this mesh component is selected.'}) showMeshGizmos=true;

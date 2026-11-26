@@ -19,9 +19,9 @@ export class SplinePositioner extends Component {
     @property({type:Node,tooltip:'Optional object whose nearest spline position is followed.'}) followTarget:Node|null=null;
     @property({tooltip:'Offset in spline-local arc units from Follow Target projection (not world units).'}) followDistance=0;
     @property({tooltip:'Wrap followDistance at the end of closed splines.'}) wrapClosed=true;
-    @property({type:Vec3,tooltip:'Offset in spline frame (X right, Y up, Z forward), in world units.'}) splineOffset=new Vec3();
+    @property({tooltip:'Offset in spline frame (X right, Y up, Z forward), in world units.'}) splineOffset=new Vec3();
     @property alignToSpline=true;
-    @property({type:Vec3}) rotationOffset=new Vec3();
+    @property rotationOffset=new Vec3();
     @property({tooltip:'Update placement every frame in gameplay. Manual positioner uses applyPosition() instead.'}) followOnUpdate=true;
     @property({tooltip:'Preview placement in Editor. Turning off restores the original target transform.'}) previewInEditor=false;
     private _previewNode:Node|null=null;

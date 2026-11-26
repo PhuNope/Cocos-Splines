@@ -1,10 +1,12 @@
 'use strict';
-// Cocos Creator 3.8.x rejects JavaScript constructors as primitive property
-// type metadata. Check the actual AST (not comments, strings or TS types).
+// Cocos Creator 3.8.x rejects JS constructors for primitive metadata and
+// warns about explicit scalar ValueType metadata when a concrete default exists.
+// Check actual AST, not comments, strings or TypeScript type annotations.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const ts=require('typescript');
 const root=path.resolve(__dirname,'..');
 const forbidden=new Set(['Number','Boolean','String','Array','Object','Function','BigInt','Symbol','number','boolean','string','undefined','null']);
+const valueTypes=new Set(['Vec2','Vec3','Vec4','Quat','Color','Mat3','Mat4','Size','Rect']);
 const errors=[],types=new Map();
 let files=0,properties=0;
 function inspect(file,source){
@@ -30,6 +32,12 @@ function inspect(file,source){
       issue(d,field+': use Cocos CCFloat/CCInteger/CCBoolean/CCString instead of '+node.getText(src));
     };
     check(explicit);
+    // Cocos infers a scalar ValueType from its instantiated default. Keep
+    // explicit element metadata for arrays, and types for nullable references.
+    if(ts.isPropertyDeclaration(n)&&n.initializer&&!ts.isArrayLiteralExpression(explicit)&&
+       valueTypes.has(explicit.getText(src).replace(/^cc\./,''))&&
+       n.initializer.kind!==ts.SyntaxKind.NullKeyword&&n.initializer.getText(src)!=='undefined')
+      issue(d,field+': redundant ValueType metadata; use @property or @property({tooltip:...}) with an instantiated default.');
     if(ts.isPropertyDeclaration(n)&&n.initializer&&ts.isArrayLiteralExpression(n.initializer)&&!ts.isArrayLiteralExpression(explicit))
       issue(d,field+': array default requires array property type.');
     if(ts.isPropertyDeclaration(n)&&ts.isArrayLiteralExpression(explicit)&&n.initializer&&!ts.isArrayLiteralExpression(n.initializer))
@@ -71,4 +79,23 @@ for(const [key,expected] of [
  ['docs/examples/TrainRouteConsist.ts#playOnStart','CCBoolean'],
 ])assert.equal(types.get(key),expected,key);
 assert.equal(snippet,2,'Both Train code samples must be audited');
+// Synthetic cases ensure the new guard catches both decorator syntaxes but
+// preserves required array metadata and nullable reference metadata.
+const saved=properties,errorsBefore=errors.length;
+inspect('value-type-fixture.ts',`
+ class Example {
+  @property({type:Vec3,tooltip:'bad'}) redundant=new Vec3();
+  @property(Color) redundantColor=new Color();
+  @_decorator.property({type:cc.Quat}) redundantQuat=new cc.Quat();
+  @property({tooltip:'ok'}) position=new Vec3();
+  @property tint=new Color();
+  @property({type:[Vec3]}) samples:Vec3[]=[];
+  @property({type:Vec3}) nullable:Vec3|null=null;
+  @property({type:Node}) target:Node|null=null;
+  @property({type:[CCFloat]}) weights:number[]=[];
+ }
+`);
+assert.equal(errors.length-errorsBefore,3,'Only redundant scalar metadata should fail');
+assert(errors.slice(errorsBefore).every(msg=>msg.includes('redundant ValueType metadata')));
+errors.length=errorsBefore;properties=saved;
 console.log('COCOS PROPERTY TYPES PASS: '+files+' TypeScript files, '+properties+' decorators including Train HTML examples.');

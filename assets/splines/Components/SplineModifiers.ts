@@ -11,8 +11,8 @@ Enum(ModifierInterpolation);
 @ccclass('Splines.SplineModifierKey')
 export class SplineModifierKey {
     @property({range:[0,1,0.001],slide:true}) progress=0;
-    @property({type:Vec3,tooltip:'Right, Up, Forward offsets in spline frame.'}) offset=new Vec3();
-    @property({type:Vec3}) scale=new Vec3(1,1,1);
+    @property({tooltip:'Right, Up, Forward offsets in spline frame.'}) offset=new Vec3();
+    @property scale=new Vec3(1,1,1);
     @property({min:0.01}) width=1;
     @property({min:0.01}) speed=1;
     @property({tooltip:'Extra roll around spline forward (degrees)'}) roll=0;

@@ -62,7 +62,7 @@ export class SplineAnimate extends Component {
     upReference:Node|null=null;
     @property({type:Enum(ForwardAxis),tooltip:'Which local axis of the target should point in the spline travel direction.'})
     forwardAxis:ForwardAxis=ForwardAxis.PositiveZ;
-    @property({type:Vec3,tooltip:'Additional Euler rotation (degrees) when alignment is enabled.'})
+    @property({tooltip:'Additional Euler rotation (degrees) when alignment is enabled.'})
     rotationOffset:Vec3=new Vec3();
     @property({tooltip:'On XY2D splines, rotate sprite around world Z so local +X follows the path. Replaces 3D alignment.'})
     orient2D=true;
@@ -73,8 +73,8 @@ export class SplineAnimate extends Component {
     startPositionMode:SplinePositionMode=SplinePositionMode.NormalizedDistance;
     @property({range:[0,1,0.01],slide:true,tooltip:'Normalized Distance legacy raw progress, or geometric t when selected.'}) startProgress=0;
     @property({min:0,tooltip:'Start at this absolute spline-local distance when Start Position Mode = Distance.'}) startDistance=0;
-    @property({type:Vec3}) worldOffset=new Vec3();
-    @property({type:Vec3,tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units).'}) splineOffset=new Vec3();
+    @property worldOffset=new Vec3();
+    @property({tooltip:'Dreamteck-style spline-frame offset: X=right, Y=up, Z=forward (world units).'}) splineOffset=new Vec3();
     @property({tooltip:'Compensate for the longer/shorter offset trajectory at bends.'}) constantSpeedWithOffset=true;
     @property({min:0,tooltip:'World units traveled on the destination spline to smoothly settle into its local Spline Offset.'})
     junctionOffsetBlendDistance=1;

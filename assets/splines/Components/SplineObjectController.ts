@@ -63,9 +63,9 @@ export class SplineObjectController extends Component {
     @property({min:0.001}) spacing=2;
     @property({range:[0,1,0.001],slide:true}) startProgress=0;
     @property({range:[0,1,0.001],slide:true}) endProgress=1;
-    @property({type:Vec3,tooltip:'Right/Up/Forward offset in spline frame.'}) offset=new Vec3();
-    @property({type:Vec3}) randomPosition=new Vec3();
-    @property({type:Vec3,tooltip:'Euler jitter in degrees.'}) randomRotation=new Vec3();
+    @property({tooltip:'Right/Up/Forward offset in spline frame.'}) offset=new Vec3();
+    @property randomPosition=new Vec3();
+    @property({tooltip:'Euler jitter in degrees.'}) randomRotation=new Vec3();
     @property({min:0,max:1,tooltip:'Uniform scale variation (+/- fraction).'}) randomScale=0;
     @property({min:0.01}) scaleMultiplier=1;
     @property({tooltip:'Seed for prefab choice and all jitter axes.'}) seed=12345;

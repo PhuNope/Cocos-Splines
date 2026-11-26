@@ -18,9 +18,9 @@ Enum(TangentMode);
 export class SplineKnot extends Component {
     @property({type:Enum(TangentMode), tooltip:'Unity tangent modes: AutoSmooth / Linear / Mirrored / Continuous / Broken'})
     mode:TangentMode=TangentMode.AutoSmooth;
-    @property({type:Vec3, tooltip:'Incoming tangent, relative to this knot, in parent local coordinates'})
+    @property({tooltip:'Incoming tangent, relative to this knot, in parent local coordinates'})
     tangentIn:Vec3=new Vec3(-1,0,0);
-    @property({type:Vec3, tooltip:'Outgoing tangent, relative to this knot, in parent local coordinates'})
+    @property({tooltip:'Outgoing tangent, relative to this knot, in parent local coordinates'})
     tangentOut:Vec3=new Vec3(1,0,0);
     @property({min:0,step:0.05, tooltip:'AutoSmooth tension; Unity default = 1/3'})
     tension=1/3;

@@ -11,7 +11,7 @@ const { ccclass, property, menu, executeInEditMode, requireComponent } = _decora
 export class Spline2DPath extends Component {
     @property({ type:SplineContainer, tooltip:'SplineContainer, preferably with Dimension=XY2D.' }) spline:SplineContainer|null=null;
     @property({ min:0.1, tooltip:'Stroke thickness in Canvas units.' }) lineWidth=5;
-    @property({ type:Color }) strokeColor:Color=new Color(40,206,255,255);
+    @property strokeColor:Color=new Color(40,206,255,255);
     @property({ min:2,max:100,step:1 }) stepsPerCurve=24;
     @property({ tooltip:'Redraw automatically when spline, dimensions or color change.' }) rebuildOnChange=true;
     private _revision='';
