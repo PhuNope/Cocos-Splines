@@ -71,6 +71,11 @@ for(const filename of tsFiles){
  const file=filename==='SplineContainer.ts'||filename==='SplineKnot.ts'?
   path.join(root,'assets/splines/Core',filename):path.join(dir,filename);
  const source=fs.readFileSync(file,'utf8');
+ for(const line of source.split('\n'))
+  if(line.includes('tooltip:'))
+   assert(!line.includes(String.fromCharCode(92,92,39)),
+    filename+' has an invalid double-escaped apostrophe in tooltip');
+
  for(const item of source.matchAll(/tooltip:'((?:\\.|[^'\\])*)'/g)){
   tooltips++;
   assert(item[1].length<=100,filename+' contains an overly long Cocos tooltip ('+

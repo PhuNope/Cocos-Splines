@@ -29,7 +29,7 @@ export class SplineProjector extends Component {
     @property({tooltip:'Align the projected target along the nearest tangent.'}) alignToSpline=false;
     @property({type:Vec3,tooltip:'Offset relative to spline frame X(right) Y(up) Z(forward).'}) splineOffset=new Vec3();
     @property({min:0,tooltip:'When > 0, On Enter/On Exit fires as source enters/leaves this world-space radius.'}) enterExitRadius=0;
-    @property({tooltip:'Fire On Project and node.emit(\\'spline-project\\') for each gameplay evaluation. Off by default.'}) notifyOnProject=false;
+    @property({tooltip:'Fire On Project and node.emit(\'spline-project\') for each gameplay evaluation. Off by default.'}) notifyOnProject=false;
     @property({type:[EventHandler]}) onProject:EventHandler[]=[];
     @property({type:[EventHandler]}) onEnter:EventHandler[]=[];
     @property({type:[EventHandler]}) onExit:EventHandler[]=[];
