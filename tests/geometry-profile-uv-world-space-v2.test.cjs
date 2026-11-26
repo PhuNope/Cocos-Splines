@@ -66,7 +66,7 @@ try{
   [Infinity,0,0,0,1,0,0,0,1],
   [NaN,0,0,0,1,0,0,0,1],
   [1e8,0,0,0,1,0,0,0,1]]){
-  assert.throws(()=>buildProfileExtrudeGeometry(frames,opts(world,bad)),/world-space mode/);
+  assert.throws(()=>buildProfileExtrudeGeometry(frames,opts(world,bad),false),/world-space mode/);
  }
  assert.deepEqual(buildProfileExtrudeGeometry(frames,opts(uv),false),
   buildProfileExtrudeGeometry(frames,opts(uv,[1,2,3]),false),
