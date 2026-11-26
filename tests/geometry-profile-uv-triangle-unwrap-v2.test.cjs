@@ -121,8 +121,11 @@ try{
  const largeFrames=Array.from({length:1025},(_,i)=>({
   ...frames[0],position:v(0,0,i),distance:i,
  }));
+ const denseProfile=Array.from({length:16},(_,i)=>({
+  x:.5*Math.cos(i*Math.PI/8),y:.5*Math.sin(i*Math.PI/8),
+ }));
  assert.throws(()=>buildProfileExtrudeGeometry(largeFrames,
-  options({triangleUnwrap:true}),false),/65536-vertex/);
+  {...options({triangleUnwrap:true}),profile:denseProfile},false),/65536-vertex/);
  // Fail-closed on zero physical UV span and invalid stand-alone arrays.
  const stationary=[frames[0],{...frames[0],position:v(0,0,1)}];
  assert.throws(()=>buildProfileExtrudeGeometry(stationary,
