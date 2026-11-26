@@ -477,7 +477,7 @@ export function buildProfileExtrudeGeometry(
                 checked.add(ring);
             }
         }
-        if(closed&&keyed[0].some((p,i)=>p.x!==keyed[keyed.length-1][i].x||p.y!==keyed[keyed.length-1][i].y))
+        if(closed&&keyed[0].some((p:Readonly<P2>,i:number)=>p.x!==keyed[keyed.length-1][i].x||p.y!==keyed[keyed.length-1][i].y))
             throw Error('Graph Profile keys require identical closed seam polygons.');
     }
     const outer=keyed?.[0]??authored?.points??PROFILES[profileShape];
@@ -603,10 +603,10 @@ export function buildProfileExtrudeGeometry(
     // identity rather than allocating per frame. Legacy authored UV is unchanged.
     const keyedUv=new Map<ReadonlyArray<Readonly<P2>>,{start:number[];end:number[]}>();
     if(keyed)for(const ring of keyed)if(!keyedUv.has(ring)){
-        const lengths=ring.map((p,i)=>{
+        const lengths=ring.map((p:Readonly<P2>,i:number)=>{
             const q=ring[(i+1)%ring.length];return Math.hypot((q.x-p.x)*width,(q.y-p.y)*height);
         });
-        const total=lengths.reduce((a,b)=>a+b,0);
+        const total=lengths.reduce((a:number,b:number)=>a+b,0);
         let cursor=0;
         const start:number[]=[],end:number[]=[];
         for(const l of lengths){start.push(cursor/total);cursor+=l;end.push(cursor/total);}
