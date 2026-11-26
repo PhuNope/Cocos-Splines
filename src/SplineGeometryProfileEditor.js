@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','sideIslandMode'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -74,6 +74,12 @@ function parseProfile(value){
    throw Error('Profile UV uFollowFrameScale requires boolean and metric Side U meters/repeat when enabled.');
   uv.uFollowFrameScale=raw.uFollowFrameScale;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'uWorldSpace')){
+  if(typeof raw.uWorldSpace!=='boolean'||
+     (raw.uWorldSpace&&uv.uMetersPerRepeat===undefined))
+   throw Error('Profile UV uWorldSpace requires boolean and metric Side U meters/repeat when enabled.');
+  uv.uWorldSpace=raw.uWorldSpace;
+ }
  if(Object.prototype.hasOwnProperty.call(raw,'sideIslandMode')){
   if(!Number.isInteger(raw.sideIslandMode)||
      raw.sideIslandMode<0||raw.sideIslandMode>2)
@@ -86,7 +92,7 @@ const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-side-island-mode'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -132,6 +138,7 @@ function applyProfileEdit(value,action,params={}){
   if(profile.uv){
    delete profile.uv.uMetersPerRepeat;
    delete profile.uv.uFollowFrameScale;
+   delete profile.uv.uWorldSpace;
    if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-u-follow-frame-scale'){
@@ -142,6 +149,18 @@ function applyProfileEdit(value,action,params={}){
   if(params.enabled)profile.uv.uFollowFrameScale=true;
   else if(profile.uv){
    delete profile.uv.uFollowFrameScale;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
+  }
+ }else if(action==='set-u-world-space'){
+  if(typeof params.enabled!=='boolean')
+   throw Error('Profile UV World-space U requires a boolean.');
+  if(params.enabled&&!profile.uv?.uMetersPerRepeat)
+   throw Error('Profile UV World-space U requires Side U meters/repeat.');
+  if(params.enabled){
+   profile.uv=profile.uv||{};
+   profile.uv.uWorldSpace=true;
+  }else if(profile.uv){
+   delete profile.uv.uWorldSpace;
    if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-uv-seam'){
@@ -243,7 +262,8 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
     'Custom mapping · seam edge #'+((profile.uv.seamEdge??0)+1))+
    ' · selected edge #'+(selectedEdge===null?'—':selectedEdge+1)+
    ' · U mode: '+(profile.uv?.uMetersPerRepeat===undefined?
-    'Normalized perimeter':(profile.uv?.uFollowFrameScale?'Frame-local':'Nominal')+
+    'Normalized perimeter':(profile.uv?.uWorldSpace?'World-space':
+     profile.uv?.uFollowFrameScale?'Frame-local':'Nominal')+
      ' meters, repeat every '+profile.uv.uMetersPerRepeat+' m')+
    '</div>'+
   '<div class="spl-vg-toolbar">'+
@@ -265,7 +285,12 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    '<input type="checkbox" class="spl-profile-uv-follow-frame"'+
    (profile.uv?.uFollowFrameScale===true?' checked':'')+
    (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
-   '> Follow taper / frame scale</label></div>'+
+   '> Follow taper / frame scale</label>'+
+  '<label title="World-space U uses Renderer Node transform and overrides frame-local U. V already follows world arc distance.">'+
+   '<input type="checkbox" class="spl-profile-uv-world-space"'+
+   (profile.uv?.uWorldSpace===true?' checked':'')+
+   (profile.uv?.uMetersPerRepeat===undefined?' disabled':'')+
+   '> World-space side U (Node scale)</label></div>'+
   '<div class="spl-vg-toolbar">'+
   '<label>Edge UV weight <input type="number" class="spl-profile-uv-weight" '+
    'min="0.25" max="4" step="0.05" value="'+

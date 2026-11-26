@@ -80,6 +80,34 @@ async function run(){
   assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,1);
   setIsland('2');
   assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,2);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/spl-profile-uv-world-space/);
+  const setWorld=enabled=>ui.$.vgProfileCanvas.events.change({target:{
+   checked:enabled,classList:{contains:name=>name==='spl-profile-uv-world-space'},
+  }});
+  const setMeters=value=>ui.$.vgProfileCanvas.events.change({target:{
+   value,classList:{contains:name=>name==='spl-profile-uv-meters'},
+  }});
+  // World mode requires metric U; invalid draft transactions never persist.
+  const beforeWorld=ui._vgAuthoredDraft.profileJson;
+  setWorld(true);
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeWorld);
+  assert.match(ui.$.vgProfileStatus.textContent,/Profile UV World-space U/);
+  setMeters('2');
+  setWorld(true);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.uWorldSpace,true);
+  const withWorld=ui._vgAuthoredDraft.profileJson;
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/World-space meters/);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.uWorldSpace,undefined);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,withWorld);
+  setWorld(false);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.uWorldSpace,undefined);
+  setWorld(true);
+  setMeters('');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.uWorldSpace,undefined,
+   'Clearing metric U also removes the world-space opt-in');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,2);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

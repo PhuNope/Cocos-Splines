@@ -28,6 +28,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/UVIslandExtrudeGraph.json','examples/installable/GeometryGraph/UVIslandExtrudeGraph.json'],
  ['GeometryGraph/Profiles/UVEdgeIslandProfile.json','examples/installable/GeometryGraph/Profiles/UVEdgeIslandProfile.json'],
  ['GeometryGraph/Profiles/UVQuadIslandProfile.json','examples/installable/GeometryGraph/Profiles/UVQuadIslandProfile.json'],
+ ['GeometryGraph/Profiles/UVWorldSpaceProfile.json','examples/installable/GeometryGraph/Profiles/UVWorldSpaceProfile.json'],
  ['GeometryGraph/Profiles/UVMetricProfile.json','examples/installable/GeometryGraph/Profiles/UVMetricProfile.json'],
  ['GeometryGraph/Profiles/UVTaperProfile.json','examples/installable/GeometryGraph/Profiles/UVTaperProfile.json'],
  ['GeometryGraph/BasicMeshDeformGraph.json','examples/installable/GeometryGraph/BasicMeshDeformGraph.json'],

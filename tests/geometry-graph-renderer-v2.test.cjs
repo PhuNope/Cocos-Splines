@@ -654,6 +654,31 @@ async function run(){
    assert.equal(lastMetricMesh.destroyed,false);
    squareProfile.uv.uMetersPerRepeat=1.5;
    renderer.rebuild();
+   // World-space Profile U consumes the renderer matrix and preserves
+   // prior mesh when the JsonAsset schema is invalid.
+   const localUv=out.mesh.data.uvs.slice();
+   squareProfile.uv.uWorldSpace=true;
+   renderer.rebuild();
+   assert.deepEqual(out.mesh.data.uvs,localUv,
+    'Identity renderer matrix reproduces nominal side metric U');
+   assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5});
+   const unchangedWorldFrames=frameBuilds;
+   node.worldMatrix.m00=2;
+   renderer.rebuild();
+   assert.notDeepEqual(out.mesh.data.uvs,localUv,
+    'Renderer Node scale adjusts opted-in World-space U');
+   assert.equal(frameBuilds,unchangedWorldFrames+1,
+    'Transform change invalidates cached local spline frames');
+   node.worldMatrix.m00=1;
+   renderer.rebuild();
+   assert.deepEqual(out.mesh.data.uvs,localUv,
+    'Reverting scale restores original UV metric');
+   const lastWorldGood=out.mesh;
+   squareProfile.uv.uWorldSpace='true';
+   assert.throws(()=>renderer.rebuild(),/Graph Profile Asset UV uWorldSpace/);
+   assert.equal(out.mesh,lastWorldGood,'Bad world UV flag retains prior mesh');
+   squareProfile.uv.uWorldSpace=true;
+   renderer.rebuild();
    const authoredFirst=out.mesh;
    renderer.profileAssetC={json:{format:'bad'}};
    renderer.update();

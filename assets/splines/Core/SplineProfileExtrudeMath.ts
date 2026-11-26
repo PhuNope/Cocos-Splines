@@ -26,6 +26,10 @@ export interface GraphProfileUV {
      * Requires metric uMetersPerRepeat; independent of node world transform.
      */
     uFollowFrameScale?:boolean;
+    /** World-space metric U (includes renderer Node scale/rotation/shear).
+     * Requires uMetersPerRepeat; overrides frame-local U when both enabled.
+     */
+    uWorldSpace?:boolean;
     /** Opt-in UV0 side islands: 0 continuous legacy perimeter (default),
      * 1 edge islands (independent U per cross-section edge, continuous V),
      * 2 quad islands (separate U/V for each spline-span side face).
@@ -62,7 +66,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','sideIslandMode'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -90,6 +94,12 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            (raw.uFollowFrameScale&&!Object.prototype.hasOwnProperty.call(uv,'uMetersPerRepeat')))
             throw Error('Graph Profile Asset UV uFollowFrameScale requires boolean and metric uMetersPerRepeat when enabled.');
         uv.uFollowFrameScale=raw.uFollowFrameScale;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'uWorldSpace')){
+        if(typeof raw.uWorldSpace!=='boolean'||
+           (raw.uWorldSpace&&!Object.prototype.hasOwnProperty.call(uv,'uMetersPerRepeat')))
+            throw Error('Graph Profile Asset UV uWorldSpace requires boolean and metric uMetersPerRepeat when enabled.');
+        uv.uWorldSpace=raw.uWorldSpace;
     }
     if(Object.prototype.hasOwnProperty.call(raw,'sideIslandMode')){
         if(!Number.isInteger(raw.sideIslandMode)||
@@ -136,6 +146,10 @@ export interface ProfileExtrudeSettings {
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
     /** Only for authored profile; no implicit UV changes to built-in presets. */
     profileUV?:Readonly<GraphProfileUV>;
+    /** Renderer local->world linear matrix, column-major (no translation).
+     * Required only by opt-in uWorldSpace, not by legacy graphs.
+     */
+    worldUvLinear?:ReadonlyArray<number>;
     width:number;
     height:number;
     profileShape:GraphProfileShape;
@@ -234,6 +248,19 @@ export function buildProfileExtrudeGeometry(
     for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
     const seam=authored?.uv?.seamEdge??0;
     const sideIslandMode=authored?.uv?.sideIslandMode??0;
+    const worldUv=authored?.uv?.uWorldSpace===true;
+    const worldLinear=settings.worldUvLinear;
+    if(worldUv&&(!Array.isArray(worldLinear)||worldLinear.length!==9||
+        worldLinear.some(x=>!Number.isFinite(x)||Math.abs(x)>1e7)))
+        throw Error('Graph Profile Asset UV world-space mode needs a finite 3x3 renderer world transform.');
+    const toWorld=(v:V3):V3=>{
+        const m=worldLinear!;
+        return {
+            x:m[0]*v.x+m[3]*v.y+m[6]*v.z,
+            y:m[1]*v.x+m[4]*v.y+m[7]*v.z,
+            z:m[2]*v.x+m[5]*v.y+m[8]*v.z,
+        };
+    };
     // Quad islands duplicate only side vertices per spline span. Preflight
     // prevents exceeding the same 16-bit-safe graph mesh budget as the runner.
     const plannedVertices=sideIslandMode===2?
@@ -259,7 +286,7 @@ export function buildProfileExtrudeGeometry(
     // geometry used to emit the section, including widthFactor, nonunit
     // frame right/up vectors, and cross-section edge weights. This changes
     // UV0 only; no geometry, cap, normals or topology changes.
-    const ringUV=authored?.uv?.uFollowFrameScale?frames.map(f=>{
+    const ringUV=(worldUv||authored?.uv?.uFollowFrameScale)?frames.map(f=>{
         if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
            f.widthFactor>1000||!isFinite3(f.right)||!isFinite3(f.up))
             throw Error('Graph Profile Asset UV frame scale requires finite valid basis.');
@@ -267,7 +294,7 @@ export function buildProfileExtrudeGeometry(
             const next=profile[(i+1)%bands];
             const tangent=add(mul(f.right,(next.x-p.x)*width*f.widthFactor),
                 mul(f.up,(next.y-p.y)*height*f.widthFactor));
-            const len=length(tangent)*(uvWeights?.[i]??1);
+            const len=length(worldUv?toWorld(tangent):tangent)*(uvWeights?.[i]??1);
             if(!Number.isFinite(len)||len<1e-8)
                 throw Error('Graph Profile Asset UV frame edge is degenerate.');
             return len;

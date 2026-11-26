@@ -164,6 +164,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const runner=new GeometryGraphRunner();
         runner.setProfilingEnabled(true);
         const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
+            worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
         runner.evaluate(plan,context,selected||undefined);
         const cold=runner.profile!;
@@ -188,6 +189,14 @@ export class SplineGeometryGraphRenderer extends Component {
             source?.node?.uuid,source?.getRevision(),matrix(source?.node.worldMatrix),
             matrix(this.node?.worldMatrix),this.samplesPerCurve,
         ]);
+    }
+    /** Renderer local->world linear basis (column-major), no translation.
+     * Used only by Profile UV opted into uWorldSpace; frame distances are
+     * already physical world arc lengths and MUST NOT be scaled again.
+     */
+    private worldUvLinear():number[]{
+        const m=this.node.worldMatrix;
+        return [m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10];
     }
     private slotMesh(slot:number):Mesh|null{
         return slot===0?this.sourceMesh:slot===1?this.sourceMeshB:this.sourceMeshC;
@@ -371,6 +380,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const signature=this.signature();
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const context={frames,closed:source.closed,revision:frameRevision,
+            worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];

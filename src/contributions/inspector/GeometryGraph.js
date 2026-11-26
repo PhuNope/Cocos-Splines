@@ -772,6 +772,11 @@ const inspector={
         applyAuthoredEdit(this,'set-side-island-mode',{mode:Number(raw)});
         return;
       }
+      if(cls?.contains('spl-profile-uv-world-space')){
+        applyAuthoredEdit(this,'set-u-world-space',{
+          enabled:event.target.checked===true});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-follow-frame')){
         applyAuthoredEdit(this,'set-u-follow-frame-scale',{
           enabled:event.target.checked===true});

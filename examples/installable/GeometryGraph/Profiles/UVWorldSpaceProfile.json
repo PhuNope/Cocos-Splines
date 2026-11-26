@@ -1,0 +1,27 @@
+{
+  "format": "cocos-splines/profile",
+  "version": 1,
+  "points": [
+    {
+      "x": -0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": 0.5
+    },
+    {
+      "x": -0.5,
+      "y": 0.5
+    }
+  ],
+  "uv": {
+    "sideIslandMode": 1,
+    "uMetersPerRepeat": 1.5,
+    "uWorldSpace": true
+  }
+}

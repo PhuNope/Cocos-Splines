@@ -75,6 +75,10 @@ export interface GeometryGraphContext {
     /** Optional UV0 side-band metadata for the same authored Profile slots. */
     profileUVs?:ReadonlyArray<Readonly<GraphProfileUV>|undefined>;
     profileRevisions?:ReadonlyArray<string|undefined>;
+    /** Cocos renderer's local->world 3x3 linear transform, column-major.
+     * This is separate from frames, which remain in renderer-local space.
+     */
+    worldUvLinear?:ReadonlyArray<number>;
 }
 export interface GeometryGraphPlan {
     nodes:GeometryGraphNode[];
@@ -413,6 +417,12 @@ export class GeometryGraphRunner {
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
+                    // Only world-space Profile UV depends on this transform.
+                    // It invalidates its Extrude branch even when a pure Core
+                    // caller changes matrix without changing frame revision.
+                    node.type==='extrude'&&node.profileSlot!==undefined&&
+                        context.profileUVs?.[node.profileSlot]?.uWorldSpace===true?
+                            context.worldUvLinear??null:null,
                 ]);
                 const prior=this.cache.get(node.id);
                 if(prior?.key===key){
@@ -533,6 +543,7 @@ export class GeometryGraphRunner {
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
                         profile:authored,profileUV:authoredUV,
+                        worldUvLinear:context.worldUvLinear,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
                     },source.closed);

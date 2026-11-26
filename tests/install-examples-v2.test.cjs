@@ -57,13 +57,17 @@ try {
  assert.equal(islandsGraph.version,1);
  assert.equal(islandsGraph.nodes.find(n=>n.type==='extrude').profileSlot,0);
  for(const [filename,mode] of [
-  ['UVEdgeIslandProfile',1],['UVQuadIslandProfile',2],
+  ['UVEdgeIslandProfile',1],['UVQuadIslandProfile',2],['UVWorldSpaceProfile',1],
  ]){
   const asset=JSON.parse(fs.readFileSync(path.join(first.folder,
    'GeometryGraph/Profiles/'+filename+'.json'),'utf8'));
   assert.equal(asset.version,1);
   assert.equal(asset.uv.sideIslandMode,mode);
   assert.equal(asset.points.length,4);
+  if(filename==='UVWorldSpaceProfile'){
+   assert.equal(asset.uv.uWorldSpace,true);
+   assert.equal(asset.uv.uMetersPerRepeat,1.5);
+  }
  }
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
