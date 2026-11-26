@@ -21,7 +21,7 @@ const TYPES=Object.freeze({
   width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
-  extrude:{input:'path',output:'mesh',params:['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']},
+  extrude:{input:'path',output:'mesh',params:['width','height','profileShape','profileSlot','profileInterpolation','uvMetersPerRepeat','capEnds']},
   meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']},
   mergeMesh:{input:'mesh',output:'mesh',params:[]},
   output:{input:'mesh',output:'mesh',params:[]},
@@ -57,13 +57,13 @@ const LIMITS=Object.freeze({
   width:[.05,100,4],endWidth:[0,100,0],
   uvMetersPerRepeat:[.01,10000,5],thickness:[0,20,0],
   cornerMode:[0,1,0],radius:[.025,50,1],radialSegments:[3,32,12],
-  height:[.05,100,1],profileShape:[0,2,0],profileSlot:[0,2,0],
+  height:[.05,100,1],profileShape:[0,2,0],profileSlot:[0,2,0],profileInterpolation:[0,2,0],
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','meshInputB','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','profileSlot','profileKeys','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
+  'height','profileShape','profileSlot','profileKeys','profileInterpolation','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -137,7 +137,7 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection','profileInterpolation'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
@@ -149,6 +149,8 @@ function validateGraph(graph) {
       throw Error('Merge Path requires distinct input nodes.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
       throw Error('Clip end must be at least 0.001 above start.');
+    if(node.type==='extrude'&&node.profileInterpolation!==undefined&&node.profileKeys===undefined)
+      throw Error('Profile interpolation requires Profile Keys.');
     if(node.type==='extrude'&&node.profileKeys!==undefined){
       if(node.profileSlot!==undefined)throw Error('Profile keys cannot mix with profileSlot.');
       validateProfileKeys(node.profileKeys);
@@ -424,7 +426,7 @@ function applyGraphEdit(json,action,details={}) {
       const keys=target.profileKeys;
       if(!keys)throw Error('Enable Profile Keys first.');
       if(action==='profile-keys-disable'){
-        target.profileSlot=keys[0].slot;delete target.profileKeys;
+        target.profileSlot=keys[0].slot;delete target.profileKeys;delete target.profileInterpolation;
       }else if(action==='profile-key-add'){
         if(keys.length>=16)throw Error('Profile keys maximum is 16.');
         let index=1;
@@ -477,6 +479,7 @@ function applyGraphEdit(json,action,details={}) {
     const target=find(details.id),key=details.key;
     if(!target||!TYPES[target.type].params.includes(key)||
       (target.type==='extrude'&&target.profileKeys&&['profileSlot','profileShape'].includes(key))||
+      (key==='profileInterpolation'&&!target.profileKeys)||
       target.type==='width'&&target.widthKeys&&
       ['multiplier','midMultiplier','endMultiplier'].includes(key))
       throw Error('Selected node does not support '+key+'.');
@@ -496,7 +499,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection','profileInterpolation'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -688,7 +691,7 @@ function renderWidthKeyControls(n){
 function renderProfileKeyControls(n){
   if(!n.profileKeys)return '<button type="button" data-profile-action="enable">Enable Profile Keys (2–16)</button>';
   const keys=n.profileKeys;
-  return '<div class="spl-vg-width-keys"><strong>Profile Keys · Step</strong>'+
+  return '<div class="spl-vg-width-keys"><strong>Profile Keys · '+['Step','Linear','Smoothstep'][n.profileInterpolation??0]+'</strong>'+
     '<div>Normalized path distance. Assign compatible simple Profile Assets A/B/C. Same first/last slot on closed paths.</div>'+
     keys.map((k,i)=>'<div class="spl-vg-width-row"><label>Progress <input type="number" min="0" max="1" step=".001" data-profile-field="progress" data-profile-index="'+i+'" value="'+k.progress+'"'+
       (i===0||i===keys.length-1?' disabled':'')+'></label><label>Slot <select data-profile-field="slot" data-profile-index="'+i+'">'+
@@ -701,7 +704,7 @@ function renderNodeParameters(graphJson,id){
   const {map}=parseGraph(graphJson),n=map.get(id);
   if(!n)return '<div>Select a node to edit its parameters.</div>';
   const info=TYPES[n.type];
-  const rows=info.params.filter(key=>!(n.type==='extrude'&&n.profileKeys&&['profileSlot','profileShape'].includes(key))&&!(n.type==='width'&&n.widthKeys&&
+  const rows=info.params.filter(key=>!(key==='profileInterpolation'&&!n.profileKeys)&&!(n.type==='extrude'&&n.profileKeys&&['profileSlot','profileShape'].includes(key))&&!(n.type==='width'&&n.widthKeys&&
     ['multiplier','midMultiplier','endMultiplier'].includes(key))).map(key=>{
     const value=n[key]??(key==='capEnds'?false:LIMITS[key][2]);
     if(key==='capEnds')
@@ -718,6 +721,7 @@ function renderNodeParameters(graphJson,id){
         ['Linear','Smoothstep (ease in/out)'].map((name,i)=>
           '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
         '</select></label>';
+    if(key==='profileInterpolation')return '<label>Profile Interpolation <select data-graph-param="profileInterpolation">'+['Step (legacy)','Linear','Smoothstep (ease in/out)'].map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
     if(key==='mergeDirection')return '<label>Direction B <select data-graph-param="mergeDirection">'+['Forward','Reverse','Nearest endpoint'].map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
     if(key==='conformMissing'||key==='conformAlign')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+(key==='conformMissing'?['Fail on missing hit','Keep source sample']:['Source up hint','Surface normal hint']).map((name,i)=>
@@ -756,7 +760,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection','profileInterpolation'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+

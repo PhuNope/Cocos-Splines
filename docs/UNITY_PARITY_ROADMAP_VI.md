@@ -278,7 +278,7 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 #### Next Geometry Graph expansion
 
 - [x] Phase 4.6a — Profile Keys: 2–16 normalized sampled-arc keys selecting authored slots A/B/C, step selection per ring, strict matching vertex counts and simple outer polygons, closed first/last slot guard, per-ring perimeter UV, endpoint cap triangulation, transition normals, slot-aware revisions and native inspector key table, shared asset conflict review, installable examples and headless regressions. Native acceptance pending.
-- [ ] Phase 4.6b — continuous profile morph interpolation and sampled-key transitions.
+- [x] Phase 4.6b — Profile Morphing: Step default (legacy), Linear/Smoothstep via profileInterpolation 0/1/2, normalized sampled-arc correspondence, insert missing key rings and a midpoint for undersampled changing intervals, bounded 1025 frames, per-sampled-polygon validation, slope-aware normals, per-ring perimeter UV, endpoint caps, matching closed seam and revision-aware cache. Inspector mode selector, shared parameter support, installable example and headless regressions. No automatic vertex matching or guarantee against intersections between sampled rings; native validation pending.
 - [ ] Phase 4.6c — compatible contour topology (holes, disconnected solids, UV metadata and point correspondence).
 - [ ] Phase 4.6d — advanced per-edge material mapping.
 - [ ] Phase 4.7 — production mesh workflows: explicit bake/export, collider generation, chunking and LOD.

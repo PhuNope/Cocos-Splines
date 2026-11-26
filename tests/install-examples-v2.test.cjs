@@ -48,6 +48,8 @@ try {
  assert.equal(mergeMesh.nodes.find(n=>n.type==='mergeMesh').meshInputB,'tube');
  const keyedGraph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ProfileKeysGraph.json'),'utf8'));
  assert.equal(keyedGraph.nodes.find(n=>n.type==='extrude').profileKeys.length,3);
+ const morphGraph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ProfileMorphGraph.json'),'utf8'));
+ assert.equal(morphGraph.nodes.find(n=>n.type==='extrude').profileInterpolation,2);
  for(const file of ['KeySquareProfile','KeyWideProfile']){
   const p=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/Profiles/'+file+'.json'),'utf8'));
   assert.equal(p.points.length,4);

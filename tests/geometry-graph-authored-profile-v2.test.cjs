@@ -164,6 +164,50 @@ try{
  assert.throws(()=>model.applyGraphEdit(edit,'profile-key-remove',{id:'extrudeB',index:0}));
  edit=model.applyGraphEdit(edit,'profile-keys-disable',{id:'extrudeB'});
  assert.equal(model.parseGraph(edit).map.get('extrudeB').profileSlot,1);
+ // Morph at exact sampled arc keys; original Step stays byte-for-byte unchanged.
+ const morphGraph=mode=>({...keyGraph,nodes:keyGraph.nodes.map(n=>n.type==='extrude'?{...n,profileInterpolation:mode}:n)});
+ const morphRunner=new GeometryGraphRunner(),linearPlan=compileGeometryGraph(morphGraph(1)),smoothPlan=compileGeometryGraph(morphGraph(2));
+ const linear=morphRunner.evaluate(linearPlan,keyCtx),smooth=morphRunner.evaluate(smoothPlan,keyCtx);
+ const near=(a,b)=>assert(Math.abs(a-b)<1e-8,a+' != '+b);
+ assert.equal(linear.ringCount,9);assert.equal(smooth.ringCount,9);
+ near(linear.positions[6],-1-.5*(2/7));
+ const t=2/7;near(smooth.positions[6],-1-.5*t*t*(3-2*t));
+ near(linear.positions[3*6+2],3);
+ near(linear.positions[4*6+2],3.5);near(linear.positions[4*6],-1.5);
+ near(linear.positions[linear.ringCount*6-6],-1.5);
+ assert.deepEqual(linear.indices,smooth.indices);
+ assert(linear.normals.every(Number.isFinite));
+ assert(linear.normals.some((v,i)=>i%3===2&&Math.abs(v)>1e-4),'Morph transition has sloped normals');
+ assert(linear.uvs.every(Number.isFinite));near(Math.max(...linear.uvs),7/5);
+ assert.deepEqual(morphRunner.evaluate(compileGeometryGraph(morphGraph(0)),keyCtx),keyed);
+ assert.deepEqual(morphRunner.evaluate(linearPlan,keyCtx),linear);
+ assert.deepEqual(morphRunner.evaluate(linearPlan,keyCtx),linear);assert.equal(morphRunner.metrics.reused,3);
+ const coarse=morphRunner.evaluate(linearPlan,{...keyCtx,frames:[frames[0],frames[7]],revision:'coarse'});
+ assert.equal(coarse.ringCount,4,'Insert missing key and midpoint for a sparse transition');
+ near(coarse.positions[6+2],1.75);near(coarse.positions[6],-1.25);
+ const crossed=square.points.slice(2).concat(square.points.slice(0,2));
+ assert.throws(()=>morphRunner.evaluate(linearPlan,{...keyCtx,profileSources:[square.points,crossed],profileRevisions:['square','crossed'],frames:[frames[0],frames[7]],revision:'bad-morph'}),/invalid sampled polygon/i);
+ assert.deepEqual(morphRunner.evaluate(linearPlan,keyCtx),linear,'Invalid morph leaves good cache intact');
+ const denseFrames=Array.from({length:1025},(_,i)=>({position:v(0,0,i),right:v(1),up:v(0,1),forward:v(0,0,1),distance:i}));
+ const overflow={...morphGraph(1),nodes:morphGraph(1).nodes.map(n=>n.type==='extrude'?{...n,profileKeys:[{progress:0,slot:0},{progress:.333,slot:1},{progress:1,slot:1}]}:n)};
+ assert.throws(()=>morphRunner.evaluate(compileGeometryGraph(overflow),{...keyCtx,frames:denseFrames,revision:'dense'}),/1025 frames/i);
+ const loop=Array.from({length:9},(_,i)=>{const a=i===8?0:i*Math.PI/4;return {
+   position:v(4*Math.sin(a),0,4*Math.cos(a)),right:v(-Math.sin(a),0,-Math.cos(a)),
+   up:v(0,1),forward:v(Math.cos(a),0,-Math.sin(a)),distance:i* Math.PI};});
+ const closedGraph={...morphGraph(2),nodes:morphGraph(2).nodes.map(n=>n.type==='extrude'?{...n,profileKeys:[{progress:0,slot:0},{progress:.5,slot:1},{progress:1,slot:0}]}:n)};
+ const seam=morphRunner.evaluate(compileGeometryGraph(closedGraph),{...keyCtx,closed:true,frames:loop,revision:'closed-morph'});
+ for(let edge=0;edge<seam.bands;edge++){
+   const start=edge*seam.ringCount*6,end=start+(seam.ringCount-1)*6;
+   for(let k=0;k<6;k++){near(seam.positions[start+k],seam.positions[end+k]);near(seam.normals[start+k],seam.normals[end+k]);}
+ }
+ for(const mode of [-1,3,1.5,null]){
+   const bad=morphGraph(mode);assert.throws(()=>compileGeometryGraph(bad));assert.throws(()=>model.parseGraph(JSON.stringify(bad)));
+ }
+ let morphEdit=model.applyGraphEdit(JSON.stringify(morphGraph(0)),'param',{id:'extrude',key:'profileInterpolation',value:2});
+ assert(model.renderNodeParameters(morphEdit,'extrude').includes('Smoothstep (ease in/out)'));
+ morphEdit=model.applyGraphEdit(morphEdit,'profile-keys-disable',{id:'extrude'});
+ assert.equal(model.parseGraph(morphEdit).map.get('extrude').profileInterpolation,undefined);
+ assert.throws(()=>model.applyGraphEdit(morphEdit,'param',{id:'extrude',key:'profileInterpolation',value:1}));
  const pkg=require(root+'/package.json');
  assert(pkg.scripts.test.includes('geometry-graph-authored-profile-v2.test.cjs'));
  console.log('AUTHORED PROFILE V2 PASS: strict CCW simple polygon, concave triangulation, profile slots, dirty propagation, safe rollback and Visual Graph preset reset.');

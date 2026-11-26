@@ -66,6 +66,15 @@ const change=(value)=>ui.$.vgProperties.events.change({target:{
   assert.equal(dump.value.graphJson.value,local);
   ui.$.vgDiscardShared.events.click();await tick();
   assert.equal(model.parseGraph(ui._vgGraphJson).map.get('extrude').profileSlot,undefined);
+  // Profile morph controls in local mode use the existing native dump transaction.
+  dump.value.useGraphAsset.value=false;dump.value.graphAsset.value=null;
+  panel.update.call(ui,dump);select();
+  ui.$.vgProperties.events.click({target:{dataset:{profileAction:'enable'},closest(s){return s==='[data-profile-action]'?this:null;}}});
+  assert.equal(writes.length,3);
+  ui.$.vgProperties.events.change({target:{dataset:{graphParam:'profileInterpolation'},value:'2',closest(s){return s==='[data-graph-param]'?this:null;}}});
+  assert.equal(writes.length,4);
+  assert.equal(model.parseGraph(ui._vgGraphJson).map.get('extrude').profileInterpolation,2);
+  assert.match(ui.$.vgProperties.innerHTML,/Profile Keys · Smoothstep/);
   panel.close.call(ui);
   assert(require(root+'/package.json').scripts.test.includes(
    'geometry-graph-authored-profile-inspector-v2.test.cjs'));

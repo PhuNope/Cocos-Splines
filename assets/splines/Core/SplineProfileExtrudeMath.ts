@@ -473,7 +473,8 @@ export function buildProfileExtrudeGeometry(
             if(!Array.isArray(ring)||ring.length!==keyed[0].length)
                 throw Error('Graph Profile keys require matching vertex counts.');
             if(!checked.has(ring)){
-                parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:ring});
+                try{parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:ring});}
+                catch(error){throw Error('Graph Profile morph contains an invalid sampled polygon: '+String((error as Error)?.message??error));}
                 checked.add(ring);
             }
         }
@@ -689,7 +690,9 @@ export function buildProfileExtrudeGeometry(
             if(keyed&&ring){
                 const prev=fi===0?(closed?frames.length-2:0):fi-1;
                 const next=fi===frames.length-1?(closed?1:fi):fi+1;
-                if(keyed[prev]!==ring||keyed[next]!==ring){
+                const same=(other:ReadonlyArray<Readonly<P2>>)=>other===ring||
+                    other.every((p,i)=>p.x===ring[i].x&&p.y===ring[i].y);
+                if(!same(keyed[prev])||!same(keyed[next])){
                     const mid=(i:number)=>mul(add(at(frames[i],keyed[i][j]),at(frames[i],keyed[i][nextEdge[j]])),.5);
                     const p=mid(prev),q=mid(next);
                     longitudinal={x:q.x-p.x,y:q.y-p.y,z:q.z-p.z};

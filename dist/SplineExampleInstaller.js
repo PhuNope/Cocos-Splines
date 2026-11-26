@@ -71,6 +71,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/MergePathGraph.json','examples/installable/GeometryGraph/MergePathGraph.json'],
  ['GeometryGraph/MergeMeshGraph.json','examples/installable/GeometryGraph/MergeMeshGraph.json'],
  ['GeometryGraph/ProfileKeysGraph.json','examples/installable/GeometryGraph/ProfileKeysGraph.json'],
+ ['GeometryGraph/ProfileMorphGraph.json','examples/installable/GeometryGraph/ProfileMorphGraph.json'],
  ['GeometryGraph/Profiles/KeySquareProfile.json','examples/installable/GeometryGraph/Profiles/KeySquareProfile.json'],
  ['GeometryGraph/Profiles/KeyWideProfile.json','examples/installable/GeometryGraph/Profiles/KeyWideProfile.json'],
  ['GeometryGraph/BasicProfileExtrudeGraph.json','examples/installable/GeometryGraph/BasicProfileExtrudeGraph.json'],
