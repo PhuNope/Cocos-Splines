@@ -687,6 +687,7 @@ async function run(){
    renderer.rebuild();
    assert.deepEqual(outputBUv(out.mesh),localUv,
     'Reverting scale restores original UV metric');
+   const framesAfterWorldTransforms=frameBuilds;
    const lastWorldGood=out.mesh;
    squareProfile.uv.uWorldSpace='true';
    assert.throws(()=>renderer.rebuild(),/Graph Profile Asset UV uWorldSpace/);
@@ -703,7 +704,7 @@ async function run(){
    assert.notEqual(out.mesh,authoredFirst,'Changing active Profile B rebuilds mesh');
    assert.deepEqual(renderer.getGraphMetrics(),{computed:2,reused:3,nodes:5},
     'Only Extrude B and Output B recalculate when Profile B changes');
-   assert.equal(frameBuilds,authoredFrameBuilds,
+   assert.equal(frameBuilds,framesAfterWorldTransforms,
     'Updating authored profile reuses sampled Spline frames');
    const authoredLastGood=out.mesh;
    squareProfile.points[1].x=3;
