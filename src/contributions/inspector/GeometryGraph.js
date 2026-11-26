@@ -56,6 +56,7 @@ const template=base.template+[
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
  '<button type="button" class="spl-btn spl-vg-add-width">＋ Width</button>',
+ '<button type="button" class="spl-btn spl-vg-add-transform">＋ Transform</button>',
  '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-use-extrude">Use Extrude Profile</button>',
  '<button type="button" class="spl-btn spl-vg-use-deform">Use Mesh Deform</button>',
@@ -151,7 +152,7 @@ const $={...base.$,
   vgOrderList:'.spl-vg-order-list',vgOrderReset:'.spl-vg-order-reset',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
-  vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
+  vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',vgAddTransform:'.spl-vg-add-transform',
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
   vgAttachMesh:'.spl-vg-attach-mesh',vgDetachMesh:'.spl-vg-detach-mesh',
@@ -332,7 +333,7 @@ function render(panel){
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -416,7 +417,7 @@ function render(panel){
       panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
-      sharedLocked||busy||!['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
+      sharedLocked||busy||!['offset','transform','width'].includes(view.map.get(panel._vgSelected)?.type);
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
@@ -1176,6 +1177,7 @@ const inspector={
     };
     this.$.vgAddOffset.addEventListener('click',()=>insert('offset'));
     this.$.vgAddWidth.addEventListener('click',()=>insert('width'));
+    this.$?.vgAddTransform?.addEventListener('click',()=>insert('transform'));
     this.$?.vgSwitchGenerator?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       try{

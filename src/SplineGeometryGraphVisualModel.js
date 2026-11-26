@@ -11,6 +11,7 @@ const TYPES=Object.freeze({
   spline:{input:null,output:'path',params:[]},
   meshAsset:{input:null,output:'meshSource',params:['slot']},
   offset:{input:'path',output:'path',params:['right','up']},
+  transform:{input:'path',output:'path',params:['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']},
   width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
@@ -20,6 +21,8 @@ const TYPES=Object.freeze({
 });
 const LIMITS=Object.freeze({
   right:[-1000,1000,0],up:[-1000,1000,0],
+  translateX:[-1000,1000,0],translateY:[-1000,1000,0],translateZ:[-1000,1000,0],
+  rotateX:[-360,360,0],rotateY:[-360,360,0],rotateZ:[-360,360,0],pathScale:[.01,100,1],
   multiplier:[.01,20,1],midMultiplier:[.01,20,1],
   endMultiplier:[.01,20,1],taperMode:[0,1,0],
   width:[.05,100,4],endWidth:[0,100,0],
@@ -29,7 +32,7 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -222,7 +225,7 @@ function applyGraphEdit(json,action,details={}) {
     next.output=target.id;
   }else if(action==='insert'){
     const type=details.type,target=find(details.before||'ribbon');
-    if(!['offset','width'].includes(type)||!target||!target.input||
+    if(!['offset','transform','width'].includes(type)||!target||!target.input||
        TYPES[target.type].input!=='path')
       throw Error('Only path-transform nodes may be inserted before a Path consumer.');
     const prefix=type;
@@ -233,7 +236,7 @@ function applyGraphEdit(json,action,details={}) {
     target.input=id;next.nodes.push(created);
   }else if(action==='remove'){
     const id=details.id,target=find(id);
-    if(!target||!['offset','width'].includes(target.type))
+    if(!target||!['offset','transform','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
     for(const node of next.nodes)if(node.input===id)node.input=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
@@ -253,7 +256,7 @@ function applyGraphEdit(json,action,details={}) {
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
     if(target.id===source.id)throw Error('Cannot connect a node to itself.');
-    if(source.input&&['offset','width'].includes(source.type)&&
+    if(source.input&&['offset','transform','width'].includes(source.type)&&
        target.input!==source.id){
       // V1 is one output and single-input path operations. A simple relink
       // would orphan a path node. Move the chosen transform immediately

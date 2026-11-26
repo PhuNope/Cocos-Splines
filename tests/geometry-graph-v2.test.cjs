@@ -31,6 +31,38 @@ try{
  let cached=runner.evaluate(basic,ctx);
  assert.equal(cached.positions[0],-2,'Returned arrays must not mutate internal cache');
  assert.deepEqual(runner.metrics,{computed:0,reused:3,nodes:3});
+ // Transform identity, rotation, path-only scale, metric and cache isolation.
+ const transformGraph={version:1,output:'output',nodes:[
+  {id:'source',type:'spline'},{id:'transform',type:'transform',input:'source'},
+  {id:'ribbon',type:'ribbon',input:'transform',width:4,uvMetersPerRepeat:1},
+  {id:'output',type:'output',input:'ribbon'}]};
+ const tr=new GeometryGraphRunner();
+ const evaluateTransform=(params={},context=ctx)=>tr.evaluate(compileGeometryGraph({
+  ...transformGraph,nodes:transformGraph.nodes.map(n=>n.id==='transform'?{...n,...params}:n)
+ }),context);
+ const identity=evaluateTransform();
+ assert.deepEqual(identity.positions,cached.positions);
+ const beforeTransform=JSON.stringify(frames);
+ const translated=evaluateTransform({translateX:3,translateY:2,translateZ:1,pathScale:2});
+ assert.deepEqual(translated.positions.slice(0,6),[1,2,1,5,2,1]);
+ assert.deepEqual(translated.positions.slice(-6),[1,2,7,5,2,7]);
+ assert(Math.max(...translated.uvs)>Math.max(...identity.uvs));
+ assert.deepEqual(tr.metrics,{computed:3,reused:1,nodes:4});
+ evaluateTransform({translateX:3,translateY:2,translateZ:1,pathScale:2});
+ assert.equal(tr.metrics.reused,4);
+ const rotatedMesh=evaluateTransform({rotateY:90});
+ const near=(a,b)=>assert(Math.abs(a-b)<1e-8,a+' != '+b);
+ near(rotatedMesh.positions[2],2);
+ near(rotatedMesh.positions[5],-2);
+ near(rotatedMesh.positions.at(-6),3);
+ const anisotropic=evaluateTransform({rotateY:90},{...ctx,worldUvLinear:[2,0,0,0,1,0,0,0,1]});
+ near(Math.max(...anisotropic.uvs),6);
+ assert.equal(tr.metrics.reused,1,'World metric changes invalidate Transform only downstream');
+ assert.equal(JSON.stringify(frames),beforeTransform);
+ for(const params of [{pathScale:0},{pathScale:-1},{rotateX:361},{translateY:Infinity},{unknown:1}])
+  assert.throws(()=>evaluateTransform(params));
+ assert.throws(()=>evaluateTransform({rotateY:90},{...ctx,worldUvLinear:[1]}));
+ assert.deepEqual(evaluateTransform({rotateY:90},{...ctx,worldUvLinear:[2,0,0,0,1,0,0,0,1]}),anisotropic);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},

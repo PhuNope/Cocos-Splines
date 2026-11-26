@@ -19,7 +19,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -32,6 +32,9 @@ export interface GeometryGraphNode {
     /** Longitudinal X / Y / Z axis for Mesh Deform; default Z. */
     axis?:number;
     right?:number;up?:number;
+    /** Renderer-local translation and XYZ Euler degrees; scale affects path positions, not profile size. */
+    translateX?:number;translateY?:number;translateZ?:number;
+    rotateX?:number;rotateY?:number;rotateZ?:number;pathScale?:number;
     multiplier?:number;
     /** Optional Width scale across normalized physical distance.
      * Unspecified middle = mean of start/end; unspecified end = start.
@@ -132,6 +135,58 @@ const deepCopyFrames=(frames:ReadonlyArray<RoadFrame>):GraphFrame[]=>frames.map(
     position:copyVec(f.position),forward:copyVec(f.forward),right:copyVec(f.right),
     up:copyVec(f.up),distance:f.distance,widthFactor:1,
 }));
+/** Local affine path transform: scale about renderer origin, then X/Y/Z
+ * Euler rotations (in that order), then translation. Rotate frame basis
+ * without scaling it so downstream cross-section dimensions stay independent.
+ * Distance deltas track transformed sampled world chords, preserving the
+ * upstream metric for zero-length chords and exact identity transforms.
+ */
+function transformPath(source:GraphPath,node:GeometryGraphNode,worldLinear?:ReadonlyArray<number>):GraphPath{
+    const scale=node.pathScale??1,tx=node.translateX??0,ty=node.translateY??0,tz=node.translateZ??0;
+    const rx=node.rotateX??0,ry=node.rotateY??0,rz=node.rotateZ??0;
+    const rotated=rx%360!==0||ry%360!==0||rz%360!==0;
+    if(!rotated&&scale===1&&tx===0&&ty===0&&tz===0)return source;
+    const radians=Math.PI/180;
+    const cx=Math.cos(rx*radians),sx=Math.sin(rx*radians);
+    const cy=Math.cos(ry*radians),sy=Math.sin(ry*radians);
+    const cz=Math.cos(rz*radians),sz=Math.sin(rz*radians);
+    const rotate=(v:RoadFrame['position'])=>{
+        if(!rotated)return copyVec(v);
+        const y=v.y*cx-v.z*sx,z=v.y*sx+v.z*cx;
+        const x=v.x*cy+z*sy,z2=-v.x*sy+z*cy;
+        return {x:x*cz-y*sz,y:x*sz+y*cz,z:z2};
+    };
+    const m=worldLinear;
+    if(rotated&&m!==undefined&&
+       (!Array.isArray(m)||m.length!==9||!m.every(v=>finite(v)&&Math.abs(v)<=1e7)))
+        throw Error('Geometry Graph Transform requires a valid world linear matrix.');
+    const chord=(a:RoadFrame['position'],b:RoadFrame['position'])=>{
+        const x=b.x-a.x,y=b.y-a.y,z=b.z-a.z;
+        return m?Math.hypot(m[0]*x+m[3]*y+m[6]*z,m[1]*x+m[4]*y+m[7]*z,m[2]*x+m[5]*y+m[8]*z):Math.hypot(x,y,z);
+    };
+    let distance=source.frames[0].distance*scale;
+    const frames:GraphFrame[]=[];
+    for(let i=0;i<source.frames.length;i++){
+        const f=source.frames[i],p=rotate(f.position);
+        const position={x:p.x*scale+tx,y:p.y*scale+ty,z:p.z*scale+tz};
+        if(i>0){
+            const previous=source.frames[i-1],delta=f.distance-previous.distance;
+            let ratio=scale;
+            if(rotated){
+                const before=chord(previous.position,f.position);
+                const after=chord(frames[i-1].position,position);
+                if(before>1e-10)ratio=after/before;
+                else if(after>1e-10)throw Error('Geometry Graph Transform has a degenerate world metric.');
+            }
+            distance+=delta*ratio;
+        }
+        const next={...f,position,forward:rotate(f.forward),right:rotate(f.right),up:rotate(f.up),distance};
+        if(![next.position,next.forward,next.right,next.up].every(vec)||!finite(distance)||distance>1e9)
+            throw Error('Geometry Graph Transform produced invalid or oversized frames.');
+        frames.push(next);
+    }
+    return {kind:'path',closed:source.closed,frames};
+}
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
@@ -177,11 +232,12 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
             node.type==='offset'?['input','right','up']:
+            node.type==='transform'?['input','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
             node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
@@ -201,6 +257,13 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         if(node.type==='offset'){
             bound(node.right??0,-1000,1000,'offset right');
             bound(node.up??0,-1000,1000,'offset up');
+        }
+        if(node.type==='transform'){
+            for(const k of ['translateX','translateY','translateZ'] as const)
+                bound(node[k]??0,-1000,1000,'Transform '+k);
+            for(const k of ['rotateX','rotateY','rotateZ'] as const)
+                bound(node[k]??0,-360,360,'Transform '+k);
+            bound(node.pathScale??1,.01,100,'Transform pathScale');
         }
         if(node.type==='width'){
             if(node.widthKeys!==undefined){
@@ -420,7 +483,8 @@ export class GeometryGraphRunner {
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
-                    // Only world-space Profile UV depends on this transform.
+                    node.type==='transform'?context.worldUvLinear??null:null,
+                    // World-space Profile UV also depends on this transform.
                     // It invalidates its Extrude branch even when a pure Core
                     // caller changes matrix without changing frame revision.
                     node.type==='extrude'&&node.profileSlot!==undefined&&
@@ -462,6 +526,9 @@ export class GeometryGraphRunner {
                             z:f.position.z+f.right.z*right+f.up.z*up,
                         },
                     }))};
+                }else if(node.type==='transform'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Transform input is not a path.');
+                    value=transformPath(source,node,context.worldUvLinear);
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
                     const keys=node.widthKeys;

@@ -10,8 +10,7 @@ const authored=require('../../SplineGeometryProfileEditor');
 const library=require('../../SplineGeometryProfileLibrary');
 const template=base.template+[
  '<details class="spl-section spl-vg-panel" open>',
- '<summary>Visual Geometry Graph · typed sockets</summary>',
- '<div class="spl-note">Drag node headers. Click an output socket then a compatible input socket to connect. All edits use native Inspector property commits. For Mesh Deform imported geometry, attach Mesh Asset Input and assign Source Mesh on the Renderer.</div>',
+ '<summary>Visual Geometry Graph</summary>',
  '<div class="spl-vg-toolbar spl-vg-asset-toolbar">',
  '<button type="button" class="spl-btn spl-vg-export">Export JSON…</button>',
  '<button type="button" class="spl-btn spl-vg-import">Import JSON → Local…</button>',
@@ -27,14 +26,12 @@ const template=base.template+[
  '</div>',
  '<div class="spl-vg-source-mode" role="status">Local graph JSON</div>',
  '<details class="spl-section spl-vg-order-section" open>',
- '<summary>Render All Outputs · material slot order</summary>',
- '<div class="spl-note">Output IDs in Material A/B/C/D slots on THIS renderer. Use arrows to reorder without editing a shared graph.</div>',
+ '<summary>Output materials</summary>',
  '<div class="spl-vg-order-list" role="group" aria-label="Output material slot order"></div>',
  '<button type="button" class="spl-btn spl-vg-order-reset">Reset alphabetical order</button>',
  '</details>',
  '<details class="spl-section spl-profile-editor" open>',
- '<summary>Authored Profile Editor · JsonAsset drafts</summary>',
- '<div class="spl-note">Pick Profile Asset A/B/C; edit vertices (blue), edges (green), and UV0 seam/edge weights. UV seam is highlighted pink. Changes are draft-only until Save; Undo/Redo does NOT restore saved JsonAsset files.</div>',
+ '<summary>Authored Profile Editor</summary>',
  '<div class="spl-vg-toolbar">',
  '<label>Profile Slot <select class="spl-profile-slot"><option value="0">A</option><option value="1">B</option><option value="2">C</option></select></label>',
  '<button type="button" class="spl-btn spl-profile-open">Edit Profile Asset…</button>',
@@ -51,15 +48,15 @@ const template=base.template+[
  '<button type="button" class="spl-btn spl-profile-apply-preset">Load Preset into Draft</button>',
  '<button type="button" class="spl-btn spl-profile-create-preset">Create Preset JSON…</button>',
  '<button type="button" class="spl-btn spl-profile-export-draft">Export Draft As New JSON…</button>',
- '<span class="spl-profile-preset-note">Load changes only the draft (Undo supported). Create / Export writes a NEW JsonAsset with confirmation; manually assign a Profile Asset slot.</span>',
  '</div>',
- '<div class="spl-profile-status" role="status" aria-live="polite">Select an authored Profile Asset slot to begin.</div>',
+ '<div class="spl-profile-status" role="status" aria-live="polite"></div>',
  '<div class="spl-profile-canvas"></div>',
  '</details>',
  '<div class="spl-vg-conflict" role="status" aria-live="polite"></div>',
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-add-offset">＋ Offset</button>',
  '<button type="button" class="spl-btn spl-vg-add-width">＋ Width</button>',
+ '<button type="button" class="spl-btn spl-vg-add-transform">＋ Transform</button>',
  '<button type="button" class="spl-btn spl-vg-switch-generator">Switch to Tube</button>',
  '<button type="button" class="spl-btn spl-vg-use-extrude">Use Extrude Profile</button>',
  '<button type="button" class="spl-btn spl-vg-use-deform">Use Mesh Deform</button>',
@@ -78,7 +75,7 @@ const template=base.template+[
  '<div class="spl-vg-toolbar">',
  '<button type="button" class="spl-btn spl-vg-profile">Profile CPU · Cold / Warm</button>',
  '</div>',
- '<pre class="spl-vg-profile-report" role="status" aria-live="polite">Run Profile CPU to measure individual graph nodes.</pre>',
+ '<pre class="spl-vg-profile-report" role="status" aria-live="polite"></pre>',
  '<div class="spl-vg-status" role="status">Ready.</div>',
  '</details>'
 ].join('');
@@ -90,7 +87,7 @@ const style=base.style+[
 '.spl-profile-canvas{margin:8px 0;font-size:11px}',
 '.spl-profile-coordinates{display:flex;gap:10px;margin:8px 0}',
 '.spl-profile-coordinates input{width:90px;color:inherit;background:#1b3544;border:1px solid #53728a;padding:3px}',
-'.spl-profile-slot,.spl-profile-snap,.spl-profile-preset{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
+'.spl-profile-slot,.spl-profile-snap,.spl-profile-preset,.spl-profile-uv-island-mode{color:inherit;background:#1b3544;border:1px solid #53728a;border-radius:3px}',
 '.spl-profile-preset-note{font-size:10px;color:#b0c4d0;align-self:center}',
 '.spl-profile-status{white-space:pre-wrap;font-size:11px;color:#a9c1cf}',
 '.spl-profile-count{margin:6px 0;color:#b6d4df}',
@@ -118,6 +115,15 @@ const style=base.style+[
 '.spl-vg-source,.spl-vg-note{font-size:10px;color:#b0c4d0;margin:4px 0}',
 '.spl-vg-params{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:6px}',
 '.spl-vg-params label{display:flex;flex-direction:column;gap:2px}',
+'.spl-vg-width-keys{margin-top:9px;border-top:1px solid #476277;padding-top:6px}',
+'.spl-vg-width-svg{display:block;max-width:100%;height:auto;margin:6px 0;background:#142a38;touch-action:none;border:1px solid #45687d;border-radius:5px}',
+'.spl-vg-width-svg circle{cursor:grab;touch-action:none}',
+'.spl-vg-width-svg circle:active{cursor:grabbing}',
+'.spl-vg-width-row{display:grid;grid-template-columns:48px 1fr 1fr 25px;gap:6px;align-items:end;margin:4px 0}',
+'.spl-vg-width-row label{display:flex;flex-direction:column;font-size:10px}',
+'.spl-vg-width-row input{width:100%;min-width:0;box-sizing:border-box;background:#1b3544;color:inherit;border:1px solid #53728a}',
+'.spl-vg-width-row button,.spl-vg-width-keys>button{background:#28485c;color:inherit;border:1px solid #53728a;border-radius:4px;cursor:pointer}',
+'.spl-vg-width-row button:disabled,.spl-vg-width-keys>button:disabled{opacity:.4;cursor:default}',
 '.spl-vg-params input:not([type=checkbox]),.spl-vg-params select{min-width:0;width:100%;box-sizing:border-box;border:1px solid #546b78;border-radius:4px;background:rgba(22,37,51,.9);color:inherit;padding:4px}',
 '.spl-vg-params input[type=checkbox]{align-self:flex-start}',
 '.spl-vg-status{font-size:11px;white-space:pre-wrap;color:#9ad6c9;min-height:15px}',
@@ -146,7 +152,7 @@ const $={...base.$,
   vgOrderList:'.spl-vg-order-list',vgOrderReset:'.spl-vg-order-reset',
   vgStage:'.spl-vg-stage',vgViewport:'.spl-vg-viewport',
   vgProperties:'.spl-vg-properties',vgStatus:'.spl-vg-status',
-  vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',
+  vgAddOffset:'.spl-vg-add-offset',vgAddWidth:'.spl-vg-add-width',vgAddTransform:'.spl-vg-add-transform',
   vgSwitchGenerator:'.spl-vg-switch-generator',vgUseExtrude:'.spl-vg-use-extrude',
   vgUseDeform:'.spl-vg-use-deform',
   vgAttachMesh:'.spl-vg-attach-mesh',vgDetachMesh:'.spl-vg-detach-mesh',
@@ -202,6 +208,10 @@ function profileStatus(panel,message,isError=false){
   panel.$.vgProfileStatus.textContent=message;
   panel.$.vgProfileStatus.classList?.toggle?.('error',isError);
 }
+function activeProfileContour(panel,profile){
+  const contour=panel._vgAuthoredContour??0;
+  return Number.isInteger(contour)&&contour>=0&&contour<authored.getProfileContours(profile).length?contour:0;
+}
 function renderAuthoredProfile(panel){
   const draft=panel._vgAuthoredDraft;
   const blocked=!!panel._vgAuthoredBusy||!!panel._vgSharedBusy||
@@ -232,9 +242,14 @@ function renderAuthoredProfile(panel){
     return;
   }
   try{
+    const profile=authored.parseProfile(draft.profileJson);
+    panel._vgAuthoredContour=activeProfileContour(panel,profile);
+    const points=authored.getProfileContours(profile)[panel._vgAuthoredContour];
+    panel._vgAuthoredSelected=Math.max(0,Math.min(panel._vgAuthoredSelected||0,points.length-1));
+    if(panel._vgAuthoredEdge>=points.length)panel._vgAuthoredEdge=null;
     panel.$.vgProfileCanvas.innerHTML=
       authored.renderProfileControls(draft.profileJson,
-        panel._vgAuthoredSelected||0,panel._vgAuthoredEdge??null);
+        panel._vgAuthoredSelected,panel._vgAuthoredEdge??null,panel._vgAuthoredContour);
   }catch(error){
     panel.$.vgProfileCanvas.textContent=String(error?.message||error);
   }
@@ -247,7 +262,7 @@ function applyAuthoredEdit(panel,action,details={}){
     const next=action==='library-preset'?
       library.applyProfilePreset(draft.profileJson,params.preset):
       authored.applyProfileEdit(baseProfile||draft.profileJson,action,
-        {index:panel._vgAuthoredSelected,...params});
+        {index:panel._vgAuthoredSelected,contour:panel._vgAuthoredContour??0,...params});
     if(next!==draft.profileJson){
       // One history entry per pointer drag, regardless of move event count.
       // Input/insert/remove remain individually undoable transactions.
@@ -259,22 +274,28 @@ function applyAuthoredEdit(panel,action,details={}){
         if(drag)drag.historySaved=true;
       }
       draft.profileJson=next;
-      if(action==='library-preset'){
+      if(action==='library-preset'||action==='set-holes'||action==='remove-hole'||action==='add-hole'||action==='set-outer-contours'||action==='set-outer-holes'||action==='remove-outer'||action==='add-outer'){
+        const profile=authored.parseProfile(next);
+        const entries=authored.getProfileContourEntries(profile);
+        const owner=params.owner??0;
+        panel._vgAuthoredContour=action==='add-hole'?
+          entries.reduce((last,e,i)=>e.owner===owner&&e.hole!==null?i:last,0):
+          action==='add-outer'?entries.findIndex(e=>e.owner===profile.outerContours.length&&e.hole===null):0;
         panel._vgAuthoredSelected=0;
         panel._vgAuthoredEdge=null;
       }else if(action==='insert'||action==='insert-edge'){
         panel._vgAuthoredSelected=Number(params.index??panel._vgAuthoredSelected)+1;
         panel._vgAuthoredEdge=null;
       }else if(action==='remove'){
-        panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
-          authored.parseProfile(next).points.length-1);
+        const profile=authored.parseProfile(next);
+        const contour=activeProfileContour(panel,profile);
+        const points=authored.getProfileContours(profile)[contour];
+        panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,points.length-1);
         panel._vgAuthoredEdge=null;
       }
     }
     renderAuthoredProfile(panel);
-    profileStatus(panel,'Unsaved Profile draft: '+draft.assetName+
-      ' · '+authored.parseProfile(draft.profileJson).points.length+
-      ' validated points. Save explicitly to update JsonAsset.');
+    profileStatus(panel,'Unsaved Profile draft: '+draft.assetName);
   }catch(error){profileStatus(panel,String(error?.message||error),true);}
 }
 function restoreAuthoredHistory(panel,mode){
@@ -287,8 +308,7 @@ function restoreAuthoredHistory(panel,mode){
   const next=authored.formatProfile(from.pop());
   to.push(prior);if(to.length>32)to.shift();
   draft.profileJson=next;
-  panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
-    authored.parseProfile(next).points.length-1);
+  panel._vgAuthoredContour=activeProfileContour(panel,authored.parseProfile(next));
   panel._vgAuthoredEdge=null;
   renderAuthoredProfile(panel);
   profileStatus(panel,(mode==='undo'?'Undo':'Redo')+
@@ -307,14 +327,13 @@ function render(panel){
     panel.$.vgProfile.disabled=busy||!!draft||!!panel._vgProfileBusy;
   if(panel.$?.vgProfileReport)
     panel.$.vgProfileReport.textContent=panel._vgProfile?
-      formatGeometryGraphProfile(panel._vgProfile):
-      'Run Profile CPU to measure individual graph nodes. No Scene or JsonAsset changes.';
+      formatGeometryGraphProfile(panel._vgProfile):'';
   if(panel.$?.vgSourceMode)panel.$.vgSourceMode.textContent=draft?
     'Shared JsonAsset · UNSAVED DRAFT. Graph edits are temporary; node layout stays locked.':
     panel._vgShared?
       'Shared JsonAsset mode · canvas is read-only until Edit Shared Asset is started.':
       'Local graph · editable Visual Canvas';
-  for(const key of ['vgAddOffset','vgAddWidth','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
+  for(const key of ['vgAddOffset','vgAddWidth','vgAddTransform','vgSwitchGenerator','vgUseExtrude','vgUseDeform','vgAttachMesh','vgDetachMesh','vgAddOutput','vgDefaultOutput','vgRemoveOutput','vgAuto','vgCopyLocal']){
     const element=panel.$?.[key];
     if(element)element.disabled=busy||(
       key==='vgCopyLocal'?(!panel._vgShared||!!draft):
@@ -398,7 +417,7 @@ function render(panel){
       panel._vgPreviewLayout||panel._vgLayoutJson,panel._vgSelected,panel._vgPending);
     properties.innerHTML=graph.renderNodeParameters(panel._vgGraphJson,panel._vgSelected);
     if(panel.$.vgRemove)panel.$.vgRemove.disabled=
-      sharedLocked||busy||!['offset','width'].includes(view.map.get(panel._vgSelected)?.type);
+      sharedLocked||busy||!['offset','transform','width'].includes(view.map.get(panel._vgSelected)?.type);
     if(!panel._vgDrag)
       status(panel,panel._vgPending?
         'Connecting from '+panel._vgPending+': click a matching input socket.':
@@ -598,7 +617,7 @@ const inspector={
     this._vgProfileRequestToken=0;this._vgProfileOutputId='';
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     this._vgAuthoredDraft=null;this._vgAuthoredBusy=false;
-    this._vgAuthoredToken=0;this._vgAuthoredSelected=0;
+    this._vgAuthoredToken=0;this._vgAuthoredSelected=0;this._vgAuthoredContour=0;
     this._vgAuthoredEdge=null;
     this._vgProfileAssetIdentity=undefined;this._vgAuthoredDrag=null;
     this.$?.vgProfileSlot?.addEventListener('change',event=>{
@@ -623,7 +642,7 @@ const inspector={
           slot,assetName:result.assetName||'Profile',sha256:result.sha256,
           profileJson:canonical,initialProfileJson:canonical,
           undo:[],redo:[]};
-        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
+        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;this._vgAuthoredContour=0;
         profileStatus(this,'Editing '+this._vgAuthoredDraft.assetName+
           ' in memory; no file/Scene changes until Save.');
       }catch(error){
@@ -736,7 +755,23 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('click',event=>{
       const el=closest(event.target,'button');
       if(!el||!this._vgAuthoredDraft)return;
-      if(el.classList?.contains('spl-profile-insert'))
+      if(this._vgAuthoredDrag)return;
+      if(el.classList?.contains('spl-profile-add-hole')||el.classList?.contains('spl-profile-remove-hole')){
+        const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+        const entry=authored.getProfileContourEntries(profile)[activeProfileContour(this,profile)];
+        if(el.classList.contains('spl-profile-add-hole'))
+          applyAuthoredEdit(this,'add-hole',{owner:entry.owner});
+        else if(entry.hole!==null)
+          applyAuthoredEdit(this,'remove-hole',{owner:entry.owner,hole:entry.hole});
+      }
+      else if(el.classList?.contains('spl-profile-add-outer'))
+        applyAuthoredEdit(this,'add-outer',{});
+      else if(el.classList?.contains('spl-profile-remove-outer')){
+        const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+        const entry=authored.getProfileContourEntries(profile)[activeProfileContour(this,profile)];
+        if(entry.owner>0&&entry.hole===null)applyAuthoredEdit(this,'remove-outer',{part:entry.owner-1});
+      }
+      else if(el.classList?.contains('spl-profile-insert'))
         applyAuthoredEdit(this,'insert',{});
       else if(el.classList?.contains('spl-profile-remove'))
         applyAuthoredEdit(this,'remove',{});
@@ -745,7 +780,7 @@ const inspector={
         applyAuthoredEdit(this,'insert-edge',{
           index:this._vgAuthoredEdge,t:.5,offset:.12});
       else if(el.classList?.contains('spl-profile-set-uv-seam')&&
-              Number.isInteger(this._vgAuthoredEdge))
+              !this._vgAuthoredContour&&Number.isInteger(this._vgAuthoredEdge))
         applyAuthoredEdit(this,'set-uv-seam',{index:this._vgAuthoredEdge});
       else if(el.classList?.contains('spl-profile-reset-uv'))
         applyAuthoredEdit(this,'reset-uv',{});
@@ -755,6 +790,111 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(this._vgAuthoredDrag)return;
+      if(cls?.contains('spl-profile-contour')){
+        const contour=Number(event.target.value);
+        const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+        if(!Number.isInteger(contour)||contour<0||contour>=authored.getProfileContours(profile).length)return;
+        this._vgAuthoredContour=contour;
+        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
+        renderAuthoredProfile(this);return;
+      }
+      if(cls?.contains('spl-profile-outer-holes')){
+        let outerHoles;
+        try{outerHoles=JSON.parse(event.target.value);}
+        catch{profileStatus(this,'Invalid additional hole JSON.',true);return;}
+        applyAuthoredEdit(this,'set-outer-holes',{outerHoles});return;
+      }
+      if(cls?.contains('spl-profile-outer-contours')){
+        let outerContours;
+        try{outerContours=JSON.parse(event.target.value);}
+        catch{profileStatus(this,'Invalid outer contours JSON.',true);return;}
+        applyAuthoredEdit(this,'set-outer-contours',{outerContours});return;
+      }
+      if(cls?.contains('spl-profile-holes')){
+        let holes;
+        try{holes=JSON.parse(event.target.value);}
+        catch{profileStatus(this,'Invalid hole contours JSON.',true);return;}
+        applyAuthoredEdit(this,'set-holes',{holes});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-triangle-unwrap')){
+        applyAuthoredEdit(this,'set-triangle-unwrap',{
+          enabled:event.target.checked===true});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-atlas')){
+        applyAuthoredEdit(this,'set-atlas-packing',{
+          enabled:event.target.checked===true});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-atlas-priority')){
+        if(event.target.checked===true)
+          applyAuthoredEdit(this,'set-atlas-priority',{outer:1,inner:1,cap:1});
+        else applyAuthoredEdit(this,'clear-atlas-priority',{});
+        return;
+      }
+      for(const key of ['outer','inner','cap']){
+        if(cls?.contains('spl-profile-uv-priority-'+key)){
+          const current=authored.parseProfile(this._vgAuthoredDraft.profileJson).uv?.atlasPriority;
+          if(!current)return;
+          const raw=String(event.target.value??'').trim();
+          const value=raw===''?NaN:Number(raw);
+          applyAuthoredEdit(this,'set-atlas-priority',{...current,[key]:value});
+          return;
+        }
+      }
+      if(cls?.contains('spl-profile-uv-atlas-rotate')){
+        applyAuthoredEdit(this,'set-atlas-rotate',{enabled:event.target.checked===true});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-pixel-padding')){
+        if(event.target.checked===true)
+          applyAuthoredEdit(this,'set-atlas-pixel-padding',{resolution:1024,pixels:2});
+        else applyAuthoredEdit(this,'clear-atlas-pixel-padding',{});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-atlas-resolution')||
+         cls?.contains('spl-profile-uv-atlas-pixels')){
+        const current=authored.parseProfile(this._vgAuthoredDraft.profileJson).uv?.atlasPixelPadding;
+        if(!current)return;
+        const raw=event.target.value;
+        if(!/^\d+$/.test(raw)){
+          profileStatus(this,'Enter a whole number for Atlas pixel padding.',true);return;
+        }
+        const value=Number(raw);
+        const resolution=cls.contains('spl-profile-uv-atlas-resolution')?value:current.resolution;
+        const pixels=cls.contains('spl-profile-uv-atlas-pixels')?value:current.pixels;
+        applyAuthoredEdit(this,'set-atlas-pixel-padding',{resolution,pixels});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-padding')){
+        const raw=event.target.value;
+        if(raw===''){
+          applyAuthoredEdit(this,'clear-atlas-padding',{});
+          return;
+        }
+        const padding=Number(raw);
+        if(!Number.isFinite(padding)||padding<0||padding>.2){
+          profileStatus(this,'Profile UV Atlas padding must be within [0,0.2].',true);
+          return;
+        }
+        applyAuthoredEdit(this,'set-atlas-padding',{padding});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-island-mode')){
+        const raw=event.target.value;
+        if(!/^[012]$/.test(raw)){
+          profileStatus(this,'Invalid side UV island mode.',true);return;
+        }
+        applyAuthoredEdit(this,'set-side-island-mode',{mode:Number(raw)});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-world-space')){
+        applyAuthoredEdit(this,'set-u-world-space',{
+          enabled:event.target.checked===true});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-follow-frame')){
         applyAuthoredEdit(this,'set-u-follow-frame-scale',{
           enabled:event.target.checked===true});
@@ -775,7 +915,7 @@ const inspector={
         return;
       }
       if(cls?.contains('spl-profile-uv-weight')){
-        if(!Number.isInteger(this._vgAuthoredEdge))return;
+        if(this._vgAuthoredContour||!Number.isInteger(this._vgAuthoredEdge))return;
         if(event.target.value===''||!Number.isFinite(Number(event.target.value))){
           profileStatus(this,'Profile UV edge weight must be finite.',true);return;
         }
@@ -784,8 +924,10 @@ const inspector={
         return;
       }
       if(!cls?.contains('spl-profile-x')&&!cls?.contains('spl-profile-y'))return;
-      const pt=authored.parseProfile(this._vgAuthoredDraft.profileJson)
-        .points[this._vgAuthoredSelected];
+      const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+      const contour=activeProfileContour(this,profile);
+      const pt=(authored.getProfileContours(profile)[contour])[this._vgAuthoredSelected];
+      if(!pt)return;
       const value=Number(event.target.value);
       if(event.target.value===''||!Number.isFinite(value)){
         profileStatus(this,'Profile point coordinate must be finite.',true);return;
@@ -796,19 +938,20 @@ const inspector={
       });
     });
     this.$?.vgProfileCanvas?.addEventListener('pointerdown',event=>{
-      if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
+      if(!this._vgAuthoredDraft||this._vgAuthoredBusy||this._vgAuthoredDrag)return;
       const circle=closest(event.target,'[data-profile-point]');
       const edge=circle?null:closest(event.target,'[data-profile-edge]');
       const kind=circle?'point':edge?'edge':null;
       if(!kind)return;
       const index=Number(circle?.dataset?.profilePoint??
         edge?.dataset?.profileEdge);
-      if(!Number.isInteger(index)||index<0||
-         index>=authored.parseProfile(this._vgAuthoredDraft.profileJson).points.length)
-        return;
+      const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+      const contour=activeProfileContour(this,profile);
+      const points=authored.getProfileContours(profile)[contour];
+      if(!Number.isInteger(index)||index<0||index>=points.length)return;
       this._vgAuthoredSelected=index;
       this._vgAuthoredEdge=kind==='edge'?index:null;
-      this._vgAuthoredDrag={pointerId:event.pointerId,index,kind,
+      this._vgAuthoredDrag={pointerId:event.pointerId,index,kind,contour,
         startX:event.clientX,startY:event.clientY,
         baseProfile:this._vgAuthoredDraft.profileJson,historySaved:false};
       this.$.vgProfileCanvas.setPointerCapture?.(event.pointerId);
@@ -830,13 +973,13 @@ const inspector={
         const dy=snapProfileCoordinate(
           -(event.clientY-drag.startY)/rect.height*240/104,snap);
         applyAuthoredEdit(this,'move-edge',{
-          baseProfile:drag.baseProfile,index:drag.index,dx,dy});
+          baseProfile:drag.baseProfile,index:drag.index,contour:drag.contour,dx,dy});
       }else{
         const x=snapProfileCoordinate(Math.max(-1,Math.min(1,
           ((event.clientX-rect.left)/rect.width*240-120)/104)),snap);
         const y=snapProfileCoordinate(Math.max(-1,Math.min(1,
           (120-(event.clientY-rect.top)/rect.height*240)/104)),snap);
-        applyAuthoredEdit(this,'move',{index:drag.index,x,y});
+        applyAuthoredEdit(this,'move',{baseProfile:drag.baseProfile,index:drag.index,contour:drag.contour,x,y});
       }
     });
     const finishProfileDrag=event=>{
@@ -1034,6 +1177,7 @@ const inspector={
     };
     this.$.vgAddOffset.addEventListener('click',()=>insert('offset'));
     this.$.vgAddWidth.addEventListener('click',()=>insert('width'));
+    this.$?.vgAddTransform?.addEventListener('click',()=>insert('transform'));
     this.$?.vgSwitchGenerator?.addEventListener('click',()=>{
       if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft)return;
       try{
@@ -1105,15 +1249,96 @@ const inspector={
       const card=closest(event.target,'.spl-vg-card');
       if(card){this._vgSelected=card.dataset.node;render(this);}
     });
+    this.$.vgProperties.addEventListener('click',event=>{
+      const button=closest(event.target,'[data-width-action]');
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||
+         !button||!this._vgSelected||button.disabled)return;
+      const kind=button.dataset.widthAction;
+      if(kind==='enable')editGraph(this,'width-keys-enable',{id:this._vgSelected});
+      else if(kind==='add')editGraph(this,'width-key-add',{id:this._vgSelected});
+      else if(kind==='remove')editGraph(this,'width-key-remove',{
+        id:this._vgSelected,index:Number(button.dataset.widthIndex)});
+    });
     this.$.vgProperties.addEventListener('change',event=>{
+      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!this._vgSelected)return;
+      const widthInput=closest(event.target,'[data-width-field]');
+      if(widthInput){
+        const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.widthKeys;
+        const index=Number(widthInput.dataset.widthIndex);
+        const field=widthInput.dataset.widthField;
+        if(!keys||!Number.isInteger(index)||!keys[index]||
+           !['progress','multiplier'].includes(field)||widthInput.value===''||
+           !Number.isFinite(Number(widthInput.value))){
+          status(this,'Invalid Width key input.',true);return;
+        }
+        const next={...keys[index],[field]:Number(widthInput.value)};
+        editGraph(this,'width-key-set',{id:this._vgSelected,index,...next});
+        return;
+      }
       const input=closest(event.target,'[data-graph-param]');
-      if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!input||!this._vgSelected)return;
+      if(!input)return;
       const key=input.dataset.graphParam;
       const optionalTaper=key==='midMultiplier'||key==='endMultiplier';
+      if(input.value===''&&!optionalTaper&&key!=='capEnds'){
+        status(this,'Graph parameter cannot be empty.',true);return;
+      }
       editGraph(this,'param',{id:this._vgSelected,key,
         value:key==='capEnds'?!!input.checked:
           (optionalTaper&&input.value==='')?null:Number(input.value)});
     });
+    this.$.vgProperties.addEventListener('pointerdown',event=>{
+      if(this._vgSharedBusy||this._vgShared&&!this._vgSharedDraft||
+         event.button!==0||!this._vgSelected)return;
+      const handle=closest(event.target,'[data-width-key]');
+      if(!handle)return;
+      const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.widthKeys;
+      const index=Number(handle.dataset.widthKey);
+      if(!keys||!Number.isInteger(index)||!keys[index])return;
+      this._vgWidthDrag={id:this._vgSelected,index,keys,base:this._vgGraphJson,
+        pointerId:event.pointerId,preview:null};
+      this.$.vgProperties.setPointerCapture?.(event.pointerId);
+      event.preventDefault?.();
+    });
+    this.$.vgProperties.addEventListener('pointermove',event=>{
+      const drag=this._vgWidthDrag;
+      if(!drag||drag.pointerId!==event.pointerId)return;
+      const svg=this.$.vgProperties.querySelector?.('.spl-vg-width-svg');
+      const rect=svg?.getBoundingClientRect?.();
+      if(!rect||rect.width<=0||rect.height<=0)return;
+      const rawProgress=Math.max(0,Math.min(1,
+        ((event.clientX-rect.left)/rect.width*320-20)/280));
+      const rawScale=.01+(124-(event.clientY-rect.top)/rect.height*140)/100*19.99;
+      const scale=Math.max(.01,Math.min(20,
+        Math.round(rawScale*1000)/1000));
+      const i=drag.index,keys=drag.keys;
+      const progress=i===0?0:i===keys.length-1?1:Math.max(
+        keys[i-1].progress+.001,Math.min(keys[i+1].progress-.001,
+          Math.round(rawProgress*1000)/1000));
+      if(!Number.isFinite(progress)||!Number.isFinite(scale))return;
+      drag.preview={progress,multiplier:scale};
+      const positions=keys.map((k,j)=>j===i?drag.preview:k);
+      const px=k=>(20+k.progress*280).toFixed(3);
+      const py=k=>(124-(k.multiplier-.01)/19.99*100).toFixed(3);
+      const circle=svg.querySelector?.('[data-width-key="'+i+'"]');
+      circle?.setAttribute?.('cx',px(drag.preview));
+      circle?.setAttribute?.('cy',py(drag.preview));
+      svg.querySelector?.('[data-width-line]')?.setAttribute?.('points',
+        positions.map(k=>px(k)+','+py(k)).join(' '));
+    });
+    const finishWidthDrag=event=>{
+      const drag=this._vgWidthDrag;
+      if(!drag||drag.pointerId!==event.pointerId)return;
+      this._vgWidthDrag=null;
+      this.$.vgProperties.releasePointerCapture?.(event.pointerId);
+      const value=drag.preview,old=drag.keys[drag.index];
+      if(event.type==='pointerup'&&value&&drag.base===this._vgGraphJson&&
+         drag.id===this._vgSelected&&
+         (value.progress!==old.progress||value.multiplier!==old.multiplier))
+        editGraph(this,'width-key-set',{id:drag.id,index:drag.index,...value});
+      else render(this);
+    };
+    this.$.vgProperties.addEventListener('pointerup',finishWidthDrag);
+    this.$.vgProperties.addEventListener('pointercancel',finishWidthDrag);
     this.$.vgStage.addEventListener('pointerdown',event=>{
       const handle=closest(event.target,'[data-drag]');
       if(this._vgShared||!handle||event.button!==0)return;
@@ -1172,7 +1397,7 @@ const inspector={
     base.close.call(this);
     this._vgGraphJson=null;this._vgLayoutJson=null;
     this._vgPreviewLayout=null;this._vgSelected=null;
-    this._vgPending=null;this._vgDrag=null;this._vgRendered=false;
+    this._vgPending=null;this._vgDrag=null;this._vgWidthDrag=null;this._vgRendered=false;
     this._vgShared=false;this._vgAssetIdentity=null;
     this._vgSharedDraft=null;this._vgSharedReview=null;this._vgSharedBusy=false;
     this._vgProfile=null;this._vgProfileBusy=false;

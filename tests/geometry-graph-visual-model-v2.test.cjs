@@ -13,6 +13,16 @@ try{
  assert.equal(m.parseGraph(source).ordered.length,3);
  assert.deepEqual(m.parseGraph(source).ordered.map(n=>n.id),
    core.parseGeometryGraph(source).nodes.map(n=>n.id));
+ let transform=m.applyGraphEdit(source,'insert',{type:'transform',before:'ribbon'});
+ assert.equal(m.parseGraph(transform).map.get('ribbon').input,'transform1');
+ transform=m.applyGraphEdit(transform,'param',{id:'transform1',key:'rotateY',value:90});
+ transform=m.applyGraphEdit(transform,'param',{id:'transform1',key:'pathScale',value:2});
+ assert.equal(m.parseGraph(transform).map.get('transform1').rotateY,90);
+ for(const key of ['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale'])
+  assert(m.renderNodeParameters(transform,'transform1').includes('data-graph-param="'+key+'"'));
+ assert.throws(()=>m.applyGraphEdit(transform,'param',{id:'transform1',key:'pathScale',value:0}));
+ transform=m.applyGraphEdit(transform,'remove',{id:'transform1'});
+ assert.equal(m.parseGraph(transform).map.get('ribbon').input,'source');
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);
