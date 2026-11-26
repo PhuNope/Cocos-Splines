@@ -764,6 +764,25 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-uv-atlas')){
+        applyAuthoredEdit(this,'set-atlas-packing',{
+          enabled:event.target.checked===true});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-padding')){
+        const raw=event.target.value;
+        if(raw===''){
+          applyAuthoredEdit(this,'clear-atlas-padding',{});
+          return;
+        }
+        const padding=Number(raw);
+        if(!Number.isFinite(padding)||padding<0||padding>.2){
+          profileStatus(this,'Profile UV Atlas padding must be within [0,0.2].',true);
+          return;
+        }
+        applyAuthoredEdit(this,'set-atlas-padding',{padding});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-island-mode')){
         const raw=event.target.value;
         if(!/^[012]$/.test(raw)){

@@ -7,6 +7,7 @@
  * Separate side bands provide crisp profile corners and independent cap UVs.
  */
 import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
+import {packProfileUvAtlas,UvAtlasIsland} from './SplineUvAtlas';
 
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
@@ -36,6 +37,12 @@ export interface GraphProfileUV {
      * Cap UV islands are always independent and are unchanged.
      */
     sideIslandMode?:number;
+    /** Opt-in deterministic UV0 atlas for side + cap islands (all 0..1).
+     * 0/false/absent maintains untouched legacy UV; true uses uniform scale.
+     */
+    atlasPacking?:boolean;
+    /** Cell-relative UV gutter [0,0.2], default 0.04 when atlas enabled. */
+    atlasPadding?:number;
 }
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
@@ -66,7 +73,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -106,6 +113,18 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            (raw.sideIslandMode as number)<0||(raw.sideIslandMode as number)>2)
             throw Error('Graph Profile Asset UV sideIslandMode must be an integer 0–2.');
         uv.sideIslandMode=raw.sideIslandMode as number;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'atlasPacking')){
+        if(typeof raw.atlasPacking!=='boolean')
+            throw Error('Graph Profile Asset UV atlasPacking must be boolean.');
+        uv.atlasPacking=raw.atlasPacking;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'atlasPadding')){
+        if(typeof raw.atlasPadding!=='number'||!Number.isFinite(raw.atlasPadding)||
+           raw.atlasPadding<0||raw.atlasPadding>.2||
+           uv.atlasPacking!==true)
+            throw Error('Graph Profile Asset UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
+        uv.atlasPadding=raw.atlasPadding;
     }
     return {format:'cocos-splines/profile',version:1,points,uv};
 }
@@ -413,6 +432,27 @@ export function buildProfileExtrudeGeometry(
                 else indices.push(a,c,b);
             }
         }
+    }
+    if(authored?.uv?.atlasPacking===true){
+        // Each side quad is individually unwrap-ready in mode 2. In mode 1,
+        // an edge strip is one island. In mode 0, the entire perimeter is one.
+        // Caps each get a separate nonoverlapping island when present.
+        const groups:UvAtlasIsland[]=[];
+        const sideVertices=sideIslandMode===2?
+            bands*(frames.length-1)*4:bands*frames.length*2;
+        if(sideIslandMode===2){
+            for(let i=0;i<bands*(frames.length-1);i++)
+                groups.push({firstVertex:i*4,vertexCount:4});
+        }else if(sideIslandMode===1){
+            for(let i=0;i<bands;i++)
+                groups.push({firstVertex:i*frames.length*2,
+                    vertexCount:frames.length*2});
+        }else groups.push({firstVertex:0,vertexCount:sideVertices});
+        if(capEnds&&!closed){
+            groups.push({firstVertex:sideVertices,vertexCount:bands});
+            groups.push({firstVertex:sideVertices+bands,vertexCount:bands});
+        }
+        packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04);
     }
     return result;
 }

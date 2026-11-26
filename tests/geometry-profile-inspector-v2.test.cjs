@@ -108,6 +108,36 @@ async function run(){
   assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.uWorldSpace,undefined,
    'Clearing metric U also removes the world-space opt-in');
   assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.sideIslandMode,2);
+  // Atlas settings remain only in the editable draft until Save.
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/spl-profile-uv-atlas/);
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/spl-profile-uv-padding/);
+  const setAtlas=enabled=>ui.$.vgProfileCanvas.events.change({target:{
+   checked:enabled,classList:{contains:name=>name==='spl-profile-uv-atlas'},
+  }});
+  const setAtlasPadding=value=>ui.$.vgProfileCanvas.events.change({target:{
+   value,classList:{contains:name=>name==='spl-profile-uv-padding'},
+  }});
+  const beforeAtlas=ui._vgAuthoredDraft.profileJson;
+  setAtlasPadding('0.03');
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeAtlas);
+  assert.match(ui.$.vgProfileStatus.textContent,/Profile UV Atlas padding/);
+  setAtlas(true);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPacking,true);
+  setAtlasPadding('0.075');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPadding,.075);
+  const atlasDraft=ui._vgAuthoredDraft.profileJson;
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPadding,undefined);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,atlasDraft);
+  setAtlasPadding('0.5');
+  assert.equal(ui._vgAuthoredDraft.profileJson,atlasDraft,
+   'Invalid atlas gutter must not enter serialized draft');
+  setAtlasPadding('');
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPadding,undefined);
+  setAtlas(false);
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeAtlas);
+  assert.equal(dump.value.graphJson.value,graph);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

@@ -69,6 +69,12 @@ try {
    assert.equal(asset.uv.uMetersPerRepeat,1.5);
   }
  }
+ const atlasProfile=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/UVAtlasProfile.json'),'utf8'));
+ assert.equal(atlasProfile.version,1);
+ assert.equal(atlasProfile.uv.sideIslandMode,2);
+ assert.equal(atlasProfile.uv.atlasPacking,true);
+ assert.equal(atlasProfile.uv.atlasPadding,.06);
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');

@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -86,13 +86,24 @@ function parseProfile(value){
    throw Error('Profile UV sideIslandMode must be an integer 0–2.');
   uv.sideIslandMode=raw.sideIslandMode;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'atlasPacking')){
+  if(typeof raw.atlasPacking!=='boolean')
+   throw Error('Profile UV atlasPacking must be boolean.');
+  uv.atlasPacking=raw.atlasPacking;
+ }
+ if(Object.prototype.hasOwnProperty.call(raw,'atlasPadding')){
+  if(!finite(raw.atlasPadding)||raw.atlasPadding<0||raw.atlasPadding>.2||
+     uv.atlasPacking!==true)
+   throw Error('Profile UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
+  uv.atlasPadding=raw.atlasPadding;
+ }
  return {format:FORMAT,version:1,points,uv};
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -127,6 +138,27 @@ function applyProfileEdit(value,action,params={}){
   }else{
    profile.uv=profile.uv||{};
    profile.uv.sideIslandMode=mode;
+  }
+ }else if(action==='set-atlas-packing'){
+  if(typeof params.enabled!=='boolean')
+   throw Error('Profile UV Atlas packing requires boolean enabled.');
+  if(params.enabled){
+   profile.uv=profile.uv||{};
+   profile.uv.atlasPacking=true;
+  }else if(profile.uv){
+   delete profile.uv.atlasPacking;
+   delete profile.uv.atlasPadding;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
+  }
+ }else if(action==='set-atlas-padding'){
+  if(!finite(params.padding)||params.padding<0||params.padding>.2||
+     profile.uv?.atlasPacking!==true)
+   throw Error('Profile UV Atlas padding requires enabled Atlas and [0,0.2].');
+  profile.uv.atlasPadding=round(params.padding);
+ }else if(action==='clear-atlas-padding'){
+  if(profile.uv){
+   delete profile.uv.atlasPadding;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-u-meters-per-repeat'){
   const value=params.meters;
@@ -275,7 +307,20 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
     .join('')+'</select></label>'+
   '</div>'+
   '<div class="spl-vg-toolbar">'+
-  '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
+  '<label title="Opt-in deterministic UV0 atlas packing for side islands and separate endcap islands. Mesh geometry does not change.">'+
+   '<input type="checkbox" class="spl-profile-uv-atlas"'+
+    (profile.uv?.atlasPacking===true?' checked':'')+
+    '> Pack UV0 islands into atlas</label>'+
+   '<label title="Fraction of each atlas cell reserved on every side as a gutter (0–0.2).">'+
+    'Atlas padding <input type="number" class="spl-profile-uv-padding" '+
+    'min="0" max="0.2" step="0.005" placeholder="0.04" value="'+
+    (profile.uv?.atlasPadding??'')+'"'+
+    (profile.uv?.atlasPacking===true?'':' disabled')+'></label></div>'+
+   '<div class="spl-profile-uv-info">Atlas uses one shared UV scale and separate cap islands; '+
+    'Quad Islands pack each spline-span face. Default padding 0.04. '+
+    'Atlas changes texture repeats and requires nondegenerate UV extents.</div>'+
+   '<div class="spl-vg-toolbar">'+
+   '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+
    'min="0.01" max="10000" step="0.1" placeholder="Normalized" value="'+
    (profile.uv?.uMetersPerRepeat??'')+'"></label>'+
   '<button type="button" class="spl-btn spl-profile-clear-uv-meters"'+
