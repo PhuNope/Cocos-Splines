@@ -123,7 +123,7 @@ try{
  assert.match(controls,/data-graph-param="midMultiplier"/);
  assert.match(controls,/data-graph-param="endMultiplier"/);
  assert.match(controls,/Smoothstep \(ease in\/out\)/);
- assert.match(controls,/distance-based taper curve/);
+ assert.doesNotMatch(controls,/distance-based taper curve/);
  edited=model.applyGraphEdit(edited,'param',{
   id:'widthB',key:'midMultiplier',value:null});
  edited=model.applyGraphEdit(edited,'param',{
