@@ -36,11 +36,11 @@ export class CocosSplinesExampleGalleryV2 extends Component {
     @property({type:Enum(SplineExampleKind),tooltip:'Choose a feature, then press Play. Nodes are created only at runtime.'})
     example:SplineExampleKind=SplineExampleKind.Follower;
     /** Optional project-authored overrides; default demo needs no asset drag/drop. */
-    @property({type:JsonAsset,tooltip:'Optional UV Atlas Profile JSON.'})
+    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas;},tooltip:'Optional UV Atlas Profile JSON.'})
     uvAtlasProfile:JsonAsset|null=null;
-    @property({type:JsonAsset,tooltip:'Optional UV Atlas Geometry Graph JSON.'})
+    @property({type:JsonAsset,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas;},tooltip:'Optional UV Atlas Geometry Graph JSON.'})
     uvAtlasGraph:JsonAsset|null=null;
-    @property({type:Material,tooltip:'Optional UV checker material for both previews.'})
+    @property({type:Material,visible(){return this.example===SplineExampleKind.GeometryGraphUVAtlas;},tooltip:'Optional UV checker material for both previews.'})
     uvAtlasPreviewMaterial:Material|null=null;
     private created=false;
 

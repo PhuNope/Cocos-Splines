@@ -80,4 +80,6 @@ assert(source.includes('graph.profileAssetA=transientProfile'));
 assert(source.includes("profileData.uv.atlasPacking=true"));
 assert(source.includes('delete profileData.uv.atlasPacking'));
 assert(source.includes('uvAtlasPreviewMaterial'));
+assert.equal((source.match(/visible\(\)\{return this.example===SplineExampleKind.GeometryGraphUVAtlas;\}/g)||[]).length,3,
+ 'Unrelated Gallery modes must not show UV-only asset fields');
 console.log('EXAMPLE CATALOG PASS: thirteen preserved enum IDs, fourteenth UV Atlas Gallery mode, runtime binding and safe-update documentation.');
