@@ -108,5 +108,22 @@ assert.equal(observed[3].material,checker);
 assert.equal(observed[2].material,checker);
 assert.notEqual(observed[3].profileAssetA,overridden.uvAtlasProfile,
  'Even provided Profile JsonAsset must be cloned for a temporary runtime mesh');
+const triangleMode=new CocosSplinesExampleGalleryV2();
+triangleMode.node=new Node('Triangle Gallery');
+triangleMode.example=SplineExampleKind.GeometryGraphTriangleUV;
+triangleMode.start();
+assert.equal(SplineExampleKind.GeometryGraphTriangleUV,14);
+assert.equal(observed.length,6,'New mode generates two Graph renderers');
+const left=observed[4].profileAssetA.json,right=observed[5].profileAssetA.json;
+assert.equal(left.uv.triangleUnwrap,undefined);
+assert.equal(left.uv.atlasPacking,undefined);
+assert.equal(right.uv.triangleUnwrap,true);
+assert.equal(right.uv.atlasPacking,true);
+assert.equal(right.uv.atlasPadding,.06);
+const triangleFile=JSON.parse(fs.readFileSync(path.join(root,
+ 'examples/installable/GeometryGraph/Profiles/UVTriangleUnwrapProfile.json'),'utf8'));
+assert.deepEqual(right,triangleFile,
+ 'Gallery triangle mode must match the installable authored Profile example');
+assert.notEqual(left,right,'Runtime modes use independent transient JsonAssets');
 assert(require(root+'/package.json').scripts.test.includes('example-gallery-uv-atlas-v2.test.cjs'));
 console.log('EXAMPLE UV ATLAS GALLERY V2 PASS: Play creates two Geometry Graph renderers without asset drag/drop, preserves author assets, clones Profile JSON, and keeps original enum IDs.');

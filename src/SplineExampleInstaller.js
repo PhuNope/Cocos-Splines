@@ -4,7 +4,10 @@
  * is a byte-identical old Gallery, safely upgraded in place.
  */
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const LEGACY_GALLERY_BLOB='4ba2fcd4ddb91f49da9a577708547bbd891e06f9';
+const PRISTINE_GALLERY_BLOBS=new Set([
+ '4ba2fcd4ddb91f49da9a577708547bbd891e06f9', // original 13-mode
+ 'b9cfb9cd36a5c9ebaa5d60f708a26e93fb37b02b', // UV Atlas 14-mode
+]);
 /** Hash the exact bytes of the previously bundled Gallery; user-edited files
  * must never be rewritten, and the existing Creator .meta UUID is preserved.
  */
@@ -14,7 +17,7 @@ function gitBlobSha(buffer){
 }
 function upgradePristineGallery(filesystem,target,source){
  const old=filesystem.readFileSync(target);
- if(gitBlobSha(old)!==LEGACY_GALLERY_BLOB)return false;
+ if(!PRISTINE_GALLERY_BLOBS.has(gitBlobSha(old)))return false;
  const data=filesystem.readFileSync(source);
  if(data.equals(old))return false;
  // Atomic replacement of ONLY the known pristine script, never its .meta.
@@ -25,7 +28,7 @@ function upgradePristineGallery(filesystem,target,source){
   filesystem.writeFileSync(fd,data);
   filesystem.closeSync(fd);fd=undefined;
   // Do not overwrite an edit made after the first read.
-  if(gitBlobSha(filesystem.readFileSync(target))!==LEGACY_GALLERY_BLOB)
+  if(!PRISTINE_GALLERY_BLOBS.has(gitBlobSha(filesystem.readFileSync(target))))
    return false;
   filesystem.renameSync(temp,target);
   return true;
@@ -60,6 +63,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/Profiles/UVQuadIslandProfile.json','examples/installable/GeometryGraph/Profiles/UVQuadIslandProfile.json'],
  ['GeometryGraph/Profiles/UVWorldSpaceProfile.json','examples/installable/GeometryGraph/Profiles/UVWorldSpaceProfile.json'],
  ['GeometryGraph/Profiles/UVAtlasProfile.json','examples/installable/GeometryGraph/Profiles/UVAtlasProfile.json'],
+ ['GeometryGraph/Profiles/UVTriangleUnwrapProfile.json','examples/installable/GeometryGraph/Profiles/UVTriangleUnwrapProfile.json'],
  ['GeometryGraph/Profiles/UVMetricProfile.json','examples/installable/GeometryGraph/Profiles/UVMetricProfile.json'],
  ['GeometryGraph/Profiles/UVTaperProfile.json','examples/installable/GeometryGraph/Profiles/UVTaperProfile.json'],
  ['GeometryGraph/BasicMeshDeformGraph.json','examples/installable/GeometryGraph/BasicMeshDeformGraph.json'],

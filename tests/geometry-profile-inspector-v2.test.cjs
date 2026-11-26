@@ -138,6 +138,23 @@ async function run(){
   setAtlas(false);
   assert.equal(ui._vgAuthoredDraft.profileJson,beforeAtlas);
   assert.equal(dump.value.graphJson.value,graph);
+  // Triangle UV split is an independent draft toggle. Undo/Redo must not
+  // touch the source JsonAsset until explicit Save.
+  assert.match(ui.$.vgProfileCanvas.innerHTML,/spl-profile-uv-triangle-unwrap/);
+  const setTriangle=enabled=>ui.$.vgProfileCanvas.events.change({target:{
+   checked:enabled,classList:{contains:name=>name==='spl-profile-uv-triangle-unwrap'},
+  }});
+  const beforeTriangle=ui._vgAuthoredDraft.profileJson;
+  setTriangle(true);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.triangleUnwrap,true);
+  const triangleDraft=ui._vgAuthoredDraft.profileJson;
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeTriangle);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,triangleDraft);
+  setTriangle(false);
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeTriangle);
+  assert.equal(dump.value.graphJson.value,graph);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

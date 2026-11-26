@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','triangleUnwrap'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -97,13 +97,18 @@ function parseProfile(value){
    throw Error('Profile UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
   uv.atlasPadding=raw.atlasPadding;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
+  if(typeof raw.triangleUnwrap!=='boolean')
+   throw Error('Profile UV triangleUnwrap must be boolean.');
+  uv.triangleUnwrap=raw.triangleUnwrap;
+ }
  return {format:FORMAT,version:1,points,uv};
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -138,6 +143,16 @@ function applyProfileEdit(value,action,params={}){
   }else{
    profile.uv=profile.uv||{};
    profile.uv.sideIslandMode=mode;
+  }
+ }else if(action==='set-triangle-unwrap'){
+  if(typeof params.enabled!=='boolean')
+   throw Error('Profile UV Triangle Unwrap requires boolean enabled.');
+  if(params.enabled){
+   profile.uv=profile.uv||{};
+   profile.uv.triangleUnwrap=true;
+  }else if(profile.uv){
+   delete profile.uv.triangleUnwrap;
+   if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
  }else if(action==='set-atlas-packing'){
   if(typeof params.enabled!=='boolean')
@@ -306,6 +321,11 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
      ((profile.uv?.sideIslandMode??0)===i?' selected':'')+'>'+name+'</option>')
     .join('')+'</select></label>'+
   '</div>'+
+  '<div class="spl-vg-toolbar">'+
+  '<label title="Independent UV0 for every triangle; geometry and normals unchanged">'+
+   '<input type="checkbox" class="spl-profile-uv-triangle-unwrap"'+
+    (profile.uv?.triangleUnwrap===true?' checked':'')+
+    '> Per-triangle UV unwrap</label></div>'+
   '<div class="spl-vg-toolbar">'+
   '<label title="Fit side and cap UV0 islands into [0,1]">'+
    '<input type="checkbox" class="spl-profile-uv-atlas"'+

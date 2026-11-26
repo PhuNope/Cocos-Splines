@@ -75,6 +75,13 @@ try {
  assert.equal(atlasProfile.uv.sideIslandMode,2);
  assert.equal(atlasProfile.uv.atlasPacking,true);
  assert.equal(atlasProfile.uv.atlasPadding,.06);
+ const triangles=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/UVTriangleUnwrapProfile.json'),'utf8'));
+ assert.equal(triangles.format,'cocos-splines/profile');
+ assert.equal(triangles.uv.sideIslandMode,2);
+ assert.equal(triangles.uv.triangleUnwrap,true);
+ assert.equal(triangles.uv.atlasPacking,true);
+ assert.equal(triangles.uv.atlasPadding,.06);
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');
@@ -182,6 +189,7 @@ try {
  assert.equal(fs.readFileSync(legacyPath+'.meta','utf8'),galleryMeta);
  const upgradedSource=fs.readFileSync(legacyPath,'utf8');
  assert(upgradedSource.includes('GeometryGraphUVAtlas=13'));
+ assert(upgradedSource.includes('GeometryGraphTriangleUV=14'));
  const idempotent=installSplineExamples({projectPath:galleryProject,extensionRoot:root});
  assert.equal(idempotent.updated,0);
  assert.equal(idempotent.installed,0);
@@ -192,6 +200,25 @@ try {
  assert.equal(customized.skipped,EXAMPLE_FILES.length);
  assert(fs.readFileSync(legacyPath,'utf8').includes('// USER CODE'));
  assert.equal(fs.readFileSync(legacyPath+'.meta','utf8'),galleryMeta);
+ // A clean 14-mode Gallery from the immediately preceding build is also
+ // eligible for safe upgrade without losing the component's existing UUID.
+ const priorProject=path.join(temp,'Previous UV Atlas Gallery Project');
+ const priorFolder=path.join(priorProject,'assets',EXAMPLE_FOLDER);
+ fs.mkdirSync(priorFolder,{recursive:true});
+ const previousPath=path.join(priorFolder,'ExampleGallery.ts');
+ const previous=fs.readFileSync(path.join(root,
+  'tests/fixtures/ExampleGallery-v2-uv-atlas.ts'));
+ fs.writeFileSync(previousPath,previous);
+ fs.writeFileSync(previousPath+'.meta',galleryMeta);
+ const previousResult=installSplineExamples({projectPath:priorProject,extensionRoot:root});
+ assert.equal(previousResult.updated,1);
+ assert.equal(fs.readFileSync(previousPath+'.meta','utf8'),galleryMeta);
+ assert(fs.readFileSync(previousPath,'utf8').includes('GeometryGraphTriangleUV=14'));
+ assert.equal(installSplineExamples({projectPath:priorProject,extensionRoot:root}).updated,0);
+ fs.writeFileSync(previousPath,Buffer.concat([previous,Buffer.from('\n// project edit\n')]));
+ const untouched=installSplineExamples({projectPath:priorProject,extensionRoot:root});
+ assert.equal(untouched.updated,0);
+ assert(fs.readFileSync(previousPath,'utf8').includes('project edit'));
  // Directories must never be allowed to escape via symlinks.
  fs.rmSync(path.join(first.folder,'Train'),{recursive:true,force:true});
  const outside=path.join(temp,'outside');fs.mkdirSync(outside);

@@ -7,7 +7,7 @@
  * Separate side bands provide crisp profile corners and independent cap UVs.
  */
 import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
-import {packProfileUvAtlas,UvAtlasIsland} from './SplineUvAtlas';
+import {packProfileUvAtlas,unwrapProfileUvTriangles,UvAtlasIsland} from './SplineUvAtlas';
 
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
@@ -43,6 +43,11 @@ export interface GraphProfileUV {
     atlasPacking?:boolean;
     /** Cell-relative UV gutter [0,0.2], default 0.04 when atlas enabled. */
     atlasPadding?:number;
+    /** Split each side/cap triangle into independent UV0 vertices.
+     * Keeps world geometry, normals and triangle winding unchanged.
+     * Triangle UVs are rebased to their own local origin (not rescaled).
+     */
+    triangleUnwrap?:boolean;
 }
 export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
@@ -73,7 +78,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','triangleUnwrap'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -125,6 +130,11 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            uv.atlasPacking!==true)
             throw Error('Graph Profile Asset UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
         uv.atlasPadding=raw.atlasPadding;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
+        if(typeof raw.triangleUnwrap!=='boolean')
+            throw Error('Graph Profile Asset UV triangleUnwrap must be boolean.');
+        uv.triangleUnwrap=raw.triangleUnwrap;
     }
     return {format:'cocos-splines/profile',version:1,points,uv};
 }
@@ -280,6 +290,12 @@ export function buildProfileExtrudeGeometry(
             z:m[2]*v.x+m[5]*v.y+m[8]*v.z,
         };
     };
+    // Per-triangle unwrap is an explicit alternative to shared vertex UVs.
+    // Reject over-budget graphs BEFORE allocating the side/cap mesh.
+    const triangleCount=2*bands*(frames.length-1)+2*triangles.length/3;
+    if(authored?.uv?.triangleUnwrap===true&&
+       (triangleCount*3>65536||triangleCount>16384))
+        throw Error('Graph Profile UV Triangle Unwrap exceeds the 65536-vertex / 16384-island limit.');
     // Quad islands duplicate only side vertices per spline span. Preflight
     // prevents exceeding the same 16-bit-safe graph mesh budget as the runner.
     const plannedVertices=sideIslandMode===2?
@@ -433,24 +449,28 @@ export function buildProfileExtrudeGeometry(
             }
         }
     }
+    const triangleGroups=authored?.uv?.triangleUnwrap===true?
+        unwrapProfileUvTriangles(result):null;
     if(authored?.uv?.atlasPacking===true){
         // Each side quad is individually unwrap-ready in mode 2. In mode 1,
         // an edge strip is one island. In mode 0, the entire perimeter is one.
         // Caps each get a separate nonoverlapping island when present.
-        const groups:UvAtlasIsland[]=[];
+        const groups:UvAtlasIsland[]=triangleGroups??[];
         const sideVertices=sideIslandMode===2?
             bands*(frames.length-1)*4:bands*frames.length*2;
-        if(sideIslandMode===2){
-            for(let i=0;i<bands*(frames.length-1);i++)
-                groups.push({firstVertex:i*4,vertexCount:4});
-        }else if(sideIslandMode===1){
-            for(let i=0;i<bands;i++)
-                groups.push({firstVertex:i*frames.length*2,
-                    vertexCount:frames.length*2});
-        }else groups.push({firstVertex:0,vertexCount:sideVertices});
-        if(capEnds&&!closed){
-            groups.push({firstVertex:sideVertices,vertexCount:bands});
-            groups.push({firstVertex:sideVertices+bands,vertexCount:bands});
+        if(!triangleGroups){
+            if(sideIslandMode===2){
+                for(let i=0;i<bands*(frames.length-1);i++)
+                    groups.push({firstVertex:i*4,vertexCount:4});
+            }else if(sideIslandMode===1){
+                for(let i=0;i<bands;i++)
+                    groups.push({firstVertex:i*frames.length*2,
+                        vertexCount:frames.length*2});
+            }else groups.push({firstVertex:0,vertexCount:sideVertices});
+            if(capEnds&&!closed){
+                groups.push({firstVertex:sideVertices,vertexCount:bands});
+                groups.push({firstVertex:sideVertices+bands,vertexCount:bands});
+            }
         }
         packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04);
     }

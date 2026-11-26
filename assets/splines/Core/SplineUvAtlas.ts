@@ -12,6 +12,59 @@ const MAX_CANDIDATE_COLUMNS=64;
 const EPS=1e-10;
 
 /** Rewrites only UV0; writes atomically after all validation and layout. */
+/** Opt-in per-triangle UV0 seams for Profile Extrude.
+ * Each triangle receives unique vertices (same positions/normals/winding)
+ * and a local UV origin, while preserving the source U/V physical scale.
+ * No geometry is modified until the complete output has been validated.
+ */
+export function unwrapProfileUvTriangles(geometry:{
+    positions:number[];normals:number[];uvs:number[];indices:number[];
+}):UvAtlasIsland[]{
+    const {positions,normals,uvs,indices}=geometry;
+    if(indices.length<3||indices.length%3!==0||
+       positions.length!==normals.length||
+       positions.length%3!==0||uvs.length/2!==positions.length/3||
+       indices.length>65536||indices.length/3>MAX_ISLANDS)
+        throw Error('Graph Profile UV Triangle Unwrap exceeds the 65536-vertex / 16384-island limit.');
+    const vertexCount=positions.length/3;
+    const nextPositions:number[]=[],nextNormals:number[]=[],nextUvs:number[]=[],nextIndices:number[]=[];
+    const groups:UvAtlasIsland[]=[];
+    for(let t=0;t<indices.length;t+=3){
+        const a=indices[t],b=indices[t+1],c=indices[t+2];
+        if(![a,b,c].every(n=>Number.isInteger(n)&&n>=0&&n<vertexCount))
+            throw Error('Graph Profile UV Triangle Unwrap index is invalid.');
+        const ids=[a,b,c];
+        const us=ids.map(n=>uvs[n*2]),vs=ids.map(n=>uvs[n*2+1]);
+        const minU=Math.min(...us),maxU=Math.max(...us);
+        const minV=Math.min(...vs),maxV=Math.max(...vs);
+        if(![...us,...vs].every(Number.isFinite)||
+           maxU-minU<1e-10||maxV-minV<1e-10)
+            throw Error('Graph Profile UV Triangle Unwrap requires nondegenerate UV triangles.');
+        const start=t;
+        groups.push({firstVertex:start,vertexCount:3});
+        for(let i=0;i<3;i++){
+            const src=ids[i],newIndex=nextPositions.length/3;
+            for(let k=0;k<3;k++){
+                const p=positions[src*3+k],n=normals[src*3+k];
+                if(!Number.isFinite(p)||!Number.isFinite(n))
+                    throw Error('Graph Profile UV Triangle Unwrap contains nonfinite geometry.');
+                nextPositions.push(p);nextNormals.push(n);
+            }
+            nextUvs.push(us[i]-minU,vs[i]-minV);
+            nextIndices.push(newIndex);
+        }
+    }
+    // Ensure all failures above leave every caller-owned array unmodified.
+    for(const [dst,src] of [
+        [positions,nextPositions],[normals,nextNormals],
+        [uvs,nextUvs],[indices,nextIndices],
+    ] as Array<[number[],number[]]>) {
+        dst.length=src.length;
+        for(let i=0;i<src.length;i++)dst[i]=src[i];
+    }
+    return groups;
+}
+
 export function packProfileUvAtlas(
     uvs:number[],groups:ReadonlyArray<Readonly<UvAtlasIsland>>,padding:number,
 ):void{
