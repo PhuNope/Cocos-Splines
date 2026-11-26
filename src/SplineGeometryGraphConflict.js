@@ -5,12 +5,12 @@
  * identical node topology. Structural edits are never silently merged.
  * Pure model: no Editor APIs, disk writes, or mutation of input graphs.
  */
-const {parseGraph,validateGraph,TYPES}=require('./SplineGeometryGraphVisualModel');
+const {parseGraph,validateGraph,TYPES,inputPorts}=require('./SplineGeometryGraphVisualModel');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const label=(id,key)=>id+'.'+key;
 const topology=g=>JSON.stringify({
-  output:g.output,
-  nodes:g.nodes.map(n=>({id:n.id,type:n.type,input:n.input??null,meshInput:n.meshInput??null,slot:n.type==='meshAsset'?(n.slot??0):null}))
+  version:g.version,output:g.output,
+  nodes:g.nodes.map(n=>({id:n.id,type:n.type,ports:inputPorts(n.type).map(p=>[p.key,n[p.key]??null]),slot:['meshAsset','spline'].includes(n.type)?(n.slot??0):null}))
     .sort((a,b)=>a.id.localeCompare(b.id)),
 });
 function changeList(before,after){
@@ -23,8 +23,8 @@ function changeList(before,after){
     if(!left){paths.push(id+' (added)');continue;}
     if(!right){paths.push(id+' (removed)');continue;}
     if(left.type!==right.type)paths.push(label(id,'type'));
-    if(left.input!==right.input)paths.push(label(id,'input'));
-    if(left.meshInput!==right.meshInput)paths.push(label(id,'meshInput'));
+    const ports=new Set([...inputPorts(left.type),...inputPorts(right.type)].map(p=>p.key));
+    for(const key of ports)if(left[key]!==right[key])paths.push(label(id,key));
     for(const key of TYPES[left.type]?.params||[]){
       if(!same(left[key],right[key]))paths.push(label(id,key));
     }

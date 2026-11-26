@@ -73,6 +73,14 @@ try{
  view=m.parseGraph(multiSpline);
  assert.equal(view.graph.version,1);
  assert.equal(view.map.get('splineSource').slot,1);
+ // Named ports are mirrored between Core and the editor model.
+ for(const type of Object.keys(m.TYPES)){
+  assert.deepEqual(m.inputPorts(type).map(({key,type,required})=>({key,type,required})),core.geometryInputPorts(type));
+ }
+ assert.deepEqual(core.geometryInputLinks({id:'d',type:'meshDeform',input:'p',meshInput:'asset'}).map(l=>[l.port.key,l.sourceId]),[['input','p'],['meshInput','asset']]);
+ assert.throws(()=>m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'meshInput'}),/socket/i);
+ assert.throws(()=>m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'__proto__'}),/socket/i);
+ assert.equal(m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'input'}),source);
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

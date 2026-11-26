@@ -1261,7 +1261,8 @@ const inspector={
         if(socket.dataset.socket==='out'){
           this._vgPending=id;this._vgSelected=id;render(this);
         }else if(this._vgPending){
-          editGraph(this,'connect',{source:this._vgPending,target:id});
+          const port=socket.dataset.port??(socket.dataset.socket==='mesh-in'?'meshInput':'input');
+          editGraph(this,'connect',{source:this._vgPending,target:id,port});
         }else status(this,'Click an output socket first, then an input socket.',true);
         return;
       }

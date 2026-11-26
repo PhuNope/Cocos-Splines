@@ -425,8 +425,27 @@ const meshCopy=(data:RoadGeometry):RoadGeometry=>({
 const nodePort=(type:GeometryNodeType):GeometryPortType=>
     type==='meshAsset'?'meshSource':
     type==='ribbon'||type==='tube'||type==='extrude'||type==='meshDeform'||type==='output'?'mesh':'path';
-const needInput=(type:GeometryNodeType):GeometryPortType|null=>
-    type==='spline'||type==='meshAsset'?null:type==='output'?'mesh':'path';
+/** Named typed inputs; order is stable for traversal, cache keys and Editor parity.
+ * Keep the existing serialized input/meshInput fields, rather than introducing
+ * an incompatible graph format. Additional named ports can extend this registry.
+ */
+export type GeometryInputKey='input'|'meshInput';
+export interface GeometryInputPort {
+    readonly key:GeometryInputKey;readonly type:GeometryPortType;readonly required:boolean;
+}
+export function geometryInputPorts(type:GeometryNodeType):ReadonlyArray<GeometryInputPort>{
+    if(type==='spline'||type==='meshAsset')return [];
+    const primary:GeometryInputPort={key:'input',type:type==='output'?'mesh':'path',required:true};
+    return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false}]:[primary];
+}
+export function geometryInputLinks(node:GeometryGraphNode):Array<{port:GeometryInputPort;sourceId:string}>{
+    const links:Array<{port:GeometryInputPort;sourceId:string}>=[];
+    for(const port of geometryInputPorts(node.type)){
+        const sourceId=node[port.key];
+        if(typeof sourceId==='string')links.push({port,sourceId});
+    }
+    return links;
+}
 /** Fail closed before copying untrusted imported mesh arrays into the runner.
  * 4096 vertices × 16 repeats <= 65536 output vertices.
  */
@@ -464,20 +483,20 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
            !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
-        const keys=['id','type',...(node.type==='spline'?['slot']:
+        const keys=['id','type',...geometryInputPorts(node.type).map(p=>p.key),...(node.type==='spline'?['slot']:
             node.type==='meshAsset'?['slot']:
-            node.type==='offset'?['input','right','up']:
-            node.type==='transform'?['input','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
-            node.type==='noise'?['input','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']:
-            node.type==='clip'?['input','clipStart','clipEnd']:
-            node.type==='resample'?['input','resampleSegments']:
-            node.type==='conform'?['input','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']:
-            node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
-            node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
-            node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
-            node.type==='extrude'?['input','width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
-            node.type==='meshDeform'?['input','meshInput','axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
-            ['input'])];
+            node.type==='offset'?['right','up']:
+            node.type==='transform'?['translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale']:
+            node.type==='noise'?['noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']:
+            node.type==='clip'?['clipStart','clipEnd']:
+            node.type==='resample'?['resampleSegments']:
+            node.type==='conform'?['conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']:
+            node.type==='width'?['multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
+            node.type==='ribbon'?['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
+            node.type==='tube'?['radius','radialSegments','uvMetersPerRepeat','capEnds']:
+            node.type==='extrude'?['width','height','profileShape','profileSlot','uvMetersPerRepeat','capEnds']:
+            node.type==='meshDeform'?['axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
+            [])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
         if(node.type==='spline'){
             sources++;
@@ -614,21 +633,13 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
         throw Error('Geometry Graph requires one v1 spline/output or 1–3 v2 splines and 2–4 v2 outputs, and a valid default output.');
     for(const node of table.values()){
-        const expected=needInput(node.type);
-        if(expected===null){
-            if(node.input!==undefined||node.meshInput!==undefined)
-                throw Error('Graph source node cannot have an input.');
-        }else{
-            if(typeof node.input!=='string'||!table.has(node.input))
-                throw Error('Missing Geometry Graph input for '+node.id+'.');
-            const linked=table.get(node.input)!;
-            if(nodePort(linked.type)!==expected)
-                throw Error('Geometry Graph type mismatch at '+node.id+'.');
-        }
-        if(node.type==='meshDeform'&&node.meshInput!==undefined){
-            if(typeof node.meshInput!=='string'||!table.has(node.meshInput)||
-               table.get(node.meshInput)!.type!=='meshAsset')
-                throw Error('Geometry Graph meshDeform meshInput requires a meshAsset node.');
+        for(const port of geometryInputPorts(node.type)){
+            const sourceId=node[port.key];
+            if(sourceId===undefined&&!port.required)continue;
+            if(typeof sourceId!=='string'||!table.has(sourceId))
+                throw Error('Missing Geometry Graph input '+node.id+'.'+port.key+'.');
+            if(nodePort(table.get(sourceId)!.type)!==port.type)
+                throw Error('Geometry Graph type mismatch at '+node.id+'.'+port.key+'.');
         }
     }
     const state=new Map<string,number>(),order:GeometryGraphNode[]=[];
@@ -638,8 +649,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         if(flag===2)return;
         state.set(id,1);
         const node=table.get(id)!;
-        if(node.input)visit(node.input);
-        if(node.meshInput)visit(node.meshInput);
+        for(const link of geometryInputLinks(node))visit(link.sourceId);
         state.set(id,2);order.push(node);
     };
     visit(graph.output);
@@ -751,7 +761,13 @@ export class GeometryGraphRunner {
         const seqBase=this.sequence;
         try{
             for(const node of checked.nodes){
-                const input=node.input?next.get(node.input):undefined;
+                const inputs=new Map<GeometryInputKey,CacheEntry>();
+                for(const link of geometryInputLinks(node)){
+                    const entry=next.get(link.sourceId);
+                    if(!entry)throw Error('Geometry Graph dependency not evaluated: '+node.id+'.'+link.port.key);
+                    inputs.set(link.port.key,entry);
+                }
+                const input=inputs.get('input');
                 const splineSource=node.type==='spline'?splineSlots.get(node.slot??0):undefined;
                 const key=JSON.stringify([
                     node,
@@ -760,8 +776,7 @@ export class GeometryGraphRunner {
                     node.type==='meshAsset'?
                         (context.meshRevisions?.[node.slot??0]??
                          ((node.slot??0)===0?context.meshRevision:null)):null,
-                    input?.version??null,
-                    node.meshInput?next.get(node.meshInput)?.version??null:null,
+                    geometryInputPorts(node.type).map(port=>[port.key,inputs.get(port.key)?.version??null]),
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
                     ['transform','noise','clip','resample','conform'].includes(node.type)?context.worldUvLinear??null:null,
@@ -924,7 +939,7 @@ export class GeometryGraphRunner {
                     value={kind:'mesh',geometry};
                 }else if(node.type==='meshDeform'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Mesh Deform input is not a path.');
-                    const meshSource=node.meshInput?next.get(node.meshInput)?.value:undefined;
+                    const meshSource=inputs.get('meshInput')?.value;
                     if(node.meshInput&&meshSource?.kind!=='meshSource')
                         throw Error('Geometry Graph meshInput did not resolve to a Mesh Asset.');
                     const geometry=buildGraphMeshDeformGeometry(source.frames,{

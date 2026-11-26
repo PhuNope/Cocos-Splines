@@ -63,7 +63,8 @@ const fourth=parse(json).map.get(parse(json).map.get(newOutput).input);
 json=model.applyGraphEdit(json,'detach-mesh-asset',{id:fourth.id});
 assert.throws(()=>model.applyGraphEdit(json,'attach-mesh-asset',{id:fourth.id}),
  /three Mesh Asset slots/);
-json=model.applyGraphEdit(json,'connect',{source:'meshAsset1',target:fourth.id});
+assert.throws(()=>model.applyGraphEdit(json,'connect',{source:'meshAsset1',target:fourth.id,port:'input'}),/socket/i);
+json=model.applyGraphEdit(json,'connect',{source:'meshAsset1',target:fourth.id,port:'meshInput'});
 assert.equal(parse(json).map.get(fourth.id).meshInput,'meshAsset1',
  'Explicit socket can share a slot across generators');
 const detached=model.applyGraphEdit(json,'detach-mesh-asset',{id:'pipe'});

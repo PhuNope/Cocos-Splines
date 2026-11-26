@@ -72,7 +72,13 @@ try {
   ...sample,positions:new Array(4100*3).fill(0)},'big')),/invalid\/oversized/);
  assert.throws(()=>runner.evaluate(plan,{...context(),meshRevision:''}),/revision/);
  const graphJson=JSON.stringify(graph());
- assert(model.renderGraphCanvas(graphJson,'{}',null,null).includes('data-socket="mesh-in"'));
+ const canvas=model.renderGraphCanvas(graphJson,'{}',null,null);
+ assert(canvas.includes('data-socket="mesh-in"'));
+ assert(canvas.includes('data-port="meshInput"')&&canvas.includes('data-target-port="meshInput"'));
+ assert(canvas.includes('data-port="input"')&&canvas.includes('data-target-port="input"'));
+ assert.throws(()=>model.applyGraphEdit(graphJson,'connect',{source:'meshAsset',target:'deform',port:'input'}),/socket/i);
+ assert.throws(()=>model.applyGraphEdit(graphJson,'connect',{source:'source',target:'deform',port:'meshInput'}),/socket/i);
+ assert.equal(model.applyGraphEdit(graphJson,'connect',{source:'meshAsset',target:'deform',port:'meshInput'}),graphJson);
  assert(model.renderGraphCanvas(graphJson,'{}',null,null).includes('spl-vg-wire-meshSource'));
  const detach=model.applyGraphEdit(graphJson,'detach-mesh-asset',{id:'deform'});
  assert.equal(model.parseGraph(detach).map.has('meshAsset'),false);

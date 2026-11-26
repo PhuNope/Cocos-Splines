@@ -7,6 +7,7 @@
  */
 import {Mesh,Vec3,gfx} from 'cc';
 import {RoadGeometry} from './SplineRoadMath';
+import {geometryInputLinks} from './SplineGeometryGraph';
 import type {GeometryGraphPlan,GeometryGraphNode} from './SplineGeometryGraph';
 
 export interface GraphMultiMeshChunk {
@@ -64,8 +65,7 @@ export function graphOutputMeshSourceSlots(
             const node=map.get(nodeId);
             if(!node)throw Error('Imported Material graph dependency is missing.');
             if(node.type==='meshAsset')slots.add(node.slot??0);
-            if(node.input)visit(node.input);
-            if(node.meshInput)visit(node.meshInput);
+            for(const link of geometryInputLinks(node))visit(link.sourceId);
         };
         visit(id);
         if(slots.size>1)throw Error(

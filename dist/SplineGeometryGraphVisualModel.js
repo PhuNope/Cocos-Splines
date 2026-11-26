@@ -24,6 +24,19 @@ const TYPES=Object.freeze({
   meshDeform:{input:'path',output:'mesh',params:['width','height','axis','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']},
   output:{input:'mesh',output:'mesh',params:[]},
 });
+/** Mirror the Core named port registry. Preserve TYPES.input for existing
+ * callers; all traversal, validation and socket rendering use descriptors. */
+function inputPorts(type){
+  const info=TYPES[type];
+  if(!info||!info.input)return [];
+  const primary={key:'input',type:info.input,required:true,socket:'in',label:info.input,offset:75};
+  return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false,
+    socket:'mesh-in',label:'asset',offset:51}]:[primary];
+}
+function inputLinks(node){
+  return inputPorts(node.type).filter(port=>typeof node[port.key]==='string')
+    .map(port=>({port,sourceId:node[port.key]}));
+}
 const LIMITS=Object.freeze({
   right:[-1000,1000,0],up:[-1000,1000,0],
   translateX:[-1000,1000,0],translateY:[-1000,1000,0],translateZ:[-1000,1000,0],
@@ -80,8 +93,7 @@ function validateGraph(graph) {
     if(!object(node)||!safeId(node.id)||!Object.hasOwn(TYPES,node.type)||
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
     const info=TYPES[node.type];
-    const allowed=new Set(['id','type',...(info.input?['input']:[]),
-      ...(node.type==='meshDeform'?['meshInput']:[]),
+    const allowed=new Set(['id','type',...inputPorts(node.type).map(p=>p.key),
       ...(node.type==='width'?['widthKeys']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
@@ -131,18 +143,13 @@ function validateGraph(graph) {
      map.get(graph.output)?.type!=='output')
     throw Error('Graph requires one v1 Spline/Output or 1–3 v2 Splines and 2–4 v2 Outputs.');
   for(const node of map.values()){
-    const info=TYPES[node.type];
-    if(info.input===null){if(node.input!==undefined||node.meshInput!==undefined)
-      throw Error('Graph source node must have no input.');}
-    else{
-      if(!safeId(node.input)||!map.has(node.input))
-        throw Error('Missing input for node '+node.id+'.');
-      if(TYPES[map.get(node.input).type].output!==info.input)
-        throw Error('Port type mismatch at '+node.id+'.');
-    }
-    if(node.type==='meshDeform'&&node.meshInput!==undefined){
-      if(!safeId(node.meshInput)||map.get(node.meshInput)?.type!=='meshAsset')
-        throw Error('meshDeform meshInput must reference a typed meshAsset node.');
+    for(const port of inputPorts(node.type)){
+      const sourceId=node[port.key];
+      if(sourceId===undefined&&!port.required)continue;
+      if(!safeId(sourceId)||!map.has(sourceId))
+        throw Error('Missing input for node '+node.id+'.'+port.key+'.');
+      if(TYPES[map.get(sourceId).type].output!==port.type)
+        throw Error('Port type mismatch at '+node.id+'.'+port.key+'.');
     }
   }
   const state=new Map(),ordered=[];
@@ -152,8 +159,7 @@ function validateGraph(graph) {
     if(stateValue===2)return;
     state.set(id,1);
     const node=map.get(id);
-    if(node.input)visit(node.input);
-    if(node.meshInput)visit(node.meshInput);
+    for(const link of inputLinks(node))visit(link.sourceId);
     state.set(id,2);ordered.push(node);
   }
   visit(graph.output);
@@ -239,8 +245,7 @@ function applyGraphEdit(json,action,details={}) {
       const node=find(id);
       if(!node)throw Error('Output branch dependency is missing.');
       live.add(id);
-      if(node.input)mark(node.input);
-      if(node.meshInput)mark(node.meshInput);
+      for(const link of inputLinks(node))mark(link.sourceId);
     };
     for(const node of next.nodes)if(node.type==='output')mark(node.id);
     next.nodes=next.nodes.filter(n=>live.has(n.id));
@@ -267,35 +272,40 @@ function applyGraphEdit(json,action,details={}) {
     const id=details.id,target=find(id);
     if(!target||!['offset','transform','noise','reverse','clip','resample','conform','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
-    for(const node of next.nodes)if(node.input===id)node.input=target.input;
+    for(const node of next.nodes)for(const link of inputLinks(node))
+      if(link.sourceId===id)node[link.port.key]=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
   }else if(action==='connect'){
     const target=find(details.target),source=find(details.source);
-    if(!target||!source||!TYPES[target.type].input)
-      throw Error('Select a valid input and output socket.');
-    if(TYPES[source.type].output==='meshSource'){
-      if(target.type!=='meshDeform')
-        throw Error('Mesh Asset may connect only to meshDeform meshInput.');
-      const previous=target.meshInput;
-      target.meshInput=source.id;
-      if(previous&&previous!==source.id&&
-         !next.nodes.some(n=>n.meshInput===previous))
+    if(!target||!source)throw Error('Select a valid input and output socket.');
+    if(target.id===source.id)throw Error('Cannot connect a node to itself.');
+    const outputType=TYPES[source.type].output,ports=inputPorts(target.type);
+    const matches=ports.filter(p=>p.type===outputType);
+    // Legacy programmatic calls without a port work only when the match is
+    // unambiguous. Inspector always supplies the clicked named input.
+    const port=details.port===undefined?(matches.length===1?matches[0]:null):
+      ports.find(p=>p.key===details.port);
+    if(!port||port.type!==outputType)
+      throw Error('Cannot connect '+source.type+' to '+target.type+': incompatible or ambiguous socket type.');
+    if(target[port.key]===source.id)return json;
+    const previous=target[port.key];
+    if(port.key==='meshInput'){
+      target[port.key]=source.id;
+      if(previous&&!next.nodes.some(n=>inputLinks(n).some(l=>l.sourceId===previous)))
         next.nodes=next.nodes.filter(n=>n.id!==previous);
     }else{
-    if(TYPES[target.type].input!==TYPES[source.type].output)
-      throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
-    if(target.id===source.id)throw Error('Cannot connect a node to itself.');
-    if(source.input&&['offset','transform','noise','reverse','clip','resample','conform','width'].includes(source.type)&&
-       target.input!==source.id){
-      // V1 is one output and single-input path operations. A simple relink
-      // would orphan a path node. Move the chosen transform immediately
-      // before the target while preserving every other graph node instead.
-      const consumer=next.nodes.find(node=>node.input===source.id);
-      if(!consumer)throw Error('Cannot move disconnected Graph output.');
-      consumer.input=source.input;
-      source.input=target.input;
-      target.input=source.id;
-    }else target.input=source.id;
+      // Preserve old single-path reorder behavior. Never silently move
+      // a transform shared by multiple consumers or change a secondary port.
+      const transforms=['offset','transform','noise','reverse','clip','resample','conform','width'];
+      if(port.key==='input'&&source.input&&transforms.includes(source.type)){
+        const consumers=next.nodes.flatMap(n=>inputLinks(n).filter(l=>l.sourceId===source.id)
+          .map(l=>({node:n,key:l.port.key})));
+        if(consumers.length===1&&consumers[0].key==='input'){
+          consumers[0].node.input=source.input;
+          source.input=previous;
+        }
+      }
+      target[port.key]=source.id;
     }
   }else if(action==='replace-generator'){
     const kind=details.type;
@@ -434,13 +444,13 @@ function cleanGraphLayout(layoutJson,graphJson){
 }
 function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
   const {ordered,map}=parseGraph(graphJson),positions=parseLayout(layoutJson,graphJson);
-  const links=ordered.flatMap(n=>[n.input,n.meshInput].filter(Boolean).map(id=>({node:n,fromId:id}))).map(({node,fromId})=>{
+  const links=ordered.flatMap(n=>inputLinks(n).map(link=>({node:n,fromId:link.sourceId,port:link.port}))).map(({node,fromId,port})=>{
     const from=positions[fromId],to=positions[node.id];
-    const sx=from.x+STAGE.cardWidth,sy=from.y+STAGE.cardHeight/2,
-      tx=to.x,ty=to.y+STAGE.cardHeight/2;
+    const sx=from.x+STAGE.cardWidth,sy=from.y+75,
+      tx=to.x,ty=to.y+port.offset;
     const dx=Math.max(28,Math.abs(tx-sx)*.42);
     return '<path class="spl-vg-wire spl-vg-wire-'+TYPES[map.get(fromId).type].output+
-      '" d="M '+sx+' '+sy+' C '+(sx+dx)+' '+sy+' '+(tx-dx)+' '+ty+' '+tx+' '+ty+
+      '" data-target-port="'+port.key+'" d="M '+sx+' '+sy+' C '+(sx+dx)+' '+sy+' '+(tx-dx)+' '+ty+' '+tx+' '+ty+
       '" fill="none"/>';
   }).join('');
   const nodes=ordered.map(n=>{
@@ -450,9 +460,9 @@ function renderGraphCanvas(graphJson,layoutJson,selectedId,pendingSource){
       '" data-node="'+n.id+'" style="left:'+p.x+'px;top:'+p.y+'px" tabindex="0">'+
       '<div class="spl-vg-head" data-drag="'+n.id+'">'+escapeHtml(n.id)+'</div>'+
       '<div class="spl-vg-type">'+escapeHtml(n.type)+'</div>'+
-      (info.input?'<button type="button" class="spl-vg-socket in '+info.input+
-        '" data-socket="in" data-node="'+n.id+'" title="Input '+info.input+'">◀ '+info.input+'</button>':'')+
-      (n.type==='meshDeform'?'<button type="button" class="spl-vg-socket mesh-in meshSource" data-socket="mesh-in" data-node="'+n.id+'" title="Imported Mesh Asset input">◀ asset</button>':'')+
+      inputPorts(n.type).map(port=>'<button type="button" class="spl-vg-socket '+port.socket+' '+port.type+
+        '" data-socket="'+port.socket+'" data-node="'+n.id+'" data-port="'+port.key+
+        '" title="Input '+port.key+' ('+port.type+')">◀ '+port.label+'</button>').join('')+
       '<button type="button" class="spl-vg-socket out '+info.output+
         '" data-socket="out" data-node="'+n.id+'" title="Output '+info.output+'">'+info.output+' ▶</button>'+
       '</div>';
@@ -555,5 +565,5 @@ function renderNodeParameters(graphJson,id){
     (rows?'<div class="spl-vg-params">'+rows+'</div>':'')+
     (n.type==='width'?renderWidthKeyControls(n):'');
 }
-module.exports={TYPES,LIMITS,STAGE,parseGraph,validateGraph,applyGraphEdit,
+module.exports={TYPES,LIMITS,STAGE,inputPorts,inputLinks,parseGraph,validateGraph,applyGraphEdit,
   parseLayout,moveGraphNode,cleanGraphLayout,renderGraphCanvas,renderNodeParameters};
