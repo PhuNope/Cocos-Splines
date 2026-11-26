@@ -39,6 +39,10 @@ Authored Profile JsonAsset supports optional `uv.sideIslandMode` with **0 Contin
 
 Authored Profile JsonAssets can now opt in with `uv.uWorldSpace: true` plus `uv.uMetersPerRepeat` to compute **side UV U from real world-space profile edge lengths**, including output Node nonuniform scale/shear, spline taper and authored edge weights. Renderer provides its local→world linear matrix; path V already uses world arc distance and is deliberately never scaled twice. Works with continuous, Edge and Quad Islands; cap UV and source geometry stay unchanged. In **Authored Profile Editor**, select **World-space side U (Node scale)** in an unsaved draft and explicitly Save Profile JSON to commit. See [usage and limitations](docs/GEOMETRY_GRAPH_WORLD_UV_V2_VI.md). Native Cocos Creator 3.8.8 GPU/Prefab validation remains pending.
 
+### Disconnected outer contours — v2 preview
+
+Authored Profile JSON accepts optional `outerContours` (1–3 additional disjoint CCW solids). The Extrude creates separate side walls and caps, with separate cap UV atlas islands. The primary outer can retain its existing holes. Use the Contour selector and Add outer/Remove outer, or select Gallery `GeometryGraphMultiContour` and Play. See [profile contours guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).
+
 ### Profile Extrude with polygon holes — v2 preview
 
 Authored Profile JSON v1 supports optional `holes`, an array of 1–3 clockwise interior contours (3–16 vertices each), strictly inside the existing CCW exterior. Caps are triangulated without filling holes; inner walls face the void. Existing UV mapping and atlas modes support separate contour seams. The Profile editor supports an active outer/inner contour selector, draggable point and edge handles, snap, numeric coordinates, point insertion/deletion and hole creation/removal with draft Undo/Redo. Advanced hole JSON remains collapsed by default. Choose Example Gallery `GeometryGraphProfileHoles` and Play. See [profile holes guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).

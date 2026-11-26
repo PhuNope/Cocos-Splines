@@ -9,7 +9,7 @@ function parseProfile(value){
   try{value=JSON.parse(value);}catch{throw Error('Invalid Profile JSON syntax.');}
  }
  if(!value||typeof value!=='object'||Array.isArray(value)||
-    Object.keys(value).some(k=>!['format','version','points','holes','uv'].includes(k))||
+    Object.keys(value).some(k=>!['format','version','points','holes','outerContours','uv'].includes(k))||
     value.format!==FORMAT||value.version!==1||!Array.isArray(value.points)||
     value.points.length<3||value.points.length>MAX_POINTS)
   throw Error('Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
@@ -83,7 +83,33 @@ function parseProfile(value){
    }
   }
  }
- const contours=holes?{holes}:{};
+ let outerContours;
+ if(Object.prototype.hasOwnProperty.call(value,'outerContours')){
+  if(!Array.isArray(value.outerContours)||value.outerContours.length<1||value.outerContours.length>3)
+   throw Error('Profile outerContours requires 1–3 additional CCW contours.');
+  outerContours=value.outerContours.map(loop=>{
+   if(!Array.isArray(loop)||loop.length<3||loop.length>MAX_POINTS)
+    throw Error('Profile outer contour requires 3–16 points.');
+   const ring=loop.map(readPoint);validateRing(ring);return ring;
+  });
+  const inside=(p,ring)=>{
+   let result=false;
+   for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const a=ring[j],b=ring[i];
+    if(on(a,b,p))return false;
+    if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)result=!result;
+   }
+   return result;
+  };
+  const outers=[points,...outerContours];
+  for(let i=1;i<outers.length;i++)for(let j=0;j<i;j++){
+   const a=outers[i],b=outers[j];
+   if(inside(a[0],b)||inside(b[0],a)||
+      a.some((p,k)=>b.some((q,l)=>intersect(p,a[(k+1)%a.length],q,b[(l+1)%b.length]))))
+    throw Error('Profile outer contours must be disjoint and not nested.');
+  }
+ }
+ const contours={...(holes?{holes}:{}),...(outerContours?{outerContours}:{})};
  if(!Object.prototype.hasOwnProperty.call(value,'uv'))
   return {format:FORMAT,version:1,points,...contours};
  const raw=value.uv;
@@ -160,14 +186,16 @@ function parseProfile(value){
 }
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
+const getProfileContours=profile=>[profile.points,...(profile.holes??[]),...(profile.outerContours??[])];
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),index=Number(params.index);
  const geometryActions=['move','move-edge','insert','insert-edge','remove'];
  const contour=geometryActions.includes(action)?(params.contour??0):0;
- if(!Number.isInteger(contour)||contour<0||contour>(profile.holes?.length??0))
+ const rings=getProfileContours(profile);
+ if(!Number.isInteger(contour)||contour<0||contour>=rings.length)
   throw Error('Select a valid contour.');
- const p=contour===0?profile.points:profile.holes[contour-1];
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole'].includes(action)&&
+ const p=rings[contour];
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole','set-outer-contours','add-outer','remove-outer'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -188,8 +216,9 @@ function applyProfileEdit(value,action,params={}){
    profile.uv.seamEdge=surviving>at?surviving-1:surviving;
   }
  };
- if(action==='add-hole'){
-  if((profile.holes?.length??0)>=3)throw Error('Profile supports up to three holes.');
+ if(action==='add-hole'||action==='add-outer'){
+  const key=action==='add-hole'?'holes':'outerContours';
+  if((profile[key]?.length??0)>=3)throw Error(key==='holes'?'Profile supports up to three holes.':'Profile supports up to three additional outer contours.');
   // Find a valid small CW square, preferring the center and larger sizes.
   // Each candidate passes the same containment/intersection validation.
   const centers=[];
@@ -202,17 +231,27 @@ function applyProfileEdit(value,action,params={}){
      {x:round(x-radius),y:round(y+radius)},
      {x:round(x+radius),y:round(y+radius)},
      {x:round(x+radius),y:round(y-radius)}];
-    try{return formatProfile({...profile,holes:[...(profile.holes??[]),ring]});}
+    if(key==='outerContours')ring.reverse();
+    try{return formatProfile({...profile,[key]:[...(profile[key]??[]),ring]});}
     catch{/* Try another location. */}
    }
   }
-  throw Error('No room for a new hole. Adjust the contour or enter hole JSON.');
+  throw Error('No room for a new contour. Adjust the profile.');
  }else if(action==='remove-hole'){
   const hole=params.hole;
   if(!Number.isInteger(hole)||hole<0||hole>=(profile.holes?.length??0))
    throw Error('Select a hole to remove.');
   profile.holes.splice(hole,1);
   if(!profile.holes.length)delete profile.holes;
+ }else if(action==='remove-outer'){
+  const part=params.part;
+  if(!Number.isInteger(part)||part<0||part>=(profile.outerContours?.length??0))throw Error('Select an additional outer contour.');
+  profile.outerContours.splice(part,1);
+  if(!profile.outerContours.length)delete profile.outerContours;
+ }else if(action==='set-outer-contours'){
+  if(!Array.isArray(params.outerContours))throw Error('Profile outerContours must be an array.');
+  if(params.outerContours.length===0)delete profile.outerContours;
+  else profile.outerContours=params.outerContours;
  }else if(action==='set-holes'){
   if(!Array.isArray(params.holes))throw Error('Profile holes must be an array.');
   if(params.holes.length===0)delete profile.holes;
@@ -363,7 +402,8 @@ function applyProfileEdit(value,action,params={}){
 }
 function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
  const profile=parseProfile(value);
- const rings=[profile.points,...(profile.holes??[])];
+ const rings=getProfileContours(profile);
+ const holeCount=profile.holes?.length??0,outerCount=profile.outerContours?.length??0;
  if(!Number.isInteger(contour)||contour<0||contour>=rings.length)contour=0;
  const points=rings[contour],pt=points[selected]||points[0];
  const map=point=>String(round(120+point.x*104))+','+String(round(120-point.y*104));
@@ -394,14 +434,17 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   'role="img" aria-label="Profile polygon: select and drag point handles">'+
   '<path d="M120 0 V240 M0 120 H240" stroke="#345365" fill="none"/>'+
   '<polygon points="'+polygon+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>'+
+  (profile.outerContours??[]).map(ring=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>').join('')+
   (profile.holes??[]).map(ring=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#142a37" stroke="#f3bb78" stroke-width="2"/>').join('')+
   edges+circles+'</svg>';
  return '<div class="spl-vg-toolbar"><label>Contour <select class="spl-profile-contour">'+
   rings.map((ring,i)=>'<option value="'+i+'"'+(i===contour?' selected':'')+'>'+
-   (i===0?'Outer':'Hole '+i)+'</option>').join('')+'</select></label>'+
-  '<button type="button" class="spl-btn spl-profile-add-hole"'+(rings.length>=4?' disabled':'')+'>Add hole</button>'+
-  '<button type="button" class="spl-btn spl-profile-remove-hole"'+(contour===0?' disabled':'')+'>Remove hole</button></div>'+
-  '<div class="spl-profile-count">'+points.length+(contour===0?' CCW':' CW')+' points · selected #'+(selected+1)+
+   (i===0?'Outer 1':i<=holeCount?'Hole '+i:'Outer '+(i-holeCount+1))+'</option>').join('')+'</select></label>'+
+  '<button type="button" class="spl-btn spl-profile-add-hole"'+(holeCount>=3?' disabled':'')+'>Add hole</button>'+
+  '<button type="button" class="spl-btn spl-profile-remove-hole"'+(contour===0||contour>holeCount?' disabled':'')+'>Remove hole</button>'+
+  '<button type="button" class="spl-btn spl-profile-add-outer"'+(outerCount>=3?' disabled':'')+'>Add outer</button>'+
+  '<button type="button" class="spl-btn spl-profile-remove-outer"'+(contour<=holeCount?' disabled':'')+'>Remove outer</button></div>'+
+  '<div class="spl-profile-count">'+points.length+(contour>0&&contour<=holeCount?' CW':' CCW')+' points · selected #'+(selected+1)+
   (selectedEdge===null?'':' · edge #'+(selectedEdge+1)+' selected')+'</div>'+
   svg+'<div class="spl-profile-coordinates">'+
   '<label>X <input type="number" class="spl-profile-x" min="-1" max="1" step="0.01" value="'+pt.x+'"></label>'+
@@ -416,6 +459,7 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   '<div class="spl-vg-toolbar"><label>Inner contours ('+(profile.holes?.length??0)+')</label></div>'+
   '<details><summary>Hole JSON</summary><textarea class="spl-profile-holes" rows="3" style="width:100%;box-sizing:border-box" aria-label="Clockwise hole contours JSON">'+
   JSON.stringify(profile.holes??[])+'</textarea></details>'+
+  '<details><summary>Outer contours JSON</summary><textarea class="spl-profile-outer-contours" rows="3" style="width:100%;box-sizing:border-box">'+JSON.stringify(profile.outerContours??[])+'</textarea></details>'+
   '<div class="spl-profile-uv-controls">'+
   '<div class="spl-profile-uv-info">UV0 side bands · '+
    (profile.uv===undefined?'Default perimeter mapping':
@@ -488,4 +532,4 @@ function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
   '<button type="button" class="spl-btn spl-profile-reset-uv"'+
    (profile.uv===undefined?' disabled':'')+'>Reset UV mapping</button></div></div>';
 }
-module.exports={FORMAT,MAX_POINTS,parseProfile,formatProfile,applyProfileEdit,renderProfileControls};
+module.exports={FORMAT,MAX_POINTS,getProfileContours,parseProfile,formatProfile,applyProfileEdit,renderProfileControls};

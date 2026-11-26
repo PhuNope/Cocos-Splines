@@ -59,13 +59,15 @@ export interface GraphAuthoredProfile {
     points:GraphProfilePoint[];
     /** Up to three strictly contained, clockwise inner boundaries. */
     holes?:GraphProfilePoint[][];
+    /** Up to three disconnected CCW outer contours, without nested holes. */
+    outerContours?:GraphProfilePoint[][];
     uv?:GraphProfileUV;
 }
 /** Strict data-only profile; copied out of the Cocos JsonAsset, never mutated. */
 export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
     const r=input as Record<string,unknown>;
     if(!r||typeof r!=='object'||Array.isArray(r)||
-       Object.keys(r).some(k=>!['format','version','points','holes','uv'].includes(k))||
+       Object.keys(r).some(k=>!['format','version','points','holes','outerContours','uv'].includes(k))||
        r.format!=='cocos-splines/profile'||r.version!==1||
        !Array.isArray(r.points)||r.points.length<3||r.points.length>16)
         throw Error('Graph Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
@@ -94,7 +96,24 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         });
         checkProfileHoles(points,holes);
     }
-    const contours=holes?{holes}:{};
+    let outerContours:GraphProfilePoint[][]|undefined;
+    if(Object.prototype.hasOwnProperty.call(r,'outerContours')){
+        if(!Array.isArray(r.outerContours)||r.outerContours.length<1||r.outerContours.length>3)
+            throw Error('Graph Profile Asset outerContours requires 1–3 additional CCW contours.');
+        outerContours=r.outerContours.map(loop=>{
+            if(!Array.isArray(loop)||loop.length<3||loop.length>16)
+                throw Error('Graph Profile Asset outer contour requires 3–16 points.');
+            const ring=loop.map(readPoint);checkAuthoredProfilePolygon(ring);return ring;
+        });
+        const outers=[points,...outerContours];
+        for(let i=1;i<outers.length;i++)for(let j=0;j<i;j++){
+            const a=outers[i],b=outers[j];
+            if(insideContour(a[0],b)||insideContour(b[0],a)||
+               a.some((p,k)=>b.some((q,l)=>segmentsMeet(p,a[(k+1)%a.length],q,b[(l+1)%b.length]))))
+                throw Error('Graph Profile Asset outer contours must be disjoint and not nested.');
+        }
+    }
+    const contours={...(holes?{holes}:{}),...(outerContours?{outerContours}:{})};
     if(!Object.prototype.hasOwnProperty.call(r,'uv'))
         return {format:'cocos-splines/profile',version:1,points,...contours};
     const raw=r.uv as Record<string,unknown>;
@@ -323,6 +342,7 @@ export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
     profileHoles?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
+    profileOuterContours?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     /** Only for authored profile; no implicit UV changes to built-in presets. */
     profileUV?:Readonly<GraphProfileUV>;
     /** Renderer local->world linear matrix, column-major (no translation).
@@ -405,14 +425,17 @@ export function buildProfileExtrudeGeometry(
        typeof capEnds!=='boolean'||typeof closed!=='boolean'||
        !Array.isArray(frames)||frames.length<2||frames.length>1025)
         throw Error('Geometry Graph Extrude settings or frame count are invalid.');
-    if((settings.profileUV!==undefined||settings.profileHoles!==undefined)&&!settings.profile)
+    if((settings.profileUV!==undefined||settings.profileHoles!==undefined||settings.profileOuterContours!==undefined)&&!settings.profile)
         throw Error('Graph Profile Asset UV requires an authored profile.');
     const authored=settings.profile?
         parseGraphProfileAsset({format:'cocos-splines/profile',version:1,
             points:settings.profile,...(settings.profileHoles===undefined?{}:{holes:settings.profileHoles}),
+            ...(settings.profileOuterContours===undefined?{}:{outerContours:settings.profileOuterContours}),
             ...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
     const outer=authored?.points??PROFILES[profileShape];
-    const rings=[outer,...(authored?.holes??[])];
+    const mainRings=[outer,...(authored?.holes??[])];
+    const extra=authored?.outerContours??[];
+    const rings=[...mainRings,...extra];
     const profile=rings.flat(),bands=profile.length;
     const nextEdge:number[]=[],ringStart:number[]=[],ringEnd:number[]=[];
     let offset=0;
@@ -423,8 +446,17 @@ export function buildProfileExtrudeGeometry(
         }
         offset+=ring.length;
     }
-    const triangles=capEnds&&!closed?
-        (rings.length===1?profileTriangles(profile):triangulateContours(rings)):[];
+    const mainCount=mainRings.reduce((sum,ring)=>sum+ring.length,0);
+    const capParts=[mainCount,...extra.map(ring=>ring.length)];
+    const triangles:number[]=[];
+    if(capEnds&&!closed){
+        triangles.push(...(mainRings.length===1?profileTriangles(outer):triangulateContours(mainRings)));
+        let base=mainCount;
+        for(const ring of extra){
+            triangles.push(...profileTriangles(ring).map(i=>i+base));
+            base+=ring.length;
+        }
+    }
     const perimeterLengths=profile.map((p,i)=>{
         const next=profile[nextEdge[i]];
         return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
@@ -642,8 +674,10 @@ export function buildProfileExtrudeGeometry(
                 }
             }
             if(capEnds&&!closed){
-                groups.push({firstVertex:sideVertices,vertexCount:bands});
-                groups.push({firstVertex:sideVertices+bands,vertexCount:bands});
+                let first=sideVertices;
+                for(let end=0;end<2;end++)for(const count of capParts){
+                    groups.push({firstVertex:first,vertexCount:count});first+=count;
+                }
             }
         }
         packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04,{

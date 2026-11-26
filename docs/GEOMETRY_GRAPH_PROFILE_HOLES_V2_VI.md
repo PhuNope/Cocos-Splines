@@ -13,3 +13,7 @@ Trong Authored Profile Editor, chọn Contour → Outer hoặc Hole 1–3, kéo 
 Mặt bên tạo riêng cho từng contour; normal biên lỗ hướng vào khoảng rỗng. Cap dùng triangulation ràng buộc theo cạnh contour, không thêm điểm cap và kiểm tra tổng diện tích cùng số tam giác. Seam/edgeWeights hiện áp dụng cho contour ngoài, các lỗ có seam mặc định ở cạnh đầu và weight 1. Mỗi contour độc lập trong continuous UV atlas; hỗ trợ Edge/Quad Islands, Triangle Unwrap, metric U và Atlas nâng cao. Không tự bake texture.
 
 Giới hạn: một contour ngoài, không hỗ trợ các đảo rời hoặc lỗ lồng nhau; chỉnh điểm/cạnh lỗ qua tay nắm SVG trong Inspector (chưa có scene gizmo riêng). Giữ giới hạn mesh 65.536 vertex và giới hạn atlas hiện hành. Cần kiểm thử trực tiếp Creator 3.8.8, nhất là winding, vật liệu culling và tiết diện cong.
+
+## Disconnected outer contours
+
+`outerContours` là mảng 1–3 tiết diện ngoài bổ sung CCW, mỗi tiết diện 3–16 điểm; không chạm, giao hoặc lồng vào contour ngoài khác. Các contour bổ sung là đặc; `holes` vẫn thuộc contour chính. Cap của mỗi tiết diện được triangulate riêng và có UV atlas island riêng. Add outer/Remove outer và Contour selector hỗ trợ chỉnh trực tiếp trên Inspector; JSON nâng cao thu gọn mặc định. Gallery `GeometryGraphMultiContour` chạy ví dụ tự động. Giới hạn vertex/UV island hiện hành áp dụng tổng toàn mesh.

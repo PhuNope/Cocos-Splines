@@ -38,6 +38,48 @@ try{
  assert.equal(editor.applyProfileEdit(added,'remove-hole',{hole:2}),base);
  assert.match(editor.renderProfileControls(base,0,0,1),/4 CW points/);
  assert.match(editor.renderProfileControls(base,0,0,1),/spl-profile-set-uv-seam" disabled/);
+ // Extra CCW islands are independent solids; the main exterior keeps its holes.
+ const extra=rect(.65,-.3,.95,.3).slice().reverse();
+ const multiProfile={...profile,outerContours:[extra]};
+ assert.deepEqual(parseGraphProfileAsset(multiProfile),multiProfile);
+ assert.deepEqual(editor.parseProfile(multiProfile),multiProfile);
+ const multiOpts={...opts,profileOuterContours:[extra]};
+ const multiMesh=buildProfileExtrudeGeometry(frames,multiOpts,false);
+ assert.equal(multiMesh.bands,16);
+ const sideCount=16*2*6;
+ assert.equal(multiMesh.indices.length,sideCount+2*(12+4-2+2)*3);
+ let capArea=0;
+ for(let t=sideCount;t<multiMesh.indices.length;t+=3){
+  const [a,b,c]=multiMesh.indices.slice(t,t+3).map(i=>multiMesh.positions.slice(i*3,i*3+3));
+  assert([a,b,c].every(p=>p[0]<=1)||[a,b,c].every(p=>p[0]>=1.3-1e-8),'No cap bridge across disconnected contours');
+  const signed=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+  assert.equal(Math.sign(signed),a[2]===0?-1:1);
+  capArea+=Math.abs(signed)/2;
+ }
+ near(capArea,2*2*(1-2*.3*.6+.3*.6));
+ for(const mode of [0,1,2]){
+  const packed=buildProfileExtrudeGeometry(frames,{...multiOpts,profileUV:{sideIslandMode:mode,atlasPacking:true}},false);
+  const plain=buildProfileExtrudeGeometry(frames,{...multiOpts,profileUV:{sideIslandMode:mode}},false);
+  assert.deepEqual(packed.positions,plain.positions);
+  assert.deepEqual(packed.normals,plain.normals);
+  assert.deepEqual(packed.indices,plain.indices);
+  assert(packed.uvs.every(x=>x>=0&&x<=1));
+ }
+ const splitMulti=buildProfileExtrudeGeometry(frames,{...multiOpts,profileUV:{triangleUnwrap:true,atlasPacking:true}},false);
+ assert.equal(splitMulti.positions.length/3,multiMesh.indices.length);
+ for(const bad of [[],[extra.slice().reverse()],[outer],[rect(.2,-.2,.8,.2).reverse()],[rect(.5,-.3,.8,.3).reverse()],[rect(-.1,-.1,.1,.1).reverse()]]){
+  assert.throws(()=>parseGraphProfileAsset({...profile,outerContours:bad}),/Graph Profile Asset/);
+  assert.throws(()=>editor.parseProfile({...profile,outerContours:bad}),/Profile/);
+ }
+ const multiDraft=editor.formatProfile(multiProfile);
+ assert.match(editor.renderProfileControls(multiDraft,0,null,3),/Outer 2/);
+ const editExtra=editor.applyProfileEdit(multiDraft,'move',{contour:3,index:0,x:.62,y:.3});
+ assert.deepEqual(editor.parseProfile(editExtra).points,outer);
+ assert.deepEqual(editor.parseProfile(editExtra).holes,holes);
+ assert.equal(editor.parseProfile(editExtra).outerContours[0][0].x,.62);
+ assert.equal(editor.applyProfileEdit(multiDraft,'remove-outer',{part:0}),editor.formatProfile(profile));
+ const addOuter=editor.applyProfileEdit(editor.formatProfile(profile),'add-outer');
+ assert.equal(editor.parseProfile(addOuter).outerContours.length,1);
  const original=JSON.stringify(profile);
  const removed=editor.applyProfileEdit(edited,'set-holes',{holes:[]});
  assert.equal(editor.parseProfile(removed).holes,undefined);
@@ -94,5 +136,7 @@ try{
  assert.deepEqual(runner.evaluateOutputs(plan,ctx),result);
  const changed=runner.evaluateOutputs(plan,{...ctx,profileHoles:[[holes[0]]],profileRevisions:['single-hole']});
  assert.equal(changed.output.bands,8);
+ const multiOutput=runner.evaluateOutputs(plan,{...ctx,profileOuterContours:[[extra]],profileRevisions:['multi-outer']});
+ assert.equal(multiOutput.output.bands,16);
  console.log('PROFILE HOLES V2 PASS: two contained CW contours, cap area, inner walls, UV modes, invalid topology, renderer graph context and draft parity.');
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}

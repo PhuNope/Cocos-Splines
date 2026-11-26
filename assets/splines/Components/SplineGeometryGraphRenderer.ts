@@ -213,13 +213,14 @@ export class SplineGeometryGraphRenderer extends Component {
      * revisions without changing shared Graph JSON or Spline samples.
      */
     private graphProfileContext(plan:GeometryGraphPlan):
-        Pick<GeometryGraphContext,'profileSources'|'profileUVs'|'profileHoles'|'profileRevisions'>{
+        Pick<GeometryGraphContext,'profileSources'|'profileUVs'|'profileHoles'|'profileOuterContours'|'profileRevisions'>{
         const slots=[...new Set(plan.nodes.filter(n=>n.type==='extrude'&&
             n.profileSlot!==undefined).map(n=>n.profileSlot!))];
         if(slots.length===0)return {};
         const sources:NonNullable<GeometryGraphContext['profileSources']>[number][]=[];
         const uvs:NonNullable<GeometryGraphContext['profileUVs']>[number][]=[];
         const holes:NonNullable<GeometryGraphContext['profileHoles']>[number][]=[];
+        const outerContours:NonNullable<GeometryGraphContext['profileOuterContours']>[number][]=[];
         const revisions:(string|undefined)[]=[];
         for(const slot of slots){
             const asset=this.profileAsset(slot);
@@ -229,9 +230,10 @@ export class SplineGeometryGraphRenderer extends Component {
             sources[slot]=profile.points;
             uvs[slot]=profile.uv;
             holes[slot]=profile.holes;
+            outerContours[slot]=profile.outerContours;
             revisions[slot]=JSON.stringify(profile);
         }
-        return {profileSources:sources,profileUVs:uvs,profileHoles:holes,profileRevisions:revisions};
+        return {profileSources:sources,profileUVs:uvs,profileHoles:holes,profileOuterContours:outerContours,profileRevisions:revisions};
     }
     private sourceMaterialRenderer(slot:number):MeshRenderer|null{
         return slot===0?this.materialSourceRenderer:

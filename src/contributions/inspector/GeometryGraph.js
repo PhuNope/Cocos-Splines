@@ -209,7 +209,7 @@ function profileStatus(panel,message,isError=false){
 }
 function activeProfileContour(panel,profile){
   const contour=panel._vgAuthoredContour??0;
-  return Number.isInteger(contour)&&contour>=0&&contour<=(profile.holes?.length??0)?contour:0;
+  return Number.isInteger(contour)&&contour>=0&&contour<authored.getProfileContours(profile).length?contour:0;
 }
 function renderAuthoredProfile(panel){
   const draft=panel._vgAuthoredDraft;
@@ -243,7 +243,7 @@ function renderAuthoredProfile(panel){
   try{
     const profile=authored.parseProfile(draft.profileJson);
     panel._vgAuthoredContour=activeProfileContour(panel,profile);
-    const points=panel._vgAuthoredContour===0?profile.points:profile.holes[panel._vgAuthoredContour-1];
+    const points=authored.getProfileContours(profile)[panel._vgAuthoredContour];
     panel._vgAuthoredSelected=Math.max(0,Math.min(panel._vgAuthoredSelected||0,points.length-1));
     if(panel._vgAuthoredEdge>=points.length)panel._vgAuthoredEdge=null;
     panel.$.vgProfileCanvas.innerHTML=
@@ -273,8 +273,10 @@ function applyAuthoredEdit(panel,action,details={}){
         if(drag)drag.historySaved=true;
       }
       draft.profileJson=next;
-      if(action==='library-preset'||action==='set-holes'||action==='remove-hole'||action==='add-hole'){
-        panel._vgAuthoredContour=action==='add-hole'?authored.parseProfile(next).holes.length:0;
+      if(action==='library-preset'||action==='set-holes'||action==='remove-hole'||action==='add-hole'||action==='set-outer-contours'||action==='remove-outer'||action==='add-outer'){
+        const profile=authored.parseProfile(next);
+        panel._vgAuthoredContour=action==='add-hole'?profile.holes.length:
+          action==='add-outer'?authored.getProfileContours(profile).length-1:0;
         panel._vgAuthoredSelected=0;
         panel._vgAuthoredEdge=null;
       }else if(action==='insert'||action==='insert-edge'){
@@ -283,7 +285,7 @@ function applyAuthoredEdit(panel,action,details={}){
       }else if(action==='remove'){
         const profile=authored.parseProfile(next);
         const contour=activeProfileContour(panel,profile);
-        const points=contour===0?profile.points:profile.holes[contour-1];
+        const points=authored.getProfileContours(profile)[contour];
         panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,points.length-1);
         panel._vgAuthoredEdge=null;
       }
@@ -754,6 +756,12 @@ const inspector={
         applyAuthoredEdit(this,'add-hole',{});
       else if(el.classList?.contains('spl-profile-remove-hole')&&this._vgAuthoredContour>0)
         applyAuthoredEdit(this,'remove-hole',{hole:this._vgAuthoredContour-1});
+      else if(el.classList?.contains('spl-profile-add-outer'))
+        applyAuthoredEdit(this,'add-outer',{});
+      else if(el.classList?.contains('spl-profile-remove-outer')){
+        const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+        applyAuthoredEdit(this,'remove-outer',{part:this._vgAuthoredContour-1-(profile.holes?.length??0)});
+      }
       else if(el.classList?.contains('spl-profile-insert'))
         applyAuthoredEdit(this,'insert',{});
       else if(el.classList?.contains('spl-profile-remove'))
@@ -777,10 +785,16 @@ const inspector={
       if(cls?.contains('spl-profile-contour')){
         const contour=Number(event.target.value);
         const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
-        if(!Number.isInteger(contour)||contour<0||contour>(profile.holes?.length??0))return;
+        if(!Number.isInteger(contour)||contour<0||contour>=authored.getProfileContours(profile).length)return;
         this._vgAuthoredContour=contour;
         this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
         renderAuthoredProfile(this);return;
+      }
+      if(cls?.contains('spl-profile-outer-contours')){
+        let outerContours;
+        try{outerContours=JSON.parse(event.target.value);}
+        catch{profileStatus(this,'Invalid outer contours JSON.',true);return;}
+        applyAuthoredEdit(this,'set-outer-contours',{outerContours});return;
       }
       if(cls?.contains('spl-profile-holes')){
         let holes;
@@ -881,7 +895,7 @@ const inspector={
       if(!cls?.contains('spl-profile-x')&&!cls?.contains('spl-profile-y'))return;
       const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
       const contour=activeProfileContour(this,profile);
-      const pt=(contour===0?profile.points:profile.holes[contour-1])[this._vgAuthoredSelected];
+      const pt=(authored.getProfileContours(profile)[contour])[this._vgAuthoredSelected];
       if(!pt)return;
       const value=Number(event.target.value);
       if(event.target.value===''||!Number.isFinite(value)){
@@ -902,7 +916,7 @@ const inspector={
         edge?.dataset?.profileEdge);
       const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
       const contour=activeProfileContour(this,profile);
-      const points=contour===0?profile.points:profile.holes[contour-1];
+      const points=authored.getProfileContours(profile)[contour];
       if(!Number.isInteger(index)||index<0||index>=points.length)return;
       this._vgAuthoredSelected=index;
       this._vgAuthoredEdge=kind==='edge'?index:null;

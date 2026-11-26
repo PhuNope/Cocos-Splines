@@ -73,6 +73,7 @@ export interface GeometryGraphContext {
     /** Explicit authored profile slots A/B/C for Extrude nodes. */
     profileSources?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>|undefined>;
     profileHoles?:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined>;
+    profileOuterContours?:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined>;
     /** Optional UV0 side-band metadata for the same authored Profile slots. */
     profileUVs?:ReadonlyArray<Readonly<GraphProfileUV>|undefined>;
     profileRevisions?:ReadonlyArray<string|undefined>;
@@ -532,6 +533,7 @@ export class GeometryGraphRunner {
                     let authored:ReadonlyArray<Readonly<GraphProfilePoint>>|undefined;
                     let authoredUV:Readonly<GraphProfileUV>|undefined;
                     let authoredHoles:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
+                    let authoredOuterContours:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
                     if(node.profileSlot!==undefined){
                         const slot=node.profileSlot,revision=context.profileRevisions?.[slot];
                         if(typeof revision!=='string'||!revision||revision.length>8192)
@@ -539,13 +541,14 @@ export class GeometryGraphRunner {
                         const profile=parseGraphProfileAsset({format:'cocos-splines/profile',
                             version:1,points:context.profileSources?.[slot],
                             ...(context.profileHoles?.[slot]===undefined?{}:{holes:context.profileHoles[slot]}),
+                            ...(context.profileOuterContours?.[slot]===undefined?{}:{outerContours:context.profileOuterContours[slot]}),
                             ...(context.profileUVs?.[slot]===undefined?{}:{uv:context.profileUVs[slot]})});
-                        authored=profile.points;authoredUV=profile.uv;authoredHoles=profile.holes;
+                        authored=profile.points;authoredUV=profile.uv;authoredHoles=profile.holes;authoredOuterContours=profile.outerContours;
                     }
                     const geometry=buildProfileExtrudeGeometry(source.frames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
-                        profile:authored,profileUV:authoredUV,profileHoles:authoredHoles,
+                        profile:authored,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,
                         worldUvLinear:context.worldUvLinear,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
