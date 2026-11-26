@@ -1,0 +1,33 @@
+{
+  "format": "cocos-splines/profile",
+  "version": 1,
+  "points": [
+    {
+      "x": -0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": -0.5
+    },
+    {
+      "x": 0.5,
+      "y": 0.5
+    },
+    {
+      "x": -0.5,
+      "y": 0.5
+    }
+  ],
+  "uv": {
+    "sideIslandMode": 2,
+    "triangleUnwrap": true,
+    "atlasPacking": true,
+    "atlasRotate": true,
+    "atlasPixelPadding": {
+      "resolution": 1024,
+      "pixels": 4
+    },
+    "uMetersPerRepeat": 1.5
+  }
+}

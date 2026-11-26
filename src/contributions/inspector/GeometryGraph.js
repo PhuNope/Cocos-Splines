@@ -769,6 +769,30 @@ const inspector={
           enabled:event.target.checked===true});
         return;
       }
+      if(cls?.contains('spl-profile-uv-atlas-rotate')){
+        applyAuthoredEdit(this,'set-atlas-rotate',{enabled:event.target.checked===true});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-pixel-padding')){
+        if(event.target.checked===true)
+          applyAuthoredEdit(this,'set-atlas-pixel-padding',{resolution:1024,pixels:2});
+        else applyAuthoredEdit(this,'clear-atlas-pixel-padding',{});
+        return;
+      }
+      if(cls?.contains('spl-profile-uv-atlas-resolution')||
+         cls?.contains('spl-profile-uv-atlas-pixels')){
+        const current=authored.parseProfile(this._vgAuthoredDraft.profileJson).uv?.atlasPixelPadding;
+        if(!current)return;
+        const raw=event.target.value;
+        if(!/^\d+$/.test(raw)){
+          profileStatus(this,'Enter a whole number for Atlas pixel padding.',true);return;
+        }
+        const value=Number(raw);
+        const resolution=cls.contains('spl-profile-uv-atlas-resolution')?value:current.resolution;
+        const pixels=cls.contains('spl-profile-uv-atlas-pixels')?value:current.pixels;
+        applyAuthoredEdit(this,'set-atlas-pixel-padding',{resolution,pixels});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-padding')){
         const raw=event.target.value;
         if(raw===''){

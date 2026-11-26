@@ -82,6 +82,10 @@ try {
  assert.equal(triangles.uv.triangleUnwrap,true);
  assert.equal(triangles.uv.atlasPacking,true);
  assert.equal(triangles.uv.atlasPadding,.06);
+ const advancedAtlas=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/UVAdvancedAtlasProfile.json'),'utf8'));
+ assert.equal(advancedAtlas.uv.atlasRotate,true);
+ assert.deepEqual(advancedAtlas.uv.atlasPixelPadding,{resolution:1024,pixels:4});
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');

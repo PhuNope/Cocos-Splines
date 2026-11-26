@@ -37,7 +37,7 @@ const catalog=[
     'Follower','Road','Extrude','Junction','Proximity','Positioner',
     'Projector','Triggers','Modifiers','Morph',
     'MeshDeform','TrafficController','PrefabSpawning','GeometryGraphUVAtlas',
-    'GeometryGraphTriangleUV',
+    'GeometryGraphTriangleUV','GeometryGraphAdvancedAtlas',
 ];
 assert.deepEqual(enums,catalog.map((name,i)=>[name,i]),
     'The original enum serialization IDs must remain unchanged');
@@ -46,7 +46,7 @@ const expectedMethods=[
     'showFollower','showRoad','showExtrude','showJunction','showProximity',
     'showPositioner','showProjector','showTriggers','showModifiers','showMorph',
     'showMeshDeform','showTrafficController','showPrefabSpawning',
-    'showGeometryGraphUVAtlas','showGeometryGraphTriangleUV',
+    'showGeometryGraphUVAtlas','showGeometryGraphTriangleUV','showGeometryGraphAdvancedAtlas',
 ];
 for(const method of expectedMethods){
     assert(methods.includes(method),'Missing gallery handler '+method);
@@ -74,14 +74,14 @@ for(const script of [
         'Bundle missing '+script);
 }
 const dispatch=source.slice(source.indexOf('switch(this.example)'),source.indexOf('private child('));
-assert.equal((dispatch.match(/case SplineExampleKind\./g)||[]).length,15);
+assert.equal((dispatch.match(/case SplineExampleKind\./g)||[]).length,16);
 assert(source.includes("new JsonAsset()"),
  'UV Atlas Gallery must build runtime Profile JsonAssets without requiring asset drag/drop');
 assert(source.includes('graph.profileAssetA=transientProfile'));
 assert(source.includes("profileData.uv.atlasPacking=true"));
 assert(source.includes('delete profileData.uv.atlasPacking'));
 assert(source.includes('uvAtlasPreviewMaterial'));
-assert.equal((source.match(/visible\(\)\{return this.example===SplineExampleKind.GeometryGraphUVAtlas\|\|this.example===SplineExampleKind.GeometryGraphTriangleUV;\}/g)||[]).length,3,
+assert.equal((source.match(/visible\(\)\{return this.example===SplineExampleKind.GeometryGraphUVAtlas\|\|this.example===SplineExampleKind.GeometryGraphTriangleUV\|\|this.example===SplineExampleKind.GeometryGraphAdvancedAtlas;\}/g)||[]).length,3,
  'Unrelated Gallery modes must not show UV-only asset fields');
 assert(source.includes('profileData.uv.triangleUnwrap=true'));
 assert(source.includes('delete profileData.uv.triangleUnwrap'));

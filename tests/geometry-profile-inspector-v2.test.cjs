@@ -155,6 +155,36 @@ async function run(){
   setTriangle(false);
   assert.equal(ui._vgAuthoredDraft.profileJson,beforeTriangle);
   assert.equal(dump.value.graphJson.value,graph);
+  // Advanced Atlas fields are transactional draft edits and are cleared
+  // with their parent Atlas toggle, without touching the source JsonAsset.
+  const beforeAdvanced=ui._vgAuthoredDraft.profileJson;
+  const changeAdvanced=(name,value)=>ui.$.vgProfileCanvas.events.change({
+   target:{checked:typeof value==='boolean'?value:undefined,
+    value:typeof value==='string'?value:undefined,
+    classList:{contains:n=>n===name}},
+  });
+  setAtlas(true);
+  changeAdvanced('spl-profile-uv-atlas-rotate',true);
+  changeAdvanced('spl-profile-uv-pixel-padding',true);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasRotate,true);
+  assert.deepEqual(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPixelPadding,
+   {resolution:1024,pixels:2});
+  changeAdvanced('spl-profile-uv-atlas-resolution','2048');
+  changeAdvanced('spl-profile-uv-atlas-pixels','4');
+  const advancedDraft=ui._vgAuthoredDraft.profileJson;
+  assert.deepEqual(model.parseProfile(advancedDraft).uv.atlasPixelPadding,
+   {resolution:2048,pixels:4});
+  changeAdvanced('spl-profile-uv-atlas-pixels','65');
+  assert.equal(ui._vgAuthoredDraft.profileJson,advancedDraft);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPixelPadding.pixels,2);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,advancedDraft);
+  changeAdvanced('spl-profile-uv-pixel-padding',false);
+  assert.equal(model.parseProfile(ui._vgAuthoredDraft.profileJson).uv.atlasPixelPadding,undefined);
+  setAtlas(false);
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeAdvanced);
+  assert.equal(dump.value.graphJson.value,graph);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

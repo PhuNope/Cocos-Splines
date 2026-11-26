@@ -7,7 +7,7 @@
  * Separate side bands provide crisp profile corners and independent cap UVs.
  */
 import {RoadFrame,RoadGeometry,V3} from './SplineRoadMath';
-import {packProfileUvAtlas,unwrapProfileUvTriangles,UvAtlasIsland} from './SplineUvAtlas';
+import {packProfileUvAtlas,unwrapProfileUvTriangles,UvAtlasIsland,UvAtlasPixelPadding} from './SplineUvAtlas';
 
 export enum GraphProfileShape {Rectangle=0,Beveled=1,UChannel=2}
 export interface ProfileExtrudeFrame extends RoadFrame {widthFactor:number}
@@ -43,6 +43,10 @@ export interface GraphProfileUV {
     atlasPacking?:boolean;
     /** Cell-relative UV gutter [0,0.2], default 0.04 when atlas enabled. */
     atlasPadding?:number;
+    /** Opt-in proper 90-degree rotation in deterministic atlas candidates. */
+    atlasRotate?:boolean;
+    /** Optional square atlas resolution and exact minimum pixel gutter per side. */
+    atlasPixelPadding?:UvAtlasPixelPadding;
     /** Split each side/cap triangle into independent UV0 vertices.
      * Keeps world geometry, normals and triangle winding unchanged.
      * Triangle UVs are rebased to their own local origin (not rescaled).
@@ -78,7 +82,7 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
         return {format:'cocos-splines/profile',version:1,points};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','triangleUnwrap'].includes(k)))
+       Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','triangleUnwrap'].includes(k)))
         throw Error('Graph Profile Asset UV must be an object with seamEdge/edgeWeights.');
     const uv:GraphProfileUV={};
     if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -130,6 +134,22 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            uv.atlasPacking!==true)
             throw Error('Graph Profile Asset UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
         uv.atlasPadding=raw.atlasPadding;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'atlasRotate')){
+        if(typeof raw.atlasRotate!=='boolean'||uv.atlasPacking!==true)
+            throw Error('Graph Profile Asset UV atlasRotate requires enabled atlasPacking and a boolean.');
+        uv.atlasRotate=raw.atlasRotate;
+    }
+    if(Object.prototype.hasOwnProperty.call(raw,'atlasPixelPadding')){
+        const p=raw.atlasPixelPadding as Record<string,unknown>;
+        if(uv.atlasPacking!==true||!p||typeof p!=='object'||Array.isArray(p)||
+           Object.keys(p).some(k=>k!=='resolution'&&k!=='pixels')||
+           typeof p.resolution!=='number'||!Number.isInteger(p.resolution)||
+           p.resolution<16||p.resolution>16384||
+           typeof p.pixels!=='number'||!Number.isInteger(p.pixels)||
+           p.pixels<0||p.pixels>64||2*p.pixels>=p.resolution)
+            throw Error('Graph Profile Asset UV atlasPixelPadding requires enabled atlasPacking, resolution 16–16384 and pixels 0–64 with room for gutters.');
+        uv.atlasPixelPadding={resolution:p.resolution,pixels:p.pixels};
     }
     if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
         if(typeof raw.triangleUnwrap!=='boolean')
@@ -472,7 +492,9 @@ export function buildProfileExtrudeGeometry(
                 groups.push({firstVertex:sideVertices+bands,vertexCount:bands});
             }
         }
-        packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04);
+        packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04,{
+            rotate:authored.uv.atlasRotate,pixelPadding:authored.uv.atlasPixelPadding,
+        });
     }
     return result;
 }

@@ -48,7 +48,7 @@ function parseProfile(value){
   return {format:FORMAT,version:1,points};
  const raw=value.uv;
  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
-    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','triangleUnwrap'].includes(k)))
+    Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','triangleUnwrap'].includes(k)))
   throw Error('Profile UV must have only seamEdge and edgeWeights.');
  const uv={};
  if(Object.prototype.hasOwnProperty.call(raw,'seamEdge')){
@@ -97,6 +97,20 @@ function parseProfile(value){
    throw Error('Profile UV atlasPadding requires enabled atlasPacking and a value in [0,0.2].');
   uv.atlasPadding=raw.atlasPadding;
  }
+ if(Object.prototype.hasOwnProperty.call(raw,'atlasRotate')){
+  if(typeof raw.atlasRotate!=='boolean'||uv.atlasPacking!==true)
+   throw Error('Profile UV atlasRotate requires enabled atlasPacking and a boolean.');
+  uv.atlasRotate=raw.atlasRotate;
+ }
+ if(Object.prototype.hasOwnProperty.call(raw,'atlasPixelPadding')){
+  const p=raw.atlasPixelPadding;
+  if(uv.atlasPacking!==true||!p||typeof p!=='object'||Array.isArray(p)||
+     Object.keys(p).some(k=>k!=='resolution'&&k!=='pixels')||
+     !Number.isInteger(p.resolution)||p.resolution<16||p.resolution>16384||
+     !Number.isInteger(p.pixels)||p.pixels<0||p.pixels>64||2*p.pixels>=p.resolution)
+   throw Error('Profile UV atlasPixelPadding requires Atlas, resolution 16–16384 and pixels 0–64 with room for gutters.');
+  uv.atlasPixelPadding={resolution:p.resolution,pixels:p.pixels};
+ }
  if(Object.prototype.hasOwnProperty.call(raw,'triangleUnwrap')){
   if(typeof raw.triangleUnwrap!=='boolean')
    throw Error('Profile UV triangleUnwrap must be boolean.');
@@ -108,7 +122,7 @@ const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
  const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap'].includes(action)&&
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
@@ -163,8 +177,21 @@ function applyProfileEdit(value,action,params={}){
   }else if(profile.uv){
    delete profile.uv.atlasPacking;
    delete profile.uv.atlasPadding;
+   delete profile.uv.atlasRotate;
+   delete profile.uv.atlasPixelPadding;
    if(Object.keys(profile.uv).length===0)delete profile.uv;
   }
+ }else if(action==='set-atlas-rotate'){
+  if(profile.uv?.atlasPacking!==true||typeof params.enabled!=='boolean')
+   throw Error('Profile UV Atlas rotation requires enabled Atlas and boolean.');
+  if(params.enabled)profile.uv.atlasRotate=true;
+  else delete profile.uv.atlasRotate;
+ }else if(action==='set-atlas-pixel-padding'){
+  if(profile.uv?.atlasPacking!==true)
+   throw Error('Profile UV pixel padding requires enabled Atlas.');
+  profile.uv.atlasPixelPadding={resolution:params.resolution,pixels:params.pixels};
+ }else if(action==='clear-atlas-pixel-padding'){
+  if(profile.uv)delete profile.uv.atlasPixelPadding;
  }else if(action==='set-atlas-padding'){
   if(!finite(params.padding)||params.padding<0||params.padding>.2||
      profile.uv?.atlasPacking!==true)
@@ -335,7 +362,18 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
     'Atlas padding <input type="number" class="spl-profile-uv-padding" '+
     'min="0" max="0.2" step="0.005" placeholder="0.04" value="'+
     (profile.uv?.atlasPadding??'')+'"'+
-    (profile.uv?.atlasPacking===true?'':' disabled')+'></label></div>'+
+    (profile.uv?.atlasPacking===true&&!profile.uv?.atlasPixelPadding?'':' disabled')+'></label></div>'+
+  '<div class="spl-vg-toolbar">'+
+  '<label title="Allow proper 90-degree island rotation">'+
+   '<input type="checkbox" class="spl-profile-uv-atlas-rotate"'+
+    (profile.uv?.atlasRotate===true?' checked':'')+
+    (profile.uv?.atlasPacking===true?'':' disabled')+'> Rotate islands</label>'+
+  '<label><input type="checkbox" class="spl-profile-uv-pixel-padding"'+
+   (profile.uv?.atlasPixelPadding?' checked':'')+
+   (profile.uv?.atlasPacking===true?'':' disabled')+'> Pixel padding</label>'+
+  (profile.uv?.atlasPixelPadding?
+   '<label>Resolution <input type="number" class="spl-profile-uv-atlas-resolution" min="16" max="16384" step="1" value="'+profile.uv.atlasPixelPadding.resolution+'"></label>'+
+   '<label>Gutter (px) <input type="number" class="spl-profile-uv-atlas-pixels" min="0" max="64" step="1" value="'+profile.uv.atlasPixelPadding.pixels+'"></label>':'')+'</div>'+
 
    '<div class="spl-vg-toolbar">'+
    '<label>Side U meters/repeat <input type="number" class="spl-profile-uv-meters" '+

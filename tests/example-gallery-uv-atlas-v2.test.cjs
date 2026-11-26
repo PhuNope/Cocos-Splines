@@ -125,5 +125,20 @@ const triangleFile=JSON.parse(fs.readFileSync(path.join(root,
 assert.deepEqual(right,triangleFile,
  'Gallery triangle mode must match the installable authored Profile example');
 assert.notEqual(left,right,'Runtime modes use independent transient JsonAssets');
+const advancedMode=new CocosSplinesExampleGalleryV2();
+advancedMode.node=new Node('Advanced Atlas Gallery');
+advancedMode.example=SplineExampleKind.GeometryGraphAdvancedAtlas;
+advancedMode.start();
+assert.equal(SplineExampleKind.GeometryGraphAdvancedAtlas,15);
+assert.equal(observed.length,8);
+const advancedLeft=observed[6].profileAssetA.json,advancedRight=observed[7].profileAssetA.json;
+assert.equal(advancedLeft.uv.atlasPacking,true);
+assert.equal(advancedLeft.uv.triangleUnwrap,true);
+assert.equal(advancedLeft.uv.atlasRotate,undefined);
+assert.equal(advancedLeft.uv.atlasPixelPadding,undefined);
+assert.equal(advancedRight.uv.atlasPacking,true);
+assert.equal(advancedRight.uv.triangleUnwrap,true);
+assert.equal(advancedRight.uv.atlasRotate,true);
+assert.deepEqual(advancedRight.uv.atlasPixelPadding,{resolution:1024,pixels:4});
 assert(require(root+'/package.json').scripts.test.includes('example-gallery-uv-atlas-v2.test.cjs'));
 console.log('EXAMPLE UV ATLAS GALLERY V2 PASS: Play creates two Geometry Graph renderers without asset drag/drop, preserves author assets, clones Profile JSON, and keeps original enum IDs.');

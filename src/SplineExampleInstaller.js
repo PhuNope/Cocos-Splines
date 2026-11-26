@@ -7,6 +7,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const PRISTINE_GALLERY_BLOBS=new Set([
  '4ba2fcd4ddb91f49da9a577708547bbd891e06f9', // original 13-mode
  'b9cfb9cd36a5c9ebaa5d60f708a26e93fb37b02b', // UV Atlas 14-mode
+ '99870b8af9ffc9899f21f6c84e3026e4bb0b5dcf', // Triangle UV 15-mode
 ]);
 /** Hash the exact bytes of the previously bundled Gallery; user-edited files
  * must never be rewritten, and the existing Creator .meta UUID is preserved.
@@ -64,6 +65,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/Profiles/UVWorldSpaceProfile.json','examples/installable/GeometryGraph/Profiles/UVWorldSpaceProfile.json'],
  ['GeometryGraph/Profiles/UVAtlasProfile.json','examples/installable/GeometryGraph/Profiles/UVAtlasProfile.json'],
  ['GeometryGraph/Profiles/UVTriangleUnwrapProfile.json','examples/installable/GeometryGraph/Profiles/UVTriangleUnwrapProfile.json'],
+ ['GeometryGraph/Profiles/UVAdvancedAtlasProfile.json','examples/installable/GeometryGraph/Profiles/UVAdvancedAtlasProfile.json'],
  ['GeometryGraph/Profiles/UVMetricProfile.json','examples/installable/GeometryGraph/Profiles/UVMetricProfile.json'],
  ['GeometryGraph/Profiles/UVTaperProfile.json','examples/installable/GeometryGraph/Profiles/UVTaperProfile.json'],
  ['GeometryGraph/BasicMeshDeformGraph.json','examples/installable/GeometryGraph/BasicMeshDeformGraph.json'],
