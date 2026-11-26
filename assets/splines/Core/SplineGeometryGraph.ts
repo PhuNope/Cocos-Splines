@@ -22,7 +22,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'mergePath'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -30,6 +30,9 @@ export interface GeometryGraphNode {
     input?:string;
     /** Optional typed meshSource input on meshDeform; absent means preset. */
     meshInput?:string;
+    /** Secondary required Path input for Merge Path. */
+    pathInputB?:string;
+    mergeDirection?:number;mergeMaxGap?:number;mergeMaxAngle?:number;
     /** Slot 0–2 for meshAsset nodes; omitted means original Source Mesh slot 0. */
     slot?:number;
     /** Longitudinal X / Y / Z axis for Mesh Deform; default Z. */
@@ -417,6 +420,39 @@ function resamplePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyAr
     }
     return {kind:'path',closed:source.closed,frames:output};
 }
+/** Concatenate two open sampled paths in travel order. A stays fixed; B
+ * may be reversed explicitly or by nearest endpoint. Only sub-epsilon gaps
+ * weld; bounded larger gaps get a straight connector segment. Rebuild one
+ * coherent World frame field, preserving width factors and source up hints.
+ */
+function mergePaths(a:GraphPath,b:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray<number>):GraphPath{
+    if(a.closed||b.closed)throw Error('Geometry Graph Merge Path requires open input paths; Clip closed paths first.');
+    const basis=displacedPathBasis(linear);
+    const {sub,len,unit,world}=basis;
+    const tail=a.frames[a.frames.length-1];
+    const gap=(p:GraphFrame)=>len(world(sub(p.position,tail.position)));
+    const direction=node.mergeDirection??0;
+    const reverse=direction===1||direction===2&&gap(b.frames[b.frames.length-1])<gap(b.frames[0]);
+    const second=reverse?reversePath(b):b;
+    const head=second.frames[0],distance=gap(head),weld=distance<=1e-5;
+    if(!finite(distance)||!weld&&distance>(node.mergeMaxGap??.05)+1e-9)
+        throw Error('Geometry Graph Merge Path endpoint gap exceeds Max Gap.');
+    const incoming=unit(world(sub(tail.position,a.frames[a.frames.length-2].position)));
+    const outgoing=unit(world(sub(second.frames[1].position,head.position)));
+    const angle=(u:FrameVec3,v:FrameVec3)=>Math.acos(Math.max(-1,Math.min(1,u.x*v.x+u.y*v.y+u.z*v.z)))*180/Math.PI;
+    const limit=node.mergeMaxAngle??120;
+    const directions=weld?[incoming,outgoing]:[incoming,unit(world(sub(head.position,tail.position))),outgoing];
+    for(let i=1;i<directions.length;i++)if(angle(directions[i-1],directions[i])>limit+1e-7)
+        throw Error('Geometry Graph Merge Path join angle exceeds Max Angle.');
+    const combined=a.frames.slice();
+    if(weld)combined[combined.length-1]={...tail,widthFactor:(tail.widthFactor+head.widthFactor)*.5};
+    combined.push(...second.frames.slice(weld?1:0));
+    if(combined.length>1025)throw Error('Geometry Graph Merge Path exceeds 1025 frames; Resample inputs first.');
+    const origin=combined[0].position;
+    const positions=combined.map(f=>world(sub(f.position,origin)));
+    const source:GraphPath={kind:'path',closed:false,frames:combined.map((f,i)=>i===0?{...f,distance:0}:f)};
+    return rebuildDisplacedPath(source,positions,origin,basis);
+}
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
@@ -429,13 +465,14 @@ const nodePort=(type:GeometryNodeType):GeometryPortType=>
  * Keep the existing serialized input/meshInput fields, rather than introducing
  * an incompatible graph format. Additional named ports can extend this registry.
  */
-export type GeometryInputKey='input'|'meshInput';
+export type GeometryInputKey='input'|'meshInput'|'pathInputB';
 export interface GeometryInputPort {
     readonly key:GeometryInputKey;readonly type:GeometryPortType;readonly required:boolean;
 }
 export function geometryInputPorts(type:GeometryNodeType):ReadonlyArray<GeometryInputPort>{
     if(type==='spline'||type==='meshAsset')return [];
     const primary:GeometryInputPort={key:'input',type:type==='output'?'mesh':'path',required:true};
+    if(type==='mergePath')return [primary,{key:'pathInputB',type:'path',required:true}];
     return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false}]:[primary];
 }
 export function geometryInputLinks(node:GeometryGraphNode):Array<{port:GeometryInputPort;sourceId:string}>{
@@ -481,7 +518,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>(),occupiedSplineSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','mergePath','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...geometryInputPorts(node.type).map(p=>p.key),...(node.type==='spline'?['slot']:
             node.type==='meshAsset'?['slot']:
@@ -491,6 +528,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='clip'?['clipStart','clipEnd']:
             node.type==='resample'?['resampleSegments']:
             node.type==='conform'?['conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']:
+            node.type==='mergePath'?['mergeDirection','mergeMaxGap','mergeMaxAngle']:
             node.type==='width'?['multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['radius','radialSegments','uvMetersPerRepeat','capEnds']:
@@ -555,6 +593,13 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 const n=bound(node[k]===undefined?(k==='conformAlign'?1:0):node[k],0,1,'Conform '+k);
                 if(!Number.isInteger(n))throw Error('Geometry Graph Conform mode must be 0 or 1.');
             }
+        }
+        if(node.type==='mergePath'){
+            const direction=bound(node.mergeDirection===undefined?0:node.mergeDirection,0,2,'Merge Path direction');
+            if(!Number.isInteger(direction))throw Error('Geometry Graph Merge Path direction must be an integer.');
+            bound(node.mergeMaxGap===undefined?.05:node.mergeMaxGap,0,10000,'Merge Path max gap');
+            bound(node.mergeMaxAngle===undefined?120:node.mergeMaxAngle,0,179,'Merge Path max angle');
+            if(node.input===node.pathInputB)throw Error('Geometry Graph Merge Path requires distinct input nodes.');
         }
         if(node.type==='width'){
             if(node.widthKeys!==undefined){
@@ -629,9 +674,9 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         }
         table.set(node.id,{...node});
     }
-    if(sources<1||sources>(multi?3:1)||meshAssets>3||(!multi&&outputs!==1)||
+    if(sources<1||sources>3||meshAssets>3||(!multi&&outputs!==1)||
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
-        throw Error('Geometry Graph requires one v1 spline/output or 1–3 v2 splines and 2–4 v2 outputs, and a valid default output.');
+        throw Error('Geometry Graph requires 1–3 spline sources, one v1 output or 2–4 v2 outputs, and a valid default output.');
     for(const node of table.values()){
         for(const port of geometryInputPorts(node.type)){
             const sourceId=node[port.key];
@@ -779,7 +824,7 @@ export class GeometryGraphRunner {
                     geometryInputPorts(node.type).map(port=>[port.key,inputs.get(port.key)?.version??null]),
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
-                    ['transform','noise','clip','resample','conform'].includes(node.type)?context.worldUvLinear??null:null,
+                    ['transform','noise','clip','resample','conform','mergePath'].includes(node.type)?context.worldUvLinear??null:null,
                     node.type==='conform'?[context.conformSurface?.revision??null,context.conformSurface?.origin??null,context.conformSurface?.targetCount??null]:null,
                     // World-space Profile UV also depends on this transform.
                     // It invalidates its Extrude branch even when a pure Core
@@ -841,6 +886,11 @@ export class GeometryGraphRunner {
                 }else if(node.type==='conform'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Conform input is not a path.');
                     value=conformPath(source,node,context);
+                }else if(node.type==='mergePath'){
+                    const second=inputs.get('pathInputB')?.value;
+                    if(source?.kind!=='path'||second?.kind!=='path')
+                        throw Error('Geometry Graph Merge Path requires two Path inputs.');
+                    value=mergePaths(source,second,node,context.worldUvLinear);
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
                     const keys=node.widthKeys;

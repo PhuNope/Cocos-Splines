@@ -197,6 +197,42 @@ try{
  for(const slot of [0,3,1.5,null])assert.throws(()=>compileGeometryGraph({...multiSpline,nodes:multiSpline.nodes.map(n=>n.id==='sb'?{...n,slot}:n)}));
  const onlyB={version:1,output:'ob',nodes:multiSpline.nodes.slice(3)};
  near(mrunner.evaluate(compileGeometryGraph(onlyB),multiCtx).positions[0],9);
+ // Merge two independent sampled paths into one continuous output (V1).
+ const joinedGraph={version:1,output:'out',nodes:[
+  {id:'sa',type:'spline'},{id:'sb',type:'spline',slot:1},
+  {id:'join',type:'mergePath',input:'sa',pathInputB:'sb'},
+  {id:'road',type:'ribbon',input:'join',width:2,uvMetersPerRepeat:1},{id:'out',type:'output',input:'road'}]};
+ const jr=new GeometryGraphRunner();
+ const bframes=frames.map(f=>({...f,position:v(0,0,f.position.z+3)}));
+ const jctx={...ctx,splineSources:[ctx,{frames:bframes,closed:false,revision:'joinB'}]};
+ const join=(opts={},c=jctx)=>jr.evaluate(compileGeometryGraph({...joinedGraph,nodes:joinedGraph.nodes.map(n=>n.id==='join'?{...n,...opts}:n)}),c);
+ const welded=join();
+ assert.equal(welded.ringCount,7);
+ centers(welded).forEach((p,i)=>near(p[2],i));
+ near(Math.max(...welded.uvs),6);
+ assert.deepEqual(join(),welded);assert.equal(jr.metrics.reused,5);
+ const revB=bframes.slice().reverse().map((f,i)=>({...f,forward:v(0,0,-1),right:v(-1,0,0),distance:i}));
+ const revCtx={...jctx,splineSources:[ctx,{frames:revB,closed:false,revision:'reverseB'}]};
+ assert.throws(()=>join({},revCtx),/gap/i);
+ assert.deepEqual(join({mergeDirection:1},revCtx),welded);
+ assert.deepEqual(join({mergeDirection:2},revCtx),welded);
+ const gapB=bframes.map(f=>({...f,position:v(0,0,f.position.z+1)}));
+ const gapCtx={...jctx,splineSources:[ctx,{frames:gapB,closed:false,revision:'gapB'}]};
+ assert.throws(()=>join({},gapCtx),/gap/i);
+ const bridged=join({mergeMaxGap:1},gapCtx);assert.equal(bridged.ringCount,8);
+ near(Math.max(...bridged.uvs),7);
+ const cornerB=bframes.map((f,i)=>({...f,position:v(i,0,3),right:v(0,0,-1),forward:v(1,0,0)}));
+ const cornerCtx={...jctx,splineSources:[ctx,{frames:cornerB,closed:false,revision:'cornerB'}]};
+ assert.throws(()=>join({mergeMaxAngle:45},cornerCtx),/angle/i);
+ const corner=join({mergeMaxAngle:100},cornerCtx);
+ assert.equal(corner.ringCount,7);assert(corner.normals.every(Number.isFinite));
+ assert.throws(()=>join({}, {...jctx,splineSources:[ctx,{...jctx.splineSources[1],closed:true}]}),/open/i);
+ assert.throws(()=>join({pathInputB:'sa'}),/distinct/i);
+ assert.throws(()=>join({pathInputB:'road'}),/type/i);
+ assert.throws(()=>join({pathInputB:'join'}),/cycle/i);
+ assert.throws(()=>join({mergeDirection:1.5}));assert.throws(()=>join({mergeMaxGap:null}));
+ assert.deepEqual(join(),welded);
+ assert.equal(JSON.stringify(frames),beforeTransform);
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},

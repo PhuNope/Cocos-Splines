@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "sourceA",
+      "type": "spline"
+    },
+    {
+      "id": "sourceB",
+      "type": "spline",
+      "slot": 1
+    },
+    {
+      "id": "join",
+      "type": "mergePath",
+      "input": "sourceA",
+      "pathInputB": "sourceB",
+      "mergeDirection": 2,
+      "mergeMaxGap": 0.5,
+      "mergeMaxAngle": 120
+    },
+    {
+      "id": "road",
+      "type": "ribbon",
+      "input": "join",
+      "width": 3,
+      "uvMetersPerRepeat": 2
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "road"
+    }
+  ],
+  "output": "output"
+}

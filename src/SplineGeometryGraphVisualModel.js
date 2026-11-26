@@ -17,6 +17,7 @@ const TYPES=Object.freeze({
   clip:{input:'path',output:'path',params:['clipStart','clipEnd']},
   resample:{input:'path',output:'path',params:['resampleSegments']},
   conform:{input:'path',output:'path',params:['conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']},
+  mergePath:{input:'path',output:'path',params:['mergeDirection','mergeMaxGap','mergeMaxAngle']},
   width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
@@ -30,6 +31,7 @@ function inputPorts(type){
   const info=TYPES[type];
   if(!info||!info.input)return [];
   const primary={key:'input',type:info.input,required:true,socket:'in',label:info.input,offset:75};
+  if(type==='mergePath')return [{...primary,label:'Path A'},{key:'pathInputB',type:'path',required:true,socket:'path-b-in',label:'Path B',offset:51}];
   return type==='meshDeform'?[primary,{key:'meshInput',type:'meshSource',required:false,
     socket:'mesh-in',label:'asset',offset:51}]:[primary];
 }
@@ -47,6 +49,7 @@ const LIMITS=Object.freeze({
   clipStart:[0,1,0],clipEnd:[0,1,1],resampleSegments:[3,1024,32],
   conformRayHeight:[0,10000,10],conformRayDepth:[0,10000,50],conformOffset:[-1000,1000,0],
   conformMinNormalY:[0,1,.3],conformMissing:[0,1,0],conformAlign:[0,1,1],
+  mergeDirection:[0,2,0],mergeMaxGap:[0,10000,.05],mergeMaxAngle:[0,179,120],
   multiplier:[.01,20,1],midMultiplier:[.01,20,1],
   endMultiplier:[.01,20,1],taperMode:[0,1,0],
   width:[.05,100,4],endWidth:[0,100,0],
@@ -56,7 +59,7 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
+const NODE_KEYS=new Set(['id','type','input','meshInput','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -120,12 +123,14 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
     if(node.type==='conform'&&(node.conformRayHeight??10)+(node.conformRayDepth??50)<=1e-6)
       throw Error('Conform requires a nonzero ray range.');
+    if(node.type==='mergePath'&&node.input===node.pathInputB)
+      throw Error('Merge Path requires distinct input nodes.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
       throw Error('Clip end must be at least 0.001 above start.');
     if(node.type==='width'&&node.widthKeys!==undefined){
@@ -138,10 +143,10 @@ function validateGraph(graph) {
       throw Error('Graph tileLength must be 0 or >= 0.01.');
     map.set(node.id,node);
   }
-  if(sources<1||sources>(graph.version===2?3:1)||meshAssets>3||(graph.version===1&&outputs!==1)||
+  if(sources<1||sources>3||meshAssets>3||(graph.version===1&&outputs!==1)||
      (graph.version===2&&(outputs<2||outputs>4))||
      map.get(graph.output)?.type!=='output')
-    throw Error('Graph requires one v1 Spline/Output or 1–3 v2 Splines and 2–4 v2 Outputs.');
+    throw Error('Graph requires 1–3 Splines and one v1 Output or 2–4 v2 Outputs.');
   for(const node of map.values()){
     for(const port of inputPorts(node.type)){
       const sourceId=node[port.key];
@@ -187,7 +192,34 @@ function applyGraphEdit(json,action,details={}) {
     if(i>100)throw Error('Graph node ID limit reached.');
     return id;
   };
-  if(action==='attach-mesh-asset'){
+  const pruneUnused=()=>{
+    const live=new Set();
+    function mark(id){
+      if(live.has(id))return;
+      const n=find(id);if(!n)throw Error('Missing graph dependency.');
+      live.add(id);for(const link of inputLinks(n))mark(link.sourceId);
+    }
+    for(const n of next.nodes)if(n.type==='output')mark(n.id);
+    next.nodes=next.nodes.filter(n=>live.has(n.id));
+  };
+  if(action==='add-merge-path'){
+    const target=find(details.before);
+    if(!target||TYPES[target.type].input!=='path'||!target.input)
+      throw Error('Select a Path consumer for Merge Path.');
+    let second=details.sourceId?find(details.sourceId):null;
+    if(details.sourceId&&!second)throw Error('Unknown second Path source.');
+    if(!second){
+      const used=new Set(next.nodes.filter(n=>n.type==='spline').map(n=>n.slot??0));
+      const slot=[0,1,2].find(i=>!used.has(i));
+      if(slot===undefined)throw Error('All Spline slots used; select an existing Path source.');
+      second={id:unique('splineSource'),type:'spline',slot};next.nodes.push(second);
+    }
+    if(TYPES[second.type].output!=='path'||target.input===second.id)
+      throw Error('Merge Path requires a distinct second Path source.');
+    if(next.nodes.length>=32)throw Error('Graph node limit reached.');
+    const created={id:unique('mergePath'),type:'mergePath',input:target.input,pathInputB:second.id};
+    next.nodes.push(created);target.input=created.id;
+  }else if(action==='attach-mesh-asset'){
     const target=find(details.id);
     if(!target||target.type!=='meshDeform')
       throw Error('Select a Mesh Deform node to attach a Mesh Asset.');
@@ -270,11 +302,12 @@ function applyGraphEdit(json,action,details={}) {
     target.input=id;next.nodes.push(created);
   }else if(action==='remove'){
     const id=details.id,target=find(id);
-    if(!target||!['offset','transform','noise','reverse','clip','resample','conform','width'].includes(target.type))
+    if(!target||!['offset','transform','noise','reverse','clip','resample','conform','mergePath','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
     for(const node of next.nodes)for(const link of inputLinks(node))
       if(link.sourceId===id)node[link.port.key]=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
+    if(target.type==='mergePath')pruneUnused();
   }else if(action==='connect'){
     const target=find(details.target),source=find(details.source);
     if(!target||!source)throw Error('Select a valid input and output socket.');
@@ -286,7 +319,7 @@ function applyGraphEdit(json,action,details={}) {
     const port=details.port===undefined?(matches.length===1?matches[0]:null):
       ports.find(p=>p.key===details.port);
     if(!port||port.type!==outputType)
-      throw Error('Cannot connect '+source.type+' to '+target.type+': incompatible or ambiguous socket type.');
+      throw Error('Cannot connect '+source.type+' to '+target.type+': incompatible socket type or ambiguous port.');
     if(target[port.key]===source.id)return json;
     const previous=target[port.key];
     if(port.key==='meshInput'){
@@ -297,7 +330,7 @@ function applyGraphEdit(json,action,details={}) {
       // Preserve old single-path reorder behavior. Never silently move
       // a transform shared by multiple consumers or change a secondary port.
       const transforms=['offset','transform','noise','reverse','clip','resample','conform','width'];
-      if(port.key==='input'&&source.input&&transforms.includes(source.type)){
+      if(target.type!=='mergePath'&&port.key==='input'&&source.input&&transforms.includes(source.type)){
         const consumers=next.nodes.flatMap(n=>inputLinks(n).filter(l=>l.sourceId===source.id)
           .map(l=>({node:n,key:l.port.key})));
         if(consumers.length===1&&consumers[0].key==='input'){
@@ -306,6 +339,7 @@ function applyGraphEdit(json,action,details={}) {
         }
       }
       target[port.key]=source.id;
+      if(target.type==='mergePath')pruneUnused();
     }
   }else if(action==='replace-generator'){
     const kind=details.type;
@@ -393,7 +427,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -520,6 +554,7 @@ function renderNodeParameters(graphJson,id){
         ['Linear','Smoothstep (ease in/out)'].map((name,i)=>
           '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
         '</select></label>';
+    if(key==='mergeDirection')return '<label>Direction B <select data-graph-param="mergeDirection">'+['Forward','Reverse','Nearest endpoint'].map((name,i)=>'<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
     if(key==='conformMissing'||key==='conformAlign')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+(key==='conformMissing'?['Fail on missing hit','Keep source sample']:['Source up hint','Surface normal hint']).map((name,i)=>
        '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
@@ -557,7 +592,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign','mergeDirection'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+

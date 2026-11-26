@@ -81,6 +81,22 @@ try{
  assert.throws(()=>m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'meshInput'}),/socket/i);
  assert.throws(()=>m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'__proto__'}),/socket/i);
  assert.equal(m.applyGraphEdit(source,'connect',{source:'source',target:'ribbon',port:'input'}),source);
+ // Add a second source and merge in one validated transaction.
+ let joined=m.applyGraphEdit(source,'add-merge-path',{before:'ribbon'});
+ let jview=m.parseGraph(joined);
+ assert.equal(jview.graph.version,1);
+ assert.equal(jview.map.get('mergePath').input,'source');
+ assert.equal(jview.map.get('mergePath').pathInputB,'splineSource');
+ assert.equal(jview.map.get('ribbon').input,'mergePath');
+ assert.deepEqual(core.parseGeometryGraph(joined).nodes.map(n=>n.id),jview.ordered.map(n=>n.id));
+ assert(m.renderGraphCanvas(joined,'{}',null,null).includes('data-port="pathInputB"'));
+ assert.throws(()=>m.applyGraphEdit(joined,'connect',{source:'source',target:'mergePath'}),/ambiguous/i);
+ assert.throws(()=>m.applyGraphEdit(joined,'connect',{source:'source',target:'mergePath',port:'pathInputB'}),/distinct/i);
+ assert.throws(()=>m.applyGraphEdit(joined,'connect',{source:'mergePath',target:'mergePath',port:'pathInputB'}),/itself/i);
+ joined=m.applyGraphEdit(joined,'param',{id:'mergePath',key:'mergeDirection',value:2});
+ assert(m.renderNodeParameters(joined,'mergePath').includes('Nearest endpoint'));
+ joined=m.applyGraphEdit(joined,'remove',{id:'mergePath'});
+ assert.equal(m.parseGraph(joined).ordered.length,3);
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

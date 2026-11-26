@@ -42,6 +42,8 @@ try {
  const multiSpline=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/MultiSplineGraph.json'),'utf8'));
  assert.equal(multiSpline.version,2);
  assert.deepEqual(multiSpline.nodes.filter(n=>n.type==='spline').map(n=>n.slot??0),[0,1]);
+ const mergePath=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/MergePathGraph.json'),'utf8'));
+ assert.equal(mergePath.nodes.find(n=>n.type==='mergePath').pathInputB,'sourceB');
  const extrude=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicProfileExtrudeGraph.json'),'utf8'));
  assert.equal(extrude.version,1);
