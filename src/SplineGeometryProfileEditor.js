@@ -161,12 +161,17 @@ function parseProfile(value){
 const formatProfile=value=>JSON.stringify(parseProfile(value),null,2)+'\n';
 const round=v=>Math.round(v*10000)/10000;
 function applyProfileEdit(value,action,params={}){
- const profile=parseProfile(value),p=profile.points,index=Number(params.index);
- if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes'].includes(action)&&
+ const profile=parseProfile(value),index=Number(params.index);
+ const geometryActions=['move','move-edge','insert','insert-edge','remove'];
+ const contour=geometryActions.includes(action)?(params.contour??0):0;
+ if(!Number.isInteger(contour)||contour<0||contour>(profile.holes?.length??0))
+  throw Error('Select a valid contour.');
+ const p=contour===0?profile.points:profile.holes[contour-1];
+ if(!['reset-uv','set-u-meters-per-repeat','clear-u-meters-per-repeat','set-u-follow-frame-scale','set-u-world-space','set-side-island-mode','set-atlas-packing','set-atlas-padding','clear-atlas-padding','set-triangle-unwrap','set-atlas-rotate','set-atlas-pixel-padding','clear-atlas-pixel-padding','set-holes','add-hole','remove-hole'].includes(action)&&
     (!Number.isInteger(index)||index<0||index>=p.length))
   throw Error('Select a valid Profile point index.');
  const insertedUv=at=>{
-  if(!profile.uv)return;
+  if(contour!==0||!profile.uv)return;
   if(profile.uv.edgeWeights){
    const weight=profile.uv.edgeWeights[at];
    profile.uv.edgeWeights.splice(at+1,0,weight);
@@ -175,7 +180,7 @@ function applyProfileEdit(value,action,params={}){
    profile.uv.seamEdge++;
  };
  const removedUv=(at,oldLength)=>{
-  if(!profile.uv)return;
+  if(contour!==0||!profile.uv)return;
   if(profile.uv.edgeWeights)profile.uv.edgeWeights.splice(at,1);
   if(profile.uv.seamEdge!==undefined){
    const seam=profile.uv.seamEdge;
@@ -183,7 +188,32 @@ function applyProfileEdit(value,action,params={}){
    profile.uv.seamEdge=surviving>at?surviving-1:surviving;
   }
  };
- if(action==='set-holes'){
+ if(action==='add-hole'){
+  if((profile.holes?.length??0)>=3)throw Error('Profile supports up to three holes.');
+  // Find a valid small CW square, preferring the center and larger sizes.
+  // Each candidate passes the same containment/intersection validation.
+  const centers=[];
+  for(let y=-.9;y<=.90001;y+=.1)for(let x=-.9;x<=.90001;x+=.1)
+   centers.push({x:round(x),y:round(y)});
+  centers.sort((a,b)=>a.x*a.x+a.y*a.y-b.x*b.x-b.y*b.y||a.x-b.x||a.y-b.y);
+  for(const radius of [.1,.05,.025]){
+   for(const {x,y} of centers){
+    const ring=[{x:round(x-radius),y:round(y-radius)},
+     {x:round(x-radius),y:round(y+radius)},
+     {x:round(x+radius),y:round(y+radius)},
+     {x:round(x+radius),y:round(y-radius)}];
+    try{return formatProfile({...profile,holes:[...(profile.holes??[]),ring]});}
+    catch{/* Try another location. */}
+   }
+  }
+  throw Error('No room for a new hole. Adjust the contour or enter hole JSON.');
+ }else if(action==='remove-hole'){
+  const hole=params.hole;
+  if(!Number.isInteger(hole)||hole<0||hole>=(profile.holes?.length??0))
+   throw Error('Select a hole to remove.');
+  profile.holes.splice(hole,1);
+  if(!profile.holes.length)delete profile.holes;
+ }else if(action==='set-holes'){
   if(!Array.isArray(params.holes))throw Error('Profile holes must be an array.');
   if(params.holes.length===0)delete profile.holes;
   else profile.holes=params.holes;
@@ -331,10 +361,13 @@ function applyProfileEdit(value,action,params={}){
  }else throw Error('Unknown Profile edit action.');
  return formatProfile(profile);
 }
-function renderProfileControls(value,selected=0,selectedEdge=null){
- const profile=parseProfile(value),points=profile.points,pt=points[selected]||points[0];
+function renderProfileControls(value,selected=0,selectedEdge=null,contour=0){
+ const profile=parseProfile(value);
+ const rings=[profile.points,...(profile.holes??[])];
+ if(!Number.isInteger(contour)||contour<0||contour>=rings.length)contour=0;
+ const points=rings[contour],pt=points[selected]||points[0];
  const map=point=>String(round(120+point.x*104))+','+String(round(120-point.y*104));
- const polygon=points.map(map).join(' ');
+ const polygon=profile.points.map(map).join(' ');
  // Wider invisible line targets enable selecting/dragging an entire edge.
  // Midpoint dots communicate edge interaction; coordinates are generated
  // only from bounded numeric polygon data, never user-provided SVG/HTML.
@@ -347,7 +380,7 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
    'role="button" tabindex="0" aria-label="Profile edge '+(i+1)+'"/>'+
    '<circle data-profile-edge="'+i+'" cx="'+mx+'" cy="'+my+'" r="'+
    (selectedEdge===i?6:4)+'" fill="'+
-   (selectedEdge===i?'#ffca76':profile.uv?.seamEdge===i?'#f49bb7':'#a7f0bb')+'" stroke="#142a37" stroke-width="1.5"/>';
+   (selectedEdge===i?'#ffca76':contour===0&&profile.uv?.seamEdge===i?'#f49bb7':'#a7f0bb')+'" stroke="#142a37" stroke-width="1.5"/>';
  }).join('');
  const circles=points.map((point,i)=>{
   const [x,y]=map(point).split(',');
@@ -363,7 +396,12 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
   '<polygon points="'+polygon+'" fill="#42637d" fill-opacity=".5" stroke="#8de1ed" stroke-width="2"/>'+
   (profile.holes??[]).map(ring=>'<polygon points="'+ring.map(map).join(' ')+'" fill="#142a37" stroke="#f3bb78" stroke-width="2"/>').join('')+
   edges+circles+'</svg>';
- return '<div class="spl-profile-count">'+points.length+' CCW points · selected #'+(selected+1)+
+ return '<div class="spl-vg-toolbar"><label>Contour <select class="spl-profile-contour">'+
+  rings.map((ring,i)=>'<option value="'+i+'"'+(i===contour?' selected':'')+'>'+
+   (i===0?'Outer':'Hole '+i)+'</option>').join('')+'</select></label>'+
+  '<button type="button" class="spl-btn spl-profile-add-hole"'+(rings.length>=4?' disabled':'')+'>Add hole</button>'+
+  '<button type="button" class="spl-btn spl-profile-remove-hole"'+(contour===0?' disabled':'')+'>Remove hole</button></div>'+
+  '<div class="spl-profile-count">'+points.length+(contour===0?' CCW':' CW')+' points · selected #'+(selected+1)+
   (selectedEdge===null?'':' · edge #'+(selectedEdge+1)+' selected')+'</div>'+
   svg+'<div class="spl-profile-coordinates">'+
   '<label>X <input type="number" class="spl-profile-x" min="-1" max="1" step="0.01" value="'+pt.x+'"></label>'+
@@ -376,8 +414,8 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
   '<button type="button" class="spl-btn spl-profile-remove"'+(points.length<=3?' disabled':'')+
   '>Remove selected point</button></div>'+
   '<div class="spl-vg-toolbar"><label>Inner contours ('+(profile.holes?.length??0)+')</label></div>'+
-  '<textarea class="spl-profile-holes" rows="3" style="width:100%;box-sizing:border-box" aria-label="Clockwise hole contours JSON">'+
-  JSON.stringify(profile.holes??[])+'</textarea>'+
+  '<details><summary>Hole JSON</summary><textarea class="spl-profile-holes" rows="3" style="width:100%;box-sizing:border-box" aria-label="Clockwise hole contours JSON">'+
+  JSON.stringify(profile.holes??[])+'</textarea></details>'+
   '<div class="spl-profile-uv-controls">'+
   '<div class="spl-profile-uv-info">UV0 side bands · '+
    (profile.uv===undefined?'Default perimeter mapping':
@@ -443,10 +481,10 @@ function renderProfileControls(value,selected=0,selectedEdge=null){
   '<div class="spl-vg-toolbar">'+
   '<label>Edge UV weight <input type="number" class="spl-profile-uv-weight" '+
    'min="0.25" max="4" step="0.05" value="'+
-   (selectedEdge===null?1:profile.uv?.edgeWeights?.[selectedEdge]??1)+
-   '"'+(selectedEdge===null?' disabled':'')+'></label>'+
+   (contour!==0||selectedEdge===null?1:profile.uv?.edgeWeights?.[selectedEdge]??1)+
+   '"'+(contour!==0||selectedEdge===null?' disabled':'')+'></label>'+
   '<button type="button" class="spl-btn spl-profile-set-uv-seam"'+
-   (selectedEdge===null?' disabled':'')+'>Set UV seam at selected edge</button>'+
+   (contour!==0||selectedEdge===null?' disabled':'')+'>Set UV seam at selected edge</button>'+
   '<button type="button" class="spl-btn spl-profile-reset-uv"'+
    (profile.uv===undefined?' disabled':'')+'>Reset UV mapping</button></div></div>';
 }

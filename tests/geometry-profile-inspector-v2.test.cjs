@@ -200,6 +200,46 @@ async function run(){
   assert.equal(ui._vgAuthoredDraft.profileJson,holesDraft);
   setHoles('[]');
   assert.equal(ui._vgAuthoredDraft.profileJson,beforeHoles);
+  const clickContourButton=cls=>ui.$.vgProfileCanvas.events.click({target:{
+   classList:{contains:name=>name===cls},closest(sel){return sel==='button'?this:null;}
+  }});
+  const selectContour=value=>ui.$.vgProfileCanvas.events.change({target:{
+   value,classList:{contains:name=>name==='spl-profile-contour'},
+  }});
+  clickContourButton('spl-profile-add-hole');
+  assert.equal(ui._vgAuthoredContour,1);
+  const addedHole=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(addedHole).holes.length,1);
+  const startHistory=ui._vgAuthoredDraft.undo.length;
+  const handles=ui.$.vgProfileCanvas;
+  handles.events.pointerdown({pointerId:19,clientX:109.6,clientY:130.4,preventDefault(){},
+   target:{dataset:{profilePoint:'0'},closest(sel){return sel==='[data-profile-point]'?this:null;}}});
+  handles.events.pointermove({pointerId:19,clientX:104.4,clientY:130.4});
+  handles.events.pointermove({pointerId:19,clientX:99.2,clientY:130.4});
+  handles.events.pointerup({pointerId:19});
+  const movedHole=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(movedHole).holes[0][0].x,-.2);
+  assert.deepEqual(model.parseProfile(movedHole).points,profile.points);
+  assert.equal(ui._vgAuthoredDraft.undo.length,Math.min(32,startHistory+1));
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,addedHole);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,movedHole);
+  handles.events.pointerdown({pointerId:20,clientX:109.6,clientY:120,preventDefault(){},
+   target:{dataset:{profileEdge:'0'},closest(sel){return sel==='[data-profile-edge]'?this:null;}}});
+  handles.events.pointermove({pointerId:20,clientX:104.4,clientY:120});
+  handles.events.pointerup({pointerId:20});
+  const edgeMoved=model.parseProfile(ui._vgAuthoredDraft.profileJson);
+  assert.equal(edgeMoved.holes[0][0].x,-.25);
+  assert.equal(edgeMoved.holes[0][1].x,-.15);
+  assert.deepEqual(edgeMoved.points,profile.points);
+  selectContour('0');
+  assert.equal(ui._vgAuthoredContour,0);
+  selectContour('1');
+  assert.equal(ui._vgAuthoredContour,1);
+  clickContourButton('spl-profile-remove-hole');
+  assert.equal(ui._vgAuthoredContour,0);
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeHoles);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

@@ -207,6 +207,10 @@ function profileStatus(panel,message,isError=false){
   panel.$.vgProfileStatus.textContent=message;
   panel.$.vgProfileStatus.classList?.toggle?.('error',isError);
 }
+function activeProfileContour(panel,profile){
+  const contour=panel._vgAuthoredContour??0;
+  return Number.isInteger(contour)&&contour>=0&&contour<=(profile.holes?.length??0)?contour:0;
+}
 function renderAuthoredProfile(panel){
   const draft=panel._vgAuthoredDraft;
   const blocked=!!panel._vgAuthoredBusy||!!panel._vgSharedBusy||
@@ -237,9 +241,14 @@ function renderAuthoredProfile(panel){
     return;
   }
   try{
+    const profile=authored.parseProfile(draft.profileJson);
+    panel._vgAuthoredContour=activeProfileContour(panel,profile);
+    const points=panel._vgAuthoredContour===0?profile.points:profile.holes[panel._vgAuthoredContour-1];
+    panel._vgAuthoredSelected=Math.max(0,Math.min(panel._vgAuthoredSelected||0,points.length-1));
+    if(panel._vgAuthoredEdge>=points.length)panel._vgAuthoredEdge=null;
     panel.$.vgProfileCanvas.innerHTML=
       authored.renderProfileControls(draft.profileJson,
-        panel._vgAuthoredSelected||0,panel._vgAuthoredEdge??null);
+        panel._vgAuthoredSelected,panel._vgAuthoredEdge??null,panel._vgAuthoredContour);
   }catch(error){
     panel.$.vgProfileCanvas.textContent=String(error?.message||error);
   }
@@ -252,7 +261,7 @@ function applyAuthoredEdit(panel,action,details={}){
     const next=action==='library-preset'?
       library.applyProfilePreset(draft.profileJson,params.preset):
       authored.applyProfileEdit(baseProfile||draft.profileJson,action,
-        {index:panel._vgAuthoredSelected,...params});
+        {index:panel._vgAuthoredSelected,contour:panel._vgAuthoredContour??0,...params});
     if(next!==draft.profileJson){
       // One history entry per pointer drag, regardless of move event count.
       // Input/insert/remove remain individually undoable transactions.
@@ -264,22 +273,23 @@ function applyAuthoredEdit(panel,action,details={}){
         if(drag)drag.historySaved=true;
       }
       draft.profileJson=next;
-      if(action==='library-preset'){
+      if(action==='library-preset'||action==='set-holes'||action==='remove-hole'||action==='add-hole'){
+        panel._vgAuthoredContour=action==='add-hole'?authored.parseProfile(next).holes.length:0;
         panel._vgAuthoredSelected=0;
         panel._vgAuthoredEdge=null;
       }else if(action==='insert'||action==='insert-edge'){
         panel._vgAuthoredSelected=Number(params.index??panel._vgAuthoredSelected)+1;
         panel._vgAuthoredEdge=null;
       }else if(action==='remove'){
-        panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
-          authored.parseProfile(next).points.length-1);
+        const profile=authored.parseProfile(next);
+        const contour=activeProfileContour(panel,profile);
+        const points=contour===0?profile.points:profile.holes[contour-1];
+        panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,points.length-1);
         panel._vgAuthoredEdge=null;
       }
     }
     renderAuthoredProfile(panel);
-    profileStatus(panel,'Unsaved Profile draft: '+draft.assetName+
-      ' · '+authored.parseProfile(draft.profileJson).points.length+
-      ' validated points. Save explicitly to update JsonAsset.');
+    profileStatus(panel,'Unsaved Profile draft: '+draft.assetName);
   }catch(error){profileStatus(panel,String(error?.message||error),true);}
 }
 function restoreAuthoredHistory(panel,mode){
@@ -292,8 +302,7 @@ function restoreAuthoredHistory(panel,mode){
   const next=authored.formatProfile(from.pop());
   to.push(prior);if(to.length>32)to.shift();
   draft.profileJson=next;
-  panel._vgAuthoredSelected=Math.min(panel._vgAuthoredSelected,
-    authored.parseProfile(next).points.length-1);
+  panel._vgAuthoredContour=activeProfileContour(panel,authored.parseProfile(next));
   panel._vgAuthoredEdge=null;
   renderAuthoredProfile(panel);
   profileStatus(panel,(mode==='undo'?'Undo':'Redo')+
@@ -602,7 +611,7 @@ const inspector={
     this._vgProfileRequestToken=0;this._vgProfileOutputId='';
     this._vgOutputOrder='';this._vgRenderAllOutputs=false;
     this._vgAuthoredDraft=null;this._vgAuthoredBusy=false;
-    this._vgAuthoredToken=0;this._vgAuthoredSelected=0;
+    this._vgAuthoredToken=0;this._vgAuthoredSelected=0;this._vgAuthoredContour=0;
     this._vgAuthoredEdge=null;
     this._vgProfileAssetIdentity=undefined;this._vgAuthoredDrag=null;
     this.$?.vgProfileSlot?.addEventListener('change',event=>{
@@ -627,7 +636,7 @@ const inspector={
           slot,assetName:result.assetName||'Profile',sha256:result.sha256,
           profileJson:canonical,initialProfileJson:canonical,
           undo:[],redo:[]};
-        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
+        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;this._vgAuthoredContour=0;
         profileStatus(this,'Editing '+this._vgAuthoredDraft.assetName+
           ' in memory; no file/Scene changes until Save.');
       }catch(error){
@@ -740,7 +749,12 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('click',event=>{
       const el=closest(event.target,'button');
       if(!el||!this._vgAuthoredDraft)return;
-      if(el.classList?.contains('spl-profile-insert'))
+      if(this._vgAuthoredDrag)return;
+      if(el.classList?.contains('spl-profile-add-hole'))
+        applyAuthoredEdit(this,'add-hole',{});
+      else if(el.classList?.contains('spl-profile-remove-hole')&&this._vgAuthoredContour>0)
+        applyAuthoredEdit(this,'remove-hole',{hole:this._vgAuthoredContour-1});
+      else if(el.classList?.contains('spl-profile-insert'))
         applyAuthoredEdit(this,'insert',{});
       else if(el.classList?.contains('spl-profile-remove'))
         applyAuthoredEdit(this,'remove',{});
@@ -749,7 +763,7 @@ const inspector={
         applyAuthoredEdit(this,'insert-edge',{
           index:this._vgAuthoredEdge,t:.5,offset:.12});
       else if(el.classList?.contains('spl-profile-set-uv-seam')&&
-              Number.isInteger(this._vgAuthoredEdge))
+              !this._vgAuthoredContour&&Number.isInteger(this._vgAuthoredEdge))
         applyAuthoredEdit(this,'set-uv-seam',{index:this._vgAuthoredEdge});
       else if(el.classList?.contains('spl-profile-reset-uv'))
         applyAuthoredEdit(this,'reset-uv',{});
@@ -759,6 +773,15 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(this._vgAuthoredDrag)return;
+      if(cls?.contains('spl-profile-contour')){
+        const contour=Number(event.target.value);
+        const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+        if(!Number.isInteger(contour)||contour<0||contour>(profile.holes?.length??0))return;
+        this._vgAuthoredContour=contour;
+        this._vgAuthoredSelected=0;this._vgAuthoredEdge=null;
+        renderAuthoredProfile(this);return;
+      }
       if(cls?.contains('spl-profile-holes')){
         let holes;
         try{holes=JSON.parse(event.target.value);}
@@ -847,7 +870,7 @@ const inspector={
         return;
       }
       if(cls?.contains('spl-profile-uv-weight')){
-        if(!Number.isInteger(this._vgAuthoredEdge))return;
+        if(this._vgAuthoredContour||!Number.isInteger(this._vgAuthoredEdge))return;
         if(event.target.value===''||!Number.isFinite(Number(event.target.value))){
           profileStatus(this,'Profile UV edge weight must be finite.',true);return;
         }
@@ -856,8 +879,10 @@ const inspector={
         return;
       }
       if(!cls?.contains('spl-profile-x')&&!cls?.contains('spl-profile-y'))return;
-      const pt=authored.parseProfile(this._vgAuthoredDraft.profileJson)
-        .points[this._vgAuthoredSelected];
+      const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+      const contour=activeProfileContour(this,profile);
+      const pt=(contour===0?profile.points:profile.holes[contour-1])[this._vgAuthoredSelected];
+      if(!pt)return;
       const value=Number(event.target.value);
       if(event.target.value===''||!Number.isFinite(value)){
         profileStatus(this,'Profile point coordinate must be finite.',true);return;
@@ -868,19 +893,20 @@ const inspector={
       });
     });
     this.$?.vgProfileCanvas?.addEventListener('pointerdown',event=>{
-      if(!this._vgAuthoredDraft||this._vgAuthoredBusy)return;
+      if(!this._vgAuthoredDraft||this._vgAuthoredBusy||this._vgAuthoredDrag)return;
       const circle=closest(event.target,'[data-profile-point]');
       const edge=circle?null:closest(event.target,'[data-profile-edge]');
       const kind=circle?'point':edge?'edge':null;
       if(!kind)return;
       const index=Number(circle?.dataset?.profilePoint??
         edge?.dataset?.profileEdge);
-      if(!Number.isInteger(index)||index<0||
-         index>=authored.parseProfile(this._vgAuthoredDraft.profileJson).points.length)
-        return;
+      const profile=authored.parseProfile(this._vgAuthoredDraft.profileJson);
+      const contour=activeProfileContour(this,profile);
+      const points=contour===0?profile.points:profile.holes[contour-1];
+      if(!Number.isInteger(index)||index<0||index>=points.length)return;
       this._vgAuthoredSelected=index;
       this._vgAuthoredEdge=kind==='edge'?index:null;
-      this._vgAuthoredDrag={pointerId:event.pointerId,index,kind,
+      this._vgAuthoredDrag={pointerId:event.pointerId,index,kind,contour,
         startX:event.clientX,startY:event.clientY,
         baseProfile:this._vgAuthoredDraft.profileJson,historySaved:false};
       this.$.vgProfileCanvas.setPointerCapture?.(event.pointerId);
@@ -902,13 +928,13 @@ const inspector={
         const dy=snapProfileCoordinate(
           -(event.clientY-drag.startY)/rect.height*240/104,snap);
         applyAuthoredEdit(this,'move-edge',{
-          baseProfile:drag.baseProfile,index:drag.index,dx,dy});
+          baseProfile:drag.baseProfile,index:drag.index,contour:drag.contour,dx,dy});
       }else{
         const x=snapProfileCoordinate(Math.max(-1,Math.min(1,
           ((event.clientX-rect.left)/rect.width*240-120)/104)),snap);
         const y=snapProfileCoordinate(Math.max(-1,Math.min(1,
           (120-(event.clientY-rect.top)/rect.height*240)/104)),snap);
-        applyAuthoredEdit(this,'move',{index:drag.index,x,y});
+        applyAuthoredEdit(this,'move',{baseProfile:drag.baseProfile,index:drag.index,contour:drag.contour,x,y});
       }
     });
     const finishProfileDrag=event=>{
