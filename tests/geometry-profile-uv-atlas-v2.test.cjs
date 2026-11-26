@@ -85,8 +85,11 @@ try{
  const tapers=frames.map((f,i)=>({...f,widthFactor:[1,2,.65][i]}));
  const worldPacked=buildProfileExtrudeGeometry(tapers,{
   ...opts(world),worldUvLinear:[2,0,0,0,1,0,0,0,1]},false);
+ const unPackedWorld={...world};
+ delete unPackedWorld.atlasPacking;
+ delete unPackedWorld.atlasPadding;
  const worldLegacy=buildProfileExtrudeGeometry(tapers,{
-  ...opts({...world,atlasPacking:false}),worldUvLinear:[2,0,0,0,1,0,0,0,1]},false);
+  ...opts(unPackedWorld),worldUvLinear:[2,0,0,0,1,0,0,0,1]},false);
  assert.deepEqual(worldPacked.positions,worldLegacy.positions);
  assert.deepEqual(worldPacked.normals,worldLegacy.normals);
  assert.deepEqual(worldPacked.indices,worldLegacy.indices);
