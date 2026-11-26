@@ -759,6 +759,13 @@ const inspector={
     this.$?.vgProfileCanvas?.addEventListener('change',event=>{
       if(!this._vgAuthoredDraft||!event.target)return;
       const cls=event.target.classList;
+      if(cls?.contains('spl-profile-holes')){
+        let holes;
+        try{holes=JSON.parse(event.target.value);}
+        catch{profileStatus(this,'Invalid hole contours JSON.',true);return;}
+        applyAuthoredEdit(this,'set-holes',{holes});
+        return;
+      }
       if(cls?.contains('spl-profile-uv-triangle-unwrap')){
         applyAuthoredEdit(this,'set-triangle-unwrap',{
           enabled:event.target.checked===true});

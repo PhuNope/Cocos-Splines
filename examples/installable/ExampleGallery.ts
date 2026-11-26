@@ -27,7 +27,7 @@ export enum SplineExampleKind {
     Follower=0, Road=1, Extrude=2, Junction=3, Proximity=4, Positioner=5,
     Projector=6, Triggers=7, Modifiers=8, Morph=9,
     MeshDeform=10, TrafficController=11, PrefabSpawning=12,
-    GeometryGraphUVAtlas=13, GeometryGraphTriangleUV=14, GeometryGraphAdvancedAtlas=15,
+    GeometryGraphUVAtlas=13, GeometryGraphTriangleUV=14, GeometryGraphAdvancedAtlas=15, GeometryGraphProfileHoles=16,
 }
 Enum(SplineExampleKind);
 
@@ -65,6 +65,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             case SplineExampleKind.GeometryGraphUVAtlas:this.showGeometryGraphUVAtlas();break;
             case SplineExampleKind.GeometryGraphTriangleUV:this.showGeometryGraphTriangleUV();break;
             case SplineExampleKind.GeometryGraphAdvancedAtlas:this.showGeometryGraphAdvancedAtlas();break;
+            case SplineExampleKind.GeometryGraphProfileHoles:this.showGeometryGraphProfileHoles();break;
         }
     }
     private child(parent:Node,name:string,at?:Vec3):Node {
@@ -428,7 +429,10 @@ export class CocosSplinesExampleGalleryV2 extends Component {
     private showGeometryGraphAdvancedAtlas():void {
         this.showGeometryGraphUVAtlas(true,true);
     }
-    private showGeometryGraphUVAtlas(triangle=false,advanced=false):void {
+    private showGeometryGraphProfileHoles():void {
+        this.showGeometryGraphUVAtlas(false,false,true);
+    }
+    private showGeometryGraphUVAtlas(triangle=false,advanced=false,hollow=false):void {
         const graphData=this.uvAtlasGraph?.json??{
             version:1,nodes:[
                 {id:'source',type:'spline'},
@@ -455,7 +459,10 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             throw Error('UV Atlas Gallery needs a polygon Profile with UV settings.');
         const variants:[
             string,number,boolean,Color,
-        ][]=triangle?[
+        ][]=hollow?[
+            ['Solid Profile',-4.7,false,new Color(80,175,240)],
+            ['Hollow Profile / Two holes',4.7,true,new Color(250,175,75)],
+        ]:triangle?[
             [advanced?'Per-triangle UV / Legacy Atlas':'Quad Islands / Reference',-4.7,false,new Color(80,175,240)],
             [advanced?'Per-triangle UV / Advanced Atlas':'Per-triangle UV / Atlas',4.7,true,new Color(250,175,75)],
         ]:[
@@ -463,7 +470,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
             ['UV Atlas / Packed',4.7,true,new Color(250,175,75)],
         ];
         for(const [label,x,packed,color] of variants){
-            const spline=this.spline((advanced?'16':triangle?'15':'14')+' — '+label,[
+            const spline=this.spline((hollow?'17':advanced?'16':triangle?'15':'14')+' — '+label,[
                 new Vec3(x-3.5,1,-1.2),
                 new Vec3(x-1.1,2.3,-3),
                 new Vec3(x+1.1,1.6,2.7),
@@ -494,6 +501,15 @@ export class CocosSplinesExampleGalleryV2 extends Component {
                 delete profileData.uv.atlasRotate;
                 delete profileData.uv.atlasPixelPadding;
             }
+            if(hollow){
+                profileData.points=[{x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5},{x:-.5,y:.5}];
+                profileData.uv={sideIslandMode:2};
+                if(packed)profileData.holes=[
+                    [{x:-.4,y:-.3},{x:-.4,y:.3},{x:-.1,y:.3},{x:-.1,y:-.3}],
+                    [{x:.1,y:-.3},{x:.1,y:.3},{x:.4,y:.3},{x:.4,y:-.3}],
+                ];
+                else delete profileData.holes;
+            }
             const transientProfile=new JsonAsset();
             transientProfile.json=profileData;
             graph.spline=spline;
@@ -515,6 +531,7 @@ export class CocosSplinesExampleGalleryV2 extends Component {
                 console.warn('[Cocos Splines Example] UV Atlas graph failed ('+label+'):',error);
             }
         }
+        if(hollow){console.log('[Cocos Splines Example] Solid vs two-hole Profile Extrude.');return;}
         console.log('[Cocos Splines Example] '+(advanced?'GeometryGraphAdvancedAtlas':triangle?'GeometryGraphTriangleUV':'GeometryGraphUVAtlas')+
             (advanced?': Left = legacy triangle Atlas, Right = advanced Atlas':': Left = Quad Islands, Right = '+(triangle?'triangle UV Atlas':'quad UV Atlas'))+
             '. Add a checker material to see UV0; no JSON assets are required.');

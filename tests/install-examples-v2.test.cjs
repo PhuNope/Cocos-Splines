@@ -86,6 +86,10 @@ try {
   'GeometryGraph/Profiles/UVAdvancedAtlasProfile.json'),'utf8'));
  assert.equal(advancedAtlas.uv.atlasRotate,true);
  assert.deepEqual(advancedAtlas.uv.atlasPixelPadding,{resolution:1024,pixels:4});
+ const hollowProfile=JSON.parse(fs.readFileSync(path.join(first.folder,
+  'GeometryGraph/Profiles/HollowProfile.json'),'utf8'));
+ assert.equal(hollowProfile.holes.length,2);
+ assert.equal(hollowProfile.points.length,4);
  const uvExample=JSON.parse(fs.readFileSync(path.join(first.folder,
   'GeometryGraph/Profiles/UVSeamProfile.json'),'utf8'));
  assert.equal(uvExample.format,'cocos-splines/profile');

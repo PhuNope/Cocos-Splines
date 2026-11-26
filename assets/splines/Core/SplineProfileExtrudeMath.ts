@@ -57,17 +57,19 @@ export interface GraphAuthoredProfile {
     format:'cocos-splines/profile';
     version:1;
     points:GraphProfilePoint[];
+    /** Up to three strictly contained, clockwise inner boundaries. */
+    holes?:GraphProfilePoint[][];
     uv?:GraphProfileUV;
 }
 /** Strict data-only profile; copied out of the Cocos JsonAsset, never mutated. */
 export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
     const r=input as Record<string,unknown>;
     if(!r||typeof r!=='object'||Array.isArray(r)||
-       Object.keys(r).some(k=>!['format','version','points','uv'].includes(k))||
+       Object.keys(r).some(k=>!['format','version','points','holes','uv'].includes(k))||
        r.format!=='cocos-splines/profile'||r.version!==1||
        !Array.isArray(r.points)||r.points.length<3||r.points.length>16)
         throw Error('Graph Profile Asset requires cocos-splines/profile v1 with 3–16 points.');
-    const points:GraphProfilePoint[]=r.points.map(raw=>{
+    const readPoint=(raw:unknown):GraphProfilePoint=>{
         const p=raw as Record<string,unknown>;
         if(!p||typeof p!=='object'||Array.isArray(p)||
            Object.keys(p).some(k=>!['x','y'].includes(k))||
@@ -76,10 +78,25 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
            Math.abs(p.x)>1||Math.abs(p.y)>1)
             throw Error('Graph Profile Asset point requires finite x/y in [-1,1].');
         return {x:p.x,y:p.y};
-    });
+    };
+    const points:GraphProfilePoint[]=r.points.map(readPoint);
     checkAuthoredProfilePolygon(points);
+    let holes:GraphProfilePoint[][]|undefined;
+    if(Object.prototype.hasOwnProperty.call(r,'holes')){
+        if(!Array.isArray(r.holes)||r.holes.length<1||r.holes.length>3)
+            throw Error('Graph Profile Asset holes requires 1–3 clockwise contours.');
+        holes=r.holes.map(loop=>{
+            if(!Array.isArray(loop)||loop.length<3||loop.length>16)
+                throw Error('Graph Profile Asset hole requires 3–16 points.');
+            const ring=loop.map(readPoint);
+            checkAuthoredProfilePolygon(ring,true);
+            return ring;
+        });
+        checkProfileHoles(points,holes);
+    }
+    const contours=holes?{holes}:{};
     if(!Object.prototype.hasOwnProperty.call(r,'uv'))
-        return {format:'cocos-splines/profile',version:1,points};
+        return {format:'cocos-splines/profile',version:1,points,...contours};
     const raw=r.uv as Record<string,unknown>;
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||
        Object.keys(raw).some(k=>!['seamEdge','edgeWeights','uMetersPerRepeat','uFollowFrameScale','uWorldSpace','sideIslandMode','atlasPacking','atlasPadding','atlasRotate','atlasPixelPadding','triangleUnwrap'].includes(k)))
@@ -156,9 +173,9 @@ export function parseGraphProfileAsset(input:unknown):GraphAuthoredProfile{
             throw Error('Graph Profile Asset UV triangleUnwrap must be boolean.');
         uv.triangleUnwrap=raw.triangleUnwrap;
     }
-    return {format:'cocos-splines/profile',version:1,points,uv};
+    return {format:'cocos-splines/profile',version:1,points,...contours,uv};
 }
-function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfilePoint>>):void{
+function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfilePoint>>,hole=false):void{
     const epsilon=1e-8,n=points.length;
     const cross2=(a:GraphProfilePoint,b:GraphProfilePoint,c:GraphProfilePoint)=>
         (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
@@ -187,12 +204,125 @@ function checkAuthoredProfilePolygon(points:ReadonlyArray<Readonly<GraphProfileP
                 throw Error('Graph Profile Asset polygon self-intersects.');
         }
     }
-    if(area<=.0002)
-        throw Error('Graph Profile Asset polygon must be counter-clockwise (CCW) with positive area.');
+    if(hole?area>=-.0002:area<=.0002)
+        throw Error(hole?'Graph Profile Asset hole must be clockwise (CW).':
+            'Graph Profile Asset polygon must be counter-clockwise (CCW) with positive area.');
+}
+// Boundary intersection/containment checks are shared by validation and
+// the deterministic constrained triangulation. Boundary contact is invalid.
+const contourEps=1e-8;
+const orient2=(a:GraphProfilePoint,b:GraphProfilePoint,c:GraphProfilePoint)=>
+    (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+const onSegment=(a:GraphProfilePoint,b:GraphProfilePoint,p:GraphProfilePoint)=>
+    Math.abs(orient2(a,b,p))<=contourEps&&
+    p.x>=Math.min(a.x,b.x)-contourEps&&p.x<=Math.max(a.x,b.x)+contourEps&&
+    p.y>=Math.min(a.y,b.y)-contourEps&&p.y<=Math.max(a.y,b.y)+contourEps;
+function segmentsMeet(a:GraphProfilePoint,b:GraphProfilePoint,c:GraphProfilePoint,d:GraphProfilePoint):boolean{
+    const x=orient2(a,b,c),y=orient2(a,b,d),z=orient2(c,d,a),w=orient2(c,d,b);
+    return onSegment(a,b,c)||onSegment(a,b,d)||onSegment(c,d,a)||onSegment(c,d,b)||
+        (((x>contourEps&&y<-contourEps)||(x<-contourEps&&y>contourEps))&&
+         ((z>contourEps&&w<-contourEps)||(z<-contourEps&&w>contourEps)));
+}
+function insideContour(p:GraphProfilePoint,loop:ReadonlyArray<GraphProfilePoint>):boolean{
+    let inside=false;
+    for(let i=0,j=loop.length-1;i<loop.length;j=i++){
+        const a=loop[j],b=loop[i];
+        if(onSegment(a,b,p))return false;
+        if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)
+            inside=!inside;
+    }
+    return inside;
+}
+function checkProfileHoles(outer:GraphProfilePoint[],holes:GraphProfilePoint[][]):void{
+    const rings=[outer,...holes];
+    for(let i=1;i<rings.length;i++){
+        const ring=rings[i];
+        if(!ring.every(p=>insideContour(p,outer)))
+            throw Error('Graph Profile Asset hole must be strictly inside outer contour.');
+        for(let j=0;j<i;j++){
+            const other=rings[j];
+            for(let a=0;a<ring.length;a++)for(let b=0;b<other.length;b++)
+                if(segmentsMeet(ring[a],ring[(a+1)%ring.length],other[b],other[(b+1)%other.length]))
+                    throw Error('Graph Profile Asset contours intersect or touch.');
+            if(j>0&&(insideContour(ring[0],other)||insideContour(other[0],ring)))
+                throw Error('Graph Profile Asset holes overlap or are nested.');
+        }
+    }
+}
+/** Bounded constrained planar triangulation: insert visible non-crossing
+ * diagonals in stable shortest-first order, then extract the bounded faces.
+ * No bridge duplicates, extra cap vertices or external dependencies.
+ */
+function triangulateContours(rings:ReadonlyArray<ReadonlyArray<GraphProfilePoint>>):number[]{
+    const points=rings.flat(),n=points.length,edges:[number,number][]=[];
+    const neighbors=points.map(()=>new Set<number>());
+    const addEdge=(a:number,b:number)=>{
+        neighbors[a].add(b);neighbors[b].add(a);edges.push([a,b]);
+    };
+    const holeFaces=new Set<string>();
+    let offset=0;
+    for(let r=0;r<rings.length;r++){
+        const len=rings[r].length;
+        for(let i=0;i<len;i++)addEdge(offset+i,offset+(i+1)%len);
+        if(r>0)holeFaces.add(Array.from({length:len},(_,i)=>offset+i).join(','));
+        offset+=len;
+    }
+    const domain=(p:GraphProfilePoint)=>insideContour(p,rings[0])&&
+        !rings.slice(1).some(r=>insideContour(p,r));
+    const candidates:{a:number;b:number;d:number}[]=[];
+    for(let a=0;a<n;a++)for(let b=a+1;b<n;b++){
+        if(neighbors[a].has(b))continue;
+        const A=points[a],B=points[b];
+        if(!domain({x:(A.x+B.x)/2,y:(A.y+B.y)/2})||
+           points.some((p,k)=>k!==a&&k!==b&&onSegment(A,B,p)))continue;
+        candidates.push({a,b,d:(A.x-B.x)**2+(A.y-B.y)**2});
+    }
+    candidates.sort((a,b)=>a.d-b.d||a.a-b.a||a.b-b.b);
+    for(const {a,b} of candidates){
+        if(edges.some(([c,d])=>a!==c&&a!==d&&b!==c&&b!==d&&
+           segmentsMeet(points[a],points[b],points[c],points[d])))continue;
+        addEdge(a,b);
+    }
+    const sorted=neighbors.map((set,i)=>[...set].sort((a,b)=>
+        Math.atan2(points[a].y-points[i].y,points[a].x-points[i].x)-
+        Math.atan2(points[b].y-points[i].y,points[b].x-points[i].x)));
+    const visited=new Set<number>(),triangles:number[]=[];
+    let area2=0;
+    for(let a=0;a<n;a++)for(const b of sorted[a]){
+        if(visited.has(a*n+b))continue;
+        const face:number[]=[];
+        let u=a,v=b;
+        do{
+            const key=u*n+v;
+            if(visited.has(key)||face.length>2*edges.length)
+                throw Error('Graph Profile Asset contour triangulation is inconsistent.');
+            visited.add(key);face.push(u);
+            const around=sorted[v],next=around[(around.indexOf(u)+around.length-1)%around.length];
+            u=v;v=next;
+        }while(u!==a||v!==b);
+        const signed=face.reduce((sum,i,k)=>{
+            const p=points[i],q=points[face[(k+1)%face.length]];
+            return sum+p.x*q.y-q.x*p.y;
+        },0);
+        if(signed<=contourEps||holeFaces.has(face.slice().sort((x,y)=>x-y).join(',')))continue;
+        if(face.length!==3||!domain({
+            x:face.reduce((sum,i)=>sum+points[i].x,0)/3,
+            y:face.reduce((sum,i)=>sum+points[i].y,0)/3}))
+            throw Error('Graph Profile Asset cannot triangulate contour domain.');
+        triangles.push(...face);area2+=signed;
+    }
+    const expected=rings.reduce((sum,ring)=>sum+ring.reduce((a,p,i)=>{
+        const q=ring[(i+1)%ring.length];return a+p.x*q.y-q.x*p.y;
+    },0),0);
+    if(triangles.length!==3*(n+2*(rings.length-1)-2)||
+       Math.abs(area2-expected)>1e-7*Math.max(1,expected))
+        throw Error('Graph Profile Asset contour triangulation area mismatch.');
+    return triangles;
 }
 export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
+    profileHoles?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     /** Only for authored profile; no implicit UV changes to built-in presets. */
     profileUV?:Readonly<GraphProfileUV>;
     /** Renderer local->world linear matrix, column-major (no translation).
@@ -275,16 +405,28 @@ export function buildProfileExtrudeGeometry(
        typeof capEnds!=='boolean'||typeof closed!=='boolean'||
        !Array.isArray(frames)||frames.length<2||frames.length>1025)
         throw Error('Geometry Graph Extrude settings or frame count are invalid.');
-    if(settings.profileUV!==undefined&&!settings.profile)
+    if((settings.profileUV!==undefined||settings.profileHoles!==undefined)&&!settings.profile)
         throw Error('Graph Profile Asset UV requires an authored profile.');
     const authored=settings.profile?
         parseGraphProfileAsset({format:'cocos-splines/profile',version:1,
-            points:settings.profile,...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
-    const profile=authored?.points??PROFILES[profileShape];
-    const bands=profile.length;
-    const triangles=capEnds&&!closed?profileTriangles(profile):[];
+            points:settings.profile,...(settings.profileHoles===undefined?{}:{holes:settings.profileHoles}),
+            ...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
+    const outer=authored?.points??PROFILES[profileShape];
+    const rings=[outer,...(authored?.holes??[])];
+    const profile=rings.flat(),bands=profile.length;
+    const nextEdge:number[]=[],ringStart:number[]=[],ringEnd:number[]=[];
+    let offset=0;
+    for(const ring of rings){
+        for(let j=0;j<ring.length;j++){
+            nextEdge.push(offset+(j+1)%ring.length);
+            ringStart.push(offset);ringEnd.push(offset+ring.length);
+        }
+        offset+=ring.length;
+    }
+    const triangles=capEnds&&!closed?
+        (rings.length===1?profileTriangles(profile):triangulateContours(rings)):[];
     const perimeterLengths=profile.map((p,i)=>{
-        const next=profile[(i+1)%bands];
+        const next=profile[nextEdge[i]];
         return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
     });
     const uvWeights=authored?.uv?.edgeWeights;
@@ -296,6 +438,7 @@ export function buildProfileExtrudeGeometry(
     let cumulative=0;
     for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
     const seam=authored?.uv?.seamEdge??0;
+    const loopSeam=(i:number)=>ringStart[i]===0?seam:ringStart[i];
     const sideIslandMode=authored?.uv?.sideIslandMode??0;
     const worldUv=authored?.uv?.uWorldSpace===true;
     const worldLinear=settings.worldUvLinear;
@@ -325,14 +468,18 @@ export function buildProfileExtrudeGeometry(
         throw Error('Graph Profile Asset UV side islands exceed the 65536-vertex mesh limit.');
     // Opt-in metric tiling: U grows with actual nominal profile side lengths.
     // Legacy weighted/seamed UV stays normalized to [0,1] without this field.
+    const loopLength=(i:number,lengths:ReadonlyArray<number>)=>
+        lengths.slice(ringStart[i],ringEnd[i]).reduce((sum,l)=>sum+l,0);
     const uDenominator=authored?.uv?.uMetersPerRepeat??perimeter;
     for(let i=0;i<bands;i++){
         // Side bands use duplicated endpoints, so the discontinuity can move
         // to any selected edge WITHOUT moving geometry or altering cap UV.
+        const start=loopSeam(i),total=rings.length===1?perimeter:loopLength(i,weightedLengths);
         const rotated=sideIslandMode===0?
-            (i>=seam?prefix[i]-prefix[seam]:
-                perimeter-prefix[seam]+prefix[i]):0;
-        const edgeDenominator=sideIslandMode===0?uDenominator:
+            (i>=start?prefix[i]-prefix[start]:
+                total-prefix[start]+prefix[i]):0;
+        const edgeDenominator=sideIslandMode===0?
+            (authored?.uv?.uMetersPerRepeat??total):
             (authored?.uv?.uMetersPerRepeat??weightedLengths[i]);
         const u=rotated/edgeDenominator;
         uvStart.push(u);uvEnd.push(u+weightedLengths[i]/edgeDenominator);
@@ -346,7 +493,7 @@ export function buildProfileExtrudeGeometry(
            f.widthFactor>1000||!isFinite3(f.right)||!isFinite3(f.up))
             throw Error('Graph Profile Asset UV frame scale requires finite valid basis.');
         const lengths=profile.map((p,i)=>{
-            const next=profile[(i+1)%bands];
+            const next=profile[nextEdge[i]];
             const tangent=add(mul(f.right,(next.x-p.x)*width*f.widthFactor),
                 mul(f.up,(next.y-p.y)*height*f.widthFactor));
             const len=length(worldUv?toWorld(tangent):tangent)*(uvWeights?.[i]??1);
@@ -361,9 +508,10 @@ export function buildProfileExtrudeGeometry(
         for(const len of lengths){prefix.push(cursor);cursor+=len;}
         const start:number[]=[],end:number[]=[];
         for(let i=0;i<bands;i++){
+            const first=loopSeam(i),loopTotal=rings.length===1?total:loopLength(i,lengths);
             const rotated=sideIslandMode===0?
-                (i>=seam?prefix[i]-prefix[seam]:
-                    total-prefix[seam]+prefix[i]):0;
+                (i>=first?prefix[i]-prefix[first]:
+                    loopTotal-prefix[first]+prefix[i]):0;
             const u=rotated/uDenominator,finish=u+lengths[i]/uDenominator;
             if(!Number.isFinite(u)||!Number.isFinite(finish))
                 throw Error('Graph Profile Asset UV frame U overflow.');
@@ -385,7 +533,7 @@ export function buildProfileExtrudeGeometry(
     // Band-major layout makes normals hard at every edge and avoids smoothing
     // across sharp corners. Two distinct vertices per edge per frame.
     for(let j=0;j<bands;j++){
-        const A=profile[j],B=profile[(j+1)%bands];
+        const A=profile[j],B=profile[nextEdge[j]];
         if(sideIslandMode===2){
             // Each side quad needs its own four UV0 vertices, because its V
             // must restart at zero at every spline span. Existing geometry
@@ -486,7 +634,13 @@ export function buildProfileExtrudeGeometry(
                 for(let i=0;i<bands;i++)
                     groups.push({firstVertex:i*frames.length*2,
                         vertexCount:frames.length*2});
-            }else groups.push({firstVertex:0,vertexCount:sideVertices});
+            }else {
+                let first=0;
+                for(const ring of rings){
+                    const count=ring.length*frames.length*2;
+                    groups.push({firstVertex:first,vertexCount:count});first+=count;
+                }
+            }
             if(capEnds&&!closed){
                 groups.push({firstVertex:sideVertices,vertexCount:bands});
                 groups.push({firstVertex:sideVertices+bands,vertexCount:bands});

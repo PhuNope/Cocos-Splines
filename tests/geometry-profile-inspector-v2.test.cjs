@@ -185,6 +185,21 @@ async function run(){
   setAtlas(false);
   assert.equal(ui._vgAuthoredDraft.profileJson,beforeAdvanced);
   assert.equal(dump.value.graphJson.value,graph);
+  const beforeHoles=ui._vgAuthoredDraft.profileJson;
+  const setHoles=value=>ui.$.vgProfileCanvas.events.change({target:{
+   value,classList:{contains:name=>name==='spl-profile-holes'},
+  }});
+  setHoles('[ [{"x":-0.1,"y":-0.1},{"x":-0.1,"y":0.1},{"x":0.1,"y":0.1},{"x":0.1,"y":-0.1}] ]');
+  const holesDraft=ui._vgAuthoredDraft.profileJson;
+  assert.equal(model.parseProfile(holesDraft).holes.length,1);
+  ui.$.vgProfileUndo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeHoles);
+  ui.$.vgProfileRedo.events.click();
+  assert.equal(ui._vgAuthoredDraft.profileJson,holesDraft);
+  setHoles('invalid JSON');
+  assert.equal(ui._vgAuthoredDraft.profileJson,holesDraft);
+  setHoles('[]');
+  assert.equal(ui._vgAuthoredDraft.profileJson,beforeHoles);
   const validUvDraft=ui._vgAuthoredDraft.profileJson;
   setIsland('3');
   assert.equal(ui._vgAuthoredDraft.profileJson,validUvDraft);

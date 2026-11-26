@@ -39,6 +39,10 @@ Authored Profile JsonAsset supports optional `uv.sideIslandMode` with **0 Contin
 
 Authored Profile JsonAssets can now opt in with `uv.uWorldSpace: true` plus `uv.uMetersPerRepeat` to compute **side UV U from real world-space profile edge lengths**, including output Node nonuniform scale/shear, spline taper and authored edge weights. Renderer provides its local→world linear matrix; path V already uses world arc distance and is deliberately never scaled twice. Works with continuous, Edge and Quad Islands; cap UV and source geometry stay unchanged. In **Authored Profile Editor**, select **World-space side U (Node scale)** in an unsaved draft and explicitly Save Profile JSON to commit. See [usage and limitations](docs/GEOMETRY_GRAPH_WORLD_UV_V2_VI.md). Native Cocos Creator 3.8.8 GPU/Prefab validation remains pending.
 
+### Profile Extrude with polygon holes — v2 preview
+
+Authored Profile JSON v1 supports optional `holes`, an array of 1–3 clockwise interior contours (3–16 vertices each), strictly inside the existing CCW exterior. Caps are triangulated without filling holes; inner walls face the void. Existing UV mapping and atlas modes support separate contour seams. The Profile editor previews holes and accepts numeric contour JSON as an undoable draft; exterior handles remain unchanged. Choose Example Gallery `GeometryGraphProfileHoles` and Play. See [profile holes guide](docs/GEOMETRY_GRAPH_PROFILE_HOLES_V2_VI.md).
+
 ### Advanced UV Atlas — v2 preview
 
 Opt-in Profile UV fields `atlasRotate: true` and `atlasPixelPadding: {resolution: 1024, pixels: 2}` allow proper 90-degree island rotation and minimum pixel gutters for a square atlas. Candidate search compares input and size-sorted layouts, preserving a common UV scale and winding. Pixel gutters override fractional padding while enabled. Edit in Authored Profile Editor; disable Atlas to clear dependent settings. Texture baking is not included. See [advanced atlas guide](docs/GEOMETRY_GRAPH_PROFILE_UV_ATLAS_ADVANCED_V2_VI.md).
