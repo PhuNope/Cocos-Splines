@@ -1,4 +1,4 @@
-import { _decorator, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, SphereCollider, CapsuleCollider, MeshCollider, Mesh, MeshRenderer, gfx, PhysicsSystem, geometry } from 'cc';
+import { _decorator, CCFloat, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, SphereCollider, CapsuleCollider, MeshCollider, Mesh, MeshRenderer, gfx, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -52,7 +52,7 @@ export class SplineObjectController extends Component {
     @property({type:[Prefab],tooltip:'Prefab variations. Selection is deterministic for the seed.'}) prefabs:Prefab[]=[];
     @property({tooltip:'Opt-in weighted selection of Prefabs. Disabled uses the legacy uniform seeded variant RNG.'})
     usePrefabWeights=false;
-    @property({type:[Number],tooltip:'Weights aligned by index to Prefabs. Exactly one value per slot, zero disables a variant; max 128.'})
+    @property({type:[CCFloat],tooltip:'Weights aligned by index to Prefabs. Exactly one value per slot, zero disables a variant; max 128.'})
     prefabWeights:number[]=[];
     @property({type:Node,tooltip:'Generated children parent; defaults to this Node.'}) parentNode:Node|null=null;
     @property({type:SplineModifiers}) modifiers:SplineModifiers|null=null;

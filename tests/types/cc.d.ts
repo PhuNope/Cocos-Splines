@@ -9,6 +9,9 @@ declare module 'cc' {
         requireComponent(type:Function):ClassDecorator;
     };
     export const CCBoolean: string;
+    export const CCFloat: string;
+    export const CCInteger: string;
+    export const CCString: string;
     export function Enum<T>(type:T):T;
     export class Vec3 {
         x:number;y:number;z:number;

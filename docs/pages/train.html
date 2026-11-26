@@ -22,7 +22,7 @@ Toa 3:    distance = 17</code></pre>
 <h3>Thiết lập Inspector</h3>
 <table><thead><tr><th>Node / Component</th><th>Thiết lập</th></tr></thead><tbody><tr><td>Locomotive / SplineAnimate</td><td>Spline = RailPath; Method = Speed; Easing = Linear; LoopMode = Once (đường mở); JunctionMode = Off; Align To Spline = ON; Start Position Mode = Distance.</td></tr><tr><td>Wagon / SplinePositioner</td><td>Spline = RailPath; Target để trống (di chuyển chính node); Position Mode = Distance; Align To Spline = ON; Follow On Update = OFF.</td></tr><tr><td>TrainManager / TrainSingleSpline</td><td>Locomotive = SplineAnimate; Wagons = 3 Positioner theo đúng thứ tự từ đầu tới đuôi; Center Spacing = khoảng cách tâm toa.</td></tr><tr><td>Khoảng Start</td><td>Start Distance của Animate phải >= số toa × Center Spacing nếu muốn toàn bộ đoàn tàu nằm sẵn trên ray.</td></tr></tbody></table>
 <p>Tạo file script <code>TrainSingleSpline.ts</code> trong <code>assets/</code> của project, dán code dưới đây; hoặc <a href="../examples/TrainSingleSpline.ts">xem bản TypeScript đầy đủ</a>.</p>
-<pre><code>import { _decorator, Component } from 'cc';
+<pre><code>import { _decorator, CCBoolean, Component } from 'cc';
 import { SplineAnimate } from 'db://cocos-splines/splines/Components/SplineAnimate';
 import { SplinePositioner } from 'db://cocos-splines/splines/Components/SplinePositioner';
 import { SplinePositionMode } from 'db://cocos-splines/splines/Core/SplinePosition';
@@ -35,7 +35,7 @@ export class TrainSingleSpline extends Component {
     @property({ type: SplineAnimate }) locomotive: SplineAnimate | null = null;
     @property({ type: [SplinePositioner] }) wagons: SplinePositioner[] = [];
     @property({ min: 0.01 }) centerSpacing = 3;
-    @property() wrapClosed = false;
+    @property({ type: CCBoolean }) wrapClosed: boolean = false;
 
     start(): void {
         for (const wagon of this.wagons) {
@@ -84,7 +84,7 @@ Các toa vẫn vào đúng nhánh đã chọn khi đến lượt.</code></pre>
 <h3>Cấu hình</h3>
 <table><thead><tr><th>Thuộc tính</th><th>Ví dụ / Ý nghĩa</th></tr></thead><tbody><tr><td>Legs</td><td>Danh sách SplineContainer theo thứ tự đường đi; chọn Backwards cho đoạn chạy từ progress 1 về 0.</td></tr><tr><td>Cars</td><td>[Engine, Wagon_01, Wagon_02, ...] đúng thứ tự. Không gắn thêm SplineAnimate hoặc Positioner đang auto update cho các Node này.</td></tr><tr><td>Center Spacing</td><td>Khoảng cách tâm-to-tâm dọc tuyến, ví dụ 5 units.</td></tr><tr><td>Start Distance</td><td>Ít nhất <code>(Cars.length - 1) × Center Spacing</code> trên đường mở.</td></tr><tr><td>Speed / Loop Route</td><td>Tốc độ theo route (units/giây); Loop Route chỉ bật nếu cuối leg cuối nối về đầu leg đầu.</td></tr><tr><td>Scale</td><td>Đặt spline Node scale = (1,1,1) để 1 local length = 1 world unit. Non-uniform scale cần LUT độ dài world riêng, sample này chưa xử lý.</td></tr></tbody></table>
 <p>Tạo file <code>TrainRouteConsist.ts</code> trong <code>assets/</code> của project, gắn lên <code>TrainManager</code>, điền Legs/Cars trong Inspector. <a href="../examples/TrainRouteConsist.ts">Xem file TypeScript đầy đủ</a>.</p>
-<pre><code>import { _decorator, Component, Node, Quat } from 'cc';
+<pre><code>import { _decorator, CCBoolean, Component, Node, Quat } from 'cc';
 import { SplineContainer } from 'db://cocos-splines/splines/Core/SplineContainer';
 
 const { ccclass, property } = _decorator;
@@ -93,7 +93,7 @@ const { ccclass, property } = _decorator;
 @ccclass('TrainRouteLeg')
 export class TrainRouteLeg {
     @property({ type: SplineContainer }) spline: SplineContainer | null = null;
-    @property() backwards = false;
+    @property({ type: CCBoolean }) backwards: boolean = false;
 }
 
 /** Route spans several splines: every wagon samples the same route history. */
@@ -104,8 +104,8 @@ export class TrainRouteConsist extends Component {
     @property({ min: 0.01 }) centerSpacing = 3;
     @property({ min: 0 }) speed = 4;
     @property({ min: 0 }) startDistance = 12;
-    @property() loopRoute = false;
-    @property() playOnStart = true;
+    @property({ type: CCBoolean }) loopRoute: boolean = false;
+    @property({ type: CCBoolean }) playOnStart: boolean = true;
 
     private headDistance = 0;
     private playing = false;

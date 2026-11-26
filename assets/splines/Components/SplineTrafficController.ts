@@ -1,4 +1,4 @@
-import { _decorator, Component } from 'cc';
+import { _decorator, CCFloat, CCInteger, Component } from 'cc';
 import type {SplineRoad} from './SplineRoad';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import {SplineJunction,JunctionTrafficSignal,type SplineJunctionLink}
@@ -18,7 +18,7 @@ const {ccclass,property,menu}= _decorator;
  */
 @ccclass('Splines.SplineTrafficPhase')
 export class SplineTrafficPhase {
-    @property({type:[Number],tooltip:'Serialized Junction Connections indices allowed Green together.'})
+    @property({type:[CCInteger],tooltip:'Serialized Junction Connections indices allowed Green together.'})
     greenExits:number[]=[];
     @property({min:.05,tooltip:'Seconds in Green for the listed destination exits.'})
     greenSeconds=8;
@@ -69,7 +69,7 @@ export class SplineTrafficController extends Component {
     conflictAutoRoadWidths=false;
     @property({type:[Component],tooltip:'Assign SplineRoad components by serialized Junction Connection index.'})
     conflictRoadSources:Component[]=[];
-    @property({type:[Number],tooltip:'Half widths in WORLD units by serialized Junction Connections index.'})
+    @property({type:[CCFloat],tooltip:'Half widths in WORLD units by serialized Junction Connections index.'})
     conflictRoadHalfWidths:number[]=[];
     @property({min:.01,tooltip:'World height separation for road-width diagnostic.'})
     conflictVerticalTolerance=.75;

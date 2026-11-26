@@ -418,3 +418,5 @@ Chỉ xóa khi đã xác định call sites, API thay thế, tests và migration
 - [ ] Phase 2.20 acceptance: Cocos Creator 3.8.8 Undo/Redo, Prefab overrides, Scene save/reopen; performance on 128 Knot closed splines.
 
 - [x] Native 3.8.8 feedback — Train example Boolean decorator metadata: explicit CCBoolean for wrapClosed, backwards, loopRoute, playOnStart; safe byte-exact installer upgrade preserving UUIDs and user edits; native verification pending.
+
+- [x] Native 3.8.8 feedback — audit all serialized component/example property decorators: CCFloat for prefabWeights and conflictRoadHalfWidths, CCInteger for greenExits, correct stale Train HTML examples; TypeScript AST regression rejects JS primitive constructors, empty decorator calls and ambiguous array/null defaults. Native verification pending.
