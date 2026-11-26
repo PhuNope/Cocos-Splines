@@ -13,8 +13,8 @@ The button does **not** overwrite/create a .scene asset in Assets. Creator owns 
 
 If the component has not compiled yet, Install Examples will keep all already installed project files. Wait for compilation (check Console) then click Create Example Gallery again.
 
-**Example choices:** Follower, Road, Extrude, Junction, Proximity, Positioner, Projector, Triggers, Modifiers, Morph, MeshDeform, TrafficController, PrefabSpawning. Feature-specific editable scripts are installed under Train/, Road/, Extrude/, Junction/. Full physics and prefab acceptance requires Creator 3.8.8 native smoke tests.
+**Example choices:** Follower, Road, Extrude, Junction, Proximity, Positioner, Projector, Triggers, Modifiers, Morph, MeshDeform, TrafficController, PrefabSpawning, **GeometryGraphUVAtlas**. UV Atlas creates two Graph Extrude meshes during Play using temporary JSON defaults, with optional checker Material to reveal UV mapping. Feature-specific editable scripts are installed under Train/, Road/, Extrude/, Junction/. Full physics and prefab acceptance requires Creator 3.8.8 native smoke tests.
 
-**Safety:** The action only modifies the currently open Scene after explicit invocation. One Editor snapshot on success. If component creation fails, it attempts to remove only its newly created node in the same Scene. The installer never overwrites existing user assets or their .meta UUIDs.
+**Safety:** The action only modifies the currently open Scene after explicit invocation. One Editor snapshot on success. If component creation fails, it attempts to remove only its newly created node in the same Scene. The installer never overwrites user-edited assets or their .meta UUIDs.
 
-A re-install skips existing ExampleGallery.ts by design. To add new modes to a previously installed Gallery, merge the changes manually rather than deleting a script referenced by saved Scenes. See README.md for safe update guidance.
+Reinstalling Examples upgrades only the unmodified, byte-identical older Gallery script while retaining its .meta UUID. Customized Gallery scripts are preserved; merge the new enum/method manually if you edited yours. Do not delete a script referenced by saved Scenes. See README.md.

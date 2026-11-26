@@ -1,9 +1,39 @@
 'use strict';
-/** Installs optional, project-owned examples on demand from the Editor menu.
- * Never invoked on extension load. Never modifies the extension asset mount.
- * Exclusive writes preserve user edits and native .meta UUIDs on re-install.
+/** Installs project-owned examples only on explicit menu action.
+ * Existing user edits and Cocos .meta UUIDs are preserved. The one exception
+ * is a byte-identical old Gallery, safely upgraded in place.
  */
-const fs=require('node:fs'),path=require('node:path');
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const LEGACY_GALLERY_BLOB='4ba2fcd4ddb91f49da9a577708547bbd891e06f9';
+/** Hash the exact bytes of the previously bundled Gallery; user-edited files
+ * must never be rewritten, and the existing Creator .meta UUID is preserved.
+ */
+function gitBlobSha(buffer){
+ const bytes=Buffer.isBuffer(buffer)?buffer:Buffer.from(buffer);
+ return crypto.createHash('sha1').update('blob '+bytes.length+String.fromCharCode(0)).update(bytes).digest('hex');
+}
+function upgradePristineGallery(filesystem,target,source){
+ const old=filesystem.readFileSync(target);
+ if(gitBlobSha(old)!==LEGACY_GALLERY_BLOB)return false;
+ const data=filesystem.readFileSync(source);
+ if(data.equals(old))return false;
+ // Atomic replacement of ONLY the known pristine script, never its .meta.
+ const temp=target+'.cocos-splines-update-'+process.pid;
+ let fd;
+ try{
+  fd=filesystem.openSync(temp,'wx',0o644);
+  filesystem.writeFileSync(fd,data);
+  filesystem.closeSync(fd);fd=undefined;
+  // Do not overwrite an edit made after the first read.
+  if(gitBlobSha(filesystem.readFileSync(target))!==LEGACY_GALLERY_BLOB)
+   return false;
+  filesystem.renameSync(temp,target);
+  return true;
+ }finally{
+  if(fd!==undefined)filesystem.closeSync(fd);
+  if(filesystem.existsSync(temp))filesystem.unlinkSync(temp);
+ }
+}
 const FOLDER='CocosSplinesExamples';
 const FILES=Object.freeze([
  ['README.md','examples/installable/README.md'],
@@ -76,7 +106,7 @@ function installSplineExamples({projectPath,extensionRoot=path.resolve(__dirname
    return {relative,absolute};
  });
  directory(filesystem,base,true);
- const installed=[],skipped=[];
+ const installed=[],skipped=[],updated=[];
  for(const {relative,absolute} of sourceFiles){
    const parts=relative.split('/');
    let dir=base;
@@ -89,6 +119,10 @@ function installSplineExamples({projectPath,extensionRoot=path.resolve(__dirname
      const st=filesystem.lstatSync(target);
      if(!st.isFile()||st.isSymbolicLink())
        throw Error('Unsafe example destination path: '+target);
+     if(relative==='ExampleGallery.ts'&&
+        upgradePristineGallery(filesystem,target,absolute)){
+       updated.push(relative);continue;
+     }
      skipped.push(relative);continue;
    }
    const data=filesystem.readFileSync(absolute);
@@ -109,7 +143,7 @@ function installSplineExamples({projectPath,extensionRoot=path.resolve(__dirname
    }finally{if(fd!==undefined)filesystem.closeSync(fd);}
  }
  return {folder:base,assetUrl:'db://assets/'+FOLDER,
-   installed:installed.length,skipped:skipped.length,
-   files:installed,total:FILES.length};
+   installed:installed.length,skipped:skipped.length,updated:updated.length,
+   files:installed,updatedFiles:updated,total:FILES.length};
 }
 module.exports={installSplineExamples,EXAMPLE_FILES:FILES,EXAMPLE_FOLDER:FOLDER};

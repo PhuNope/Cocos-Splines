@@ -43,6 +43,10 @@ Authored Profile JsonAssets can now opt in with `uv.uWorldSpace: true` plus `uv.
 
 Authored Profile JsonAsset v1 supports optional `uv.atlasPacking: true` with `uv.atlasPadding` (0–0.2, default 0.04). The deterministic Core grid packs **side + individual cap UV0 islands** into [0,1] with per-cell gutter and one uniform global scale, preserving topology/normals and avoiding overlap. Mode 0 packs the whole side perimeter, mode 1 packs each edge strip, mode 2 packs each spline-side quad. Existing profiles remain untouched by default. Edit via **Authored Profile Editor → Pack UV0 islands into atlas / Atlas padding** with draft Undo/Redo and explicit guarded Save. Examples include `UVAtlasProfile.json`; [Vietnamese atlas guide](docs/GEOMETRY_GRAPH_PROFILE_UV_ATLAS_V2_VI.md). Native 3.8.8 UV/PBR/Prefab testing pending; texture baking and per-triangle unwrap remain future work.
 
+### Runnable UV Atlas Gallery mode — v2
+
+The installed `CocosSplinesExampleGalleryV2` now offers **GeometryGraphUVAtlas** (enum value 13). Select the mode and Play to create a pair of temporary Profile Extrude renderers, comparing regular Quad Islands vs UV0 Atlas without assigning any JSON files. Optionally bind a checker Material in `UV Atlas Preview Material` to see the UV mapping, or override the built-in graph/profile through two optional JsonAsset slots. No source asset is mutated. Re-running **Install Examples** upgrades an unmodified legacy Gallery in place and preserves its `.meta` UUID; a customized Gallery script is never overwritten. See [Gallery quick-start](examples/installable/CREATE_GALLERY_IN_SCENE.md).
+
 ### Compact Inspector copy — v2
 
 Component inspectors now show field controls and action/status UI without long embedded roadmap paragraphs. The 20 generated custom inspectors, Spline Container, Geometry Graph node/property editor and authored Profile editor were cleaned; runtime component tooltips are kept brief (up to 100 characters). Behavior and serialized properties are unchanged. See [Inspector copy cleanup](docs/INSPECTOR_COMPACT_COPY_V2_VI.md).

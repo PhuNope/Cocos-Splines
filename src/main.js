@@ -270,6 +270,7 @@ const methods={
                 else refreshWarning='Asset DB refresh message unavailable; refresh Assets manually.';
             }catch(e){refreshWarning='Refresh Assets manually: '+String(e?.message||e);}
             const message='Install Examples: '+result.installed+' new, '+
+                result.updated+' pristine Gallery upgraded, '+
                 result.skipped+' existing preserved in '+result.assetUrl+'.'+
                 (refreshWarning?' '+refreshWarning:'');
             console.log('[Cocos Splines] '+message);

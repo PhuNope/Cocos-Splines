@@ -162,6 +162,36 @@ try {
  assert.equal(third.installed,1);
  assert.equal(third.skipped,EXAMPLE_FILES.length-1);
  assert(fs.readFileSync(custom,'utf8').includes('USER MODIFICATION PRESERVED'));
+ // Upgrade ONLY an unchanged legacy gallery, retaining Creator's .meta
+ // UUID for serialized Scene components. Never replace a user-edited file.
+ const galleryProject=path.join(temp,'Pristine Gallery Project');
+ const galleryAssets=path.join(galleryProject,'assets');
+ const galleryFolder=path.join(galleryAssets,EXAMPLE_FOLDER);
+ fs.mkdirSync(galleryFolder,{recursive:true});
+ const legacy=fs.readFileSync(path.join(root,
+  'tests/fixtures/ExampleGallery-v2-legacy.ts'));
+ const legacyPath=path.join(galleryFolder,'ExampleGallery.ts');
+ fs.writeFileSync(legacyPath,legacy);
+ const galleryMeta='{"ver":"4.0.24","uuid":"existing-scene-script-uuid"}';
+ fs.writeFileSync(legacyPath+'.meta',galleryMeta);
+ const upgraded=installSplineExamples({projectPath:galleryProject,extensionRoot:root});
+ assert.equal(upgraded.updated,1,'Pristine legacy gallery should be upgraded');
+ assert.deepEqual(upgraded.updatedFiles,['ExampleGallery.ts']);
+ assert.equal(upgraded.installed,EXAMPLE_FILES.length-1);
+ assert.equal(upgraded.skipped,0);
+ assert.equal(fs.readFileSync(legacyPath+'.meta','utf8'),galleryMeta);
+ const upgradedSource=fs.readFileSync(legacyPath,'utf8');
+ assert(upgradedSource.includes('GeometryGraphUVAtlas=13'));
+ const idempotent=installSplineExamples({projectPath:galleryProject,extensionRoot:root});
+ assert.equal(idempotent.updated,0);
+ assert.equal(idempotent.installed,0);
+ assert.equal(idempotent.skipped,EXAMPLE_FILES.length);
+ fs.writeFileSync(legacyPath,Buffer.concat([legacy,Buffer.from('\n// USER CODE\n')]));
+ const customized=installSplineExamples({projectPath:galleryProject,extensionRoot:root});
+ assert.equal(customized.updated,0);
+ assert.equal(customized.skipped,EXAMPLE_FILES.length);
+ assert(fs.readFileSync(legacyPath,'utf8').includes('// USER CODE'));
+ assert.equal(fs.readFileSync(legacyPath+'.meta','utf8'),galleryMeta);
  // Directories must never be allowed to escape via symlinks.
  fs.rmSync(path.join(first.folder,'Train'),{recursive:true,force:true});
  const outside=path.join(temp,'outside');fs.mkdirSync(outside);
@@ -200,6 +230,7 @@ try {
    const result=await methods.installExamples();
    assert(result.ok,result.message);
    assert.equal(result.installed,EXAMPLE_FILES.length);
+   assert.equal(result.updated,0);
    assert.deepEqual(messages,[['asset-db','refresh-asset','db://assets']]);
    const again=await methods.installExamples();
    assert(again.ok&&!again.installed);

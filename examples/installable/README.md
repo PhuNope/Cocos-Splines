@@ -4,7 +4,7 @@ Installed from **Extension → Cocos Splines → Install Examples**.
 
 These are **project-owned scripts** (not linked to the extension package). You can edit or remove them freely. Re-running Install Examples **skips existing files**; it never replaces changes or existing .meta UUIDs. This installer does NOT create a .scene/.prefab asset — create your own empty scene first.
 
-## Quick start: 13 runnable examples
+## Quick start: 14 runnable examples
 
 1. Make or open a **3D Scene** in Cocos Creator 3.8.x and save it.
 2. Once script compilation finishes, choose **Extension → Cocos Splines → Create Example Gallery in Scene**. The Editor creates a Node with **CocosSplinesExampleGalleryV2**; clicking again selects the same Node.
@@ -27,6 +27,15 @@ These are **project-owned scripts** (not linked to the extension package). You c
 | MeshDeform | Deform a procedurally subdivided ribbon along a curved spline (imported-mesh workflow also included) |
 | TrafficController | Two alternating signal phases, with all-red clearance at a three-way junction |
 | PrefabSpawning | Deterministic distribution of runtime prefab copies along a spline (or bind authored .prefab files) |
+| GeometryGraphUVAtlas | Two temporary Profile Extrude meshes: regular Quad Islands and UV Atlas packed. No JSON drag/drop required. |
+
+### Geometry Graph UV Atlas — no JsonAsset setup required
+
+Choose **Example → GeometryGraphUVAtlas**, then **Play**. The Gallery creates a spline and **SplineGeometryGraphRenderer** on each side and compares Quad Islands with and without Atlas Packing. Both the graph and Profile are created from built-in defaults matching `GeometryGraph/UVIslandExtrudeGraph.json` and `GeometryGraph/Profiles/UVAtlasProfile.json`; no manual JsonAsset assignment is needed.
+
+The default previews have different unlit colors. For actual texture UV differences, assign the same checker-pattern Material to Gallery's **UV Atlas Preview Material** before Play. You may optionally drag `UVAtlasProfile.json` into **UV Atlas Profile** or `UVIslandExtrudeGraph.json` into **UV Atlas Graph**, but these references are overrides only; the Gallery makes temporary copies and does not write either asset.
+
+To inspect/edit the actual Graph interactively, add a persistent **Splines → Procedural Geometry Graph** component in Edit Mode and assign the shared Graph Asset and Profile Asset A there. The Gallery's objects disappear when Play stops.
 
 The gallery creates nodes only in **Play mode**; the generated nodes are ephemeral and not saved in your scene. To save editable examples permanently, use the extension's menu/Inspector actions to create spline nodes in Edit Mode and reconstruct the chosen setup.
 
@@ -86,11 +95,11 @@ selects the existing Gallery. Details:
 
 ### Updating an existing Gallery installation
 
-Install Examples always **skips existing files** to preserve your edits and Cocos-generated .meta UUIDs. Consequently, a pre-existing ExampleGallery.ts will retain its older set of modes, even after installing this newer extension.
+Install Examples **skips existing files** except a byte-for-byte pristine legacy `ExampleGallery.ts`, which it upgrades in place and preserves the existing `.meta` UUID. User-edited Gallery scripts are always preserved. Consequently, a pre-existing ExampleGallery.ts will retain its older set of modes, even after installing this newer extension.
 
-For an existing project, prefer comparing the bundled new ExampleGallery.ts to your project copy and merging new enum modes/methods manually. To replace a clean, unreferenced Gallery script, back up your project first and remove only that script, then run Install Examples again. **Deleting a script referenced by saved Scenes may break component references**, so do not delete your live Gallery script without a backup and migration plan. New projects receive all ten modes immediately.
+If the Gallery script is customized, merge the new enum mode and handler manually. **Deleting a script referenced by saved Scenes** can break component references; do not remove and recreate a Gallery script merely to upgrade it.
 
-### Imported asset workflows (13-mode Gallery)
+### Imported asset workflows (14-mode Gallery)
 
 **Mesh Deformation**: Press Play in MeshDeform mode to see a procedural ribbon input mesh deformed along a curved spline. To test an imported rope/pipe model instead, create a SplineContainer and a Node with MeshRenderer + SplineMeshDeform, then attach `CocosSplinesMeshDeformExampleV2` and bind its three Inspector references. Enable **Allow Data Access** on the imported Mesh, and subdivide the mesh along its Z axis.
 
