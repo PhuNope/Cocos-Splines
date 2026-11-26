@@ -34,6 +34,7 @@ const configs={
     groups:[
         {title:'Spline & graph asset source',fields:['spline','useGraphAsset','graphAsset','outputId','renderAllOutputs','outputOrder','sourceMesh','sourceSubMesh','sourceMeshB','sourceSubMeshB','sourceMeshC','sourceSubMeshC','samplesPerCurve']},
         {title:'Local graph JSON & canvas layout',fields:['graphJson','graphLayoutJson']},
+        {title:'Conform Path targets',fields:['conformColliders']},
         {title:'Authored Extrude Profile Assets',fields:['profileAssetA','profileAssetB','profileAssetC']},
         {title:'Material & live update',fields:['material','materialB','materialC','materialD','autoBindImportedMaterials','materialSourceRenderer','materialSourceRendererB','materialSourceRendererC','rebuildOnChange']},
         {title:'Selected-only geometry wireframe',fields:['showMeshGizmos','gizmoEdgeLimit']},

@@ -149,6 +149,31 @@ try{
  assert.throws(()=>process([{type:'resample',resampleSegments:6}],{...ctx,worldUvLinear:[0,0,0,0,1,0,0,0,1]}));
  assert.deepEqual(process([{type:'resample',resampleSegments:6}],scaled),scaledResample);
  assert.equal(JSON.stringify(frames),beforeTransform);
+ // Conform pure host contract: explicit targets, nearest valid hit, UV and atomic failure.
+ let queries=0;
+ const surface={revision:'surface-1',targetCount:1,origin:v(5,10,2),
+  raycast:(o,range)=>{queries++;const y=8+(o.z-2)*.5;return [
+   {targetIndex:-1,distance:1,point:v(o.x,o.y-1,o.z),normal:v(0,1,0)},
+   {targetIndex:0,distance:o.y-y,point:v(o.x,y,o.z),normal:v(0,1,-.5)}
+  ];}};
+ const conformContext={...ctx,conformSurface:surface};
+ const conform=process([{type:'conform'}],conformContext);
+ assert.equal(queries,4);
+ centers(conform).forEach((p,i)=>{near(p[1],-2+i*.5);near(p[2],i);});
+ near(Math.max(...conform.uvs),Math.hypot(3,1.5));
+ assert.deepEqual(process([{type:'conform'}],conformContext),conform);
+ assert.equal(queries,4);
+ const missing={...conformContext,conformSurface:{...surface,revision:'missing',raycast:()=>[]}};
+ assert.throws(()=>process([{type:'conform'}],missing),/missed/i);
+ assert.deepEqual(process([{type:'conform'}],conformContext),conform);
+ assert.deepEqual(process([{type:'conform',conformMissing:1}],missing),process([]));
+ assert.throws(()=>process([{type:'conform'}]),/explicit surface/i);
+ for(const opts of [{conformRayHeight:0,conformRayDepth:0},{conformAlign:2},{conformOffset:null},{conformMissing:.5}])
+  assert.throws(()=>process([{type:'conform',...opts}],conformContext));
+ const cclosed={...closed,conformSurface:{...surface,origin:v(),revision:'surface-loop',raycast:o=>[
+  {targetIndex:0,distance:o.y+1,point:v(o.x,-1,o.z),normal:v(0,1,0)}]}};
+ const seam=process([{type:'conform'}],cclosed);
+ seam.positions.slice(0,6).forEach((x,k)=>near(x,seam.positions.at(-6+k)));
  const graph={
    version:1,nodes:[
      {id:'output',type:'output',input:'ribbon'},

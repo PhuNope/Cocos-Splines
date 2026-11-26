@@ -1,5 +1,5 @@
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils} from 'cc';
+import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils,Collider,PhysicsSystem,geometry} from 'cc';
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
@@ -134,6 +134,9 @@ export class SplineGeometryGraphRenderer extends Component {
     private _renderedOutputIds:string[]=[];
     private _revision='';
     private _lastAttempt='';
+    @property({type:[Collider],tooltip:'Explicit Conform Path targets (1–64 active 3D Colliders).'})
+    conformColliders:Collider[]=[];
+    private _conformRevision=0;
     private _runner=new GeometryGraphRunner();
     private _frameRevision='';
     private _frameCache:RoadFrame[]|null=null;
@@ -165,7 +168,7 @@ export class SplineGeometryGraphRenderer extends Component {
         runner.setProfilingEnabled(true);
         const context={frames:this._frameCache!,closed:source.closed,revision:frameRevision,
             worldUvLinear:this.worldUvLinear(),
-            ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
+            ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
         runner.evaluate(plan,context,selected||undefined);
         const cold=runner.profile!;
         runner.evaluate(plan,context,selected||undefined);
@@ -267,18 +270,68 @@ export class SplineGeometryGraphRenderer extends Component {
             return material;
         });
     }
+    /** No scene scans; capture only explicit active targets. */
+    private graphConformTargets():Collider[]{
+        const refs=this.conformColliders;
+        if(!Array.isArray(refs)||refs.length<1||refs.length>64||new Set(refs).size!==refs.length)
+            throw Error('Conform Path requires 1–64 unique explicit 3D Colliders.');
+        const root=(n:typeof this.node)=>{
+            let depth=0;
+            while(n.parent){if(++depth>128)throw Error('Invalid Conform Scene hierarchy.');n=n.parent;}
+            return n;
+        };
+        const scene=root(this.node);
+        for(const c of refs)
+            if(!c?.node||c.node.isValid===false||c.node.activeInHierarchy===false||
+               c.enabled===false||root(c.node)!==scene||c.node===this.node)
+                throw Error('Conform targets must be active in the same Scene and not on the output Node.');
+        return refs.slice();
+    }
+    private graphConformSignature(plan:GeometryGraphPlan):unknown{
+        if(!plan.nodes.some(n=>n.type==='conform'))return null;
+        // Keep invalid reference states observable so fixing assignments retries.
+        return (Array.isArray(this.conformColliders)?this.conformColliders:[]).map(c=>{
+            const m=c?.node?.worldMatrix,b=c?.worldBounds;
+            return [c?.uuid,c?.node?.uuid,c?.enabled,c?.node?.activeInHierarchy,c?.node?.isValid,
+                m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:null,
+                b?[b.center.x,b.center.y,b.center.z,b.halfExtents.x,b.halfExtents.y,b.halfExtents.z]:null];
+        });
+    }
+    private graphConformContext(plan:GeometryGraphPlan):Pick<GeometryGraphContext,'conformSurface'>{
+        if(!plan.nodes.some(n=>n.type==='conform'))return {};
+        const targets=this.graphConformTargets(),physics=PhysicsSystem?.instance;
+        if(!physics||typeof physics.raycast!=='function'||typeof geometry?.Ray!=='function')
+            throw Error('Conform Path requires working 3D Physics raycasts.');
+        const m=this.node.worldMatrix;
+        return {conformSurface:{
+            revision:String(++this._conformRevision),targetCount:targets.length,
+            origin:{x:m.m12,y:m.m13,z:m.m14},
+            raycast:(origin,length)=>{
+                const ray=new geometry.Ray(origin.x,origin.y,origin.z,0,-1,0);
+                if(!physics.raycast(ray,0xffffffff,length,false))return [];
+                const hits=physics.raycastResults;
+                if(!Array.isArray(hits)||hits.length>2048)throw Error('Invalid Conform Physics hits.');
+                return hits.map(hit=>({
+                    targetIndex:targets.indexOf(hit.collider),distance:hit.distance,
+                    point:{x:hit.hitPoint?.x??NaN,y:hit.hitPoint?.y??NaN,z:hit.hitPoint?.z??NaN},
+                    normal:{x:hit.hitNormal?.x??NaN,y:hit.hitNormal?.y??NaN,z:hit.hitNormal?.z??NaN},
+                }));
+            },
+        }};
+    }
     private signature():string {
         const json=this.activeGraphJson();
         const slots=json.includes('"meshAsset"')?
             [...new Set(parseGeometryGraph(json).nodes.filter(n=>n.type==='meshAsset')
                 .map(n=>n.slot??0))].sort((a,b)=>a-b):[];
         const assets=slots.map(slot=>[slot,this.slotSubMesh(slot),graphMeshDataFingerprint(this.slotMesh(slot))]);
-        const profiles=this.graphProfileContext(parseGeometryGraph(json));
+        const plan=parseGeometryGraph(json);
+        const profiles=this.graphProfileContext(plan);
         const activeProfileRevisions=Object.entries(profiles.profileRevisions||{});
         return JSON.stringify([this.frameSignature(),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
             this.renderAllOutputs?this.outputOrder:null,
             this.renderAllOutputs?this.autoBindImportedMaterials:null,
-            assets,activeProfileRevisions,this.gizmoEdgeLimit]);
+            assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan)]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -387,7 +440,7 @@ export class SplineGeometryGraphRenderer extends Component {
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const context={frames,closed:source.closed,revision:frameRevision,
             worldUvLinear:this.worldUvLinear(),
-            ...this.graphMeshContext(plan),...this.graphProfileContext(plan)};
+            ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];
         if(this.renderAllOutputs){

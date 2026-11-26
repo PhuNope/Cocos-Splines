@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "conform",
+      "type": "conform",
+      "input": "source",
+      "conformRayHeight": 10,
+      "conformRayDepth": 50,
+      "conformOffset": 0.1,
+      "conformMinNormalY": 0.3,
+      "conformMissing": 0,
+      "conformAlign": 1
+    },
+    {
+      "id": "ribbon",
+      "type": "ribbon",
+      "input": "conform",
+      "width": 3,
+      "uvMetersPerRepeat": 2
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "ribbon"
+    }
+  ],
+  "output": "output"
+}

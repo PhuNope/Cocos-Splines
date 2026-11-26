@@ -16,6 +16,7 @@ const TYPES=Object.freeze({
   reverse:{input:'path',output:'path',params:[]},
   clip:{input:'path',output:'path',params:['clipStart','clipEnd']},
   resample:{input:'path',output:'path',params:['resampleSegments']},
+  conform:{input:'path',output:'path',params:['conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']},
   width:{input:'path',output:'path',params:['multiplier','midMultiplier','endMultiplier','taperMode']},
   ribbon:{input:'path',output:'mesh',params:['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']},
   tube:{input:'path',output:'mesh',params:['radius','radialSegments','uvMetersPerRepeat','capEnds']},
@@ -31,6 +32,8 @@ const LIMITS=Object.freeze({
   noiseFrequency:[1,64,4],noiseOctaves:[1,6,2],noisePersistence:[0,1,.5],noisePhase:[-1000,1000,0],
   noiseSeed:[-2147483647,2147483647,12345],noiseFadeEnds:[0,.5,.1],
   clipStart:[0,1,0],clipEnd:[0,1,1],resampleSegments:[3,1024,32],
+  conformRayHeight:[0,10000,10],conformRayDepth:[0,10000,50],conformOffset:[-1000,1000,0],
+  conformMinNormalY:[0,1,.3],conformMissing:[0,1,0],conformAlign:[0,1,1],
   multiplier:[.01,20,1],midMultiplier:[.01,20,1],
   endMultiplier:[.01,20,1],taperMode:[0,1,0],
   width:[.05,100,4],endWidth:[0,100,0],
@@ -40,7 +43,7 @@ const LIMITS=Object.freeze({
   deformShape:[0,1,0],axis:[0,2,2],slot:[0,2,0],segments:[2,64,12],repeats:[1,16,1],
   repeatLayout:[0,1,0],tileLength:[0,10000,0],uvMode:[0,2,2],
 });
-const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
+const NODE_KEYS=new Set(['id','type','input','meshInput','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
   'height','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -99,10 +102,12 @@ function validateGraph(graph) {
       }else{
         const [lo,hi]=LIMITS[key];
         if(!finite(value)||value<lo||value>hi||
-          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments'].includes(key)&&!Number.isInteger(value)))
+          (['cornerMode','radialSegments','profileShape','profileSlot','deformShape','axis','slot','segments','repeats','repeatLayout','uvMode','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)&&!Number.isInteger(value)))
           throw Error('Invalid Graph parameter '+key+'.');
       }
     }
+    if(node.type==='conform'&&(node.conformRayHeight??10)+(node.conformRayDepth??50)<=1e-6)
+      throw Error('Conform requires a nonzero ray range.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
       throw Error('Clip end must be at least 0.001 above start.');
     if(node.type==='width'&&node.widthKeys!==undefined){
@@ -235,7 +240,7 @@ function applyGraphEdit(json,action,details={}) {
     next.output=target.id;
   }else if(action==='insert'){
     const type=details.type,target=find(details.before||'ribbon');
-    if(!['offset','transform','noise','reverse','clip','resample','width'].includes(type)||!target||!target.input||
+    if(!['offset','transform','noise','reverse','clip','resample','conform','width'].includes(type)||!target||!target.input||
        TYPES[target.type].input!=='path')
       throw Error('Only path-transform nodes may be inserted before a Path consumer.');
     const prefix=type;
@@ -246,7 +251,7 @@ function applyGraphEdit(json,action,details={}) {
     target.input=id;next.nodes.push(created);
   }else if(action==='remove'){
     const id=details.id,target=find(id);
-    if(!target||!['offset','transform','noise','reverse','clip','resample','width'].includes(target.type))
+    if(!target||!['offset','transform','noise','reverse','clip','resample','conform','width'].includes(target.type))
       throw Error('Cannot delete required Spline, Ribbon or Output node.');
     for(const node of next.nodes)if(node.input===id)node.input=target.input;
     next.nodes=next.nodes.filter(n=>n.id!==id);
@@ -266,7 +271,7 @@ function applyGraphEdit(json,action,details={}) {
     if(TYPES[target.type].input!==TYPES[source.type].output)
       throw Error('Cannot connect '+(source?.type||'?')+' to '+target.type+': incompatible socket types.');
     if(target.id===source.id)throw Error('Cannot connect a node to itself.');
-    if(source.input&&['offset','transform','noise','reverse','clip','resample','width'].includes(source.type)&&
+    if(source.input&&['offset','transform','noise','reverse','clip','resample','conform','width'].includes(source.type)&&
        target.input!==source.id){
       // V1 is one output and single-input path operations. A simple relink
       // would orphan a path node. Move the chosen transform immediately
@@ -364,7 +369,7 @@ function applyGraphEdit(json,action,details={}) {
     else {
       if(typeof value!=='number'||!finite(value))throw Error('Non-finite Graph parameter.');
       const [lo,hi]=LIMITS[key];
-      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments'].includes(key)&&!Number.isInteger(value)))
+      if(value<lo||value>hi||(['cornerMode','radialSegments','profileShape','profileSlot','deformShape','segments','repeats','repeatLayout','uvMode','axis','slot','taperMode','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)&&!Number.isInteger(value)))
         throw Error(key+' out of range ('+lo+'–'+hi+').');
     }
     if(key==='tileLength'&&value>0&&value<.01)
@@ -491,6 +496,9 @@ function renderNodeParameters(graphJson,id){
         ['Linear','Smoothstep (ease in/out)'].map((name,i)=>
           '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+
         '</select></label>';
+    if(key==='conformMissing'||key==='conformAlign')return '<label>'+escapeHtml(key)+
+      ' <select data-graph-param="'+key+'">'+(key==='conformMissing'?['Fail on missing hit','Keep source sample']:['Source up hint','Surface normal hint']).map((name,i)=>
+       '<option value="'+i+'"'+(value===i?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
     if(key==='axis'||key==='slot')return '<label>'+escapeHtml(key)+
       ' <select data-graph-param="'+key+'">'+
       (key==='axis'?['X','Y','Z']:['A (Source Mesh)','B (Source Mesh B)','C (Source Mesh C)'])
@@ -525,7 +533,7 @@ function renderNodeParameters(graphJson,id){
       ' <select data-graph-param="'+key+'"><option value="0"'+(value===0?' selected':'')+
       '>Legacy</option><option value="1"'+(value===1?' selected':'')+'>Join &amp; Trim</option></select></label>';
     return '<label>'+escapeHtml(key)+' <input type="number" data-graph-param="'+key+
-      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
+      '" min="'+min+'" max="'+max+'" step="'+(['radialSegments','segments','repeats','noiseFrequency','noiseOctaves','noiseSeed','resampleSegments','conformMissing','conformAlign'].includes(key)?'1':'any')+'" value="'+value+'"></label>';
   }).join('');
   return '<strong>'+escapeHtml(n.id)+' · '+escapeHtml(n.type)+'</strong>'+
     (n.input?'<div class="spl-vg-source">Input: '+escapeHtml(n.input)+'</div>':'')+

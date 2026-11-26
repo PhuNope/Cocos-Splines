@@ -53,7 +53,18 @@ async function run(){
    getSharedMaterial(i=0){return this.materials[i]??null;}
    setSharedMaterial(m,i=0){this.materials[i]=m;this.material=this.materials[0]??null;}
   }
-  const cc={_decorator:{
+  let physicsQueries=0,groundY=-2,missSurface=false;
+  class Collider extends Component{}
+  const physics={raycastResults:[],raycast(ray,mask,length,trigger){
+   physicsQueries++;
+   if(missSurface)return false;
+   this.raycastResults=[{collider:this.target,distance:ray.y-groundY,
+    hitPoint:new Vec3(ray.x,groundY,ray.z),hitNormal:new Vec3(0,1,0)}];
+   return true;
+  }};
+  const cc={Collider,PhysicsSystem:{instance:physics},
+   geometry:{Ray:class Ray{constructor(x,y,z){Object.assign(this,{x,y,z});}}},
+   _decorator:{
     ccclass:()=>x=>x,property:()=>{},menu:()=>x=>x,
     executeInEditMode:()=>x=>x,requireComponent:()=>x=>x,
    },Component,MeshRenderer,Mesh,Material,Vec3,Mat4,
@@ -748,6 +759,34 @@ async function run(){
    assert(panel.template.includes('spl-field-graphJson'));
    assert(panel.template.includes('spl-rebuild-graph'));
    assert(pkg.scripts.test.includes('geometry-graph-renderer-v2.test.cjs'));
+   // Separate renderer avoids interfering with the earlier frame/cache assertions.
+   const rootNode=new Node('conform-scene'),conformNode=new Node('conform-output');
+   conformNode.parent=rootNode;
+   const conformOut=new MeshRenderer();conformOut.node=conformNode;
+   const conformRenderer=new SplineGeometryGraphRenderer();conformRenderer.node=conformNode;
+   conformNode.components=[conformOut,conformRenderer];
+   conformRenderer.spline={count:2,segmentCount:1,closed:false,node:new Node('conform-source'),getRevision:()=> '1'};
+   const target=new Collider();target.node=new Node('terrain');target.node.parent=rootNode;
+   target.enabled=true;physics.target=target;
+   conformRenderer.graphJson=JSON.stringify({version:1,output:'output',nodes:[
+    {id:'source',type:'spline'},{id:'conform',type:'conform',input:'source'},
+    {id:'ribbon',type:'ribbon',input:'conform',width:2},{id:'output',type:'output',input:'ribbon'}]});
+   assert.throws(()=>conformRenderer.rebuild(),/explicit/i);
+   conformRenderer.conformColliders=[target];
+   conformRenderer.rebuild();
+   assert(physicsQueries>0);
+   assert(conformOut.mesh.data.positions.some((v,i)=>i%3===1&&v===-2));
+   const priorQueries=physicsQueries;
+   groundY=-3;conformRenderer.rebuild();
+   assert(physicsQueries>priorQueries,'Manual rebuild must re-query Physics even when bounds unchanged');
+   assert(conformOut.mesh.data.positions.some((v,i)=>i%3===1&&v===-3));
+   const conformedMesh=conformOut.mesh;missSurface=true;
+   assert.throws(()=>conformRenderer.rebuild(),/missed/i);
+   assert.equal(conformOut.mesh,conformedMesh);
+   assert.equal(conformedMesh.destroyed,false);
+   missSurface=false;conformRenderer.conformColliders=[target,target];
+   assert.throws(()=>conformRenderer.rebuild(),/unique/i);
+   assert.equal(conformOut.mesh,conformedMesh);
    console.log('GEOMETRY GRAPH RENDERER V2 PASS: atomic generated Mesh replacement, frame cache, source immutability, live updates, Inspector and ownership.');
   }finally{
    Module._load=original;globalThis.Editor=previousEditor;

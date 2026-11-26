@@ -37,6 +37,8 @@ try {
  }
  const processing=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/PathProcessingGraph.json'),'utf8'));
  assert.deepEqual(processing.nodes.map(n=>n.type),['spline','reverse','clip','resample','tube','output']);
+ const conform=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ConformPathGraph.json'),'utf8'));
+ assert(conform.nodes.some(n=>n.type==='conform'));
  const extrude=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicProfileExtrudeGraph.json'),'utf8'));
  assert.equal(extrude.version,1);

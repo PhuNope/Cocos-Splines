@@ -50,6 +50,12 @@ try{
   p=m.applyGraphEdit(p,'remove',{id});
   assert.equal(m.parseGraph(p).map.get('ribbon').input,'source');
  }
+ let conform=m.applyGraphEdit(source,'insert',{type:'conform',before:'ribbon'});
+ for(const key of ['conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign'])assert(m.renderNodeParameters(conform,'conform1').includes('data-graph-param="'+key+'"'));
+ conform=m.applyGraphEdit(conform,'param',{id:'conform1',key:'conformMissing',value:1});
+ assert.throws(()=>m.applyGraphEdit(conform,'param',{id:'conform1',key:'conformAlign',value:.5}));
+ conform=m.applyGraphEdit(conform,'remove',{id:'conform1'});
+ assert.equal(m.parseGraph(conform).map.get('ribbon').input,'source');
  let json=m.applyGraphEdit(source,'insert',{type:'offset',before:'ribbon'});
  assert.deepEqual(m.parseGraph(json).ordered.map(n=>n.type),
   ['spline','offset','ribbon','output']);

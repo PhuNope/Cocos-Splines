@@ -66,6 +66,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/TransformPathGraph.json','examples/installable/GeometryGraph/TransformPathGraph.json'],
  ['GeometryGraph/NoisePathGraph.json','examples/installable/GeometryGraph/NoisePathGraph.json'],
  ['GeometryGraph/PathProcessingGraph.json','examples/installable/GeometryGraph/PathProcessingGraph.json'],
+ ['GeometryGraph/ConformPathGraph.json','examples/installable/GeometryGraph/ConformPathGraph.json'],
  ['GeometryGraph/BasicProfileExtrudeGraph.json','examples/installable/GeometryGraph/BasicProfileExtrudeGraph.json'],
  ['GeometryGraph/TaperWidthExtrudeGraph.json','examples/installable/GeometryGraph/TaperWidthExtrudeGraph.json'],
  ['GeometryGraph/AuthoredProfileExtrudeGraph.json','examples/installable/GeometryGraph/AuthoredProfileExtrudeGraph.json'],

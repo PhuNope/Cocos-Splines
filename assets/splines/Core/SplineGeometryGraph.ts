@@ -10,6 +10,7 @@ import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 import {sampleNoiseLayers,NoiseLayerConfig} from './SplineNoiseMath';
 import {buildStableFrames,FrameVec3} from './SplineStableFrames';
+import {projectSurfaceCandidates,PopulationSurfaceRaycast} from './SplinePopulationSurfaceMath';
 
 export const GEOMETRY_GRAPH_VERSION=1;
 /** Multi-output opt-in; v1 scenes/assets remain unchanged. */
@@ -21,7 +22,7 @@ export const DEFAULT_GEOMETRY_GRAPH=JSON.stringify({
         {id:'output',type:'output',input:'ribbon'},
     ],output:'output',
 },null,2);
-export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
+export type GeometryNodeType='spline'|'meshAsset'|'offset'|'transform'|'noise'|'reverse'|'clip'|'resample'|'conform'|'width'|'ribbon'|'tube'|'extrude'|'meshDeform'|'output';
 export type GeometryPortType='path'|'mesh'|'meshSource';
 export interface GeometryWidthKey {progress:number;multiplier:number}
 export interface GeometryGraphNode {
@@ -45,6 +46,8 @@ export interface GeometryGraphNode {
     clipStart?:number;clipEnd?:number;
     /** Number of equal-input-arc intervals (output has count+1 frames). */
     resampleSegments?:number;
+    conformRayHeight?:number;conformRayDepth?:number;conformOffset?:number;
+    conformMinNormalY?:number;conformMissing?:number;conformAlign?:number;
     multiplier?:number;
     /** Optional Width scale across normalized physical distance.
      * Unspecified middle = mean of start/end; unspecified end = start.
@@ -95,6 +98,8 @@ export interface GeometryGraphContext {
      * This is separate from frames, which remain in renderer-local space.
      */
     worldUvLinear?:ReadonlyArray<number>;
+    /** Explicit host-provided Physics query snapshot. No engine objects in the DAG. */
+    conformSurface?:{revision:string;targetCount:number;origin:FrameVec3;raycast:PopulationSurfaceRaycast};
 }
 export interface GeometryGraphPlan {
     nodes:GeometryGraphNode[];
@@ -205,23 +210,8 @@ function transformPath(source:GraphPath,node:GeometryGraphNode,worldLinear?:Read
 function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray<number>):GraphPath{
     const amplitude={x:node.noiseRight??0,y:node.noiseUp??0,z:node.noiseForward??0};
     if(amplitude.x===0&&amplitude.y===0&&amplitude.z===0)return source;
-    const m=linear??[1,0,0,0,1,0,0,0,1];
-    if(!Array.isArray(m)||m.length!==9||!m.every(v=>finite(v)&&Math.abs(v)<=1e7))
-        throw Error('Geometry Graph Noise requires a valid world linear matrix.');
-    const V=(x:number,y:number,z:number):FrameVec3=>({x,y,z});
-    const add=(a:FrameVec3,b:FrameVec3)=>V(a.x+b.x,a.y+b.y,a.z+b.z);
-    const sub=(a:FrameVec3,b:FrameVec3)=>V(a.x-b.x,a.y-b.y,a.z-b.z);
-    const mul=(a:FrameVec3,k:number)=>V(a.x*k,a.y*k,a.z*k);
-    const dot=(a:FrameVec3,b:FrameVec3)=>a.x*b.x+a.y*b.y+a.z*b.z;
-    const cross=(a:FrameVec3,b:FrameVec3)=>V(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);
-    const len=(a:FrameVec3)=>Math.hypot(a.x,a.y,a.z);
-    const unit=(a:FrameVec3)=>{const d=len(a);if(!finite(d)||d<1e-9)throw Error('Geometry Graph Noise produced a degenerate path segment.');return mul(a,1/d);};
-    const a=V(m[0],m[1],m[2]),b=V(m[3],m[4],m[5]),c=V(m[6],m[7],m[8]);
-    const bc=cross(b,c),ca=cross(c,a),ab=cross(a,b),det=dot(a,bc);
-    if(!finite(det)||Math.abs(det)<1e-12*Math.max(1e-18,len(a)*len(b)*len(c)))
-        throw Error('Geometry Graph Noise requires an invertible world linear matrix.');
-    const world=(v:FrameVec3)=>add(add(mul(a,v.x),mul(b,v.y)),mul(c,v.z));
-    const local=(v:FrameVec3)=>V(dot(bc,v)/det,dot(ca,v)/det,dot(ab,v)/det);
+    const basis=displacedPathBasis(linear);
+    const {V,add,sub,mul,len,world}=basis;
     const frames=source.frames,last=frames.length-1;
     const start=frames[0].distance,span=frames[last].distance-start;
     if(span<=1e-9||source.closed&&last<3)throw Error('Geometry Graph Noise requires a nonzero sampled path.');
@@ -238,6 +228,32 @@ function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray
         return world(p);
     });
     if(source.closed)positions[last]=positions[0];
+    return rebuildDisplacedPath(source,positions,origin,basis);
+}
+function displacedPathBasis(linear?:ReadonlyArray<number>){
+    const m=linear??[1,0,0,0,1,0,0,0,1];
+    if(!Array.isArray(m)||m.length!==9||!m.every(v=>finite(v)&&Math.abs(v)<=1e7))
+        throw Error('Geometry Graph displaced path requires a valid world linear matrix.');
+    const V=(x:number,y:number,z:number):FrameVec3=>({x,y,z});
+    const add=(a:FrameVec3,b:FrameVec3)=>V(a.x+b.x,a.y+b.y,a.z+b.z);
+    const sub=(a:FrameVec3,b:FrameVec3)=>V(a.x-b.x,a.y-b.y,a.z-b.z);
+    const mul=(a:FrameVec3,k:number)=>V(a.x*k,a.y*k,a.z*k);
+    const dot=(a:FrameVec3,b:FrameVec3)=>a.x*b.x+a.y*b.y+a.z*b.z;
+    const cross=(a:FrameVec3,b:FrameVec3)=>V(a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x);
+    const len=(a:FrameVec3)=>Math.hypot(a.x,a.y,a.z);
+    const unit=(a:FrameVec3)=>{const d=len(a);if(!finite(d)||d<1e-9)throw Error('Geometry Graph displaced path produced a degenerate path segment.');return mul(a,1/d);};
+    const a=V(m[0],m[1],m[2]),b=V(m[3],m[4],m[5]),c=V(m[6],m[7],m[8]);
+    const bc=cross(b,c),ca=cross(c,a),ab=cross(a,b),det=dot(a,bc);
+    if(!finite(det)||Math.abs(det)<1e-12*Math.max(1e-18,len(a)*len(b)*len(c)))
+        throw Error('Geometry Graph displaced path requires an invertible world linear matrix.');
+    const world=(v:FrameVec3)=>add(add(mul(a,v.x),mul(b,v.y)),mul(c,v.z));
+    const local=(v:FrameVec3)=>V(dot(bc,v)/det,dot(ca,v)/det,dot(ab,v)/det);
+    return {V,add,sub,mul,len,unit,world,local};
+}
+function rebuildDisplacedPath(source:GraphPath,positions:FrameVec3[],origin:FrameVec3,
+    basis:ReturnType<typeof displacedPathBasis>,upHints?:ReadonlyArray<FrameVec3|undefined>):GraphPath{
+    const {add,sub,len,unit,world,local}=basis;
+    const frames=source.frames,last=frames.length-1,start=frames[0].distance;
     const segments=positions.slice(1).map((p,i)=>sub(p,positions[i]));
     const directions=segments.map(unit);
     const samples=positions.map((position,i)=>{
@@ -246,7 +262,7 @@ function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray
         const after=index<last?directions[index]:directions[last-1];
         const blended=add(before,after);
         const tangent=len(blended)>1e-9?unit(blended):after;
-        return {t:i/last,position,tangent,up:world(frames[index].up)};
+        return {t:i/last,position,tangent,up:upHints?.[index]??world(frames[index].up)};
     });
     const stable=buildStableFrames(samples,source.closed);
     let distance=start;
@@ -256,10 +272,45 @@ function noisePath(source:GraphPath,node:GeometryGraphNode,linear?:ReadonlyArray
         const next:GraphFrame={...frames[i],position:add(origin,local(f.position)),
             forward:local(basis.tangent),right:local(basis.right),up:local(basis.up),distance};
         if(![next.position,next.forward,next.right,next.up].every(vec)||!finite(distance)||distance>1e9)
-            throw Error('Geometry Graph Noise produced invalid or oversized frames.');
+            throw Error('Geometry Graph displaced path produced invalid or oversized frames.');
         return next;
     });
     return {kind:'path',closed:source.closed,frames:output};
+}
+/** Project the path centerline (not every mesh vertex) onto explicit targets.
+ * Missing samples either fail atomically or retain their source positions.
+ */
+function conformPath(source:GraphPath,node:GeometryGraphNode,context:GeometryGraphContext):GraphPath{
+    const host=context.conformSurface;
+    if(!host||typeof host.revision!=='string'||!host.revision||host.revision.length>8192||
+       !vec(host.origin)||typeof host.raycast!=='function')
+        throw Error('Geometry Graph Conform requires explicit surface targets and a query revision.');
+    const basis=displacedPathBasis(context.worldUvLinear);
+    const {add,sub,len,world}=basis;
+    const frames=source.frames,last=frames.length-1,start=frames[0].distance;
+    const span=frames[last].distance-start;
+    if(span<=1e-9||source.closed&&last<3)throw Error('Geometry Graph Conform needs a nonzero sampled path.');
+    if(source.closed&&len(world(sub(frames[last].position,frames[0].position)))>1e-4)
+        throw Error('Geometry Graph Conform requires coincident closed-loop endpoints.');
+    const count=source.closed?last:frames.length;
+    const candidates=frames.slice(0,count).map((f,index)=>({
+        index,progress:(f.distance-start)/span,position:add(host.origin,world(f.position)),
+    }));
+    const projected=projectSurfaceCandidates(candidates,{
+        rayHeight:node.conformRayHeight??10,rayDepth:node.conformRayDepth??50,
+        surfaceOffset:node.conformOffset??0,minNormalY:node.conformMinNormalY??.3,
+        skipMissing:false,targetCount:host.targetCount,
+    },host.raycast);
+    if(projected.length!==count||projected.some((p,i)=>p.index!==i))
+        throw Error('Geometry Graph Conform returned incomplete samples.');
+    if((node.conformMissing??0)===0&&projected.some(p=>!p.surfaceNormal))
+        throw Error('Geometry Graph Conform missed a target surface. Previous mesh retained.');
+    if(projected.every(p=>!p.surfaceNormal))return source;
+    const positions=projected.map(p=>sub(p.position,host.origin));
+    const upHints=projected.map(p=>(node.conformAlign??1)===1?p.surfaceNormal??undefined:undefined);
+    if(source.closed){positions.push(positions[0]);upHints.push(upHints[0]);}
+    return rebuildDisplacedPath(source,positions,{x:0,y:0,z:0},basis,upHints);
+
 }
 /** Reverse travel direction without changing the world-space path or its up
  * hints. Both right and forward must flip together to retain handedness.
@@ -405,7 +456,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
     const occupiedMeshSlots=new Set<number>();
     for(const node of graph.nodes){
         if(!node||typeof node.id!=='string'||!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(node.id)||
-           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
+           !['spline','meshAsset','offset','transform','noise','reverse','clip','resample','conform','width','ribbon','tube','extrude','meshDeform','output'].includes(node.type)||table.has(node.id))
             throw Error('Invalid/duplicate Geometry Graph node ID or type.');
         const keys=['id','type',...(node.type==='spline'?[]:
             node.type==='meshAsset'?['slot']:
@@ -414,6 +465,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='noise'?['input','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds']:
             node.type==='clip'?['input','clipStart','clipEnd']:
             node.type==='resample'?['input','resampleSegments']:
+            node.type==='conform'?['input','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign']:
             node.type==='width'?['input','multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['input','width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['input','radius','radialSegments','uvMetersPerRepeat','capEnds']:
@@ -461,6 +513,17 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
         if(node.type==='resample'){
             const count=bound(node.resampleSegments===undefined?32:node.resampleSegments,3,1024,'Resample segments');
             if(!Number.isInteger(count))throw Error('Geometry Graph Resample segments must be an integer.');
+        }
+        if(node.type==='conform'){
+            const h=bound(node.conformRayHeight===undefined?10:node.conformRayHeight,0,10000,'Conform ray height');
+            const d=bound(node.conformRayDepth===undefined?50:node.conformRayDepth,0,10000,'Conform ray depth');
+            if(h+d<=1e-6)throw Error('Geometry Graph Conform needs a nonzero ray range.');
+            bound(node.conformOffset===undefined?0:node.conformOffset,-1000,1000,'Conform offset');
+            bound(node.conformMinNormalY===undefined?.3:node.conformMinNormalY,0,1,'Conform normal Y');
+            for(const k of ['conformMissing','conformAlign'] as const){
+                const n=bound(node[k]===undefined?(k==='conformAlign'?1:0):node[k],0,1,'Conform '+k);
+                if(!Number.isInteger(n))throw Error('Geometry Graph Conform mode must be 0 or 1.');
+            }
         }
         if(node.type==='width'){
             if(node.widthKeys!==undefined){
@@ -680,7 +743,8 @@ export class GeometryGraphRunner {
                     node.meshInput?next.get(node.meshInput)?.version??null:null,
                     node.type==='extrude'&&node.profileSlot!==undefined?
                         context.profileRevisions?.[node.profileSlot]??null:null,
-                    ['transform','noise','clip','resample'].includes(node.type)?context.worldUvLinear??null:null,
+                    ['transform','noise','clip','resample','conform'].includes(node.type)?context.worldUvLinear??null:null,
+                    node.type==='conform'?[context.conformSurface?.revision??null,context.conformSurface?.origin??null,context.conformSurface?.targetCount??null]:null,
                     // World-space Profile UV also depends on this transform.
                     // It invalidates its Extrude branch even when a pure Core
                     // caller changes matrix without changing frame revision.
@@ -738,6 +802,9 @@ export class GeometryGraphRunner {
                 }else if(node.type==='resample'){
                     if(source?.kind!=='path')throw Error('Geometry Graph Resample input is not a path.');
                     value=resamplePath(source,node,context.worldUvLinear);
+                }else if(node.type==='conform'){
+                    if(source?.kind!=='path')throw Error('Geometry Graph Conform input is not a path.');
+                    value=conformPath(source,node,context);
                 }else if(node.type==='width'){
                     if(source?.kind!=='path')throw Error('Geometry Graph width input is not a path.');
                     const keys=node.widthKeys;
