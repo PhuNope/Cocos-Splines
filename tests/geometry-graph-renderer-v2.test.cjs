@@ -912,11 +912,11 @@ async function run(){
    const fullMesh=multiOut.mesh,fullCollider=collision.mesh;
    const fullTriangles=fullMesh.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0);
    const bakeBefore=multiRenderer.snapshotGeometryForBake();
-   observer.worldPosition=new Vec3(0,0,30);multiRenderer.update();
+   observer.worldPosition=new Vec3(0,30,5);multiRenderer.update();
    assert.equal(multiRenderer.getRenderedLodLevel(),1);assert.equal(collision.mesh,fullCollider);
    const medium=multiOut.mesh;assert(medium.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0)<fullTriangles);
    assert.deepEqual(multiRenderer.snapshotGeometryForBake(),bakeBefore);
-   observer.worldPosition=new Vec3(0,0,24);multiRenderer.update();assert.equal(multiOut.mesh,medium);
+   observer.worldPosition=new Vec3(0,19,5);multiRenderer.update();assert.equal(multiOut.mesh,medium);
    observer.worldPosition=new Vec3(0,0,100);failCreate=true;multiRenderer.update();failCreate=false;
    assert.equal(multiOut.mesh,medium);assert.equal(multiRenderer.getRenderedLodLevel(),1);assert.equal(collision.mesh,fullCollider);
    multiRenderer.rebuild();assert.equal(multiRenderer.getRenderedLodLevel(),2);assert.equal(collision.mesh,fullCollider);

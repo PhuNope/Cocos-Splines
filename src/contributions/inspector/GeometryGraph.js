@@ -13,6 +13,8 @@ const template=base.template+[
  '<summary>Visual Geometry Graph</summary>',
  '<div class="spl-vg-toolbar spl-vg-asset-toolbar">',
  '<button type="button" class="spl-btn spl-vg-export">Export JSON…</button>',
+ '<select class="spl-vg-bake-format" aria-label="Bake file format"><option value="gltf">glTF</option><option value="glb">GLB</option></select>',
+ '<label title="Compact identical position/normal/UV tuples; keep all triangles"><input type="checkbox" class="spl-vg-bake-optimize"> Optimize vertices</label>',
  '<button type="button" class="spl-btn spl-vg-bake">Bake Mesh…</button>',
  '<select class="spl-vg-chunk-budget" aria-label="Maximum triangles per baked chunk" title="Maximum triangles per baked chunk"><option value="256">256 tris</option><option value="1024">1024 tris</option><option value="4096" selected>4096 tris</option><option value="8192">8192 tris</option></select>',
  '<button type="button" class="spl-btn spl-vg-bake-chunks">Bake Chunks…</button>',
@@ -146,7 +148,7 @@ const style=base.style+[
 '.spl-vg-profile-report{font:11px/1.6 ui-monospace,monospace;white-space:pre;overflow:auto;max-height:440px;margin:6px 0;padding:7px;border:1px solid #3b576b;border-radius:6px;color:#a9d8db;background:rgba(14,26,36,.5)}'
 ].join('\n');
 const $={...base.$,
-  vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',vgBake:'.spl-vg-bake',vgBakeChunks:'.spl-vg-bake-chunks',vgChunkBudget:'.spl-vg-chunk-budget',
+  vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',vgBake:'.spl-vg-bake',vgBakeChunks:'.spl-vg-bake-chunks',vgChunkBudget:'.spl-vg-chunk-budget',vgBakeFormat:'.spl-vg-bake-format',vgBakeOptimize:'.spl-vg-bake-optimize',
   vgCopyLocal:'.spl-vg-copy-local',vgRefresh:'.spl-vg-refresh',
   vgEditShared:'.spl-vg-edit-shared',vgSaveShared:'.spl-vg-save-shared',
   vgDiscardShared:'.spl-vg-discard-shared',
@@ -363,8 +365,8 @@ function render(panel){
     !draft||busy||!panel._vgSharedReview||
     panel._vgSharedReview.sha256===draft.sha256||
     !panel._vgSharedReview.analysis?.canRebase;
-  for(const key of ['vgExport','vgImport','vgBake','vgBakeChunks','vgChunkBudget'])if(panel.$?.[key])
-    panel.$[key].disabled=!!draft||busy||(['vgBake','vgBakeChunks','vgChunkBudget'].includes(key)&&!!panel._vgBakeBusy);
+  for(const key of ['vgExport','vgImport','vgBake','vgBakeChunks','vgChunkBudget','vgBakeFormat','vgBakeOptimize'])if(panel.$?.[key])
+    panel.$[key].disabled=!!draft||busy||(['vgBake','vgBakeChunks','vgChunkBudget','vgBakeFormat','vgBakeOptimize'].includes(key)&&!!panel._vgBakeBusy);
   if(panel.$?.vgConflict)panel.$.vgConflict.textContent=reviewText;
   if(panel.$?.vgRefresh)panel.$.vgRefresh.disabled=!!draft||busy;
   const stage=panel.$?.vgStage,properties=panel.$?.vgProperties;
@@ -1073,7 +1075,7 @@ const inspector={
       if(this._vgSharedDraft||this._vgSharedBusy||this._vgBakeBusy)return;
       this._vgBakeBusy=true;
       try{
-        const options=chunked?{chunkTriangles:Number(this.$?.vgChunkBudget?.value||4096)}:{};
+        const options={format:this.$?.vgBakeFormat?.value||'gltf',optimize:this.$?.vgBakeOptimize?.checked===true,...(chunked?{chunkTriangles:Number(this.$?.vgChunkBudget?.value||4096)}:{})};
         const result=await Editor.Message.request('cocos-splines','bake-geometry-graph-mesh',options);
         if(!result?.ok&&!result?.canceled)status(this,String(result?.error||'Mesh Bake failed.'),true);
         else if(result?.message)status(this,result.message);

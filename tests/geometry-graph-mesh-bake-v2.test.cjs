@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {encodeBakedGltf,writeNewBakedMesh}=require('../dist/SplineGeometryMeshBake');
+const {encodeBakedGltf,buildBakedModel,writeNewBakedMesh}=require('../dist/SplineGeometryMeshBake');
 const geometry={positions:[0,0,0,1,0,0,0,1,0,1,1,0],normals:Array(4).fill([0,0,1]).flat(),uvs:[0,0,1,0,0,1,1,1],indices:[0,1,2,1,3,2],triangleMaterialSlots:[2,0]};
 const snapshot={outputs:[{outputId:'road',geometry}]};
 const before=JSON.stringify(snapshot),content=encodeBakedGltf(snapshot),m=JSON.parse(content);
@@ -51,6 +51,41 @@ assert.equal(encodeBakedGltf(chunkSnapshot,{chunkTriangles:256}),chunkText);
 assert.throws(()=>partitionBakeGeometry(grid,256,2),/chunk count/i);
 assert.throws(()=>encodeBakedGltf(chunkSnapshot,{chunkTriangles:12}),/triangle budget/i);
 assert.throws(()=>encodeBakedGltf({outputs:['a','b'].map(outputId=>({outputId,geometry:grid}))},{chunkTriangles:256}),/four material/i);
+// Exact attribute welding only: same positions with distinct normals/UVs
+// stay separate, unreferenced vertex drops, triangle order and groups survive.
+const {optimizeBakeGeometry}=require('../dist/SplineGeometryMeshOptimize');
+const dup={positions:[...geometry.positions,0,0,0,0,0,0,0,0,0,50,50,50],
+ normals:[...geometry.normals,0,0,1,0,0,-1,0,0,1,0,0,1],
+ uvs:[...geometry.uvs,0,0,0,0,1,0,0,0],
+ indices:[0,1,2,4,1,2,5,1,2,6,1,2,0,0,1],triangleMaterialSlots:[0,0,1,2,3]};
+const dupBefore=JSON.stringify(dup),compact=optimizeBakeGeometry(dup);
+assert.equal(compact.positions.length/3,5);
+assert.deepEqual(triKeys(compact),triKeys(dup));
+assert.equal(JSON.stringify(dup),dupBefore);
+const production=buildBakedModel({outputs:[{outputId:'mesh',geometry:dup}]},{optimize:true,format:'glb'});
+assert.equal(production.report.removedVertices,3);
+assert.equal(production.report.input.unreferencedVertices,2);
+assert.equal(production.report.input.degenerateTriangles,1);
+assert.equal(production.report.triangles,5);
+assert.equal(production.report.vertexBytesSaved,96);
+const glb=production.content;
+assert.equal(glb.readUInt32LE(0),0x46546c67);assert.equal(glb.readUInt32LE(4),2);assert.equal(glb.readUInt32LE(8),glb.length);
+const jsonLen=glb.readUInt32LE(12),binStart=20+jsonLen;
+assert.equal(jsonLen%4,0);assert.equal(glb.readUInt32LE(16),0x4e4f534a);
+const glbModel=JSON.parse(glb.subarray(20,binStart).toString('utf8'));
+assert.equal(glbModel.buffers[0].uri,undefined);
+assert.equal(glb.readUInt32LE(binStart+4),0x004e4942);
+assert.equal(glb.readUInt32LE(binStart)%4,0);
+assert.equal(glb.length,binStart+8+glb.readUInt32LE(binStart));
+assert.equal(glbModel.extras.cocosSplinesBake.removedVertices,3);
+const glbData=glb.subarray(binStart+8,binStart+8+glbModel.buffers[0].byteLength);
+const asJson=buildBakedModel({outputs:[{outputId:'mesh',geometry:dup}]},{optimize:true,format:'gltf'});
+assert.deepEqual(glbData,Buffer.from(JSON.parse(asJson.content).buffers[0].uri.split(',')[1],'base64'));
+const optChunks=buildBakedModel(chunkSnapshot,{chunkTriangles:256,optimize:true,format:'glb'});
+assert.equal(optChunks.report.meshCount,3);assert.equal(optChunks.report.triangles,600);
+assert.equal(optChunks.report.materialCount,3);
+assert.throws(()=>buildBakedModel(snapshot,{format:'obj'}),/options/i);
+assert.throws(()=>buildBakedModel(snapshot,{optimize:1}),/options/i);
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'spline-bake-'));
 try{
  const assets=path.join(temp,'assets');fs.mkdirSync(assets);
@@ -58,6 +93,12 @@ try{
  assert.equal(writeNewBakedMesh(target,assets,content).assetUrl,'db://assets/road.gltf');
  assert.equal(fs.readFileSync(target,'utf8'),content);
  assert.throws(()=>writeNewBakedMesh(target,assets,content));
+ const binaryTarget=path.join(assets,'road.glb');
+ assert.equal(writeNewBakedMesh(binaryTarget,assets,glb).bytes,glb.length);
+ assert.deepEqual(fs.readFileSync(binaryTarget),glb);
+ assert.throws(()=>writeNewBakedMesh(binaryTarget,assets,glb));
+ assert.throws(()=>writeNewBakedMesh(path.join(assets,'bad.glb'),assets,content),/type/i);
+ assert.throws(()=>writeNewBakedMesh(path.join(assets,'invalid.glb'),assets,Buffer.alloc(20)),/header/i);
  assert.throws(()=>writeNewBakedMesh(path.join(temp,'outside.gltf'),assets,content),/inside/i);
  fs.writeFileSync(path.join(assets,'orphan.gltf.meta'),'{}');
  assert.throws(()=>writeNewBakedMesh(path.join(assets,'orphan.gltf'),assets,content),/meta/i);

@@ -11,7 +11,7 @@ const {formatProfile}=require('./SplineGeometryProfileEditor');
 const {readProfileSnapshot,saveProfileIfUnchanged}=require('./SplineGeometryProfileAssetWorkflow');
 const {createProfilePreset}=require('./SplineGeometryProfileLibrary');
 const {writeNewProfileAsset}=require('./SplineGeometryProfileExport');
-const {encodeBakedGltf,writeNewBakedMesh}=require('./SplineGeometryMeshBake');
+const {buildBakedModel,writeNewBakedMesh}=require('./SplineGeometryMeshBake');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -1188,7 +1188,8 @@ const methods={
         meshBakeBusy=true;
         try{
             const nodeUuid=singleGraphSelection();
-            const chunkTriangles=options?.chunkTriangles;
+            const chunkTriangles=options?.chunkTriangles,format=options?.format??'gltf',optimize=options?.optimize??false;
+            if(!['gltf','glb'].includes(format)||typeof optimize!=='boolean')throw Error('Invalid Bake export options.');
             if(chunkTriangles!==undefined&&![256,1024,4096,8192].includes(chunkTriangles))
                 throw Error('Invalid chunk triangle budget.');
             if(typeof Editor.Dialog?.save!=='function'||typeof Editor.Dialog?.info!=='function')
@@ -1197,8 +1198,9 @@ const methods={
             if(typeof root!=='string'||!path.isAbsolute(root))throw Error('Project root unavailable.');
             const assets=path.join(root,'assets');
             const choice=await Editor.Dialog.save({title:'Bake NEW Geometry Graph Mesh',
-                path:path.join(assets,chunkTriangles===undefined?'BakedSpline.gltf':'BakedSplineChunks.gltf'),filters:[{name:'glTF 2.0',extensions:['gltf']}]});
+                path:path.join(assets,(chunkTriangles===undefined?'BakedSpline':'BakedSplineChunks')+'.'+format),filters:[{name:format==='glb'?'Binary glTF 2.0':'glTF 2.0',extensions:[format]}]});
             if(choice?.canceled||!choice?.filePath)return {ok:false,canceled:true};
+            if(path.extname(choice.filePath).toLowerCase()!=='.'+format)throw Error('Bake filename extension must match selected format.');
             if(singleGraphSelection()!==nodeUuid)throw Error('Selected renderer changed during Bake.');
             const answer=await Editor.Dialog.info('Bake current Geometry Graph as a new model?',{
                 title:'Bake Mesh',detail:choice.filePath+'\n'+(chunkTriangles===undefined?'Single mesh.':'Spatial chunks: max '+chunkTriangles+' triangles per mesh, up to 128 meshes.')+'\nUses current graph inputs, renderer-local geometry and placeholder material groups. Never overwrites or auto-assigns assets; no Scene Undo entry.',
@@ -1208,14 +1210,15 @@ const methods={
             const info=await invokeScene('snapshotGeometryGraphForBake',nodeUuid);
             if(!info?.ok)throw Error(info?.error||'Unable to evaluate Geometry Graph.');
             if(singleGraphSelection()!==nodeUuid)throw Error('Selected renderer changed during evaluation.');
-            const content=encodeBakedGltf(info.snapshot,{chunkTriangles});
+            const {content,report}=buildBakedModel(info.snapshot,{chunkTriangles,optimize,format});
             const saved=writeNewBakedMesh(choice.filePath,assets,content);
+            const summary=' | '+report.beforeVertices+' → '+report.vertices+' vertices, '+report.triangles+' triangles, '+report.meshCount+' mesh(es), '+report.fileBytes+' bytes; '+report.input.degenerateTriangles+' degenerate triangles (retained).';
             try{
                 const result=await Editor.Message.request('asset-db','refresh-asset',saved.assetUrl);
                 if(result===false)throw Error('AssetDB returned false.');
-                return {ok:true,created:true,...saved,message:'Baked model saved: '+saved.assetUrl+(chunkTriangles===undefined?'. Use the imported Mesh subasset or Prefab;':'. Use the imported chunked Prefab;')+' assign original materials manually.'};
+                return {ok:true,created:true,...saved,report,message:'Baked model saved: '+saved.assetUrl+(chunkTriangles===undefined?'. Use the imported Mesh subasset or Prefab;':'. Use the imported chunked Prefab;')+' assign original materials manually.'+summary};
             }catch(error){
-                return {ok:true,created:true,refreshPending:true,...saved,message:'Baked model saved; refresh Assets manually: '+String(error?.message||error)};
+                return {ok:true,created:true,refreshPending:true,...saved,report,message:'Baked model saved; refresh Assets manually: '+String(error?.message||error)+summary};
             }
         }catch(error){return alertError('bake-geometry-graph-mesh',error);}
         finally{meshBakeBusy=false;}
