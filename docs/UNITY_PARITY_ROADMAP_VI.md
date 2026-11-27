@@ -288,7 +288,11 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 - [x] Phase 4.7c2 — opt-in runtime/Preview child MeshRenderer chunks with centroid partition parity, per-chunk shared vertex/material primitives, exact stream/physical-slot reuse, staged node/mesh ownership and rollback, material/visibility sync, explicit bounds and cleanup on disable/destroy, static collider compatibility, Inspector and offline regressions. Graph evaluation/partition still whole-output; no local spline-segment reevaluation or native performance claim. Edit Mode uses original single renderer. Native culling/ownership acceptance pending.
 - [x] Phase 4.7d — opt-in renderer-wide distance-based visual LOD (full/half/quarter path samples, explicit observer Node, nearest sampled source segment world distance, 10% hysteresis, separate per-level graph runners, full-resolution bake/collider and camera-only collision reuse, chunk compatibility, unchanged material groups, Inspector and offline regressions). Conservative supported-node allowlist; unsupported path/mesh operations remain LOD0. No per-chunk LOD, simplification, crossfade or native performance claim. Native acceptance pending.
 - [x] Phase 4.7e — optional exact attribute-tuple vertex compaction (no tolerance or face deletion, UV/hard normal seams preserved), standalone binary GLB 2.0 alongside embedded glTF, single/chunk bake options, bounded binary encoding, shared material groups, geometry/size/degenerate diagnostics in export response and extras, exclusive asset write and offline regression coverage. Native GLB import acceptance pending.
-- [ ] Phase 4.8 — population/scatter graph processing.
+- [x] Phase 4.8a — data-only Typed Population Graph v1: bounded versioned JSON, path/candidates/instances ports, topological compilation, cycle/type/disconnected validation, world arc Count distribution, existing density/exclusion/spacing and weighted-prefab policies, immutable compiled plan, deterministic candidate IDs, revision-based atomic node cache and read-only instance descriptors, installable JSON example and headless regression tests. No native spawning yet.
+- [ ] Phase 4.8b — advanced distribution nodes (spacing, jitter, range and deterministic scatter).
+- [ ] Phase 4.8c — filter/transform nodes (surface, obstacle, offsets, rotation/scale).
+- [ ] Phase 4.8d — native prefab instance output and lifecycle integration.
+- [ ] Phase 4.8e — visual Population Graph Editor and native examples.
 
 ### Phase 5 — Runtime networks & controllers
 

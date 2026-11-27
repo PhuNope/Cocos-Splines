@@ -27,6 +27,8 @@ try {
  assert.equal(demo.output,'output');
  assert.deepEqual(demo.nodes.map(n=>n.type),
    ['spline','offset','width','ribbon','output']);
+ const populationGraph=JSON.parse(fs.readFileSync(path.join(first.folder,'Population/BasicPopulationGraph.json'),'utf8'));
+ assert.equal(populationGraph.version,1);assert.equal(populationGraph.nodes.find(n=>n.type==='prefab').weights.length,2);
  const tube=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/BasicTubeGraph.json'),'utf8'));
  assert.equal(tube.version,1);
  assert.deepEqual(tube.nodes.map(n=>n.type),['spline','offset','width','tube','output']);

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "output": "output",
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline",
+      "slot": 0
+    },
+    {
+      "id": "distribution",
+      "type": "count",
+      "input": "source",
+      "count": 32
+    },
+    {
+      "id": "density",
+      "type": "density",
+      "input": "distribution",
+      "density": 0.8,
+      "seed": 42,
+      "minWorldSpacing": 0.1
+    },
+    {
+      "id": "prefabs",
+      "type": "prefab",
+      "input": "density",
+      "weights": [
+        1,
+        3
+      ],
+      "seed": 17
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "prefabs"
+    }
+  ]
+}

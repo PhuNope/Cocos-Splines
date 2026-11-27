@@ -61,6 +61,7 @@ const FILES=Object.freeze([
  ['MeshDeform/MeshDeformSetup.ts','examples/installable/MeshDeform/MeshDeformSetup.ts'],
  ['Traffic/TrafficSignalsSetup.ts','examples/installable/Traffic/TrafficSignalsSetup.ts'],
  ['Population/PrefabSpawningSetup.ts','examples/installable/Population/PrefabSpawningSetup.ts'],
+ ['Population/BasicPopulationGraph.json','examples/installable/Population/BasicPopulationGraph.json'],
  ['GeometryGraph/BasicRibbonGraph.json','examples/installable/GeometryGraph/BasicRibbonGraph.json'],
  ['GeometryGraph/BasicTubeGraph.json','examples/installable/GeometryGraph/BasicTubeGraph.json'],
  ['GeometryGraph/TransformPathGraph.json','examples/installable/GeometryGraph/TransformPathGraph.json'],
