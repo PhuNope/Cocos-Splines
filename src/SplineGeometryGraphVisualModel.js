@@ -692,7 +692,7 @@ function renderProfileKeyControls(n){
   if(!n.profileKeys)return '<button type="button" data-profile-action="enable">Enable Profile Keys (2–16)</button>';
   const keys=n.profileKeys;
   return '<div class="spl-vg-width-keys"><strong>Profile Keys · '+['Step','Linear','Smoothstep'][n.profileInterpolation??0]+'</strong>'+
-    '<div>Normalized path distance. Assign Profile Assets A/B/C with matching ordered contours, holes and vertex counts. Custom UV metadata not supported yet. Same first/last slot on closed paths.</div>'+
+    '<div>Normalized path distance. Assign Profile Assets A/B/C with matching ordered contours, holes and vertex counts. Use identical UV metadata on all referenced profiles (including seams, weights, tiling and atlas settings). Same first/last slot on closed paths.</div>'+
     keys.map((k,i)=>'<div class="spl-vg-width-row"><label>Progress <input type="number" min="0" max="1" step=".001" data-profile-field="progress" data-profile-index="'+i+'" value="'+k.progress+'"'+
       (i===0||i===keys.length-1?' disabled':'')+'></label><label>Slot <select data-profile-field="slot" data-profile-index="'+i+'">'+
       ['A','B','C'].map((s,j)=>'<option value="'+j+'"'+(j===k.slot?' selected':'')+'>'+s+'</option>').join('')+

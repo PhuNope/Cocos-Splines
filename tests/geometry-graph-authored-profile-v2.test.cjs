@@ -259,6 +259,55 @@ try{
   const first=edge*contourSeam.ringCount*6,last=first+(contourSeam.ringCount-1)*6;
   for(let k=0;k<6;k++){near(contourSeam.positions[first+k],contourSeam.positions[last+k]);near(contourSeam.normals[first+k],contourSeam.normals[last+k]);}
  }
+ // Compatible keyed UV metadata: weighted per-ring seams, metric lengths,
+ // world transform invalidation, quad/triangle islands and atlas.
+ const uvRunner=new GeometryGraphRunner();
+ const uvContext=(uv,extra={})=>({...keyCtx,profileUVs:[uv,uv],
+  profileRevisions:['square:'+JSON.stringify(uv),'wide:'+JSON.stringify(uv)],...extra});
+ const weights={seamEdge:1,edgeWeights:[2,1,1,1]};
+ const weighted=uvRunner.evaluate(linearPlan,uvContext(weights));
+ assert.deepEqual(weighted.positions,linear.positions);
+ assert.deepEqual(weighted.normals,linear.normals);
+ const getU=(mesh,edge,ring,end=0)=>mesh.uvs[(edge*mesh.ringCount*2+ring*2+end)*2];
+ near(getU(weighted,1,0),0);
+ near(getU(weighted,0,0),.5);
+ near(getU(weighted,0,0,1),1);
+ near(getU(weighted,0,4),5/11);
+ near(getU(weighted,0,4,1),1);
+ const metric={uMetersPerRepeat:2};
+ const tiled=uvRunner.evaluate(linearPlan,uvContext(metric));
+ near(getU(tiled,0,0,1),1);near(getU(tiled,0,4,1),1.5);
+ const scaledFrames=frames.map(f=>({...f,right:v(2,0,0)}));
+ const local=uvRunner.evaluate(linearPlan,uvContext({...metric,uFollowFrameScale:true},{frames:scaledFrames,revision:'local-uv'}));
+ near(getU(local,0,0,1),2);near(getU(local,0,4,1),3);
+ const world={...metric,uWorldSpace:true};
+ const wctx=uvContext(world,{worldUvLinear:[2,0,0,0,1,0,0,0,1]});
+ const worldMesh=uvRunner.evaluate(keyPlan,wctx);
+ near(getU(worldMesh,0,0,1),2);
+ const worldChanged=uvRunner.evaluate(keyPlan,{...wctx,worldUvLinear:[3,0,0,0,1,0,0,0,1]});
+ near(getU(worldChanged,0,0,1),3);
+ assert.deepEqual(uvRunner.metrics,{computed:2,reused:1,nodes:3});
+ assert.deepEqual(worldMesh.positions,worldChanged.positions);
+ const edge=uvRunner.evaluate(linearPlan,uvContext({sideIslandMode:1}));
+ near(getU(edge,2,4),0);near(getU(edge,2,4,1),1);
+ const quad=uvRunner.evaluate(linearPlan,uvContext({sideIslandMode:2}));
+ const expanded=(mesh,field,stride)=>mesh.indices.flatMap(i=>mesh[field].slice(i*stride,i*stride+stride));
+ assert.deepEqual(expanded(quad,'positions',3),expanded(linear,'positions',3));
+ assert.deepEqual(expanded(quad,'normals',3),expanded(linear,'normals',3));
+ const atlasUV={sideIslandMode:2,atlasPacking:true,atlasRotate:true,atlasPixelPadding:{resolution:1024,pixels:2}};
+ const atlas=uvRunner.evaluate(linearPlan,uvContext(atlasUV));
+ assert.deepEqual(atlas.positions,quad.positions);
+ assert(atlas.uvs.every(x=>Number.isFinite(x)&&x>=0&&x<=1));
+ const triangle=uvRunner.evaluate(linearPlan,uvContext({triangleUnwrap:true,atlasPacking:true}));
+ assert.deepEqual(expanded(triangle,'positions',3),expanded(linear,'positions',3));
+ assert(triangle.uvs.every(x=>Number.isFinite(x)&&x>=0&&x<=1));
+ const compoundUV={seamEdge:1,edgeWeights:[2,1,1,1],sideIslandMode:0};
+ const compound=contourRunner.evaluate(linearPlan,{...contourContext,profileUVs:[compoundUV,compoundUV],profileRevisions:['compoundA','compoundB']});
+ near(getU(compound,1,4),0);near(getU(compound,4,4),0);near(getU(compound,7,4,1),1);
+ const mismatch={...uvContext(weights),profileUVs:[weights,{...weights,seamEdge:2}],profileRevisions:['wrongA','wrongB']};
+ assert.throws(()=>uvRunner.evaluate(linearPlan,mismatch),/matching custom UV/i);
+ assert.deepEqual(uvRunner.evaluate(linearPlan,uvContext(weights)),weighted);
+ assert.throws(()=>uvRunner.evaluate(keyPlan,uvContext(world)),/world transform/i);
  const pkg=require(root+'/package.json');
  assert(pkg.scripts.test.includes('geometry-graph-authored-profile-v2.test.cjs'));
  console.log('AUTHORED PROFILE V2 PASS: strict CCW simple polygon, concave triangulation, profile slots, dirty propagation, safe rollback and Visual Graph preset reset.');

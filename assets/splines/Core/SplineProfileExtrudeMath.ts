@@ -375,11 +375,19 @@ export function graphProfileParts(profile:GraphAuthoredProfile):GraphProfilePoin
 export function graphProfileTopology(profile:GraphAuthoredProfile):string{
     return JSON.stringify(graphProfileParts(profile).map(part=>part.map(loop=>loop.length)));
 }
+/** parseGraphProfileAsset emits UV keys in canonical order, including nested
+ * atlas settings. Require a single shared configuration for a keyed strip:
+ * no seam/atlas layout switches or interpolation of UV settings. */
+export function graphProfileUVSignature(profile:GraphAuthoredProfile):string{
+    return JSON.stringify(profile.uv??null);
+}
 /** Caller supplies validated profiles with identical topology. The builder
  * validates each interpolated section, including hole containment and overlap. */
 export function interpolateGraphProfile(a:GraphAuthoredProfile,b:GraphAuthoredProfile,t:number):GraphAuthoredProfile{
     if(graphProfileTopology(a)!==graphProfileTopology(b))
         throw Error('Graph Profile keys require matching contour topology and vertex counts.');
+    if(graphProfileUVSignature(a)!==graphProfileUVSignature(b))
+        throw Error('Graph Profile keys require matching custom UV metadata.');
     const left=graphProfileParts(a),right=graphProfileParts(b);
     const parts=left.map((part,i)=>part.map((loop,j)=>loop.map((p,k)=>{
         const q=right[i][j][k];return {x:p.x+(q.x-p.x)*t,y:p.y+(q.y-p.y)*t};
@@ -388,7 +396,8 @@ export function interpolateGraphProfile(a:GraphAuthoredProfile,b:GraphAuthoredPr
     return {format:'cocos-splines/profile',version:1,points:parts[0][0],
         ...(parts[0].length>1?{holes:parts[0].slice(1)}:{}),
         ...(extra.length?{outerContours:extra.map(part=>part[0])}:{}),
-        ...(extra.some(part=>part.length>1)?{outerHoles:extra.map(part=>part.slice(1))}:{})};
+        ...(extra.some(part=>part.length>1)?{outerHoles:extra.map(part=>part.slice(1))}:{}),
+        ...(a.uv===undefined?{}:{uv:a.uv})};
 }
 export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
@@ -508,18 +517,22 @@ export function buildProfileExtrudeGeometry(
         });
     let keyed:ReadonlyArray<ReadonlyArray<Readonly<P2>>>|undefined;
     let keyedParts:ReadonlyArray<GraphProfilePoint[][][]>|undefined;
+    let activeUV=authored?.uv;
     if(rawSections!==undefined){
         if(!Array.isArray(rawSections)||rawSections.length!==frames.length||authored)
             throw Error('Graph Profile keys require exactly one section per frame and no static authored profile.');
         const checked=new Map<GraphAuthoredProfile,GraphProfilePoint[][][]>();
-        let topology:string|undefined;
+        let topology:string|undefined,uvSignature:string|undefined;
         const validated=rawSections.map((section:GraphAuthoredProfile)=>{
             let part=checked.get(section);
             if(part)return part;
             let parsed:GraphAuthoredProfile;
             try{parsed=parseGraphProfileAsset(section);}
             catch(error){throw Error('Graph Profile morph contains an invalid sampled polygon: '+String((error as Error)?.message??error));}
-            if(parsed.uv!==undefined)throw Error('Graph Profile keys currently do not support custom UV metadata.');
+            const signature=graphProfileUVSignature(parsed);
+            if(uvSignature!==undefined&&uvSignature!==signature)
+                throw Error('Graph Profile keys require matching custom UV metadata.');
+            uvSignature=signature;activeUV=parsed.uv;
             const next=graphProfileTopology(parsed);
             if(topology!==undefined&&topology!==next)
                 throw Error('Graph Profile keys require matching contour topology and vertex counts.');
@@ -559,11 +572,12 @@ export function buildProfileExtrudeGeometry(
         return triangles;
     };
     const triangles=capEnds&&!closed?triangulateParts(parts):[];
+    const endTriangles=capEnds&&!closed&&keyedParts?triangulateParts(keyedParts[frames.length-1]):triangles;
     const perimeterLengths=profile.map((p,i)=>{
         const next=profile[nextEdge[i]];
         return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
     });
-    const uvWeights=authored?.uv?.edgeWeights;
+    const uvWeights=activeUV?.edgeWeights;
     const weightedLengths=perimeterLengths.map((len,i)=>
         len*(uvWeights?.[i]??1));
     const perimeter=weightedLengths.reduce((total,l)=>total+l,0);
@@ -571,10 +585,10 @@ export function buildProfileExtrudeGeometry(
     const prefix:number[]=[];
     let cumulative=0;
     for(const len of weightedLengths){prefix.push(cumulative);cumulative+=len;}
-    const seam=authored?.uv?.seamEdge??0;
+    const seam=activeUV?.seamEdge??0;
     const loopSeam=(i:number)=>ringStart[i]===0?seam:ringStart[i];
-    const sideIslandMode=authored?.uv?.sideIslandMode??0;
-    const worldUv=authored?.uv?.uWorldSpace===true;
+    const sideIslandMode=activeUV?.sideIslandMode??0;
+    const worldUv=activeUV?.uWorldSpace===true;
     const worldLinear=settings.worldUvLinear;
     if(worldUv&&(!Array.isArray(worldLinear)||worldLinear.length!==9||
         worldLinear.some(x=>!Number.isFinite(x)||Math.abs(x)>1e7)))
@@ -589,8 +603,8 @@ export function buildProfileExtrudeGeometry(
     };
     // Per-triangle unwrap is an explicit alternative to shared vertex UVs.
     // Reject over-budget graphs BEFORE allocating the side/cap mesh.
-    const triangleCount=2*bands*(frames.length-1)+2*triangles.length/3;
-    if(authored?.uv?.triangleUnwrap===true&&
+    const triangleCount=2*bands*(frames.length-1)+(triangles.length+endTriangles.length)/3;
+    if(activeUV?.triangleUnwrap===true&&
        (triangleCount*3>65536||triangleCount>16384))
         throw Error('Graph Profile UV Triangle Unwrap exceeds the 65536-vertex / 16384-island limit.');
     // Quad islands duplicate only side vertices per spline span. Preflight
@@ -604,7 +618,7 @@ export function buildProfileExtrudeGeometry(
     // Legacy weighted/seamed UV stays normalized to [0,1] without this field.
     const loopLength=(i:number,lengths:ReadonlyArray<number>)=>
         lengths.slice(ringStart[i],ringEnd[i]).reduce((sum,l)=>sum+l,0);
-    const uDenominator=authored?.uv?.uMetersPerRepeat??perimeter;
+    const uDenominator=activeUV?.uMetersPerRepeat??perimeter;
     for(let i=0;i<bands;i++){
         // Side bands use duplicated endpoints, so the discontinuity can move
         // to any selected edge WITHOUT moving geometry or altering cap UV.
@@ -613,8 +627,8 @@ export function buildProfileExtrudeGeometry(
             (i>=start?prefix[i]-prefix[start]:
                 total-prefix[start]+prefix[i]):0;
         const edgeDenominator=sideIslandMode===0?
-            (authored?.uv?.uMetersPerRepeat??total):
-            (authored?.uv?.uMetersPerRepeat??weightedLengths[i]);
+            (activeUV?.uMetersPerRepeat??total):
+            (activeUV?.uMetersPerRepeat??weightedLengths[i]);
         const u=rotated/edgeDenominator;
         uvStart.push(u);uvEnd.push(u+weightedLengths[i]/edgeDenominator);
     }
@@ -622,7 +636,7 @@ export function buildProfileExtrudeGeometry(
     // geometry used to emit the section, including widthFactor, nonunit
     // frame right/up vectors, and cross-section edge weights. This changes
     // UV0 only; no geometry, cap, normals or topology changes.
-    const ringUV=(worldUv||authored?.uv?.uFollowFrameScale)?frames.map(f=>{
+    const ringUV=(!keyed&&(worldUv||activeUV?.uFollowFrameScale))?frames.map(f=>{
         if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
            f.widthFactor>1000||!isFinite3(f.right)||!isFinite3(f.up))
             throw Error('Graph Profile Asset UV frame scale requires finite valid basis.');
@@ -653,21 +667,51 @@ export function buildProfileExtrudeGeometry(
         }
         return {start,end};
     }):null;
-    // For keys, each polygon has normalized perimeter U; cache by polygon
-    // identity rather than allocating per frame. Legacy authored UV is unchanged.
+    // Keyed sections use their own edge lengths. Cache nominal UV by
+    // polygon identity; metric frame/world U must evaluate every frame.
     const keyedUv=new Map<ReadonlyArray<Readonly<P2>>,{start:number[];end:number[]}>();
-    if(keyed)for(const ring of keyed)if(!keyedUv.has(ring)){
-        const lengths=ring.map((p:Readonly<P2>,i:number)=>{
-            const q=ring[nextEdge[i]];return Math.hypot((q.x-p.x)*width,(q.y-p.y)*height);
+    const keyedMetric=worldUv||activeUV?.uFollowFrameScale===true;
+    const keyedRingUV=keyed?.map((ring,fi)=>{
+        const cached=keyedMetric?undefined:keyedUv.get(ring);
+        if(cached)return cached;
+        const f=frames[fi];
+        const lengths=ring.map((p,i)=>{
+            const q=ring[nextEdge[i]],dx=(q.x-p.x)*width,dy=(q.y-p.y)*height;
+            let len=Math.hypot(dx,dy);
+            if(keyedMetric){
+                if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||f.widthFactor>1000||
+                   !isFinite3(f.right)||!isFinite3(f.up))
+                    throw Error('Graph Profile Asset UV frame scale requires finite valid basis.');
+                const tangent=add(mul(f.right,dx*f.widthFactor),mul(f.up,dy*f.widthFactor));
+                len=length(worldUv?toWorld(tangent):tangent);
+            }
+            len*=uvWeights?.[i]??1;
+            if(!Number.isFinite(len)||len<1e-8)
+                throw Error('Graph Profile Asset UV keyed edge is degenerate.');
+            return len;
         });
-        let cursor=0,total=0;
         const start:number[]=[],end:number[]=[];
-        for(let i=0;i<bands;i++){
-            if(i===ringStart[i]){cursor=0;total=loopLength(i,lengths);}
-            start.push(cursor/total);cursor+=lengths[i];end.push(cursor/total);
+        // Accumulate from each loop's seam. Weights/seam metadata is defined
+        // only for the main outer contour, same as the static asset format.
+        for(let base=0;base<bands;base=ringEnd[base]){
+            const count=ringEnd[base]-base,first=loopSeam(base);
+            const total=loopLength(base,lengths);
+            let cursor=0;
+            for(let j=0;j<count;j++){
+                const i=base+(first-base+j)%count;
+                const denom=activeUV?.uMetersPerRepeat??(sideIslandMode===0?total:lengths[i]);
+                const u=sideIslandMode===0?cursor/denom:0;
+                start[i]=u;
+                cursor+=lengths[i];
+                end[i]=sideIslandMode===0?cursor/denom:lengths[i]/denom;
+                if(!Number.isFinite(start[i])||!Number.isFinite(end[i]))
+                    throw Error('Graph Profile Asset UV keyed U overflow.');
+            }
         }
-        keyedUv.set(ring,{start,end});
-    }
+        const uv={start,end};
+        if(!keyedMetric)keyedUv.set(ring,uv);
+        return uv;
+    });
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
     const result:RoadGeometry={positions,normals,uvs,indices,bands,ringCount:frames.length};
     const push=(p:V3,n:V3,u:number,v:number):number=>{
@@ -683,47 +727,7 @@ export function buildProfileExtrudeGeometry(
     // across sharp corners. Two distinct vertices per edge per frame.
     for(let j=0;j<bands;j++){
         const A=profile[j],B=profile[nextEdge[j]];
-        if(sideIslandMode===2){
-            // Each side quad needs its own four UV0 vertices, because its V
-            // must restart at zero at every spline span. Existing geometry
-            // and normals are evaluated at the SAME frame positions as the
-            // continuous mode, preserving hard profile corners.
-            const sideNormal=(f:ProfileExtrudeFrame):V3=>{
-                if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
-                   f.widthFactor>1000||!Number.isFinite(f.distance)||
-                   ![f.position,f.forward,f.right,f.up].every(isFinite3))
-                    throw Error('Geometry Graph Extrude contains an invalid frame.');
-                const orientation=dot(cross(f.right,f.up),f.forward);
-                if(!Number.isFinite(orientation)||Math.abs(orientation)<1e-10)
-                    throw Error('Geometry Graph Extrude frame basis is degenerate.');
-                const sign=orientation>0?1:-1;
-                if(handedness!==0&&handedness!==sign)
-                    throw Error('Geometry Graph Extrude frame handedness changed.');
-                handedness=sign;
-                const edge=add(mul(f.right,(B.x-A.x)*width*f.widthFactor),
-                    mul(f.up,(B.y-A.y)*height*f.widthFactor));
-                return unit(mul(cross(edge,f.forward),handedness));
-            };
-            for(let fi=0;fi<frames.length-1;fi++){
-                const f0=frames[fi],f1=frames[fi+1];
-                const n0=sideNormal(f0),n1=sideNormal(f1);
-                const start0=ringUV?.[fi].start[j]??uvStart[j];
-                const end0=ringUV?.[fi].end[j]??uvEnd[j];
-                const start1=ringUV?.[fi+1].start[j]??uvStart[j];
-                const end1=ringUV?.[fi+1].end[j]??uvEnd[j];
-                const v=(f1.distance-f0.distance)/uvMetersPerRepeat;
-                if(!Number.isFinite(v)||v<0)
-                    throw Error('Graph Profile Asset UV Quad Islands require ordered finite frames.');
-                const a=push(at(f0,A),n0,start0,0);
-                const b=push(at(f0,B),n0,end0,0);
-                const c=push(at(f1,A),n1,start1,v);
-                const d=push(at(f1,B),n1,end1,v);
-                if(handedness>0)indices.push(a,b,c,b,d,c);
-                else indices.push(a,c,b,b,c,d);
-            }
-            continue;
-        }
-        for(let fi=0;fi<frames.length;fi++){
+        const sideSample=(fi:number)=>{
             const f=frames[fi];
             if(!Number.isFinite(f.widthFactor)||f.widthFactor<.0001||
                f.widthFactor>1000||!Number.isFinite(f.distance)||
@@ -754,9 +758,25 @@ export function buildProfileExtrudeGeometry(
                 }
             }
             const n=unit(mul(cross(edge,longitudinal),handedness));
-            const uv=ring?keyedUv.get(ring):undefined;
-            push(at(f,a),n,uv?.start[j]??ringUV?.[fi].start[j]??uvStart[j],f.distance/uvMetersPerRepeat);
-            push(at(f,b),n,uv?.end[j]??ringUV?.[fi].end[j]??uvEnd[j],f.distance/uvMetersPerRepeat);
+            const uv=keyedRingUV?.[fi]??ringUV?.[fi];
+            return {a:at(f,a),b:at(f,b),n,u0:uv?.start[j]??uvStart[j],u1:uv?.end[j]??uvEnd[j]};
+        };
+        if(sideIslandMode===2){
+            for(let fi=0;fi<frames.length-1;fi++){
+                const p=sideSample(fi),q=sideSample(fi+1);
+                const v=(frames[fi+1].distance-frames[fi].distance)/uvMetersPerRepeat;
+                if(!Number.isFinite(v)||v<0)
+                    throw Error('Graph Profile Asset UV Quad Islands require ordered finite frames.');
+                const a=push(p.a,p.n,p.u0,0),b=push(p.b,p.n,p.u1,0);
+                const c=push(q.a,q.n,q.u0,v),d=push(q.b,q.n,q.u1,v);
+                if(handedness>0)indices.push(a,b,c,b,d,c);
+                else indices.push(a,c,b,b,c,d);
+            }
+            continue;
+        }
+        for(let fi=0;fi<frames.length;fi++){
+            const p=sideSample(fi),v=frames[fi].distance/uvMetersPerRepeat;
+            push(p.a,p.n,p.u0,v);push(p.b,p.n,p.u1,v);
         }
         const first=j*frames.length*2;
         for(let i=0;i<frames.length-1;i++){
@@ -772,7 +792,7 @@ export function buildProfileExtrudeGeometry(
                 handedness*(end===0?-1:1)));
             const offset=positions.length/3;
             const capProfile=keyed?.[end===0?0:frames.length-1]??profile;
-            const capTriangles=keyedParts?triangulateParts(keyedParts[end===0?0:frames.length-1]):triangles;
+            const capTriangles=end===0?triangles:endTriangles;
             for(const point of capProfile)
                 push(at(f,point),outward,point.x+.5,point.y+.5);
             const ccw=(end===1)===(handedness>0);
@@ -784,9 +804,9 @@ export function buildProfileExtrudeGeometry(
             }
         }
     }
-    const triangleGroups=authored?.uv?.triangleUnwrap===true?
+    const triangleGroups=activeUV?.triangleUnwrap===true?
         unwrapProfileUvTriangles(result):null;
-    if(authored?.uv?.atlasPacking===true){
+    if(activeUV?.atlasPacking===true){
         // Each side quad is individually unwrap-ready in mode 2. In mode 1,
         // an edge strip is one island. In mode 0, the entire perimeter is one.
         // Caps each get a separate nonoverlapping island when present.
@@ -815,7 +835,7 @@ export function buildProfileExtrudeGeometry(
                 }
             }
         }
-        const priority=authored.uv.atlasPriority;
+        const priority=activeUV.atlasPriority;
         if(priority){
             // Side indices are emitted edge-major; each edge has two triangles
             // per span. Cap vertices/triangles follow all side geometry.
@@ -837,8 +857,8 @@ export function buildProfileExtrudeGeometry(
                 }
             }
         }
-        packProfileUvAtlas(uvs,groups,authored.uv.atlasPadding??.04,{
-            rotate:authored.uv.atlasRotate,pixelPadding:authored.uv.atlasPixelPadding,
+        packProfileUvAtlas(uvs,groups,activeUV.atlasPadding??.04,{
+            rotate:activeUV.atlasRotate,pixelPadding:activeUV.atlasPixelPadding,
         });
     }
     return result;

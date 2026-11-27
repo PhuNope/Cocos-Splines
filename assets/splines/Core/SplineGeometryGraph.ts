@@ -5,7 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
-import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,GraphAuthoredProfile,graphProfileTopology,interpolateGraphProfile,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,GraphAuthoredProfile,graphProfileTopology,graphProfileUVSignature,interpolateGraphProfile,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 import {sampleNoiseLayers,NoiseLayerConfig} from './SplineNoiseMath';
@@ -490,17 +490,20 @@ function mergePaths(a:GraphPath,b:GraphPath,node:GeometryGraphNode,linear?:Reado
 function sampleProfileKeys(node:GeometryGraphNode,source:GraphPath,context:GeometryGraphContext):
     {frames:GraphFrame[];sections:ReadonlyArray<GraphAuthoredProfile>}{
     const keys=node.profileKeys!,profiles=new Map<number,GraphAuthoredProfile>();
-    let topology:string|undefined;
+    let topology:string|undefined,uvSignature:string|undefined;
     for(const slot of graphProfileSlots(node)){
         const revision=context.profileRevisions?.[slot];
         if(typeof revision!=='string'||!revision||revision.length>32768)
             throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
-        if(context.profileUVs?.[slot]!==undefined)
-            throw Error('Geometry Graph Profile keys currently do not support custom UV metadata.');
         const profile=parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:context.profileSources?.[slot],
             ...(context.profileHoles?.[slot]===undefined?{}:{holes:context.profileHoles[slot]}),
             ...(context.profileOuterContours?.[slot]===undefined?{}:{outerContours:context.profileOuterContours[slot]}),
-            ...(context.profileOuterHoles?.[slot]===undefined?{}:{outerHoles:context.profileOuterHoles[slot]})});
+            ...(context.profileOuterHoles?.[slot]===undefined?{}:{outerHoles:context.profileOuterHoles[slot]}),
+            ...(context.profileUVs?.[slot]===undefined?{}:{uv:context.profileUVs[slot]})});
+        const signature=graphProfileUVSignature(profile);
+        if(uvSignature!==undefined&&uvSignature!==signature)
+            throw Error('Geometry Graph Profile keys require matching custom UV metadata.');
+        uvSignature=signature;
         const next=graphProfileTopology(profile);
         if(topology!==undefined&&topology!==next)
             throw Error('Geometry Graph Profile keys require matching vertex counts and contour topology.');
@@ -956,7 +959,7 @@ export class GeometryGraphRunner {
                     // It invalidates its Extrude branch even when a pure Core
                     // caller changes matrix without changing frame revision.
                     node.type==='extrude'&&((node.profileInterpolation??0)!==0||
-                        (node.profileSlot!==undefined&&context.profileUVs?.[node.profileSlot]?.uWorldSpace===true))?
+                        graphProfileSlots(node).some(slot=>context.profileUVs?.[slot]?.uWorldSpace===true))?
                             context.worldUvLinear??null:null,
                 ]);
                 const prior=this.cache.get(node.id);
