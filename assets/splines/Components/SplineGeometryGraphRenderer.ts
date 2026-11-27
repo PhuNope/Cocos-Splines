@@ -1,9 +1,11 @@
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils,Collider,MeshCollider,RigidBody,PhysicsSystem,geometry} from 'cc';
+import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,Node,utils,Collider,MeshCollider,RigidBody,PhysicsSystem,geometry} from 'cc';
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {SplineGraphColliderBinding} from '../Core/SplineGraphColliderBinding';
 import {SplineGraphChunkBinding} from '../Core/SplineGraphChunkBinding';
+import {selectGraphLod,reduceGraphLodSource,graphLodPathDistance,supportsGraphLod} from '../Core/SplineGraphLodMath';
+import type {GraphLodLevel} from '../Core/SplineGraphLodMath';
 import type {GraphChunkTransaction} from '../Core/SplineGraphChunkBinding';
 import type {GraphMultiMeshChunk} from '../Core/SplineGeometryGraphMultiMesh';
 import type {CollisionGeometry} from '../Core/SplineGraphCollisionMath';
@@ -142,6 +144,36 @@ export class SplineGeometryGraphRenderer extends Component {
     runtimeChunking=false;
     @property({min:256,max:8192,step:256,tooltip:'Maximum triangles per chunk (256–8192, step 256).'})
     chunkTriangles=4096;
+    @property({tooltip:'Preview/runtime: reduce visual path samples by camera distance; collider stays full resolution.'})
+    runtimeLod=false;
+    @property({type:Node,tooltip:'Explicit camera or observer Node. Missing target uses full resolution.'})
+    lodTarget:Node|null=null;
+    @property({min:1,max:80000,step:1,tooltip:'LOD1 distance in world units from the sampled source paths.'})
+    lodNearDistance=20;
+    @property({min:2,max:100000,step:1,tooltip:'LOD2 distance; at least 1.25 times LOD1 distance.'})
+    lodFarDistance=60;
+    private _lodLevel:GraphLodLevel=0;
+    private _lodRunners=[new GeometryGraphRunner(),new GeometryGraphRunner()];
+    private _collisionBase='';
+    public getRenderedLodLevel():number{return this._lodLevel;}
+    private desiredLod(plan:GeometryGraphPlan,frames:Map<number,GeometryGraphSplineSource>):GraphLodLevel{
+        if(EDITOR_NOT_IN_PREVIEW||!this.runtimeLod||!this.lodTarget||
+           this.lodTarget.isValid===false||this.lodTarget.activeInHierarchy===false||!supportsGraphLod(plan.nodes))
+            return 0;
+        const m=this.node.worldMatrix,p=this.lodTarget.worldPosition;
+        if(!p)return 0;
+        const distance=graphLodPathDistance(p,[...frames.values()],v=>({
+            x:m.m00*v.x+m.m04*v.y+m.m08*v.z+m.m12,
+            y:m.m01*v.x+m.m05*v.y+m.m09*v.z+m.m13,
+            z:m.m02*v.x+m.m06*v.y+m.m10*v.z+m.m14,
+        }));
+        if(!Number.isFinite(distance))return 0;
+        return selectGraphLod(distance,this.lodNearDistance,this.lodFarDistance,this._lodLevel);
+    }
+    private checkLodMaterialGroups(a:import('../Core/SplineRoadMath').RoadGeometry,b:import('../Core/SplineRoadMath').RoadGeometry):void{
+        const slots=(g:typeof a)=>[...new Set(g.triangleMaterialSlots??[0])].sort((x,y)=>x-y).join(',');
+        if(slots(a)!==slots(b))throw Error('Graph LOD changes material groups. Use full resolution.');
+    }
     private _chunks=new SplineGraphChunkBinding();
     public getRenderedChunkMeshes():Mesh[]{return this._chunks.meshes;}
     private chunkMaterials(renderer:MeshRenderer,slots:ReadonlyArray<number|null>,count:number):Material[]{
@@ -518,7 +550,7 @@ export class SplineGeometryGraphRenderer extends Component {
             catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
         }
     }
-    onDisable():void{this._collision.release();this._chunks.release();}
+    onDisable():void{this._collision.release();this._chunks.release();this._collisionBase='';}
     update():void {
         if((EDITOR_NOT_IN_PREVIEW||!this.generateCollider)&&this._collision.ownedMesh)this._collision.release();
         try{
@@ -535,8 +567,10 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         if(!this.rebuildOnChange)return;
         let signature:string;
-        try{signature=this.signature();}
-        catch(error){return;}
+        try{
+            const plan=parseGeometryGraph(this.activeGraphJson());
+            signature=JSON.stringify([this.signature(),this.desiredLod(plan,this._splineFrameCache)]);
+        }catch(error){return;}
         if(signature===this._revision||signature===this._lastAttempt)return;
         this._lastAttempt=signature;
         try{this.rebuild();}
@@ -550,14 +584,25 @@ export class SplineGeometryGraphRenderer extends Component {
         if(!renderer)throw Error('Geometry Graph requires a MeshRenderer.');
         const plan=parseGeometryGraph(this.activeGraphJson());
         const nextFrames=this.prepareSplineFrames(plan);
-        const signature=this.signature();
+        const baseSignature=this.signature(),lod=this.desiredLod(plan,nextFrames);
+        const signature=JSON.stringify([baseSignature,lod]);
         const selection=typeof this.outputId==='string'?this.outputId.trim():'';
         const context={...this.splineFrameContext(plan,nextFrames),
             worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
+        const visualRunner=lod===0?this._runner:this._lodRunners[lod-1];
+        let visualContext=context;
+        if(lod!==0){
+            const reduced=new Map<number,GeometryGraphSplineSource>();
+            for(const [slot,source] of nextFrames)reduced.set(slot,reduceGraphLodSource(source,lod));
+            visualContext={...context,...this.splineFrameContext(plan,reduced)};
+        }
         const collider=EDITOR_NOT_IN_PREVIEW||!this.generateCollider?null:this.colliderTarget;
         if(!EDITOR_NOT_IN_PREVIEW&&this.generateCollider&&!collider)throw Error('Assign an empty MeshCollider before enabling Graph Collider.');
         if(collider)this._collision.validate(this.node,collider);
+        // Only a camera-driven LOD transition may skip recooking a committed
+        // full-resolution collider. Explicit rebuild at same LOD keeps legacy behavior.
+        const reuseCollision=!!collider&&lod!==this._lodLevel&&this._collisionBase===baseSignature&&this._collision.isBoundTo(collider);
         const useChunks=!EDITOR_NOT_IN_PREVIEW&&this.runtimeChunking;
         if(useChunks&&(!Number.isInteger(this.chunkTriangles)||this.chunkTriangles<256||this.chunkTriangles>8192||this.chunkTriangles%256!==0))throw Error('Invalid runtime chunk triangle budget.');
         if(useChunks&&renderer.mesh&&renderer.mesh!==this._mesh)throw Error('Runtime chunking requires an empty or graph-owned root MeshRenderer.');
@@ -572,13 +617,15 @@ export class SplineGeometryGraphRenderer extends Component {
             // Each output is evaluated atomically by the typed runner and
             // converted to a distinct vertex bundle / index buffer / material
             // primitive. The resolved per-renderer order defines material slots.
-            const outputs=this._runner.evaluateOutputs(plan,context);
+            const fullOutputs=this._runner.evaluateOutputs(plan,context);
+            const outputs=lod===0?fullOutputs:visualRunner.evaluateOutputs(plan,visualContext);
             const orderedIds=resolveGraphOutputOrder(plan.outputs,this.outputOrder);
             const sourceSlots=graphOutputMeshSourceSlots(plan,orderedIds);
+            if(lod!==0)for(const outputId of orderedIds)this.checkLodMaterialGroups(fullOutputs[outputId],outputs[outputId]);
             const chunks=orderedIds.map(outputId=>({
                 outputId,geometry:outputs[outputId],
             }));
-            if(collider)for(const chunk of chunks)collisionGeometry.push(chunk.geometry);
+            if(collider&&!reuseCollision)for(const outputId of orderedIds)collisionGeometry.push(fullOutputs[outputId]);
             nextMaterialSlots=chunks.flatMap((chunk,i)=>Array.from({length:chunk.geometry.triangleMaterialSlots===undefined?1:new Set(chunk.geometry.triangleMaterialSlots).size},()=>sourceSlots[i]));
             this.importedMaterials(nextMaterialSlots,[this.material,this.materialB,this.materialC,this.materialD],renderer);
             const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
@@ -594,8 +641,10 @@ export class SplineGeometryGraphRenderer extends Component {
             }
             outputIds=orderedIds;
         }else{
-            const geometry=this._runner.evaluate(plan,context,selection||undefined);
-            if(collider)collisionGeometry.push(geometry);
+            const fullGeometry=this._runner.evaluate(plan,context,selection||undefined);
+            const geometry=lod===0?fullGeometry:visualRunner.evaluate(plan,visualContext,selection||undefined);
+            if(lod!==0)this.checkLodMaterialGroups(fullGeometry,geometry);
+            if(collider&&!reuseCollision)collisionGeometry.push(fullGeometry);
             wire=buildMeshGizmoLines(
                 geometry.positions,geometry.indices,this.gizmoEdgeLimit);
             outputIds=[selection||plan.output];
@@ -617,7 +666,7 @@ export class SplineGeometryGraphRenderer extends Component {
         try{
             if(useChunks)chunkTransaction=this._chunks.prepare(renderer,chunkOutputs,materialGroups,
                 this.chunkMaterials(renderer,nextMaterialSlots,materialGroups.length),this.chunkTriangles);
-            if(collider)nextCollision=this._collision.prepare(this.node,collider,collisionGeometry);
+            if(collider&&!reuseCollision)nextCollision=this._collision.prepare(this.node,collider,collisionGeometry);
         }catch(error){chunkTransaction?.rollback();mesh?.destroy();throw error;}
         const previousMesh=this._mesh,previousBoundMesh=renderer.mesh;
         const oldSlots=this._autoSourceSlots,oldCount=this._subMeshCount;
@@ -629,7 +678,7 @@ export class SplineGeometryGraphRenderer extends Component {
             this._subMeshCount=materialGroups.length;
             if(chunkTransaction)chunkTransaction.activate();else this.syncMaterial(renderer);
             if(collider&&nextCollision)this._collision.commit(this.node,collider,nextCollision);
-            else this._collision.release();
+            else if(!reuseCollision)this._collision.release();
         }catch(error){
             // Best-effort native rollback; never destroy a previously owned
             // successful Mesh on a failed Mesh/material commit.
@@ -652,6 +701,7 @@ export class SplineGeometryGraphRenderer extends Component {
         this._mesh=mesh;this._gizmo=wire;
         this._renderedOutputIds=outputIds;this._renderedMaterialGroups=materialGroups;
         this._splineFrameCache=nextFrames;
+        this._lodLevel=lod;this._collisionBase=collider?baseSignature:'';
         this._revision=signature;this._lastAttempt='';this._lastMaterialWarning='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
     }
@@ -669,6 +719,7 @@ export class SplineGeometryGraphRenderer extends Component {
         this._fallback?.destroy();this._fallback=null;
         this._boundMaterials=[];this._subMeshCount=1;
         this._autoSourceSlots=[];this._renderedOutputIds=[];this._renderedMaterialGroups=[];this._lastMaterialWarning='';
-        this._runner.clear();this._splineFrameCache.clear();
+        this._runner.clear();for(const runner of this._lodRunners)runner.clear();
+        this._lodLevel=0;this._collisionBase='';this._splineFrameCache.clear();
     }
 }

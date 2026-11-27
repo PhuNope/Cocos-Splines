@@ -903,6 +903,26 @@ async function run(){
    multiRenderer.runtimeChunking=true;multiRenderer.rebuild();const finalChunks=multiRenderer.getRenderedChunkMeshes();
    multiRenderer.onDisable();assert.equal(multiNode.children.length,0);assert(finalChunks.every(m=>m.destroyed));
    multiRenderer.onEnable();assert.equal(multiRenderer.getRenderedChunkMeshes().length,2);
+   // LOD with full-detail collider and independent bake snapshot, including chunks.
+   const observer=new Node('observer');observer.worldPosition=new Vec3(0,0,5);
+   multiRenderer.runtimeLod=true;multiRenderer.lodTarget=observer;
+   multiRenderer.lodNearDistance=20;multiRenderer.lodFarDistance=60;
+   multiRenderer.runtimeChunking=false;multiRenderer.rebuild();
+   assert.equal(multiRenderer.getRenderedLodLevel(),0);
+   const fullMesh=multiOut.mesh,fullCollider=collision.mesh;
+   const fullTriangles=fullMesh.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0);
+   const bakeBefore=multiRenderer.snapshotGeometryForBake();
+   observer.worldPosition=new Vec3(0,0,30);multiRenderer.update();
+   assert.equal(multiRenderer.getRenderedLodLevel(),1);assert.equal(collision.mesh,fullCollider);
+   const medium=multiOut.mesh;assert(medium.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0)<fullTriangles);
+   assert.deepEqual(multiRenderer.snapshotGeometryForBake(),bakeBefore);
+   observer.worldPosition=new Vec3(0,0,24);multiRenderer.update();assert.equal(multiOut.mesh,medium);
+   observer.worldPosition=new Vec3(0,0,100);failCreate=true;multiRenderer.update();failCreate=false;
+   assert.equal(multiOut.mesh,medium);assert.equal(multiRenderer.getRenderedLodLevel(),1);assert.equal(collision.mesh,fullCollider);
+   multiRenderer.rebuild();assert.equal(multiRenderer.getRenderedLodLevel(),2);assert.equal(collision.mesh,fullCollider);
+   assert(multiOut.mesh.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0)<medium.struct.primitives.reduce((s,p)=>s+p.indexView.count/3,0));
+   multiRenderer.runtimeChunking=true;multiRenderer.rebuild();assert.equal(multiRenderer.getRenderedLodLevel(),2);assert.equal(multiRenderer.getRenderedChunkMeshes().length,2);
+   observer.worldPosition=new Vec3(0,0,5);multiRenderer.update();assert.equal(multiRenderer.getRenderedLodLevel(),0);
    const destroyedMesh=collision.mesh;
    multiRenderer.onDestroy();assert.equal(collision.mesh,null);assert(destroyedMesh.destroyed);assert.equal(multiNode.children.length,0);
    console.log('GEOMETRY GRAPH RENDERER V2 PASS: atomic generated Mesh replacement, frame cache, source immutability, live updates, Inspector and ownership.');

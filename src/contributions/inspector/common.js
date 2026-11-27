@@ -37,6 +37,7 @@ const configs={
         {title:'Conform Path targets',fields:['conformColliders']},
         {title:'Static collision mesh (Preview/runtime)',fields:['generateCollider','colliderTarget']},
         {title:'Runtime spatial chunks',fields:['runtimeChunking','chunkTriangles']},
+        {title:'Runtime visual LOD',fields:['runtimeLod','lodTarget','lodNearDistance','lodFarDistance']},
         {title:'Authored Extrude Profile Assets',fields:['profileAssetA','profileAssetB','profileAssetC']},
         {title:'Material & live update',fields:['material','materialB','materialC','materialD','autoBindImportedMaterials','materialSourceRenderer','materialSourceRendererB','materialSourceRendererC','rebuildOnChange']},
         {title:'Selected-only geometry wireframe',fields:['showMeshGizmos','gizmoEdgeLimit']},
@@ -322,6 +323,7 @@ function makeInspector(type){
             if(field==='uvTilesPerUnit')return Number(v('uvMode'))===2;
         }
         if(type==='geometryGraph'&&field==='graphLayoutJson')return false;
+        if(type==='geometryGraph'&&['lodTarget','lodNearDistance','lodFarDistance'].includes(field))return v('runtimeLod')===true;
         if(type==='geometryGraph'&&field==='chunkTriangles')return v('runtimeChunking')===true;
         if(type==='geometryGraph'&&field==='colliderTarget')return v('generateCollider')===true;
         if(type==='geometryGraph'&&field==='outputOrder')return v('renderAllOutputs')===true;

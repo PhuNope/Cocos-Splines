@@ -23,5 +23,18 @@ try{
  const parts=partitionGraphGeometry(many,256);
  assert.deepEqual(parts.map(({bands,ringCount,...g})=>g),partitionBakeGeometry(many,256));
  assert.throws(()=>partitionGraphGeometry(many,256,2),/chunk count/i);
+ const {selectGraphLod,reduceGraphLodSource,graphLodPathDistance,supportsGraphLod}=require(dir+'/Core/SplineGraphLodMath.js');
+ assert.equal(selectGraphLod(21,20,60,0),0);assert.equal(selectGraphLod(22,20,60,0),1);
+ assert.equal(selectGraphLod(19,20,60,1),1);assert.equal(selectGraphLod(17,20,60,1),0);
+ assert.equal(selectGraphLod(100,20,60,0),2);assert.equal(selectGraphLod(0,20,60,2),0);
+ assert.throws(()=>selectGraphLod(10,20,21,0),/distances/i);
+ const v=(x=0,y=0,z=0)=>({x,y,z});
+ const source={revision:'a',closed:false,frames:Array.from({length:13},(_,i)=>({position:v(0,0,i),forward:v(0,0,1),right:v(1),up:v(0,1),distance:i}))};
+ const lod1=reduceGraphLodSource(source,1),lod2=reduceGraphLodSource(source,2);
+ assert.equal(lod1.frames.length,7);assert.equal(lod2.frames.length,4);assert.equal(lod2.frames[3],source.frames[12]);
+ assert.equal(lod2.frames[1].distance,4);assert.equal(reduceGraphLodSource({...source,closed:true},2).frames.length,5);
+ assert.equal(graphLodPathDistance(v(3,0,6),[source],p=>p),3);
+ assert.equal(graphLodPathDistance(v(3,0,6),[source],p=>v(p.x+3,p.y,p.z)),0);
+ assert(supportsGraphLod([{type:'spline'},{type:'extrude'},{type:'output'}]));assert(!supportsGraphLod([{type:'conform'}]));
  console.log('GRAPH COLLIDER V2 PASS: seam welding, degenerate rejection, bounds and immutability.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
