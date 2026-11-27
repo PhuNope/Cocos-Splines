@@ -45,7 +45,7 @@ declare module 'cc' {
     }
     export class Node {
         constructor(name?:string);
-        parent:Node|null;worldPosition:Vec3;activeInHierarchy:boolean;
+        parent:Node|null;worldPosition:Vec3;activeInHierarchy:boolean;active:boolean;layer:number;
         uuid:string;name:string;isValid:boolean;children:Node[];position:Vec3;rotation:Quat;scale:Vec3;worldMatrix:Mat4;worldRotation:Quat;
         getComponent<T>(c:new (...args:any[])=>T):T|null;
         getComponents<T>(c:new (...args:any[])=>T):T[];

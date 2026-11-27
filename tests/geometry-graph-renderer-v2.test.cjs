@@ -27,7 +27,11 @@ async function run(){
   }
   class Node{
    constructor(name='node'){this.name=name;this.uuid=name;this.isValid=true;
-    this.worldMatrix=new Mat4();this.components=[];}
+    this.worldMatrix=new Mat4();this.components=[];this.children=[];this.parent=null;this.active=true;this.layer=1;}
+   addComponent(cls){const c=new cls();c.node=this;this.components.push(c);return c;}
+   setParent(p){this.removeFromParent();this.parent=p;if(p)p.children.push(this);}
+   removeFromParent(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);this.parent=null;}
+   destroy(){this.removeFromParent();this.isValid=false;}
    getComponent(cls){return this.components.find(x=>x instanceof cls)||null;}
   }
   class Component{
@@ -74,7 +78,7 @@ async function run(){
    _decorator:{
     ccclass:()=>x=>x,property:()=>{},menu:()=>x=>x,
     executeInEditMode:()=>x=>x,requireComponent:()=>x=>x,
-   },Component,MeshRenderer,Mesh,Material,Vec3,Mat4,
+   },Node,Component,MeshRenderer,Mesh,Material,Vec3,Mat4,
    gfx:{Attribute:class Attribute{constructor(name,format){Object.assign(this,{name,format});}},
     AttributeName:{ATTR_POSITION:'a_position',ATTR_TEX_COORD:'a_texCoord',ATTR_NORMAL:'a_normal'},
     Format:{RGB32F:1,RG32F:2},PrimitiveMode:{TRIANGLE_LIST:4}},
@@ -875,8 +879,32 @@ async function run(){
    multiRenderer.rebuild();const disabledMesh=collision.mesh;
    multiRenderer.onDisable();assert.equal(collision.mesh,null);assert(disabledMesh.destroyed);
    multiRenderer.onEnable();assert(collision.mesh);
+   // Runtime chunk mode: independent nodes and meshes, output B-only invalidation,
+   // material updates, collider/visual rollback and lifecycle.
+   multiRenderer.runtimeChunking=true;multiRenderer.chunkTriangles=256;
+   multiRenderer.material=new Material();multiRenderer.materialB=new Material();
+   multiRenderer.rebuild();
+   const chunks=multiRenderer.getRenderedChunkMeshes();
+   assert.equal(chunks.length,2);assert.equal(multiOut.mesh,null);
+   assert.equal(multiNode.children.length,2);
+   assert.equal(multiNode.children[1].getComponent(MeshRenderer).getSharedMaterial(0),multiRenderer.materialB);
+   multiRenderer.rebuild();assert.deepEqual(multiRenderer.getRenderedChunkMeshes(),chunks);
+   revB++;multiRenderer.splineB.testOffset+=5;
+   const stableCollider=collision.mesh;failCollisionBind=true;
+   assert.throws(()=>multiRenderer.rebuild(),/collider bind failure/i);failCollisionBind=false;
+   assert.deepEqual(multiRenderer.getRenderedChunkMeshes(),chunks);assert.equal(multiNode.children.length,2);
+   assert.equal(collision.mesh,stableCollider);assert.equal(chunks[1].destroyed,false);
+   multiRenderer.rebuild();const changed=multiRenderer.getRenderedChunkMeshes();
+   assert.equal(changed[0],chunks[0]);assert.notEqual(changed[1],chunks[1]);assert(chunks[1].destroyed);
+   multiRenderer.materialB=new Material();multiRenderer.update();
+   assert.deepEqual(multiRenderer.getRenderedChunkMeshes(),changed);
+   assert.equal(multiNode.children[1].getComponent(MeshRenderer).getSharedMaterial(0),multiRenderer.materialB);
+   multiRenderer.runtimeChunking=false;multiRenderer.rebuild();assert(multiOut.mesh);assert.equal(multiNode.children.length,0);assert(changed.every(m=>m.destroyed));
+   multiRenderer.runtimeChunking=true;multiRenderer.rebuild();const finalChunks=multiRenderer.getRenderedChunkMeshes();
+   multiRenderer.onDisable();assert.equal(multiNode.children.length,0);assert(finalChunks.every(m=>m.destroyed));
+   multiRenderer.onEnable();assert.equal(multiRenderer.getRenderedChunkMeshes().length,2);
    const destroyedMesh=collision.mesh;
-   multiRenderer.onDestroy();assert.equal(collision.mesh,null);assert(destroyedMesh.destroyed);
+   multiRenderer.onDestroy();assert.equal(collision.mesh,null);assert(destroyedMesh.destroyed);assert.equal(multiNode.children.length,0);
    console.log('GEOMETRY GRAPH RENDERER V2 PASS: atomic generated Mesh replacement, frame cache, source immutability, live updates, Inspector and ownership.');
   }finally{
    Module._load=original;globalThis.Editor=previousEditor;

@@ -3,6 +3,9 @@ import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,util
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
 import {SplineGraphColliderBinding} from '../Core/SplineGraphColliderBinding';
+import {SplineGraphChunkBinding} from '../Core/SplineGraphChunkBinding';
+import type {GraphChunkTransaction} from '../Core/SplineGraphChunkBinding';
+import type {GraphMultiMeshChunk} from '../Core/SplineGeometryGraphMultiMesh';
 import type {CollisionGeometry} from '../Core/SplineGraphCollisionMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
@@ -135,6 +138,22 @@ export class SplineGeometryGraphRenderer extends Component {
     @property({type:MeshCollider,tooltip:'Empty non-convex MeshCollider on this Node, with zero center and no RigidBody.'})
     colliderTarget:MeshCollider|null=null;
 
+    @property({tooltip:'Preview/runtime only: split visual geometry into independently rendered child meshes.'})
+    runtimeChunking=false;
+    @property({min:256,max:8192,step:256,tooltip:'Maximum triangles per chunk (256–8192, step 256).'})
+    chunkTriangles=4096;
+    private _chunks=new SplineGraphChunkBinding();
+    public getRenderedChunkMeshes():Mesh[]{return this._chunks.meshes;}
+    private chunkMaterials(renderer:MeshRenderer,slots:ReadonlyArray<number|null>,count:number):Material[]{
+        const overrides=[this.material,this.materialB,this.materialC,this.materialD];
+        const imported=this.importedMaterials(slots,overrides,renderer);
+        return Array.from({length:count},(_,i)=>{
+            const selected=overrides[i]||imported[i]||renderer.getSharedMaterial(i);
+            if(selected)return selected;
+            if(!this._fallback){this._fallback=new Material();this._fallback.initialize({effectName:'builtin-unlit'});}
+            return this._fallback;
+        });
+    }
     private _collision=new SplineGraphColliderBinding();
     private _colliderIds=new WeakMap<MeshCollider,number>();
     private _nextColliderId=0;
@@ -452,7 +471,8 @@ export class SplineGeometryGraphRenderer extends Component {
         return JSON.stringify([this.splineSlots(plan).map(slot=>[slot,this.frameSignature(slot)]),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
             this.renderAllOutputs?this.outputOrder:null,
             this.renderAllOutputs?this.autoBindImportedMaterials:null,
-            assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan),this.colliderSignature()]);
+            assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan),this.colliderSignature(),
+            !EDITOR_NOT_IN_PREVIEW&&this.runtimeChunking?this.chunkTriangles:null]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -498,10 +518,14 @@ export class SplineGeometryGraphRenderer extends Component {
             catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
         }
     }
-    onDisable():void{this._collision.release();}
+    onDisable():void{this._collision.release();this._chunks.release();}
     update():void {
         if((EDITOR_NOT_IN_PREVIEW||!this.generateCollider)&&this._collision.ownedMesh)this._collision.release();
-        try{this.syncMaterial(this.getComponent(MeshRenderer));}
+        try{
+            const root=this.getComponent(MeshRenderer);
+            if(root&&this._chunks.count){this._chunks.syncVisibility(root);this._chunks.syncMaterials(this.chunkMaterials(root,this._autoSourceSlots,this._subMeshCount));}
+            else this.syncMaterial(root);
+        }
         catch(error){
             // Invalid imported references cannot partially change output slots.
             if(EDITOR_NOT_IN_PREVIEW&&String(error)!==this._lastMaterialWarning){
@@ -534,8 +558,11 @@ export class SplineGeometryGraphRenderer extends Component {
         const collider=EDITOR_NOT_IN_PREVIEW||!this.generateCollider?null:this.colliderTarget;
         if(!EDITOR_NOT_IN_PREVIEW&&this.generateCollider&&!collider)throw Error('Assign an empty MeshCollider before enabling Graph Collider.');
         if(collider)this._collision.validate(this.node,collider);
-        const collisionGeometry:CollisionGeometry[]=[];
-        let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
+        const useChunks=!EDITOR_NOT_IN_PREVIEW&&this.runtimeChunking;
+        if(useChunks&&(!Number.isInteger(this.chunkTriangles)||this.chunkTriangles<256||this.chunkTriangles>8192||this.chunkTriangles%256!==0))throw Error('Invalid runtime chunk triangle budget.');
+        if(useChunks&&renderer.mesh&&renderer.mesh!==this._mesh)throw Error('Runtime chunking requires an empty or graph-owned root MeshRenderer.');
+        const collisionGeometry:CollisionGeometry[]=[],chunkOutputs:GraphMultiMeshChunk[]=[];
+        let mesh:Mesh|null=null,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];
         let materialGroups:GraphMaterialGroup[]=[];
         if(this.renderAllOutputs){
@@ -557,8 +584,14 @@ export class SplineGeometryGraphRenderer extends Component {
             const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
             wire=buildMeshGizmoLines(
                 wireGeometry.positions,wireGeometry.indices,this.gizmoEdgeLimit);
-            const packed=createGraphMultiOutputMesh(chunks);
-            mesh=packed.mesh;materialGroups=packed.materialGroups;
+            if(useChunks){
+                chunkOutputs.push(...chunks);
+                materialGroups=chunks.flatMap(c=>[...new Set(c.geometry.triangleMaterialSlots??[0])].sort((a,b)=>a-b).map(slot=>({outputId:c.outputId,slot})));
+                if(materialGroups.length>4)throw Error('Runtime chunks exceed four material groups.');
+            }else{
+                const packed=createGraphMultiOutputMesh(chunks);
+                mesh=packed.mesh;materialGroups=packed.materialGroups;
+            }
             outputIds=orderedIds;
         }else{
             const geometry=this._runner.evaluate(plan,context,selection||undefined);
@@ -566,7 +599,10 @@ export class SplineGeometryGraphRenderer extends Component {
             wire=buildMeshGizmoLines(
                 geometry.positions,geometry.indices,this.gizmoEdgeLimit);
             outputIds=[selection||plan.output];
-            if(geometry.triangleMaterialSlots!==undefined){
+            if(useChunks){
+                chunkOutputs.push({outputId:outputIds[0],geometry});
+                materialGroups=[...new Set(geometry.triangleMaterialSlots??[0])].sort((a,b)=>a-b).map(slot=>({outputId:outputIds[0],slot}));
+            }else if(geometry.triangleMaterialSlots!==undefined){
                 const packed=createGraphMultiOutputMesh([{outputId:outputIds[0],geometry}]);
                 mesh=packed.mesh;materialGroups=packed.materialGroups;
             }else{
@@ -577,9 +613,12 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         // A failing renderer assignment must not destroy the previously bound
         // generated Mesh or a manually assigned external Mesh asset.
-        let nextCollision:Mesh|null=null;
-        try{if(collider)nextCollision=this._collision.prepare(this.node,collider,collisionGeometry);}
-        catch(error){mesh.destroy();throw error;}
+        let nextCollision:Mesh|null=null,chunkTransaction:GraphChunkTransaction|null=null;
+        try{
+            if(useChunks)chunkTransaction=this._chunks.prepare(renderer,chunkOutputs,materialGroups,
+                this.chunkMaterials(renderer,nextMaterialSlots,materialGroups.length),this.chunkTriangles);
+            if(collider)nextCollision=this._collision.prepare(this.node,collider,collisionGeometry);
+        }catch(error){chunkTransaction?.rollback();mesh?.destroy();throw error;}
         const previousMesh=this._mesh,previousBoundMesh=renderer.mesh;
         const oldSlots=this._autoSourceSlots,oldCount=this._subMeshCount;
         const oldBoundMaterials=this._boundMaterials.slice();
@@ -588,7 +627,7 @@ export class SplineGeometryGraphRenderer extends Component {
             renderer.mesh=mesh;
             this._autoSourceSlots=nextMaterialSlots;
             this._subMeshCount=materialGroups.length;
-            this.syncMaterial(renderer);
+            if(chunkTransaction)chunkTransaction.activate();else this.syncMaterial(renderer);
             if(collider&&nextCollision)this._collision.commit(this.node,collider,nextCollision);
             else this._collision.release();
         }catch(error){
@@ -604,10 +643,12 @@ export class SplineGeometryGraphRenderer extends Component {
             this._autoSourceSlots=oldSlots;
             this._subMeshCount=oldCount;
             this._boundMaterials=oldBoundMaterials;
+            chunkTransaction?.rollback();
             if(nextCollision&&collider?.mesh!==nextCollision)nextCollision.destroy();
-            mesh.destroy();
+            mesh?.destroy();
             throw error;
         }
+        if(chunkTransaction)chunkTransaction.commit();else this._chunks.release();
         this._mesh=mesh;this._gizmo=wire;
         this._renderedOutputIds=outputIds;this._renderedMaterialGroups=materialGroups;
         this._splineFrameCache=nextFrames;
@@ -615,7 +656,7 @@ export class SplineGeometryGraphRenderer extends Component {
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
     }
     onDestroy():void{
-        this._collision.release();
+        this._collision.release();this._chunks.release();
         const renderer=this.getComponent(MeshRenderer);
         if(this._mesh&&renderer?.mesh===this._mesh)renderer.mesh=null;
         this._mesh?.destroy();this._mesh=null;this._gizmo=null;
