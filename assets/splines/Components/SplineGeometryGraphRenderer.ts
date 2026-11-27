@@ -1,7 +1,9 @@
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils,Collider,PhysicsSystem,geometry} from 'cc';
+import {_decorator,Component,MeshRenderer,Mesh,Material,JsonAsset,Vec3,Mat4,utils,Collider,MeshCollider,RigidBody,PhysicsSystem,geometry} from 'cc';
 import {SplineContainer} from '../Core/SplineContainer';
 import {RoadFrame} from '../Core/SplineRoadMath';
+import {SplineGraphColliderBinding} from '../Core/SplineGraphColliderBinding';
+import type {CollisionGeometry} from '../Core/SplineGraphCollisionMath';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {buildMeshGizmoLines,MeshGizmoLines} from '../Core/SplineMeshGizmos';
 import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGraphProfile,GeometryGraphPlan,GeometryGraphContext,GeometryGraphSplineSource,graphProfileSlots}
@@ -128,6 +130,28 @@ export class SplineGeometryGraphRenderer extends Component {
     @property({min:24,max:1200,step:1})
     gizmoEdgeLimit=300;
 
+    @property({tooltip:'Generate a separate static triangle collider in Preview/runtime only.'})
+    generateCollider=false;
+    @property({type:MeshCollider,tooltip:'Empty non-convex MeshCollider on this Node, with zero center and no RigidBody.'})
+    colliderTarget:MeshCollider|null=null;
+
+    private _collision=new SplineGraphColliderBinding();
+    private _colliderIds=new WeakMap<MeshCollider,number>();
+    private _nextColliderId=0;
+    public getGeneratedColliderMesh():Mesh|null{return this._collision.ownedMesh;}
+    private colliderSignature():unknown{
+        if(EDITOR_NOT_IN_PREVIEW||!this.generateCollider)return null;
+        const c=this.colliderTarget;
+        if(!c)return ['missing'];
+        let id=this._colliderIds.get(c);
+        if(id===undefined){id=++this._nextColliderId;this._colliderIds.set(c,id);}
+        let body=false,depth=0;
+        for(let n:typeof this.node|null=this.node;n;n=n.parent){
+            if(++depth>128||n.getComponent(RigidBody)){body=true;break;}
+        }
+        return [id,c.node===this.node,c.node?.isValid,c.convex,c.center?.x,c.center?.y,c.center?.z,
+            !!c.mesh&&!this._collision.isBoundTo(c),body];
+    }
     private _mesh:Mesh|null=null;
     private _gizmo:MeshGizmoLines|null=null;
     private _fallback:Material|null=null;
@@ -428,7 +452,7 @@ export class SplineGeometryGraphRenderer extends Component {
         return JSON.stringify([this.splineSlots(plan).map(slot=>[slot,this.frameSignature(slot)]),json,this.renderAllOutputs?null:this.outputId,this.renderAllOutputs,
             this.renderAllOutputs?this.outputOrder:null,
             this.renderAllOutputs?this.autoBindImportedMaterials:null,
-            assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan)]);
+            assets,activeProfileRevisions,this.gizmoEdgeLimit,this.graphConformSignature(plan),this.colliderSignature()]);
     }
     private graphMeshContext(plan:GeometryGraphPlan):
         Pick<GeometryGraphContext,'meshSource'|'meshRevision'|'meshSources'|'meshRevisions'>{
@@ -474,7 +498,9 @@ export class SplineGeometryGraphRenderer extends Component {
             catch(error){if(EDITOR_NOT_IN_PREVIEW)console.warn('[SplineGeometryGraph] Rebuild failed:',error);}
         }
     }
+    onDisable():void{this._collision.release();}
     update():void {
+        if((EDITOR_NOT_IN_PREVIEW||!this.generateCollider)&&this._collision.ownedMesh)this._collision.release();
         try{this.syncMaterial(this.getComponent(MeshRenderer));}
         catch(error){
             // Invalid imported references cannot partially change output slots.
@@ -505,6 +531,10 @@ export class SplineGeometryGraphRenderer extends Component {
         const context={...this.splineFrameContext(plan,nextFrames),
             worldUvLinear:this.worldUvLinear(),
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
+        const collider=EDITOR_NOT_IN_PREVIEW||!this.generateCollider?null:this.colliderTarget;
+        if(!EDITOR_NOT_IN_PREVIEW&&this.generateCollider&&!collider)throw Error('Assign an empty MeshCollider before enabling Graph Collider.');
+        if(collider)this._collision.validate(this.node,collider);
+        const collisionGeometry:CollisionGeometry[]=[];
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];
         let materialGroups:GraphMaterialGroup[]=[];
@@ -521,6 +551,7 @@ export class SplineGeometryGraphRenderer extends Component {
             const chunks=orderedIds.map(outputId=>({
                 outputId,geometry:outputs[outputId],
             }));
+            if(collider)for(const chunk of chunks)collisionGeometry.push(chunk.geometry);
             nextMaterialSlots=chunks.flatMap((chunk,i)=>Array.from({length:chunk.geometry.triangleMaterialSlots===undefined?1:new Set(chunk.geometry.triangleMaterialSlots).size},()=>sourceSlots[i]));
             this.importedMaterials(nextMaterialSlots,[this.material,this.materialB,this.materialC,this.materialD],renderer);
             const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
@@ -531,6 +562,7 @@ export class SplineGeometryGraphRenderer extends Component {
             outputIds=orderedIds;
         }else{
             const geometry=this._runner.evaluate(plan,context,selection||undefined);
+            if(collider)collisionGeometry.push(geometry);
             wire=buildMeshGizmoLines(
                 geometry.positions,geometry.indices,this.gizmoEdgeLimit);
             outputIds=[selection||plan.output];
@@ -545,6 +577,9 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         // A failing renderer assignment must not destroy the previously bound
         // generated Mesh or a manually assigned external Mesh asset.
+        let nextCollision:Mesh|null=null;
+        try{if(collider)nextCollision=this._collision.prepare(this.node,collider,collisionGeometry);}
+        catch(error){mesh.destroy();throw error;}
         const previousMesh=this._mesh,previousBoundMesh=renderer.mesh;
         const oldSlots=this._autoSourceSlots,oldCount=this._subMeshCount;
         const oldBoundMaterials=this._boundMaterials.slice();
@@ -554,6 +589,8 @@ export class SplineGeometryGraphRenderer extends Component {
             this._autoSourceSlots=nextMaterialSlots;
             this._subMeshCount=materialGroups.length;
             this.syncMaterial(renderer);
+            if(collider&&nextCollision)this._collision.commit(this.node,collider,nextCollision);
+            else this._collision.release();
         }catch(error){
             // Best-effort native rollback; never destroy a previously owned
             // successful Mesh on a failed Mesh/material commit.
@@ -567,6 +604,7 @@ export class SplineGeometryGraphRenderer extends Component {
             this._autoSourceSlots=oldSlots;
             this._subMeshCount=oldCount;
             this._boundMaterials=oldBoundMaterials;
+            if(nextCollision&&collider?.mesh!==nextCollision)nextCollision.destroy();
             mesh.destroy();
             throw error;
         }
@@ -577,6 +615,7 @@ export class SplineGeometryGraphRenderer extends Component {
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
     }
     onDestroy():void{
+        this._collision.release();
         const renderer=this.getComponent(MeshRenderer);
         if(this._mesh&&renderer?.mesh===this._mesh)renderer.mesh=null;
         this._mesh?.destroy();this._mesh=null;this._gizmo=null;

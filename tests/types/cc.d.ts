@@ -83,6 +83,7 @@ declare module 'cc' {
     export class SphereCollider extends Collider {center:Vec3;radius:number;}
     export class CapsuleCollider extends Collider {center:Vec3;radius:number;cylinderHeight:number;direction:number;}
     export class MeshCollider extends Collider {mesh:Mesh|null;center:Vec3;convex:boolean;}
+    export class RigidBody extends Component {}
     export class Camera extends Component {}
     export class DirectionalLight extends Component {}
     export const primitives:{box(options?:{width?:number;height?:number;length?:number}):any};

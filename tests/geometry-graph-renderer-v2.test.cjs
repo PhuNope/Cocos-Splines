@@ -55,6 +55,13 @@ async function run(){
   }
   let physicsQueries=0,groundY=-2,missSurface=false;
   class Collider extends Component{}
+  let failCollisionBind=false;
+  class MeshCollider extends Collider{
+   constructor(){super();this._mesh=null;this.convex=false;this.center=new Vec3();}
+   get mesh(){return this._mesh;}
+   set mesh(v){if(failCollisionBind&&v!==null)throw Error('Injected collider bind failure');this._mesh=v;}
+  }
+  class RigidBody extends Component{}
   const physics={raycastResults:[],raycast(ray,mask,length,trigger){
    physicsQueries++;
    if(missSurface)return false;
@@ -62,7 +69,7 @@ async function run(){
     hitPoint:new Vec3(ray.x,groundY,ray.z),hitNormal:new Vec3(0,1,0)}];
    return true;
   }};
-  const cc={Collider,PhysicsSystem:{instance:physics},
+  const cc={Collider,MeshCollider,RigidBody,PhysicsSystem:{instance:physics},
    geometry:{Ray:class Ray{constructor(x,y,z){Object.assign(this,{x,y,z});}}},
    _decorator:{
     ccclass:()=>x=>x,property:()=>{},menu:()=>x=>x,
@@ -842,7 +849,34 @@ async function run(){
    multiRenderer.renderAllOutputs=true;multiRenderer.rebuild();
    assert.deepEqual(multiRenderer.getRenderedOutputIds(),['oa','ob']);
    assert.equal(frameBuilds,beforeMulti+3);
-   multiRenderer.onDestroy();
+   const collision=new MeshCollider();collision.node=multiNode;multiNode.components.push(collision);
+   multiRenderer.generateCollider=true;multiRenderer.colliderTarget=collision;
+   multiRenderer.rebuild();
+   const collisionMesh=collision.mesh,visualMesh=multiOut.mesh;
+   assert(collisionMesh&&collisionMesh!==visualMesh);
+   assert.deepEqual(Object.keys(collisionMesh.data).sort(),['indices','positions']);
+   assert.equal(multiRenderer.getGeneratedColliderMesh(),collisionMesh);
+   revB++;failCollisionBind=true;
+   assert.throws(()=>multiRenderer.rebuild(),/collider bind failure/i);
+   failCollisionBind=false;
+   assert.equal(collision.mesh,collisionMesh);assert.equal(multiOut.mesh,visualMesh);
+   assert.equal(collisionMesh.destroyed,false);assert.equal(visualMesh.destroyed,false);
+   multiRenderer.rebuild();assert(collisionMesh.destroyed);
+   const owned=collision.mesh;
+   const foreign=new Mesh({external:true});collision.mesh=foreign;
+   assert.throws(()=>multiRenderer.rebuild(),/existing Mesh/i);
+   assert.equal(collision.mesh,foreign);
+   multiRenderer.generateCollider=false;multiRenderer.update();
+   assert(owned.destroyed);assert.equal(foreign.destroyed,false);assert.equal(collision.mesh,foreign);
+   collision.mesh=null;multiRenderer.generateCollider=true;
+   collision.convex=true;assert.throws(()=>multiRenderer.rebuild(),/non-convex/i);collision.convex=false;
+   const rb=new RigidBody();multiNode.components.push(rb);
+   assert.throws(()=>multiRenderer.rebuild(),/RigidBody/i);multiNode.components.pop();
+   multiRenderer.rebuild();const disabledMesh=collision.mesh;
+   multiRenderer.onDisable();assert.equal(collision.mesh,null);assert(disabledMesh.destroyed);
+   multiRenderer.onEnable();assert(collision.mesh);
+   const destroyedMesh=collision.mesh;
+   multiRenderer.onDestroy();assert.equal(collision.mesh,null);assert(destroyedMesh.destroyed);
    console.log('GEOMETRY GRAPH RENDERER V2 PASS: atomic generated Mesh replacement, frame cache, source immutability, live updates, Inspector and ownership.');
   }finally{
    Module._load=original;globalThis.Editor=previousEditor;
