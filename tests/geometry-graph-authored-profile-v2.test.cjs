@@ -208,6 +208,57 @@ try{
  morphEdit=model.applyGraphEdit(morphEdit,'profile-keys-disable',{id:'extrude'});
  assert.equal(model.parseGraph(morphEdit).map.get('extrude').profileInterpolation,undefined);
  assert.throws(()=>model.applyGraphEdit(morphEdit,'param',{id:'extrude',key:'profileInterpolation',value:1}));
+ // Phase 4.6c1: matching ordered contour parts and holes.
+ const rect=(x0,y0,x1,y1)=>[{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1}];
+ const hole=(x0,y0,x1,y1)=>rect(x0,y0,x1,y1).reverse();
+ const sectionA={format:'cocos-splines/profile',version:1,
+  points:rect(-.9,-.5,-.1,.5),holes:[hole(-.7,-.2,-.3,.2)],
+  outerContours:[rect(.1,-.4,.9,.4)],outerHoles:[[hole(.3,-.15,.7,.15)]]};
+ const sectionB={format:'cocos-splines/profile',version:1,
+  points:rect(-.95,-.6,-.05,.6),holes:[hole(-.75,-.25,-.25,.25)],
+  outerContours:[rect(.05,-.5,.95,.5)],outerHoles:[[hole(.25,-.2,.75,.2)]]};
+ const contourCtx=(a,b,revision='contours')=>({...keyCtx,revision,
+  profileSources:[a.points,b.points],profileHoles:[a.holes,b.holes],
+  profileOuterContours:[a.outerContours,b.outerContours],profileOuterHoles:[a.outerHoles,b.outerHoles],
+  profileRevisions:[JSON.stringify(a),JSON.stringify(b)]});
+ const contourRunner=new GeometryGraphRunner(),contourContext=contourCtx(sectionA,sectionB);
+ const contour=contourRunner.evaluate(linearPlan,contourContext);
+ assert.equal(contour.bands,16);assert.equal(contour.ringCount,9);
+ near(contour.positions[0],-1.8);near(contour.positions[4*6],-1.9);
+ // Every loop owns a full normalized U perimeter, including clockwise holes.
+ for(let edge=0;edge<16;edge+=4){
+  const start=edge*contour.ringCount*4;
+  const last=(edge+3)*contour.ringCount*4;
+  near(contour.uvs[start],0);near(contour.uvs[last+2],1);
+ }
+ const sideIndices=16*(contour.ringCount-1)*6;
+ const area=(start,end)=>{
+  let result=0;
+  for(let i=start;i<end;i+=3){
+   const [a,b,c]=contour.indices.slice(i,i+3).map(j=>contour.positions.slice(j*3,j*3+3));
+   result+=Math.abs((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))/2;
+  }
+  return result;
+ };
+ const capMid=sideIndices+(contour.indices.length-sideIndices)/2;
+ near(area(sideIndices,capMid),2*(.8*1-.4*.4+.8*.8-.4*.3));
+ near(area(capMid,contour.indices.length),2*(.9*1.2-.5*.5+.9*1-.5*.4));
+ assert(contour.normals.every(Number.isFinite));
+ assert.deepEqual(contourRunner.evaluate(linearPlan,contourContext),contour);
+ assert.equal(contourRunner.metrics.reused,3);
+ const noHole={...sectionB,holes:undefined};
+ assert.throws(()=>contourRunner.evaluate(linearPlan,contourCtx(sectionA,noHole)),/contour topology/i);
+ const badHole={...sectionB,holes:[sectionB.holes[0].slice(2).concat(sectionB.holes[0].slice(0,2))]};
+ const coarseContour={...contourCtx(sectionA,badHole,'bad-hole'),frames:[frames[0],frames[7]]};
+ // Use identical hole sizes to force a zero-area interpolated hole.
+ const rotatedA={...sectionA,holes:[sectionA.holes[0].slice(2).concat(sectionA.holes[0].slice(0,2))]};
+ assert.throws(()=>contourRunner.evaluate(linearPlan,{...contourCtx(sectionA,rotatedA,'collapsed-hole'),frames:coarseContour.frames}),/invalid sampled polygon/i);
+ assert.deepEqual(contourRunner.evaluate(linearPlan,contourContext),contour);
+ const contourSeam=contourRunner.evaluate(compileGeometryGraph(closedGraph),{...contourContext,closed:true,frames:loop,revision:'closed-contours'});
+ for(let edge=0;edge<contourSeam.bands;edge++){
+  const first=edge*contourSeam.ringCount*6,last=first+(contourSeam.ringCount-1)*6;
+  for(let k=0;k<6;k++){near(contourSeam.positions[first+k],contourSeam.positions[last+k]);near(contourSeam.normals[first+k],contourSeam.normals[last+k]);}
+ }
  const pkg=require(root+'/package.json');
  assert(pkg.scripts.test.includes('geometry-graph-authored-profile-v2.test.cjs'));
  console.log('AUTHORED PROFILE V2 PASS: strict CCW simple polygon, concave triangulation, profile slots, dirty propagation, safe rollback and Visual Graph preset reset.');

@@ -366,11 +366,37 @@ function triangulateContours(rings:ReadonlyArray<ReadonlyArray<GraphProfilePoint
         throw Error('Graph Profile Asset contour triangulation area mismatch.');
     return triangles;
 }
+/** Stable ordered part/loop correspondence: main outer + holes, then
+ * each additional outer + its holes. No implicit contour or vertex matching. */
+export function graphProfileParts(profile:GraphAuthoredProfile):GraphProfilePoint[][][]{
+    return [[profile.points,...(profile.holes??[])],
+        ...(profile.outerContours??[]).map((outer,i)=>[outer,...(profile.outerHoles?.[i]??[])])];
+}
+export function graphProfileTopology(profile:GraphAuthoredProfile):string{
+    return JSON.stringify(graphProfileParts(profile).map(part=>part.map(loop=>loop.length)));
+}
+/** Caller supplies validated profiles with identical topology. The builder
+ * validates each interpolated section, including hole containment and overlap. */
+export function interpolateGraphProfile(a:GraphAuthoredProfile,b:GraphAuthoredProfile,t:number):GraphAuthoredProfile{
+    if(graphProfileTopology(a)!==graphProfileTopology(b))
+        throw Error('Graph Profile keys require matching contour topology and vertex counts.');
+    const left=graphProfileParts(a),right=graphProfileParts(b);
+    const parts=left.map((part,i)=>part.map((loop,j)=>loop.map((p,k)=>{
+        const q=right[i][j][k];return {x:p.x+(q.x-p.x)*t,y:p.y+(q.y-p.y)*t};
+    })));
+    const extra=parts.slice(1);
+    return {format:'cocos-splines/profile',version:1,points:parts[0][0],
+        ...(parts[0].length>1?{holes:parts[0].slice(1)}:{}),
+        ...(extra.length?{outerContours:extra.map(part=>part[0])}:{}),
+        ...(extra.some(part=>part.length>1)?{outerHoles:extra.map(part=>part.slice(1))}:{})};
+}
 export interface ProfileExtrudeSettings {
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
     /** Optional one simple, index-compatible authored polygon per path frame. */
     profileRings?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
+    /** Complete index-compatible sections per frame, including holes/extra solids. */
+    profileSections?:ReadonlyArray<GraphAuthoredProfile>;
     profileHoles?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     profileOuterContours?:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>;
     profileOuterHoles?:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>>;
@@ -464,27 +490,52 @@ export function buildProfileExtrudeGeometry(
             ...(settings.profileOuterContours===undefined?{}:{outerContours:settings.profileOuterContours}),
             ...(settings.profileOuterHoles===undefined?{}:{outerHoles:settings.profileOuterHoles}),
             ...(settings.profileUV===undefined?{}:{uv:settings.profileUV})}):null;
-    const keyed=settings.profileRings;
-    if(keyed!==undefined){
-        if(!Array.isArray(keyed)||keyed.length!==frames.length||authored)
-            throw Error('Graph Profile keys require exactly one polygon per frame and no static authored profile.');
-        const checked=new Set<ReadonlyArray<Readonly<GraphProfilePoint>>>();
-        for(const ring of keyed){
-            if(!Array.isArray(ring)||ring.length!==keyed[0].length)
-                throw Error('Graph Profile keys require matching vertex counts.');
-            if(!checked.has(ring)){
-                try{parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:ring});}
-                catch(error){throw Error('Graph Profile morph contains an invalid sampled polygon: '+String((error as Error)?.message??error));}
-                checked.add(ring);
+    if(settings.profileRings!==undefined&&settings.profileSections!==undefined)
+        throw Error('Graph Profile keys cannot mix polygon rings and sections.');
+    if(settings.profileRings!==undefined&&!Array.isArray(settings.profileRings))
+        throw Error('Graph Profile keys require an array of polygons.');
+    // Keep the original pure polygon API working. Reuse its ring objects for
+    // identity caching rather than reparsing unchanged Step rings per frame.
+    const legacy=new Map<ReadonlyArray<Readonly<GraphProfilePoint>>,GraphAuthoredProfile>();
+    const rawSections:ReadonlyArray<GraphAuthoredProfile>|undefined=settings.profileSections??
+        settings.profileRings?.map((ring:ReadonlyArray<Readonly<GraphProfilePoint>>)=>{
+            let section=legacy.get(ring);
+            if(!section){
+                section={format:'cocos-splines/profile',version:1,points:ring as GraphProfilePoint[]};
+                legacy.set(ring,section);
             }
-        }
-        if(closed&&keyed[0].some((p:Readonly<P2>,i:number)=>p.x!==keyed[keyed.length-1][i].x||p.y!==keyed[keyed.length-1][i].y))
+            return section;
+        });
+    let keyed:ReadonlyArray<ReadonlyArray<Readonly<P2>>>|undefined;
+    let keyedParts:ReadonlyArray<GraphProfilePoint[][][]>|undefined;
+    if(rawSections!==undefined){
+        if(!Array.isArray(rawSections)||rawSections.length!==frames.length||authored)
+            throw Error('Graph Profile keys require exactly one section per frame and no static authored profile.');
+        const checked=new Map<GraphAuthoredProfile,GraphProfilePoint[][][]>();
+        let topology:string|undefined;
+        const validated=rawSections.map((section:GraphAuthoredProfile)=>{
+            let part=checked.get(section);
+            if(part)return part;
+            let parsed:GraphAuthoredProfile;
+            try{parsed=parseGraphProfileAsset(section);}
+            catch(error){throw Error('Graph Profile morph contains an invalid sampled polygon: '+String((error as Error)?.message??error));}
+            if(parsed.uv!==undefined)throw Error('Graph Profile keys currently do not support custom UV metadata.');
+            const next=graphProfileTopology(parsed);
+            if(topology!==undefined&&topology!==next)
+                throw Error('Graph Profile keys require matching contour topology and vertex counts.');
+            topology=next;part=graphProfileParts(parsed);checked.set(section,part);return part;
+        });
+        const flattened=new Map<GraphProfilePoint[][][],GraphProfilePoint[]>();
+        keyed=validated.map((part:GraphProfilePoint[][][])=>{
+            let flat=flattened.get(part);
+            if(!flat){flat=part.flat(2);flattened.set(part,flat);}
+            return flat;
+        });
+        keyedParts=validated;
+        if(closed&&keyed[0].some((p:Readonly<P2>,i:number)=>p.x!==keyed![keyed!.length-1][i].x||p.y!==keyed![keyed!.length-1][i].y))
             throw Error('Graph Profile keys require identical closed seam polygons.');
     }
-    const outer=keyed?.[0]??authored?.points??PROFILES[profileShape];
-    const mainRings=[outer,...(authored?.holes??[])];
-    const extra=authored?.outerContours??[];
-    const parts=[mainRings,...extra.map((ring,i)=>[ring,...(authored?.outerHoles?.[i]??[])])];
+    const parts=keyedParts?.[0]??(authored?graphProfileParts(authored):[[PROFILES[profileShape]]]);
     const rings=parts.flat();
     const profile=rings.flat(),bands=profile.length;
     const nextEdge:number[]=[],ringStart:number[]=[],ringEnd:number[]=[];
@@ -497,15 +548,17 @@ export function buildProfileExtrudeGeometry(
         offset+=ring.length;
     }
     const capParts=parts.map(part=>part.reduce((sum,ring)=>sum+ring.length,0));
-    const triangles:number[]=[];
-    if(capEnds&&!closed){
+    const triangulateParts=(sections:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<P2>>>>):number[]=>{
         let base=0;
-        for(let i=0;i<parts.length;i++){
-            const part=parts[i];
+        const triangles:number[]=[];
+        for(const part of sections){
             const local=part.length===1?profileTriangles(part[0]):triangulateContours(part);
-            triangles.push(...local.map(j=>j+base));base+=capParts[i];
+            triangles.push(...local.map(j=>j+base));
+            base+=part.reduce((sum,ring)=>sum+ring.length,0);
         }
-    }
+        return triangles;
+    };
+    const triangles=capEnds&&!closed?triangulateParts(parts):[];
     const perimeterLengths=profile.map((p,i)=>{
         const next=profile[nextEdge[i]];
         return Math.hypot((next.x-p.x)*width,(next.y-p.y)*height);
@@ -605,12 +658,14 @@ export function buildProfileExtrudeGeometry(
     const keyedUv=new Map<ReadonlyArray<Readonly<P2>>,{start:number[];end:number[]}>();
     if(keyed)for(const ring of keyed)if(!keyedUv.has(ring)){
         const lengths=ring.map((p:Readonly<P2>,i:number)=>{
-            const q=ring[(i+1)%ring.length];return Math.hypot((q.x-p.x)*width,(q.y-p.y)*height);
+            const q=ring[nextEdge[i]];return Math.hypot((q.x-p.x)*width,(q.y-p.y)*height);
         });
-        const total=lengths.reduce((a:number,b:number)=>a+b,0);
-        let cursor=0;
+        let cursor=0,total=0;
         const start:number[]=[],end:number[]=[];
-        for(const l of lengths){start.push(cursor/total);cursor+=l;end.push(cursor/total);}
+        for(let i=0;i<bands;i++){
+            if(i===ringStart[i]){cursor=0;total=loopLength(i,lengths);}
+            start.push(cursor/total);cursor+=lengths[i];end.push(cursor/total);
+        }
         keyedUv.set(ring,{start,end});
     }
     const positions:number[]=[],normals:number[]=[],uvs:number[]=[],indices:number[]=[];
@@ -717,7 +772,7 @@ export function buildProfileExtrudeGeometry(
                 handedness*(end===0?-1:1)));
             const offset=positions.length/3;
             const capProfile=keyed?.[end===0?0:frames.length-1]??profile;
-            const capTriangles=keyed?profileTriangles(capProfile):triangles;
+            const capTriangles=keyedParts?triangulateParts(keyedParts[end===0?0:frames.length-1]):triangles;
             for(const point of capProfile)
                 push(at(f,point),outward,point.x+.5,point.y+.5);
             const ccw=(end===1)===(handedness>0);

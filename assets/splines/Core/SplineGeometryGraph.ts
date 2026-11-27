@@ -5,7 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
-import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,GraphAuthoredProfile,graphProfileTopology,interpolateGraphProfile,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 import {sampleNoiseLayers,NoiseLayerConfig} from './SplineNoiseMath';
@@ -482,25 +482,29 @@ function mergePaths(a:GraphPath,b:GraphPath,node:GeometryGraphNode,linear?:Reado
     const source:GraphPath={kind:'path',closed:false,frames:combined.map((f,i)=>i===0?{...f,distance:0}:f)};
     return rebuildDisplacedPath(source,positions,origin,basis);
 }
-/** Sample compatible simple outer polygons using explicit point correspondence.
+/** Sample compatible contour sections using explicit part/loop/point correspondence.
  * Step retains the original sample positions. Continuous modes insert exact
  * key rings (and a midpoint when a transition has no interior path samples).
  * Every emitted polygon is validated by the extrusion builder.
  */
 function sampleProfileKeys(node:GeometryGraphNode,source:GraphPath,context:GeometryGraphContext):
-    {frames:GraphFrame[];rings:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>}{
-    const keys=node.profileKeys!,profiles=new Map<number,GraphProfilePoint[]>();
-    let count=0;
+    {frames:GraphFrame[];sections:ReadonlyArray<GraphAuthoredProfile>}{
+    const keys=node.profileKeys!,profiles=new Map<number,GraphAuthoredProfile>();
+    let topology:string|undefined;
     for(const slot of graphProfileSlots(node)){
         const revision=context.profileRevisions?.[slot];
         if(typeof revision!=='string'||!revision||revision.length>32768)
             throw Error('Graph Profile Asset slot '+slot+' requires a valid revision.');
-        if(context.profileHoles?.[slot]!==undefined||context.profileOuterContours?.[slot]!==undefined||
-           context.profileOuterHoles?.[slot]!==undefined||context.profileUVs?.[slot]!==undefined)
-            throw Error('Geometry Graph Profile keys currently require simple outer polygons without custom UV metadata.');
-        const profile=parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:context.profileSources?.[slot]});
-        if(count&&count!==profile.points.length)throw Error('Geometry Graph Profile keys require matching vertex counts.');
-        count=profile.points.length;profiles.set(slot,profile.points);
+        if(context.profileUVs?.[slot]!==undefined)
+            throw Error('Geometry Graph Profile keys currently do not support custom UV metadata.');
+        const profile=parseGraphProfileAsset({format:'cocos-splines/profile',version:1,points:context.profileSources?.[slot],
+            ...(context.profileHoles?.[slot]===undefined?{}:{holes:context.profileHoles[slot]}),
+            ...(context.profileOuterContours?.[slot]===undefined?{}:{outerContours:context.profileOuterContours[slot]}),
+            ...(context.profileOuterHoles?.[slot]===undefined?{}:{outerHoles:context.profileOuterHoles[slot]})});
+        const next=graphProfileTopology(profile);
+        if(topology!==undefined&&topology!==next)
+            throw Error('Geometry Graph Profile keys require matching vertex counts and contour topology.');
+        topology=next;profiles.set(slot,profile);
     }
     if(source.closed&&keys[0].slot!==keys[keys.length-1].slot)
         throw Error('Geometry Graph closed Profile keys require matching first/last slots.');
@@ -530,7 +534,7 @@ function sampleProfileKeys(node:GeometryGraphNode,source:GraphPath,context:Geome
         }
     }
     let current=0;
-    const rings=frames.map(f=>{
+    const sections=frames.map(f=>{
         const progress=(f.distance-first)/span;
         while(current+1<keys.length&&keys[current+1].progress<=progress+1e-10)current++;
         const a=keys[current],from=profiles.get(a.slot)!;
@@ -540,9 +544,9 @@ function sampleProfileKeys(node:GeometryGraphNode,source:GraphPath,context:Geome
         const to=profiles.get(b.slot)!;
         let t=Math.max(0,Math.min(1,(progress-a.progress)/(b.progress-a.progress)));
         if(mode===2)t=t*t*(3-2*t);
-        return from.map((p,i)=>({x:p.x+(to[i].x-p.x)*t,y:p.y+(to[i].y-p.y)*t}));
+        return interpolateGraphProfile(from,to,t);
     });
-    return {frames,rings};
+    return {frames,sections};
 }
 const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
@@ -1087,11 +1091,11 @@ export class GeometryGraphRunner {
                     let authoredHoles:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
                     let authoredOuterContours:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
                     let authoredOuterHoles:ReadonlyArray<ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>>|undefined;
-                    let profileRings:ReadonlyArray<ReadonlyArray<Readonly<GraphProfilePoint>>>|undefined;
+                    let profileSections:ReadonlyArray<GraphAuthoredProfile>|undefined;
                     let extrusionFrames=source.frames;
                     if(node.profileKeys){
                         const sampled=sampleProfileKeys(node,source,context);
-                        extrusionFrames=sampled.frames;profileRings=sampled.rings;
+                        extrusionFrames=sampled.frames;profileSections=sampled.sections;
                     }else if(node.profileSlot!==undefined){
                         const slot=node.profileSlot,revision=context.profileRevisions?.[slot];
                         if(typeof revision!=='string'||!revision||revision.length>32768)
@@ -1107,7 +1111,7 @@ export class GeometryGraphRunner {
                     const geometry=buildProfileExtrudeGeometry(extrusionFrames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
-                        profile:authored,profileRings,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
+                        profile:authored,profileSections,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
                         worldUvLinear:context.worldUvLinear,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,
