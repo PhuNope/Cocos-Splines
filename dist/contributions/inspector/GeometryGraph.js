@@ -13,6 +13,7 @@ const template=base.template+[
  '<summary>Visual Geometry Graph</summary>',
  '<div class="spl-vg-toolbar spl-vg-asset-toolbar">',
  '<button type="button" class="spl-btn spl-vg-export">Export JSON…</button>',
+ '<button type="button" class="spl-btn spl-vg-bake">Bake Mesh…</button>',
  '<button type="button" class="spl-btn spl-vg-import">Import JSON → Local…</button>',
  '<button type="button" class="spl-btn spl-vg-copy-local">Copy Asset to Local</button>',
  '<button type="button" class="spl-btn spl-vg-refresh">Refresh Asset View</button>',
@@ -143,7 +144,7 @@ const style=base.style+[
 '.spl-vg-profile-report{font:11px/1.6 ui-monospace,monospace;white-space:pre;overflow:auto;max-height:440px;margin:6px 0;padding:7px;border:1px solid #3b576b;border-radius:6px;color:#a9d8db;background:rgba(14,26,36,.5)}'
 ].join('\n');
 const $={...base.$,
-  vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',
+  vgExport:'.spl-vg-export',vgImport:'.spl-vg-import',vgBake:'.spl-vg-bake',
   vgCopyLocal:'.spl-vg-copy-local',vgRefresh:'.spl-vg-refresh',
   vgEditShared:'.spl-vg-edit-shared',vgSaveShared:'.spl-vg-save-shared',
   vgDiscardShared:'.spl-vg-discard-shared',
@@ -1066,6 +1067,16 @@ const inspector={
           else if(result?.message)status(this,result.message);
         }).catch(error=>status(this,String(error?.message||error),true)));
     }
+    this.$?.vgBake?.addEventListener('click',()=>void(async()=>{
+      if(this._vgSharedDraft||this._vgSharedBusy||this._vgBakeBusy)return;
+      this._vgBakeBusy=true;
+      try{
+        const result=await Editor.Message.request('cocos-splines','bake-geometry-graph-mesh');
+        if(!result?.ok&&!result?.canceled)status(this,String(result?.error||'Mesh Bake failed.'),true);
+        else if(result?.message)status(this,result.message);
+      }catch(error){status(this,String(error?.message||error),true);}
+      finally{this._vgBakeBusy=false;}
+    })());
     this.$?.vgRefresh?.addEventListener('click',()=>void refreshAsset(this));
     this.$?.vgProfile?.addEventListener('click',()=>void (async()=>{
       if(this._vgProfileBusy||this._vgSharedBusy||this._vgSharedDraft)return;

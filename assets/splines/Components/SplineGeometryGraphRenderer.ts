@@ -115,11 +115,11 @@ export class SplineGeometryGraphRenderer extends Component {
     samplesPerCurve=12;
     @property({type:Material,tooltip:'Optional shared material; otherwise respects a manually assigned MeshRenderer material.'})
     material:Material|null=null;
-    @property({type:Material,tooltip:'Physical material primitive 1 (output order, then local group ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 1 (output/group order). Empty respects MeshRenderer material.'})
     materialB:Material|null=null;
-    @property({type:Material,tooltip:'Physical material primitive 2 (output order, then local group ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 2 (output/group order). Empty respects MeshRenderer material.'})
     materialC:Material|null=null;
-    @property({type:Material,tooltip:'Physical material primitive 3 (output order, then local group ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 3 (output/group order). Empty respects MeshRenderer material.'})
     materialD:Material|null=null;
     @property({tooltip:'Rebuild when graph, spline geometry, or output transform changes.'})
     rebuildOnChange=true;
@@ -192,6 +192,23 @@ export class SplineGeometryGraphRenderer extends Component {
             outputId:selected||plan.output,
             sampledFrames:context.frames.length,
         };
+    }
+    /** Explicit bake evaluates current inputs using an isolated runner.
+     * No live cache, generated Mesh, scene property or source asset is changed. */
+    public snapshotGeometryForBake():{outputs:Array<{outputId:string;geometry:import('../Core/SplineRoadMath').RoadGeometry}>}{
+        const plan=parseGeometryGraph(this.activeGraphJson());
+        const nextFrames=this.prepareSplineFrames(plan);
+        const context={...this.splineFrameContext(plan,nextFrames),worldUvLinear:this.worldUvLinear(),
+            ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
+        const runner=new GeometryGraphRunner();
+        if(this.renderAllOutputs){
+            if(plan.version!==2||!plan.outputs)throw Error('Bake All Outputs requires a V2 graph.');
+            const order=resolveGraphOutputOrder(plan.outputs,this.outputOrder);
+            const meshes=runner.evaluateOutputs(plan,context);
+            return {outputs:order.map(outputId=>({outputId,geometry:meshes[outputId]}))};
+        }
+        const outputId=this.outputId.trim()||plan.output;
+        return {outputs:[{outputId,geometry:runner.evaluate(plan,context,outputId)}]};
     }
     private source():SplineContainer|null{
         return this.spline||this.getComponent(SplineContainer);

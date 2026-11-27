@@ -642,6 +642,13 @@ async function run(){
    assert.equal(out.mesh.struct.vertexBundles.length,2);
    assert.deepEqual(renderer.getRenderedMaterialGroups(),[{outputId:'outputA',slot:0},{outputId:'outputA',slot:1},{outputId:'outputA',slot:2},{outputId:'outputB',slot:0}]);
    const lastMapped=out.mesh;
+   const beforeBakeMetrics=renderer.getGraphMetrics();
+   const snapshot=renderer.snapshotGeometryForBake();
+   assert.deepEqual(snapshot.outputs.map(o=>o.outputId),['outputA','outputB']);
+   assert(snapshot.outputs[0].geometry.triangleMaterialSlots.includes(2));
+   assert.equal(out.mesh,lastMapped);
+   assert.deepEqual(renderer.getGraphMetrics(),beforeBakeMetrics);
+   assert.equal(frameBuilds,authoredFrameBuilds);
    mappedGraph.nodes.find(n=>n.id==='extrudeB').profileMaterials={outer:0,endCap:1};
    renderer.graphJson=JSON.stringify(mappedGraph);
    assert.throws(()=>renderer.rebuild(),/four material primitives/i);

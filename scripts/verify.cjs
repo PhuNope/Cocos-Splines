@@ -9,6 +9,7 @@ checkRel('dist/SplineExampleInstaller.js');
 checkRel('dist/SplineGeometryGraphVisualModel.js');
 checkRel('dist/SplineGeometryProfileLibrary.js');
 checkRel('dist/SplineGeometryProfileExport.js');
+checkRel('dist/SplineGeometryMeshBake.js');
 checkRel('dist/SplineGeometryGraphAssetWorkflow.js');
 for(const [name,method] of Object.entries({
     'query-geometry-graph-asset':'queryGeometryGraphAsset',

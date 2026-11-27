@@ -489,6 +489,16 @@ function profileGeometryGraph(uuid){
     try{return {ok:true,profile:comp.profileGraph()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
+/** Read only: bake the current active graph, not a possibly stale live Mesh. */
+function snapshotGeometryGraphForBake(uuid){
+    const node=resolve(uuid);
+    if(!node||node.isValid===false)return {ok:false,error:'Select an active Geometry Graph Renderer Node.'};
+    const comps=node.components.filter(c=>classOf(c)==='Splines.SplineGeometryGraphRenderer');
+    if(comps.length!==1||comps[0].enabled===false||typeof comps[0].snapshotGeometryForBake!=='function')
+        return {ok:false,error:'Select a Node with exactly one active Geometry Graph Renderer.'};
+    try{return {ok:true,snapshot:comps[0].snapshotGeometryForBake()};}
+    catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
+}
 function rebuildGeometryGraph(uuid){
     const node=resolve(uuid);
     if(!node||node.isValid===false)return {ok:false,error:'Select an active Geometry Graph Renderer Node.'};
@@ -703,5 +713,5 @@ function queryTrafficConflicts(uuid){
     try{return {ok:true,...comp.diagnoseConflicts()};}
     catch(error){return {ok:false,error:String(error instanceof Error?error.message:error)};}
 }
-exports.methods={...junctionScene,queryGeometryGraphAsset,queryGeometryProfileAsset,rebuildGeometryGraph,profileGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
+exports.methods={...junctionScene,snapshotGeometryGraphForBake,queryGeometryGraphAsset,queryGeometryProfileAsset,rebuildGeometryGraph,profileGeometryGraph,queryExampleGallery,queryTrafficConflicts,queryPlacementSummary,spawnPrefabs,executeTool,querySpline:query,querySvgGeometry,queryJsonGeometry,queryKnotEditFrame,listSurfaceTargets,snapToSurfaceTarget,queryKnotOrientations,queryKnotBatchState,queryArcDistribution,queryResamplePlan,queryResampleValid,refreshPreview,rebuildRoad,rebuildComponent,describeHandles,queryAnimate:animate,previewAnimate,restoreAnimate,describeSplit,moveKnot,placeAfter};
 exports.load=function(){};exports.unload=function(){};

@@ -11,6 +11,7 @@ const {formatProfile}=require('./SplineGeometryProfileEditor');
 const {readProfileSnapshot,saveProfileIfUnchanged}=require('./SplineGeometryProfileAssetWorkflow');
 const {createProfilePreset}=require('./SplineGeometryProfileLibrary');
 const {writeNewProfileAsset}=require('./SplineGeometryProfileExport');
+const {encodeBakedGltf,writeNewBakedMesh}=require('./SplineGeometryMeshBake');
 const {planKnotPositions,planSurfaceKnotPositions,transformFrame,validatedKnots}=require('./SplineKnotEditMath');
 const {commitKnotEdits}=require('./SplineBatchEditTransaction');
 const {commitJunctionTangent}=require('./SplineJunctionTangentTransaction');
@@ -25,6 +26,7 @@ const {appearanceWrites,validateContainerAppearance}=require('./SplineTopologyCo
 let sharedGraphSaveBusy=false;
 let profileAssetSaveBusy=false;
 let profileAssetExportBusy=false;
+let meshBakeBusy=false;
 function singleGraphSelection(){
     const ids=selected();
     if(ids.length!==1||!ids[0])throw Error('Select exactly one Geometry Graph Renderer Node.');
@@ -1180,6 +1182,40 @@ const methods={
             if(!id)throw Error('Chọn Node chứa SplineGeometryGraphRenderer.');
             return await invokeScene('rebuildGeometryGraph',id);
         }catch(error){return alertError('rebuild-geometry-graph',error);}
+    },
+    async bakeGeometryGraphMesh(){
+        if(meshBakeBusy)return {ok:false,error:'Another Mesh Bake is pending.'};
+        meshBakeBusy=true;
+        try{
+            const nodeUuid=singleGraphSelection();
+            if(typeof Editor.Dialog?.save!=='function'||typeof Editor.Dialog?.info!=='function')
+                throw Error('Native save/confirmation unavailable; no mesh baked.');
+            const root=Editor.Project?.path;
+            if(typeof root!=='string'||!path.isAbsolute(root))throw Error('Project root unavailable.');
+            const assets=path.join(root,'assets');
+            const choice=await Editor.Dialog.save({title:'Bake NEW Geometry Graph Mesh',
+                path:path.join(assets,'BakedSpline.gltf'),filters:[{name:'glTF 2.0',extensions:['gltf']}]});
+            if(choice?.canceled||!choice?.filePath)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)throw Error('Selected renderer changed during Bake.');
+            const answer=await Editor.Dialog.info('Bake current Geometry Graph as a new model?',{
+                title:'Bake Mesh',detail:choice.filePath+'\nUses current graph inputs, renderer-local geometry and placeholder material groups. Never overwrites or auto-assigns assets; no Scene Undo entry.',
+                buttons:['Bake New Mesh','Cancel'],default:1,cancel:1});
+            if(answer?.response!==0)return {ok:false,canceled:true};
+            if(singleGraphSelection()!==nodeUuid)throw Error('Selected renderer changed before Bake.');
+            const info=await invokeScene('snapshotGeometryGraphForBake',nodeUuid);
+            if(!info?.ok)throw Error(info?.error||'Unable to evaluate Geometry Graph.');
+            if(singleGraphSelection()!==nodeUuid)throw Error('Selected renderer changed during evaluation.');
+            const content=encodeBakedGltf(info.snapshot);
+            const saved=writeNewBakedMesh(choice.filePath,assets,content);
+            try{
+                const result=await Editor.Message.request('asset-db','refresh-asset',saved.assetUrl);
+                if(result===false)throw Error('AssetDB returned false.');
+                return {ok:true,created:true,...saved,message:'Baked model saved: '+saved.assetUrl+'. Use the imported Mesh subasset or Prefab; assign original materials manually.'};
+            }catch(error){
+                return {ok:true,created:true,refreshPending:true,...saved,message:'Baked model saved; refresh Assets manually: '+String(error?.message||error)};
+            }
+        }catch(error){return alertError('bake-geometry-graph-mesh',error);}
+        finally{meshBakeBusy=false;}
     },
     async profileGeometryGraph(){
         try{

@@ -1,0 +1,35 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {encodeBakedGltf,writeNewBakedMesh}=require('../dist/SplineGeometryMeshBake');
+const geometry={positions:[0,0,0,1,0,0,0,1,0,1,1,0],normals:Array(4).fill([0,0,1]).flat(),uvs:[0,0,1,0,0,1,1,1],indices:[0,1,2,1,3,2],triangleMaterialSlots:[2,0]};
+const snapshot={outputs:[{outputId:'road',geometry}]};
+const before=JSON.stringify(snapshot),content=encodeBakedGltf(snapshot),m=JSON.parse(content);
+assert.equal(JSON.stringify(snapshot),before);
+assert.equal(m.asset.version,'2.0');assert.equal(m.meshes[0].primitives.length,2);
+assert.deepEqual(m.materials.map(x=>x.name),['road_group_0','road_group_2']);
+const buffer=Buffer.from(m.buffers[0].uri.split(',')[1],'base64');
+assert.equal(buffer.length,m.buffers[0].byteLength);
+const read=id=>{const a=m.accessors[id],v=m.bufferViews[a.bufferView],n=a.count*({VEC3:3,VEC2:2,SCALAR:1}[a.type]);return Array.from({length:n},(_,i)=>a.componentType===5123?buffer.readUInt16LE(v.byteOffset+i*2):buffer.readFloatLE(v.byteOffset+i*4));};
+const p=m.meshes[0].primitives;
+assert.deepEqual(p[0].attributes,p[1].attributes);
+assert.deepEqual(read(p[0].attributes.POSITION),geometry.positions);
+assert.deepEqual(read(p[0].attributes.NORMAL),geometry.normals);
+assert.deepEqual(read(p[0].attributes.TEXCOORD_0),[0,1,1,1,0,0,1,0]);
+assert.deepEqual(read(p[0].indices),[1,3,2]);assert.deepEqual(read(p[1].indices),[0,1,2]);
+assert.deepEqual(m.accessors[p[0].attributes.POSITION].max,[1,1,0]);
+for(const g of [{...geometry,indices:[0,1,99]},{...geometry,triangleMaterialSlots:[9,0]},{...geometry,normals:Array(12).fill(0)}])assert.throws(()=>encodeBakedGltf({outputs:[{outputId:'bad',geometry:g}]}));
+assert.throws(()=>encodeBakedGltf({outputs:['a','b','c'].map(outputId=>({outputId,geometry}))}),/four material/i);
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'spline-bake-'));
+try{
+ const assets=path.join(temp,'assets');fs.mkdirSync(assets);
+ const target=path.join(assets,'road.gltf');
+ assert.equal(writeNewBakedMesh(target,assets,content).assetUrl,'db://assets/road.gltf');
+ assert.equal(fs.readFileSync(target,'utf8'),content);
+ assert.throws(()=>writeNewBakedMesh(target,assets,content));
+ assert.throws(()=>writeNewBakedMesh(path.join(temp,'outside.gltf'),assets,content),/inside/i);
+ fs.writeFileSync(path.join(assets,'orphan.gltf.meta'),'{}');
+ assert.throws(()=>writeNewBakedMesh(path.join(assets,'orphan.gltf'),assets,content),/meta/i);
+ assert.throws(()=>writeNewBakedMesh(path.join(assets,'bad.json'),assets,content),/gltf/i);
+ assert.deepEqual(require('../package.json').contributions.messages['bake-geometry-graph-mesh'].methods,['bakeGeometryGraphMesh']);
+ console.log('MESH BAKE V2 PASS: embedded binary, material grouping, exclusive asset creation.');
+}finally{fs.rmSync(temp,{recursive:true,force:true});}
