@@ -635,6 +635,22 @@ async function run(){
    assert.deepEqual(renderer.getRenderedOutputIds(),['outputA','outputB']);
    assert.equal(out.mesh.struct.primitives.length,2);
    assert.equal(frameBuilds,authoredFrameBuilds);
+   const mappedGraph=JSON.parse(authoredGraph);
+   mappedGraph.nodes.find(n=>n.id==='extrudeA').profileMaterials={outer:0,startCap:1,endCap:2};
+   renderer.graphJson=JSON.stringify(mappedGraph);renderer.rebuild();
+   assert.equal(out.mesh.struct.primitives.length,4);
+   assert.equal(out.mesh.struct.vertexBundles.length,2);
+   assert.deepEqual(renderer.getRenderedMaterialGroups(),[{outputId:'outputA',slot:0},{outputId:'outputA',slot:1},{outputId:'outputA',slot:2},{outputId:'outputB',slot:0}]);
+   const lastMapped=out.mesh;
+   mappedGraph.nodes.find(n=>n.id==='extrudeB').profileMaterials={outer:0,endCap:1};
+   renderer.graphJson=JSON.stringify(mappedGraph);
+   assert.throws(()=>renderer.rebuild(),/four material primitives/i);
+   assert.equal(out.mesh,lastMapped);
+   renderer.renderAllOutputs=false;renderer.outputId='outputA';renderer.rebuild();
+   assert.equal(out.mesh.struct.primitives.length,3);
+   assert.deepEqual(renderer.getRenderedOutputIds(),['outputA']);
+   renderer.renderAllOutputs=true;renderer.outputId='';renderer.graphJson=authoredGraph;renderer.rebuild();
+   assert.equal(frameBuilds,authoredFrameBuilds);
    // UV-only Profile edits dirty only dependent Extrude + Output, never
    // source spline frames or the other authored branch.
    const uvBaseline=out.mesh;

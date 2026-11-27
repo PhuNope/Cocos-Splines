@@ -308,6 +308,33 @@ try{
  assert.throws(()=>uvRunner.evaluate(linearPlan,mismatch),/matching custom UV/i);
  assert.deepEqual(uvRunner.evaluate(linearPlan,uvContext(weights)),weighted);
  assert.throws(()=>uvRunner.evaluate(keyPlan,uvContext(world)),/world transform/i);
+ // Material groups follow original triangle order through UV island modes.
+ const materialPlan=compileGeometryGraph({...morphGraph(1),nodes:morphGraph(1).nodes.map(n=>n.type==='extrude'?{...n,profileMaterials:{outer:0,inner:1,startCap:2,endCap:3,edgeSlots:[2,-1,-1,-1,...Array(12).fill(-1)]}}:n)});
+ const mapped=contourRunner.evaluate(materialPlan,contourContext);
+ assert.deepEqual(mapped.positions,contour.positions);
+ assert.deepEqual(mapped.indices,contour.indices);
+ const perEdge=2*(mapped.ringCount-1),sideCount=16*perEdge;
+ assert.equal(mapped.triangleMaterialSlots.length,mapped.indices.length/3);
+ assert(mapped.triangleMaterialSlots.slice(0,perEdge).every(s=>s===2));
+ assert(mapped.triangleMaterialSlots.slice(4*perEdge,8*perEdge).every(s=>s===1));
+ assert(mapped.triangleMaterialSlots.slice(8*perEdge,12*perEdge).every(s=>s===0));
+ assert(mapped.triangleMaterialSlots.slice(sideCount,sideCount+(mapped.triangleMaterialSlots.length-sideCount)/2).every(s=>s===2));
+ assert(mapped.triangleMaterialSlots.slice(sideCount+(mapped.triangleMaterialSlots.length-sideCount)/2).every(s=>s===3));
+ const triUV={triangleUnwrap:true,atlasPacking:true};
+ const mappedUnwrapped=contourRunner.evaluate(materialPlan,{...contourContext,profileUVs:[triUV,triUV],profileRevisions:['mat-tri-a','mat-tri-b']});
+ assert.deepEqual(mappedUnwrapped.triangleMaterialSlots,mapped.triangleMaterialSlots);
+ const mappingCopy=contourRunner.evaluate(materialPlan,contourContext);
+ mappingCopy.triangleMaterialSlots[0]=3;
+ assert.equal(contourRunner.evaluate(materialPlan,contourContext).triangleMaterialSlots[0],2);
+ const badMap=mode=>({...keyGraph,nodes:keyGraph.nodes.map(n=>n.type==='extrude'?{...n,profileMaterials:mode}:n)});
+ for(const bad of [{outer:4},{edgeSlots:[-2]},{unknown:0},null]){
+   assert.throws(()=>compileGeometryGraph(badMap(bad)));assert.throws(()=>model.parseGraph(JSON.stringify(badMap(bad))));
+ }
+ assert.throws(()=>keyedRunner.evaluate(compileGeometryGraph(badMap({edgeSlots:[0]})),keyCtx),/edgeSlots/i);
+ let matEdit=model.applyGraphEdit(JSON.stringify(keyGraph),'profile-materials-set',{id:'extrude',value:{outer:0,endCap:2}});
+ assert(model.renderNodeParameters(matEdit,'extrude').includes('data-profile-materials'));
+ matEdit=model.applyGraphEdit(matEdit,'profile-materials-set',{id:'extrude',value:null});
+ assert.equal(model.parseGraph(matEdit).map.get('extrude').profileMaterials,undefined);
  const pkg=require(root+'/package.json');
  assert(pkg.scripts.test.includes('geometry-graph-authored-profile-v2.test.cjs'));
  console.log('AUTHORED PROFILE V2 PASS: strict CCW simple polygon, concave triangulation, profile slots, dirty propagation, safe rollback and Visual Graph preset reset.');

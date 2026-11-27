@@ -9,7 +9,7 @@ import {DEFAULT_GEOMETRY_GRAPH,GeometryGraphRunner,parseGeometryGraph,GeometryGr
 import {parseGraphProfileAsset} from '../Core/SplineProfileExtrudeMath';
 import {readGraphSourceMeshAsset,graphMeshDataFingerprint}
     from '../Core/SplineGraphMeshAssetReader';
-import {createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder,graphOutputMeshSourceSlots}
+import {GraphMaterialGroup,createGraphMultiOutputMesh,graphMultiMeshGizmoGeometry,resolveGraphOutputOrder,graphOutputMeshSourceSlots}
     from '../Core/SplineGeometryGraphMultiMesh';
 import {registerGizmos} from 'db://cocos-gizmos/RegisterGizmos';
 import {SplineGeometryGraphGizmos} from '../Editor/SplineMeshDrawers';
@@ -115,11 +115,11 @@ export class SplineGeometryGraphRenderer extends Component {
     samplesPerCurve=12;
     @property({type:Material,tooltip:'Optional shared material; otherwise respects a manually assigned MeshRenderer material.'})
     material:Material|null=null;
-    @property({type:Material,tooltip:'All Outputs: material slot 1 (second sorted Output ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 1 (output order, then local group ID). Empty respects MeshRenderer material.'})
     materialB:Material|null=null;
-    @property({type:Material,tooltip:'All Outputs: material slot 2 (third sorted Output ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 2 (output order, then local group ID). Empty respects MeshRenderer material.'})
     materialC:Material|null=null;
-    @property({type:Material,tooltip:'All Outputs: material slot 3 (fourth sorted Output ID). Empty respects MeshRenderer material.'})
+    @property({type:Material,tooltip:'Physical material primitive 3 (output order, then local group ID). Empty respects MeshRenderer material.'})
     materialD:Material|null=null;
     @property({tooltip:'Rebuild when graph, spline geometry, or output transform changes.'})
     rebuildOnChange=true;
@@ -136,6 +136,7 @@ export class SplineGeometryGraphRenderer extends Component {
     private _subMeshCount=1;
     private _autoSourceSlots:(number|null)[]=[];
     private _renderedOutputIds:string[]=[];
+    private _renderedMaterialGroups:GraphMaterialGroup[]=[];
     private _revision='';
     private _lastAttempt='';
     @property({type:[Collider],tooltip:'Explicit Conform Path targets (1–64 active 3D Colliders).'})
@@ -154,8 +155,10 @@ export class SplineGeometryGraphRenderer extends Component {
     private _splineIds=new WeakMap<SplineContainer,number>();
     private _nextSplineId=0;
     public getMeshGizmoGeometry():MeshGizmoLines|null{return this._gizmo;}
-    /** Material slot order for the currently committed generated Mesh only. */
+    /** Output order for the currently committed generated Mesh only. */
     public getRenderedOutputIds():string[]{return this._renderedOutputIds.slice();}
+    /** Physical submesh/material slot order, with local group IDs. */
+    public getRenderedMaterialGroups():GraphMaterialGroup[]{return this._renderedMaterialGroups.map(g=>({...g}));}
     public getGraphMetrics():{computed:number;reused:number;nodes:number}{
         return this._runner.metrics;
     }
@@ -487,6 +490,7 @@ export class SplineGeometryGraphRenderer extends Component {
             ...this.graphMeshContext(plan),...this.graphProfileContext(plan),...this.graphConformContext(plan)};
         let mesh:Mesh,wire:MeshGizmoLines,outputIds:string[];
         let nextMaterialSlots:(number|null)[]=[];
+        let materialGroups:GraphMaterialGroup[]=[];
         if(this.renderAllOutputs){
             if(plan.version!==2||!plan.outputs||
                 plan.outputs.length<2||plan.outputs.length>4)
@@ -496,28 +500,31 @@ export class SplineGeometryGraphRenderer extends Component {
             // primitive. The resolved per-renderer order defines material slots.
             const outputs=this._runner.evaluateOutputs(plan,context);
             const orderedIds=resolveGraphOutputOrder(plan.outputs,this.outputOrder);
-            nextMaterialSlots=graphOutputMeshSourceSlots(plan,orderedIds);
-            // Validate imported MeshRenderer/Material references BEFORE
-            // creating a transient Mesh or committing a new output.
-            this.importedMaterials(nextMaterialSlots,
-                [this.material,this.materialB,this.materialC,this.materialD],renderer);
+            const sourceSlots=graphOutputMeshSourceSlots(plan,orderedIds);
             const chunks=orderedIds.map(outputId=>({
                 outputId,geometry:outputs[outputId],
             }));
+            nextMaterialSlots=chunks.flatMap((chunk,i)=>Array.from({length:chunk.geometry.triangleMaterialSlots===undefined?1:new Set(chunk.geometry.triangleMaterialSlots).size},()=>sourceSlots[i]));
+            this.importedMaterials(nextMaterialSlots,[this.material,this.materialB,this.materialC,this.materialD],renderer);
             const wireGeometry=graphMultiMeshGizmoGeometry(chunks);
             wire=buildMeshGizmoLines(
                 wireGeometry.positions,wireGeometry.indices,this.gizmoEdgeLimit);
-            mesh=createGraphMultiOutputMesh(chunks).mesh;
+            const packed=createGraphMultiOutputMesh(chunks);
+            mesh=packed.mesh;materialGroups=packed.materialGroups;
             outputIds=orderedIds;
         }else{
             const geometry=this._runner.evaluate(plan,context,selection||undefined);
             wire=buildMeshGizmoLines(
                 geometry.positions,geometry.indices,this.gizmoEdgeLimit);
-            mesh=utils.createMesh({
-                positions:geometry.positions,normals:geometry.normals,
-                uvs:geometry.uvs,indices:geometry.indices,
-            });
             outputIds=[selection||plan.output];
+            if(geometry.triangleMaterialSlots!==undefined){
+                const packed=createGraphMultiOutputMesh([{outputId:outputIds[0],geometry}]);
+                mesh=packed.mesh;materialGroups=packed.materialGroups;
+            }else{
+                mesh=utils.createMesh({positions:geometry.positions,normals:geometry.normals,
+                    uvs:geometry.uvs,indices:geometry.indices});
+                materialGroups=[{outputId:outputIds[0],slot:0}];
+            }
         }
         // A failing renderer assignment must not destroy the previously bound
         // generated Mesh or a manually assigned external Mesh asset.
@@ -528,7 +535,7 @@ export class SplineGeometryGraphRenderer extends Component {
         try{
             renderer.mesh=mesh;
             this._autoSourceSlots=nextMaterialSlots;
-            this._subMeshCount=outputIds.length;
+            this._subMeshCount=materialGroups.length;
             this.syncMaterial(renderer);
         }catch(error){
             // Best-effort native rollback; never destroy a previously owned
@@ -547,7 +554,7 @@ export class SplineGeometryGraphRenderer extends Component {
             throw error;
         }
         this._mesh=mesh;this._gizmo=wire;
-        this._renderedOutputIds=outputIds;
+        this._renderedOutputIds=outputIds;this._renderedMaterialGroups=materialGroups;
         this._splineFrameCache=nextFrames;
         this._revision=signature;this._lastAttempt='';this._lastMaterialWarning='';
         if(previousMesh&&previousMesh!==mesh)previousMesh.destroy();
@@ -564,7 +571,7 @@ export class SplineGeometryGraphRenderer extends Component {
         }
         this._fallback?.destroy();this._fallback=null;
         this._boundMaterials=[];this._subMeshCount=1;
-        this._autoSourceSlots=[];this._renderedOutputIds=[];this._lastMaterialWarning='';
+        this._autoSourceSlots=[];this._renderedOutputIds=[];this._renderedMaterialGroups=[];this._lastMaterialWarning='';
         this._runner.clear();this._splineFrameCache.clear();
     }
 }

@@ -63,7 +63,7 @@ const LIMITS=Object.freeze({
 });
 const NODE_KEYS=new Set(['id','type','input','meshInput','meshInputB','pathInputB','mergeDirection','mergeMaxGap','mergeMaxAngle','right','up','translateX','translateY','translateZ','rotateX','rotateY','rotateZ','pathScale','noiseRight','noiseUp','noiseForward','noiseFrequency','noiseOctaves','noisePersistence','noisePhase','noiseSeed','noiseFadeEnds','clipStart','clipEnd','resampleSegments','conformRayHeight','conformRayDepth','conformOffset','conformMinNormalY','conformMissing','conformAlign','multiplier','midMultiplier','endMultiplier','taperMode','width','widthKeys',
   'endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode','radius','radialSegments',
-  'height','profileShape','profileSlot','profileKeys','profileInterpolation','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
+  'height','profileShape','profileSlot','profileKeys','profileInterpolation','profileMaterials','deformShape','axis','slot','segments','repeats','repeatLayout','tileLength','uvMode']);
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const safeId=s=>typeof s==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s);
@@ -83,6 +83,15 @@ function validateWidthKeys(keys){
       throw Error('Invalid Width keys: endpoints 0/1, 0.001 minimum gap, multiplier .01–20.');
     prev=key.progress;
   });
+}
+function validateProfileMaterials(raw){
+  if(!object(raw)||Object.keys(raw).some(k=>!['outer','inner','startCap','endCap','edgeSlots'].includes(k)))
+    throw Error('Profile material mapping requires outer/inner/startCap/endCap/edgeSlots.');
+  for(const key of ['outer','inner','startCap','endCap'])if(Object.hasOwn(raw,key)&&
+    (!Number.isInteger(raw[key])||raw[key]<0||raw[key]>3))throw Error('Profile material slot must be 0–3.');
+  if(Object.hasOwn(raw,'edgeSlots')&&(!Array.isArray(raw.edgeSlots)||raw.edgeSlots.length<1||
+    raw.edgeSlots.length>256||Array.from(raw.edgeSlots).some(v=>!Number.isInteger(v)||v< -1||v>3)))
+    throw Error('Profile material edgeSlots requires 1–256 integer entries -1–3.');
 }
 function validateProfileKeys(keys){
   if(!Array.isArray(keys)||keys.length<2||keys.length>16)
@@ -111,7 +120,7 @@ function validateGraph(graph) {
       map.has(node.id))throw Error('Unknown, duplicate or invalid Graph node.');
     const info=TYPES[node.type];
     const allowed=new Set(['id','type',...inputPorts(node.type).map(p=>p.key),
-      ...(node.type==='width'?['widthKeys']:node.type==='extrude'?['profileKeys']:[]),...info.params]);
+      ...(node.type==='width'?['widthKeys']:node.type==='extrude'?['profileKeys','profileMaterials']:[]),...info.params]);
     if(Object.keys(node).some(k=>!allowed.has(k)||!NODE_KEYS.has(k)))
       throw Error('Unsupported Graph node parameter.');
     if(node.type==='spline'){
@@ -149,6 +158,7 @@ function validateGraph(graph) {
       throw Error('Merge Path requires distinct input nodes.');
     if(node.type==='clip'&&(node.clipEnd??1)-(node.clipStart??0)<.001-1e-12)
       throw Error('Clip end must be at least 0.001 above start.');
+    if(node.type==='extrude'&&node.profileMaterials!==undefined)validateProfileMaterials(node.profileMaterials);
     if(node.type==='extrude'&&node.profileInterpolation!==undefined&&node.profileKeys===undefined)
       throw Error('Profile interpolation requires Profile Keys.');
     if(node.type==='extrude'&&node.profileKeys!==undefined){
@@ -414,6 +424,11 @@ function applyGraphEdit(json,action,details={}) {
     if(current.type==='meshDeform'&&current.meshInput&&
        !next.nodes.some(n=>n.meshInput===current.meshInput))
       next.nodes=next.nodes.filter(n=>n.id!==current.meshInput);
+  }else if(action==='profile-materials-set'){
+    const target=find(details.id);
+    if(!target||target.type!=='extrude')throw Error('Select an Extrude node.');
+    if(details.value===null)delete target.profileMaterials;
+    else {validateProfileMaterials(details.value);target.profileMaterials=JSON.parse(JSON.stringify(details.value));}
   }else if(['profile-keys-enable','profile-keys-disable','profile-key-add','profile-key-remove','profile-key-set'].includes(action)){
     const target=find(details.id);
     if(!target||target.type!=='extrude')throw Error('Select an Extrude node.');
@@ -700,6 +715,12 @@ function renderProfileKeyControls(n){
     '<button type="button" data-profile-action="add"'+(keys.length>=16?' disabled':'')+'>＋ Key</button> '+
     '<button type="button" data-profile-action="disable">Use First Slot Only</button></div>';
 }
+function renderProfileMaterialControls(n){
+  return '<div class="spl-vg-width-keys"><strong>Profile Materials</strong>'+
+    '<div>JSON mapping: outer, inner, startCap, endCap (0–3); optional edgeSlots in flattened contour order (-1 inherits). Empty uses one material. Material A–D follow output order then used group IDs; maximum four total primitives.</div>'+
+    '<textarea data-profile-materials="true" rows="4" placeholder="{&quot;outer&quot;:0,&quot;inner&quot;:1,&quot;startCap&quot;:2,&quot;endCap&quot;:3}">'+
+    (n.profileMaterials===undefined?'':escapeHtml(JSON.stringify(n.profileMaterials)))+'</textarea></div>';
+}
 function renderNodeParameters(graphJson,id){
   const {map}=parseGraph(graphJson),n=map.get(id);
   if(!n)return '<div>Select a node to edit its parameters.</div>';
@@ -767,7 +788,7 @@ function renderNodeParameters(graphJson,id){
     (n.meshInput?'<div class="spl-vg-source">Imported mesh: '+escapeHtml(n.meshInput)+'</div>':'')+
     (n.type==='mergeMesh'?'<div class="spl-vg-note">One output material; positions, normals and UVs preserved. No vertex welding.</div>':'')+
     (rows?'<div class="spl-vg-params">'+rows+'</div>':'')+
-    (n.type==='width'?renderWidthKeyControls(n):n.type==='extrude'?renderProfileKeyControls(n):'');
+    (n.type==='width'?renderWidthKeyControls(n):n.type==='extrude'?renderProfileKeyControls(n)+renderProfileMaterialControls(n):'');
 }
 module.exports={TYPES,LIMITS,STAGE,inputPorts,inputLinks,parseGraph,validateGraph,applyGraphEdit,
   autoGraphLayout,graphCanvasSize,graphOutputIdsForNode,activeGraphOutputId,

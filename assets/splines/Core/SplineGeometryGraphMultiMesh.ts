@@ -14,7 +14,9 @@ export interface GraphMultiMeshChunk {
     outputId:string;
     geometry:Readonly<RoadGeometry>;
 }
+export interface GraphMaterialGroup {outputId:string;slot:number;}
 export interface GraphMultiMeshResult {
+    materialGroups:GraphMaterialGroup[];
     mesh:Mesh;
     outputIds:string[];
     vertexCount:number;
@@ -85,9 +87,10 @@ export function graphOutputMeshSourceSlots(
 export function checkGraphMultiMesh(chunks:ReadonlyArray<GraphMultiMeshChunk>):{
     vertexCount:number;indexCount:number;
 }{
-    if(!Array.isArray(chunks)||chunks.length<2||chunks.length>4)
-        throw Error('Multi-output Mesh requires 2–4 output branches.');
-    let vertexCount=0,indexCount=0;
+    if(!Array.isArray(chunks)||chunks.length<1||chunks.length>4||
+       (chunks.length===1&&chunks[0]?.geometry?.triangleMaterialSlots===undefined))
+        throw Error('Multi-output Mesh requires 2–4 output branches or one material-mapped output.');
+    let vertexCount=0,indexCount=0,primitiveCount=0;
     const ids=new Set<string>();
     for(const chunk of chunks){
         if(!chunk||!safeId(chunk.outputId)||ids.has(chunk.outputId))
@@ -107,12 +110,18 @@ export function checkGraphMultiMesh(chunks:ReadonlyArray<GraphMultiMeshChunk>):{
            g.uvs.some((n:number)=>!finite(n))||
            g.indices.some((n:number)=>!Number.isInteger(n)||n<0||n>=count))
             throw Error('Multi-output Mesh branch contains invalid geometry.');
+        const slots=g.triangleMaterialSlots;
+        if(slots!==undefined&&(!Array.isArray(slots)||slots.length!==g.indices.length/3||
+            Array.from(slots).some(s=>!Number.isInteger(s)||s<0||s>3)))
+            throw Error('Multi-output Mesh invalid triangle material slots.');
+        primitiveCount+=slots===undefined?1:new Set(slots).size;
+        if(primitiveCount>4)throw Error('Multi-output Mesh exceeds four material primitives.');
         vertexCount+=count;
         indexCount+=g.indices.length;
         if(vertexCount>MAX_VERTICES||indexCount>MAX_INDICES)
             throw Error('Multi-output Mesh combined geometry exceeds 65536 vertices / 393216 indices.');
     }
-    if(vertexCount*VERTEX_STRIDE+indexCount*2+chunks.length*4>MAX_BYTES)
+    if(vertexCount*VERTEX_STRIDE+indexCount*2+primitiveCount*4>MAX_BYTES)
         throw Error('Multi-output Mesh combined buffers exceed 8 MiB.');
     return {vertexCount,indexCount};
 }
@@ -126,14 +135,15 @@ export function createGraphMultiOutputMesh(
     const counts=checkGraphMultiMesh(chunks);
     const vertexBundles:Mesh.IVertexBundle[]=[];
     const primitives:Mesh.ISubMesh[]=[];
-    const segments:{vertexOffset:number;indexOffset:number}[]=[];
+    const segments:{vertexOffset:number;groups:{indexOffset:number;indices:ReadonlyArray<number>}[]}[]=[];
+    const materialGroups:GraphMaterialGroup[]=[];
     let offset=0;
     const attrs=[
         new gfx.Attribute(gfx.AttributeName.ATTR_POSITION,gfx.Format.RGB32F),
         new gfx.Attribute(gfx.AttributeName.ATTR_NORMAL,gfx.Format.RGB32F),
         new gfx.Attribute(gfx.AttributeName.ATTR_TEX_COORD,gfx.Format.RG32F),
     ];
-    for(const {geometry:g} of chunks){
+    for(const {geometry:g,outputId} of chunks){
         offset=align4(offset);
         const vertexOffset=offset,count=g.positions.length/3;
         const vertexLength=count*VERTEX_STRIDE;
@@ -143,17 +153,27 @@ export function createGraphMultiOutputMesh(
                 count,stride:VERTEX_STRIDE},
         });
         offset+=vertexLength;
-        offset=align4(offset);
-        const indexOffset=offset;
-        const indexLength=g.indices.length*2;
-        primitives.push({
-            vertexBundelIndices:[vertexBundles.length-1],
-            primitiveMode:gfx.PrimitiveMode.TRIANGLE_LIST,
-            indexView:{offset:indexOffset,length:indexLength,
-                count:g.indices.length,stride:2},
-        });
-        segments.push({vertexOffset,indexOffset});
-        offset+=indexLength;
+        const bySlot=new Map<number,number[]>();
+        if(g.triangleMaterialSlots===undefined)bySlot.set(0,g.indices);
+        else for(let t=0;t<g.triangleMaterialSlots.length;t++){
+            const slot=g.triangleMaterialSlots[t];
+            let list=bySlot.get(slot);if(!list){list=[];bySlot.set(slot,list);}
+            list.push(g.indices[t*3],g.indices[t*3+1],g.indices[t*3+2]);
+        }
+        const groups:{indexOffset:number;indices:ReadonlyArray<number>}[]=[];
+        for(const slot of [...bySlot.keys()].sort((a,b)=>a-b)){
+            const list=bySlot.get(slot)!;
+            offset=align4(offset);
+            const indexOffset=offset,indexLength=list.length*2;
+            primitives.push({
+                vertexBundelIndices:[vertexBundles.length-1],
+                primitiveMode:gfx.PrimitiveMode.TRIANGLE_LIST,
+                indexView:{offset:indexOffset,length:indexLength,count:list.length,stride:2},
+            });
+            groups.push({indexOffset,indices:list});
+            materialGroups.push({outputId,slot});offset+=indexLength;
+        }
+        segments.push({vertexOffset,groups});
     }
     if(offset>MAX_BYTES)throw Error('Multi-output Mesh combined buffers exceed 8 MiB.');
     const bytes=new Uint8Array(offset);
@@ -162,7 +182,7 @@ export function createGraphMultiOutputMesh(
     for(let chunkIndex=0;chunkIndex<chunks.length;chunkIndex++){
         const g=chunks[chunkIndex].geometry;
         const count=g.positions.length/3;
-        const {vertexOffset,indexOffset}=segments[chunkIndex];
+        const {vertexOffset,groups}=segments[chunkIndex];
         for(let i=0;i<count;i++){
             const at=vertexOffset+i*VERTEX_STRIDE;
             for(let k=0;k<3;k++){
@@ -175,9 +195,8 @@ export function createGraphMultiOutputMesh(
             view.setFloat32(at+24,g.uvs[i*2],true);
             view.setFloat32(at+28,g.uvs[i*2+1],true);
         }
-        for(let i=0;i<g.indices.length;i++){
-            view.setUint16(indexOffset+i*2,g.indices[i],true);
-        }
+        for(const group of groups)for(let i=0;i<group.indices.length;i++)
+            view.setUint16(group.indexOffset+i*2,group.indices[i],true);
     }
     const struct:Mesh.IStruct={
         vertexBundles,primitives,
@@ -187,7 +206,7 @@ export function createGraphMultiOutputMesh(
     const mesh=new MeshCtor();
     try{mesh.reset({struct,data:bytes});}
     catch(error){mesh.destroy();throw error;}
-    return {mesh,outputIds:chunks.map(c=>c.outputId),
+    return {mesh,materialGroups,outputIds:chunks.map(c=>c.outputId),
         vertexCount:counts.vertexCount,indexCount:counts.indexCount};
 }
 

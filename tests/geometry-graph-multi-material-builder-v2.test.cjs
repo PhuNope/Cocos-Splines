@@ -122,6 +122,18 @@ try{
   assert.equal(allocated,count+2);
   assert.equal(JSON.stringify(output),previous);
   broken=false;
+  const mappedRoad={...road,triangleMaterialSlots:[3,1]};
+  const mapped=createGraphMultiOutputMesh([{outputId:'road',geometry:mappedRoad}]);
+  assert.deepEqual(mapped.materialGroups,[{outputId:'road',slot:1},{outputId:'road',slot:3}]);
+  assert.equal(mapped.mesh.struct.vertexBundles.length,1);
+  assert.equal(mapped.mesh.struct.primitives.length,2);
+  assert(mapped.mesh.struct.primitives.every(p=>p.vertexBundelIndices[0]===0));
+  const mappedView=new DataView(mapped.mesh.data.buffer);
+  assert.deepEqual(mapped.mesh.struct.primitives.map(p=>Array.from({length:p.indexView.count},(_,i)=>mappedView.getUint16(p.indexView.offset+i*2,true))),[[1,2,3],[0,2,1]]);
+  const beforeInvalid=allocated;
+  assert.throws(()=>createGraphMultiOutputMesh([{outputId:'bad',geometry:{...road,triangleMaterialSlots:[0]}}]),/material slots/i);
+  assert.throws(()=>createGraphMultiOutputMesh([{outputId:'a',geometry:mappedRoad},{outputId:'b',geometry:mappedRoad},{outputId:'c',geometry:pipe}]),/four material primitives/i);
+  assert.equal(allocated,beforeInvalid);
   assert(require(root+'/package.json').scripts.test.includes(
    'geometry-graph-multi-material-builder-v2.test.cjs'));
   console.log('MULTI-MATERIAL GRAPH BUILDER PASS: two indexed primitives, vertex packing, bounds, wireframe, atomic allocation guards.');

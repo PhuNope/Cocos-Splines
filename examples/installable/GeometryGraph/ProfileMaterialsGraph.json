@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "output": "output",
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "extrude",
+      "type": "extrude",
+      "input": "source",
+      "width": 2,
+      "height": 1,
+      "profileKeys": [
+        {
+          "progress": 0,
+          "slot": 0
+        },
+        {
+          "progress": 1,
+          "slot": 1
+        }
+      ],
+      "profileInterpolation": 2,
+      "capEnds": true,
+      "profileMaterials": {
+        "outer": 0,
+        "inner": 1,
+        "startCap": 2,
+        "endCap": 3
+      }
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "extrude"
+    }
+  ]
+}

@@ -5,7 +5,7 @@
  */
 import {buildRoadGeometry, RoadCornerMode, RoadFrame, RoadGeometry} from './SplineRoadMath';
 import {buildTubeGeometry} from './SplineTubeMath';
-import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,GraphAuthoredProfile,graphProfileTopology,graphProfileUVSignature,interpolateGraphProfile,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
+import {buildProfileExtrudeGeometry,GraphProfileShape,GraphProfilePoint,GraphProfileUV,GraphAuthoredProfile,ProfileMaterialMapping,validateProfileMaterialMapping,graphProfileTopology,graphProfileUVSignature,interpolateGraphProfile,parseGraphProfileAsset} from './SplineProfileExtrudeMath';
 import {buildGraphMeshDeformGeometry} from './SplineGraphMeshDeformMath';
 import {MeshGeometry} from './SplineMeshDeformMath';
 import {sampleNoiseLayers,NoiseLayerConfig} from './SplineNoiseMath';
@@ -70,6 +70,7 @@ export interface GeometryGraphNode {
     profileKeys?:GeometryProfileKey[];
     /** 0 Step (legacy), 1 Linear, 2 Smoothstep; only valid with profileKeys. */
     profileInterpolation?:number;
+    profileMaterials?:ProfileMaterialMapping;
     deformShape?:number;segments?:number;repeats?:number;
     /** 0 Count (legacy), 1 physical length with clipped final tile. */
     repeatLayout?:number;
@@ -555,6 +556,7 @@ const meshCopy=(data:RoadGeometry):RoadGeometry=>({
     positions:data.positions.slice(),normals:data.normals.slice(),
     uvs:data.uvs.slice(),indices:data.indices.slice(),bands:data.bands,
     ringCount:data.ringCount,
+    ...(data.triangleMaterialSlots===undefined?{}:{triangleMaterialSlots:data.triangleMaterialSlots.slice()}),
 });
 const nodePort=(type:GeometryNodeType):GeometryPortType=>
     type==='meshAsset'?'meshSource':
@@ -631,7 +633,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
             node.type==='width'?['multiplier','midMultiplier','endMultiplier','taperMode','widthKeys']:
             node.type==='ribbon'?['width','endWidth','uvMetersPerRepeat','thickness','capEnds','cornerMode']:
             node.type==='tube'?['radius','radialSegments','uvMetersPerRepeat','capEnds']:
-            node.type==='extrude'?['width','height','profileShape','profileSlot','profileKeys','profileInterpolation','uvMetersPerRepeat','capEnds']:
+            node.type==='extrude'?['width','height','profileShape','profileSlot','profileKeys','profileInterpolation','profileMaterials','uvMetersPerRepeat','capEnds']:
             node.type==='meshDeform'?['axis','width','height','deformShape','segments','repeats','repeatLayout','tileLength','uvMode','uvMetersPerRepeat']:
             [])];
         onlyKeys(node as unknown as Record<string,unknown>,keys);
@@ -740,6 +742,7 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph Tube capEnds must be a boolean.');
         }
         if(node.type==='extrude'){
+            if(node.profileMaterials!==undefined)validateProfileMaterialMapping(node.profileMaterials);
             if(node.profileInterpolation!==undefined){
                 const mode=bound(node.profileInterpolation,0,2,'Profile interpolation');
                 if(!Number.isInteger(mode)||node.profileKeys===undefined)
@@ -782,7 +785,8 @@ export function compileGeometryGraph(graph:GeometryGraph):GeometryGraphPlan{
                 throw Error('Geometry Graph tileLength must be 0 or >= 0.01.');
             bound(node.uvMetersPerRepeat??5,.01,10000,'Mesh Deform UV length');
         }
-        table.set(node.id,{...node,...(node.profileKeys===undefined?{}:{profileKeys:node.profileKeys.map(k=>({...k}))})});
+        table.set(node.id,{...node,...(node.profileKeys===undefined?{}:{profileKeys:node.profileKeys.map(k=>({...k}))}),
+            ...(node.profileMaterials===undefined?{}:{profileMaterials:validateProfileMaterialMapping(node.profileMaterials)})});
     }
     if(sources<1||sources>3||meshAssets>3||(!multi&&outputs!==1)||
        (multi&&(outputs<2||outputs>4))||table.get(graph.output)?.type!=='output')
@@ -844,6 +848,9 @@ function validateFrames(context:GeometryGraphSplineSource):void{
 }
 function validateMesh(m:RoadGeometry):void{
     const vertices=m.positions.length/3;
+    if(m.triangleMaterialSlots!==undefined&&(!Array.isArray(m.triangleMaterialSlots)||
+       m.triangleMaterialSlots.length!==m.indices.length/3||Array.from(m.triangleMaterialSlots).some(s=>!Number.isInteger(s)||s<0||s>3)))
+        throw Error('Geometry Graph generated invalid material mapping.');
     if(!Number.isInteger(vertices)||vertices<4||vertices>65536||
        m.normals.length!==m.positions.length||m.uvs.length!==vertices*2||
        m.indices.length<3||m.indices.length>393216||
@@ -1114,7 +1121,7 @@ export class GeometryGraphRunner {
                     const geometry=buildProfileExtrudeGeometry(extrusionFrames,{
                         width:node.width??1,height:node.height??1,
                         profileShape:(node.profileShape??0) as GraphProfileShape,
-                        profile:authored,profileSections,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
+                        profile:authored,profileSections,profileMaterials:node.profileMaterials,profileUV:authoredUV,profileHoles:authoredHoles,profileOuterContours:authoredOuterContours,profileOuterHoles:authoredOuterHoles,
                         worldUvLinear:context.worldUvLinear,
                         uvMetersPerRepeat:node.uvMetersPerRepeat??5,
                         capEnds:node.capEnds??false,

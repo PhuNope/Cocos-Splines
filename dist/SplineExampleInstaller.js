@@ -74,6 +74,7 @@ const FILES=Object.freeze([
  ['GeometryGraph/ProfileMorphGraph.json','examples/installable/GeometryGraph/ProfileMorphGraph.json'],
  ['GeometryGraph/ContourMorphGraph.json','examples/installable/GeometryGraph/ContourMorphGraph.json'],
  ['GeometryGraph/ProfileUVMorphGraph.json','examples/installable/GeometryGraph/ProfileUVMorphGraph.json'],
+ ['GeometryGraph/ProfileMaterialsGraph.json','examples/installable/GeometryGraph/ProfileMaterialsGraph.json'],
  ['GeometryGraph/Profiles/UVMorphA.json','examples/installable/GeometryGraph/Profiles/UVMorphA.json'],
  ['GeometryGraph/Profiles/UVMorphB.json','examples/installable/GeometryGraph/Profiles/UVMorphB.json'],
  ['GeometryGraph/Profiles/ContourMorphA.json','examples/installable/GeometryGraph/Profiles/ContourMorphA.json'],

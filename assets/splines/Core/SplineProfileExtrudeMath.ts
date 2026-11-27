@@ -399,7 +399,33 @@ export function interpolateGraphProfile(a:GraphAuthoredProfile,b:GraphAuthoredPr
         ...(extra.some(part=>part.length>1)?{outerHoles:extra.map(part=>part.slice(1))}:{}),
         ...(a.uv===undefined?{}:{uv:a.uv})};
 }
+/** Material group IDs 0–3, independent of renderer-local material references.
+ * edgeSlots follows flattened part/loop/edge order; -1 inherits outer/inner.
+ */
+export interface ProfileMaterialMapping {
+    outer?:number;inner?:number;startCap?:number;endCap?:number;edgeSlots?:number[];
+}
+export function validateProfileMaterialMapping(raw:unknown):ProfileMaterialMapping{
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+       Object.keys(raw).some(k=>!['outer','inner','startCap','endCap','edgeSlots'].includes(k)))
+        throw Error('Profile material mapping requires outer/inner/startCap/endCap/edgeSlots.');
+    const r=raw as Record<string,unknown>,result:ProfileMaterialMapping={};
+    const valid=(n:unknown,min=0):n is number=>typeof n==='number'&&Number.isInteger(n)&&n>=min&&n<=3;
+    for(const k of ['outer','inner','startCap','endCap'] as const)if(Object.prototype.hasOwnProperty.call(r,k)){
+        const v=r[k];if(!valid(v))throw Error('Profile material slot must be an integer 0–3.');
+        result[k]=v;
+    }
+    if(Object.prototype.hasOwnProperty.call(r,'edgeSlots')){
+        const slots=r.edgeSlots;
+        if(!Array.isArray(slots)||slots.length<1||slots.length>256||
+           Array.from(slots).some(v=>!valid(v,-1)))
+            throw Error('Profile material edgeSlots requires 1–256 integer entries -1–3.');
+        result.edgeSlots=slots.slice();
+    }
+    return result;
+}
 export interface ProfileExtrudeSettings {
+    profileMaterials?:ProfileMaterialMapping;
     /** Optional data-only polygon; absent preserves built-in preset. */
     profile?:ReadonlyArray<Readonly<GraphProfilePoint>>;
     /** Optional one simple, index-compatible authored polygon per path frame. */
@@ -551,6 +577,9 @@ export function buildProfileExtrudeGeometry(
     const parts=keyedParts?.[0]??(authored?graphProfileParts(authored):[[PROFILES[profileShape]]]);
     const rings=parts.flat();
     const profile=rings.flat(),bands=profile.length;
+    const mapping=settings.profileMaterials===undefined?undefined:validateProfileMaterialMapping(settings.profileMaterials);
+    if(mapping?.edgeSlots&&mapping.edgeSlots.length!==bands)
+        throw Error('Profile material edgeSlots must match the total flattened profile edge count.');
     const nextEdge:number[]=[],ringStart:number[]=[],ringEnd:number[]=[];
     let offset=0;
     for(const ring of rings){
@@ -803,6 +832,20 @@ export function buildProfileExtrudeGeometry(
                 else indices.push(a,c,b);
             }
         }
+    }
+    if(mapping){
+        const sideSlots=parts.flatMap(part=>part.flatMap((loop,i)=>loop.map(()=>i===0?(mapping.outer??0):(mapping.inner??mapping.outer??0))));
+        const slots:number[]=[];
+        for(let j=0;j<bands;j++){
+            const override=mapping.edgeSlots?.[j]??-1;
+            const slot=override<0?sideSlots[j]:override;
+            for(let i=0;i<2*(frames.length-1);i++)slots.push(slot);
+        }
+        for(let i=0;i<triangles.length/3;i++)slots.push(mapping.startCap??mapping.outer??0);
+        for(let i=0;i<endTriangles.length/3;i++)slots.push(mapping.endCap??mapping.outer??0);
+        if(slots.length!==indices.length/3)throw Error('Profile material triangle count mismatch.');
+        // Triangle unwrap retains triangle order, only remaps vertex indices.
+        result.triangleMaterialSlots=slots;
     }
     const triangleGroups=activeUV?.triangleUnwrap===true?
         unwrapProfileUvTriangles(result):null;

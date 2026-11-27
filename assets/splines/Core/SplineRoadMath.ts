@@ -31,7 +31,7 @@ export interface RoadSettings {
     /** Fraction of local bend radius left clear of the trimmed inside edge. */
     cornerTrimSafety?:number;
 }
-export interface RoadGeometry {positions:number[];normals:number[];uvs:number[];indices:number[];bands:number;ringCount:number}
+export interface RoadGeometry {positions:number[];normals:number[];uvs:number[];indices:number[];bands:number;ringCount:number;triangleMaterialSlots?:number[]}
 interface CrossPoint {x:number;y:number}
 const add=(a:V3,b:V3):V3=>({x:a.x+b.x,y:a.y+b.y,z:a.z+b.z});
 const sub=(a:V3,b:V3):V3=>({x:a.x-b.x,y:a.y-b.y,z:a.z-b.z});

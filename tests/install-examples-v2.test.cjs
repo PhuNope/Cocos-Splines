@@ -52,6 +52,8 @@ try {
  assert.equal(morphGraph.nodes.find(n=>n.type==='extrude').profileInterpolation,2);
  const contourMorph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ContourMorphGraph.json'),'utf8'));
  assert.equal(contourMorph.nodes.find(n=>n.type==='extrude').profileInterpolation,2);
+ const materialGraph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ProfileMaterialsGraph.json'),'utf8'));
+ assert.equal(materialGraph.nodes.find(n=>n.type==='extrude').profileMaterials.inner,1);
  const uvMorph=JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/ProfileUVMorphGraph.json'),'utf8'));
  assert.equal(uvMorph.nodes.find(n=>n.type==='extrude').profileInterpolation,2);
  const uvProfiles=['UVMorphA','UVMorphB'].map(file=>JSON.parse(fs.readFileSync(path.join(first.folder,'GeometryGraph/Profiles/'+file+'.json'),'utf8')));

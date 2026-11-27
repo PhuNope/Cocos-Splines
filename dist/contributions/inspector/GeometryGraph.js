@@ -1339,6 +1339,14 @@ const inspector={
     });
     this.$.vgProperties.addEventListener('change',event=>{
       if((this._vgShared&&!this._vgSharedDraft)||this._vgSharedBusy||!this._vgSelected)return;
+      const materialInput=closest(event.target,'[data-profile-materials]');
+      if(materialInput){
+        try{const value=materialInput.value.trim();
+          if(value.length>4096)throw Error('Profile material mapping too large.');
+          editGraph(this,'profile-materials-set',{id:this._vgSelected,value:value?JSON.parse(value):null});
+        }catch(error){status(this,String(error?.message||error),true);}
+        return;
+      }
       const profileInput=closest(event.target,'[data-profile-field]');
       if(profileInput){
         const keys=graph.parseGraph(this._vgGraphJson).map.get(this._vgSelected)?.profileKeys;

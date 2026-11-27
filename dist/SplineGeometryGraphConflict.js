@@ -8,7 +8,7 @@
 const {parseGraph,validateGraph,TYPES,inputPorts}=require('./SplineGeometryGraphVisualModel');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const label=(id,key)=>id+'.'+key;
-const params=type=>[...(TYPES[type]?.params||[]),...(type==='width'?['widthKeys']:type==='extrude'?['profileKeys']:[])];
+const params=type=>[...(TYPES[type]?.params||[]),...(type==='width'?['widthKeys']:type==='extrude'?['profileKeys','profileMaterials']:[])];
 const topology=g=>JSON.stringify({
   version:g.version,output:g.output,
   nodes:g.nodes.map(n=>({id:n.id,type:n.type,ports:inputPorts(n.type).map(p=>[p.key,n[p.key]??null]),slot:['meshAsset','spline'].includes(n.type)?(n.slot??0):null}))
