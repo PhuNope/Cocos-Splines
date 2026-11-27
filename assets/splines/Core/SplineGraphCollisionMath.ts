@@ -13,8 +13,8 @@ export function buildGraphCollisionGeometry(chunks:ReadonlyArray<Readonly<Collis
             throw Error('Invalid Graph Collider geometry.');
         count+=g.positions.length/3;indexCount+=g.indices.length;
         if(count>65536||indexCount>393216)throw Error('Graph Collider exceeds geometry budget.');
-        if(Array.from(g.positions).some(p=>!Number.isFinite(p)||Math.abs(p)>1e7)||
-           Array.from(g.indices).some(i=>!Number.isInteger(i)||i<0||i>=g.positions.length/3))
+        if(Array.from(g.positions).some(p=>typeof p!=='number'||!Number.isFinite(p)||Math.abs(p)>1e7)||
+           Array.from(g.indices).some(i=>typeof i!=='number'||!Number.isInteger(i)||i<0||i>=g.positions.length/3))
             throw Error('Invalid Graph Collider position/index.');
     }
     const positions:number[]=[],indices:number[]=[],weld=new Map<string,number>();
