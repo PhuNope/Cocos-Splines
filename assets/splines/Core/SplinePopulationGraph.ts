@@ -203,7 +203,7 @@ export class PopulationGraphRunner {
             if(prior?.key===key){next.set(n.id,prior);reused++;continue;}
             const input=parent?.value;let value:Value;
             if(n.type==='spline'){
-                value={kind:'path',source:{...source!,frames:source!.frames.map(f=>({...f,position:copyVec(f.position),forward:copyVec(f.forward),up:copyVec(f.up)}))}};
+                value={kind:'path',source:{...source!,frames:source!.frames.map((f:PopulationGraphFrame)=>({...f,position:copyVec(f.position),forward:copyVec(f.forward),up:copyVec(f.up)}))}};
             }else if(n.type==='count'&&input?.kind==='path'){
                 value={kind:'candidates',closed:input.source.closed,points:countPoints(input.source,n)};
             }else if(n.type==='density'&&input?.kind==='candidates'){
