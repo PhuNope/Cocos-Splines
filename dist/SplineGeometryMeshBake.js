@@ -1,8 +1,12 @@
 'use strict';
 /** Bounded data-only glTF encoder and exclusive project asset writer. */
 const fs=require('node:fs'),path=require('node:path');
+const {partitionBakeGeometry,CHUNK_TRIANGLE_COUNTS,MAX_CHUNKS}=require('./SplineGeometryMeshChunk');
 const MAX_VERTICES=65536,MAX_INDICES=393216,MAX_BYTES=8*1024*1024;
-function encodeBakedGltf(snapshot){
+const MAX_CHUNK_BYTES=16*1024*1024;
+function encodeBakedGltf(snapshot,{chunkTriangles}={}){
+ const chunked=chunkTriangles!==undefined;
+ if(chunked&&!CHUNK_TRIANGLE_COUNTS.includes(chunkTriangles))throw Error('Invalid chunk triangle budget.');
  const outputs=snapshot?.outputs;
  if(!Array.isArray(outputs)||outputs.length<1||outputs.length>4)throw Error('Bake requires 1–4 outputs.');
  let vertices=0,indices=0,primitiveCount=0;
@@ -16,7 +20,7 @@ function encodeBakedGltf(snapshot){
      !['positions','normals','uvs'].every(k=>g[k].every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=1e8))||
      g.indices.some(i=>!Number.isInteger(i)||i<0||i>=n))throw Error('Invalid Bake geometry.');
   vertices+=n;indices+=g.indices.length;
-  if(vertices>MAX_VERTICES||indices>MAX_INDICES)throw Error('Bake exceeds geometry budget.');
+  if(n>MAX_VERTICES||g.indices.length>MAX_INDICES||vertices>MAX_VERTICES*(chunked?4:1)||indices>MAX_INDICES*(chunked?4:1))throw Error('Bake exceeds geometry budget.');
   const slots=g.triangleMaterialSlots;
   if(slots!==undefined&&(!Array.isArray(slots)||slots.length!==g.indices.length/3||Array.from(slots).some(s=>!Number.isInteger(s)||s<0||s>3)))throw Error('Invalid Bake material groups.');
   const groups=new Map();
@@ -29,8 +33,39 @@ function encodeBakedGltf(snapshot){
   if(primitiveCount>4)throw Error('Bake exceeds four material primitives.');
   prepared.push({outputId,g,groups,n});
  }
- const model={asset:{version:'2.0',generator:'Cocos Splines V2 Mesh Bake'},scene:0,scenes:[{nodes:[0]}],nodes:[{name:'BakedSpline',mesh:0}],
-  meshes:[{name:'BakedSpline',primitives:[]}],materials:[],accessors:[],bufferViews:[],buffers:[]};
+ // Keep one material table in physical output/group order, reused across chunks.
+ const model={asset:{version:'2.0',generator:'Cocos Splines V2 Mesh Bake'},scene:0,scenes:[{nodes:[0]}],nodes:chunked?[{name:'BakedSpline',children:[]}]:[{name:'BakedSpline',mesh:0}],
+  meshes:chunked?[]:[{name:'BakedSpline',primitives:[]}],materials:[],accessors:[],bufferViews:[],buffers:[]};
+ const materialIds=new Map();
+ for(const {outputId,groups} of prepared)for(const slot of [...groups.keys()].sort((a,b)=>a-b)){
+  materialIds.set(outputId+':'+slot,model.materials.length);
+  model.materials.push({name:outputId+'_group_'+slot,pbrMetallicRoughness:{metallicFactor:0,roughnessFactor:1}});
+ }
+ const work=[];
+ if(chunked){
+  let chunkCount=0,totalBytes=0;
+  // Count the actual remapped streams (including duplicated border vertices)
+  // before constructing binary buffers; keep the serialized asset bounded.
+  for(const {outputId,g} of prepared){
+   const leaves=partitionBakeGeometry(g,chunkTriangles,MAX_CHUNKS-chunkCount);
+   for(let i=0;i<leaves.length;i++){
+    const geometry=leaves[i],groups=new Map(),n=geometry.positions.length/3;
+    for(let t=0;t<geometry.indices.length/3;t++){
+     const slot=geometry.triangleMaterialSlots?.[t]??0;
+     if(!groups.has(slot))groups.set(slot,[]);
+     groups.get(slot).push(geometry.indices[t*3],geometry.indices[t*3+1],geometry.indices[t*3+2]);
+    }
+    totalBytes+=n*32+geometry.indices.length*2+groups.size*4;
+    if(totalBytes>MAX_CHUNK_BYTES)throw Error('Chunk Bake binary exceeds 16 MiB.');
+    const name=outputId+'_chunk_'+String(i).padStart(3,'0');
+    const meshIndex=model.meshes.length,nodeIndex=model.nodes.length;
+    model.meshes.push({name,primitives:[]});
+    model.nodes.push({name,mesh:meshIndex});model.nodes[0].children.push(nodeIndex);
+    work.push({outputId,g:geometry,groups,n,meshIndex});chunkCount++;
+   }
+   if(chunkCount>MAX_CHUNKS)throw Error('Chunk Bake exceeds chunk count budget.');
+  }
+ }else for(const p of prepared)work.push({...p,meshIndex:0});
  const buffers=[];let offset=0;
  function accessor(values,componentType,type,count,target,min,max){
   const bytes=componentType===5123?2:4;
@@ -45,7 +80,7 @@ function encodeBakedGltf(snapshot){
   model.accessors.push({bufferView:view,componentType,count,type,...(min?{min,max}:{})});
   return id;
  }
- for(const {outputId,g,groups,n} of prepared){
+ for(const {outputId,g,groups,n,meshIndex} of work){
   const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
   const pos=g.positions.map((v,i)=>{const f=Math.fround(v),k=i%3;min[k]=Math.min(min[k],f);max[k]=Math.max(max[k],f);return f;});
   const normals=[];
@@ -60,12 +95,11 @@ function encodeBakedGltf(snapshot){
   const attributes={POSITION:accessor(pos,5126,'VEC3',n,34962,min,max),
    NORMAL:accessor(normals,5126,'VEC3',n,34962),TEXCOORD_0:accessor(uv,5126,'VEC2',n,34962)};
   for(const slot of [...groups.keys()].sort((a,b)=>a-b)){
-   const list=groups.get(slot),material=model.materials.length;
-   model.materials.push({name:outputId+'_group_'+slot,pbrMetallicRoughness:{metallicFactor:0,roughnessFactor:1}});
-   model.meshes[0].primitives.push({attributes,indices:accessor(list,5123,'SCALAR',list.length,34963),material,mode:4});
+   const list=groups.get(slot),material=materialIds.get(outputId+':'+slot);
+   model.meshes[meshIndex].primitives.push({attributes,indices:accessor(list,5123,'SCALAR',list.length,34963),material,mode:4});
   }
  }
- if(offset>MAX_BYTES)throw Error('Bake binary exceeds 8 MiB.');
+ if(offset>(chunked?MAX_CHUNK_BYTES:MAX_BYTES))throw Error('Bake binary exceeds byte budget.');
  model.buffers.push({byteLength:offset,uri:'data:application/octet-stream;base64,'+Buffer.concat(buffers).toString('base64')});
  return JSON.stringify(model,null,2)+'\n';
 }
@@ -74,7 +108,7 @@ function writeNewBakedMesh(file,assetsRoot,content,{filesystem=fs}={}){
     typeof assetsRoot!=='string'||!path.isAbsolute(assetsRoot))throw Error('Bake requires a new .gltf inside Project/assets.');
  const root=path.resolve(assetsRoot),target=path.resolve(file),rel=path.relative(root,target);
  if(!rel||rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw Error('Bake destination must be inside Project/assets.');
- if(typeof content!=='string'||Buffer.byteLength(content)>12*1024*1024)throw Error('Invalid Bake content size.');
+ if(typeof content!=='string'||Buffer.byteLength(content)>24*1024*1024)throw Error('Invalid Bake content size.');
  let cursor=root;
  for(const segment of ['',...rel.split(path.sep).slice(0,-1)]){
   cursor=path.join(cursor,segment);
