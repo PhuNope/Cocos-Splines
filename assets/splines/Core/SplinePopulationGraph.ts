@@ -2,6 +2,7 @@
  * Input paths are immutable snapshots in WORLD space with cumulative distance.
  * Each stage owns its data; a failed evaluation never publishes partial output.
  */
+import type {PlacementDiagnostic,PlacementReason,PopulationGraphStageSummary} from './SplinePlacementDiagnostics';
 import {planPopulation,populationGate,validatePopulationPolicy} from './SplinePopulationMath';
 import type {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationVector} from './SplinePopulationMath';
 import {selectWeightedPrefab,validatePrefabWeights} from './SplinePopulationPlacementMath';
@@ -52,6 +53,9 @@ export interface PopulationGraphMetrics {computed:number;reused:number;nodes:num
 export interface PopulationGraphResult {
     instances:PopulationGraphInstance[];
     metrics:PopulationGraphMetrics;
+    /** Populated only when diagnostics are requested. */
+    diagnostics?:PlacementDiagnostic[];
+    stages?:PopulationGraphStageSummary[];
 }
 const LIMIT=2048;
 const id=(x:unknown):x is string=>typeof x==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(x);
@@ -216,7 +220,7 @@ type PathValue={kind:'path';source:PopulationGraphSource};
 type CandidateValue={kind:'candidates';closed:boolean;points:PopulationGraphPoint[]};
 type InstanceValue={kind:'instances';points:PopulationGraphInstance[]};
 type Value=PathValue|CandidateValue|InstanceValue;
-interface CacheEntry {key:string;version:number;value:Value}
+interface CacheEntry {key:string;version:number;value:Value;reasons?:Map<number,PlacementReason>}
 const mix=(a:PopulationVector,b:PopulationVector,t:number):PopulationVector=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t});
 function basis(a:PopulationGraphFrame,b:PopulationGraphFrame,t:number):{forward:PopulationVector;up:PopulationVector}{
     const unit=(v:PopulationVector):PopulationVector=>{
@@ -253,7 +257,7 @@ export class PopulationGraphRunner {
     private last:PopulationGraphMetrics={computed:0,reused:0,nodes:0};
     public get metrics():PopulationGraphMetrics{return {...this.last};}
     public clear():void{this.cache.clear();this.version=0;this.last={computed:0,reused:0,nodes:0};}
-    public evaluate(plan:PopulationGraphPlan,context:PopulationGraphContext):PopulationGraphResult{
+    public evaluate(plan:PopulationGraphPlan,context:PopulationGraphContext,trace=false):PopulationGraphResult{
         if(!context||!Array.isArray(context.sources)||context.sources.length>3||
            !integer(context.prefabSlotCount,1,128))throw Error('Invalid Population Graph context.');
         const next=new Map<string,CacheEntry>();let computed=0,reused=0,version=this.version;
@@ -274,7 +278,7 @@ export class PopulationGraphRunner {
                 surface?.revision??null,surface?.targetCount??null,obstacles?.revision??null]);
             const prior=this.cache.get(n.id);
             if(prior?.key===key){next.set(n.id,prior);reused++;continue;}
-            const input=parent?.value;let value:Value;
+            const input=parent?.value;let value:Value,reasons:Map<number,PlacementReason>|undefined;
             if(n.type==='spline'){
                 value={kind:'path',source:{...source!,frames:source!.frames.map((f:PopulationGraphFrame)=>({...f,position:copyVec(f.position),forward:copyVec(f.forward),up:copyVec(f.up)}))}};
             }else if((n.type==='count'||n.type==='spacing'||n.type==='random'||n.type==='jitter')&&input?.kind==='path'){
@@ -285,7 +289,9 @@ export class PopulationGraphRunner {
                 value={kind:'candidates',closed:input.closed,points:input.points.filter(p=>inPopulationProgressRange(p.progress,n.startProgress!,n.endProgress!,input.closed))};
             }else if(n.type==='density'&&input?.kind==='candidates'){
                 const p=policy(n,input.closed);validatePopulationPolicy(p);
-                const kept=new Set(planPopulation(input.points,p));
+                const rejected=new Map<number,PlacementReason>();
+                const kept=new Set(planPopulation(input.points,p,(index,reason)=>rejected.set(index,reason)));
+                reasons=rejected;
                 value={kind:'candidates',closed:input.closed,points:input.points.filter(x=>kept.has(x.index))};
             }else if(n.type==='offset'&&input?.kind==='candidates'){
                 value={...input,points:input.points.map(p=>offsetPopulationPoint(p,n.offset!,n.space??'frame'))};
@@ -306,13 +312,34 @@ export class PopulationGraphRunner {
                 value={kind:'instances',points:input.points.map(p=>({...p,prefabSlot:selectWeightedPrefab(n.weights!,populationGate(n.seed??0,p.index))}))};
             }else if(n.type==='output'&&input?.kind==='instances')value=input;
             else throw Error('Population Graph invalid compiled input.');
-            next.set(n.id,{key,value,version:++version});computed++;
+            next.set(n.id,{key,value,version:++version,reasons});computed++;
         }
         const result=next.get(plan.output)?.value;
         if(result?.kind!=='instances')throw Error('Population Graph missing instance output.');
         const instances=result.points.map(copyPoint);
+        const report=trace?this.trace(plan,next,instances):{};
         this.cache=next;this.version=version;this.last={computed,reused,nodes:plan.nodes.length};
-        return {instances,metrics:this.metrics};
+        return {instances,metrics:this.metrics,...report};
+    }
+    /** Derive trace from the exact cached stage values; never rerun a filter or raycast. */
+    private trace(plan:PopulationGraphPlan,entries:Map<string,CacheEntry>,instances:PopulationGraphInstance[]):{diagnostics:PlacementDiagnostic[];stages:PopulationGraphStageSummary[]}{
+        const diagnostics=new Map<number,PlacementDiagnostic>(),stages:PopulationGraphStageSummary[]=[];
+        for(const n of plan.nodes){
+            const entry=entries.get(n.id)!,before=n.input===undefined?undefined:entries.get(n.input)?.value,after=entry.value;
+            if(after.kind==='path')continue;
+            const incoming=before&&before.kind!=='path'?before.points:[],outgoing=after.points;
+            const kept=new Set(outgoing.map(p=>p.index));
+            const rejected=incoming.filter(p=>!kept.has(p.index));
+            for(const p of rejected){
+                const reason:PlacementReason|undefined=n.type==='range'?'exclusion':n.type==='surface'?'surface':n.type==='obstacle'?'collider':entry.reasons?.get(p.index);
+                if(!reason||diagnostics.has(p.index))throw Error('Population Graph incomplete rejection attribution.');
+                diagnostics.set(p.index,{index:p.index,progress:p.progress,position:copyVec(p.position),radius:0,reason});
+            }
+            stages.push({id:n.id,type:n.type,input:incoming.length,output:outgoing.length,rejected:rejected.length,
+                examples:rejected.slice(0,3).map(p=>p.index)});
+        }
+        for(const p of instances)diagnostics.set(p.index,{index:p.index,progress:p.progress,position:copyVec(p.position),radius:0,reason:'accepted'});
+        return {diagnostics:[...diagnostics.values()].sort((a,b)=>a.index-b.index),stages};
     }
 }
 export const DEFAULT_POPULATION_GRAPH=JSON.stringify({version:1,output:'output',nodes:[

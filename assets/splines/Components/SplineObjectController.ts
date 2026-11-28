@@ -20,7 +20,7 @@ import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 import {filterSharedOccupancy,type SharedOccupancyCandidate,type SharedOccupant} from '../Core/SplineSharedOccupancyMath';
 import {DEFAULT_POPULATION_GRAPH,parsePopulationGraph,PopulationGraphRunner} from '../Core/SplinePopulationGraph';
-import type {PopulationGraphPlan,PopulationGraphContext,PopulationGraphInstance,PopulationGraphMetrics} from '../Core/SplinePopulationGraph';
+import type {PopulationGraphPlan,PopulationGraphContext,PopulationGraphInstance,PopulationGraphMetrics,PopulationGraphResult} from '../Core/SplinePopulationGraph';
 import type {PopulationSurfaceRaycast} from '../Core/SplinePopulationSurfaceMath';
 import {samplePopulationGraphSource,stagePopulationGraphInstances} from '../Core/SplinePopulationGraphHost';
 const {ccclass,property,menu}=_decorator;
@@ -400,7 +400,7 @@ export class SplineObjectController extends Component {
     }
     /** Read-only evaluation of current graph inputs. Explicit respawn always
      * uses a fresh runner so moving physics results never reuse stale queries. */
-    private prepareGraphPlacement():{instances:PopulationGraphInstance[];metrics:PopulationGraphMetrics;signature:string}{
+    private prepareGraphPlacement(trace=false):PopulationGraphResult&{signature:string}{
         const text=this.graphText(),plan=parsePopulationGraph(text);
         if(!Array.isArray(this.prefabs)||this.prefabs.length<1||this.prefabs.length>128||this.prefabs.some(p=>!p))
             throw Error('Population Graph requires 1–128 nonempty Prefab slots; slot order is preserved.');
@@ -417,7 +417,7 @@ export class SplineObjectController extends Component {
             context.surface={revision:'fresh-surface',targetCount:targets.length,raycast:this.surfaceRaycast(targets)};
         }
         if(plan.nodes.some(n=>n.type==='obstacle'))context.obstacles={revision:'fresh-obstacles',shapes:this.obstacleShapes()};
-        const result=new PopulationGraphRunner().evaluate(plan,context);
+        const result=new PopulationGraphRunner().evaluate(plan,context,trace);
         return {...result,signature:this.graphSignature(plan,text)};
     }
     public previewPopulationGraph():PopulationGraphInstance[]{return this.prepareGraphPlacement().instances;}
@@ -504,12 +504,15 @@ export class SplineObjectController extends Component {
     }
     /** Authoritative preflight for both read-only preview and Respawn. */
     public previewPlacement():PlacementDiagnostic[]{
-        if(this.usePopulationGraph)return this.previewPopulationGraph().map(p=>({index:p.index,progress:p.progress,position:p.position,radius:0,reason:'accepted'}));
+        if(this.usePopulationGraph)return this.prepareGraphPlacement(true).diagnostics!;
         return this.preparePlacement(true)?.diagnostics??[];
     }
     /** Read-only exact candidate counts (not the limited drawn Gizmo markers). */
     public summarizePlacement():PlacementSummary{
-        if(this.usePopulationGraph)throw Error('Population Graph preview shows accepted candidates only; per-stage rejection statistics are not available yet.');
+        if(this.usePopulationGraph){
+            const graph=this.prepareGraphPlacement(true);
+            return {...summarizePlacementDiagnostics(graph.diagnostics!),graphStages:graph.stages!};
+        }
         return summarizePlacementDiagnostics(this.previewPlacement());
     }
     public placementPreviewRevision():string{

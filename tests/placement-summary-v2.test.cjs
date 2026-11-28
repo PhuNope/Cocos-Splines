@@ -131,6 +131,9 @@ async function main(){
    assert.match(formatPlacementSummary(empty),/Total: 0/);
    assert.throws(()=>formatPlacementSummary({...stats,rejected:99}));
    assert.throws(()=>formatPlacementSummary({...stats,byReason:{...stats.byReason,spacing:NaN}}));
+   const graphSummary={...empty,total:3,accepted:1,rejected:2,byReason:{...empty.byReason,accepted:1,exclusion:1,surface:1},examples:{...empty.examples,exclusion:[2],surface:[0]},graphStages:[{id:'dist',type:'count',input:0,output:3,rejected:0,examples:[]},{id:'range',type:'range',input:3,output:2,rejected:1,examples:[2]},{id:'ground',type:'surface',input:2,output:1,rejected:1,examples:[0]},{id:'prefab',type:'prefab',input:1,output:1,rejected:0,examples:[]},{id:'out',type:'output',input:1,output:1,rejected:0,examples:[]}]};
+   assert.match(formatPlacementSummary(graphSummary),/ground \(surface\): 2 → 1/);
+   assert.throws(()=>formatPlacementSummary({...graphSummary,graphStages:graphSummary.graphStages.map(s=>s.id==='ground'?{...s,input:3}:s)}));
    const unsafe={...stats,examples:{...stats.examples,surface:['<script>']}};
    assert.throws(()=>formatPlacementSummary(unsafe));
    const packageJSON=require(root+'/package.json');

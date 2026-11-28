@@ -89,6 +89,8 @@ export function attributePlacementDiagnostics(stages:PlacementDiagnosticStages):
 export const PLACEMENT_REASONS:ReadonlyArray<PlacementReason>=
     ['accepted','surface','collider','peer','exclusion','density','spacing'];
 
+/** Candidate-flow counts. Source path is omitted; distribution input is 0. */
+export interface PopulationGraphStageSummary {id:string;type:string;input:number;output:number;rejected:number;examples:number[]}
 export interface PlacementSummary {
     total:number;
     accepted:number;
@@ -96,6 +98,7 @@ export interface PlacementSummary {
     byReason:Record<PlacementReason,number>;
     /** At most three original candidate indexes per rejection reason. */
     examples:Record<Exclude<PlacementReason,'accepted'>,number[]>;
+    graphStages?:PopulationGraphStageSummary[];
 }
 /** Exact totals for all preflight candidates, NOT the sampled Gizmo markers.
  * Validates reason/index contracts before returning a compact, serializable

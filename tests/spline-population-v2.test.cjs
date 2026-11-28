@@ -175,7 +175,7 @@ try{
     const oldRoot=controller.spawnedRoot,oldNodes=oldRoot.children.slice();
     const preview=controller.previewPopulationGraph();assert.equal(preview.length,6);
     assert.deepEqual(oldRoot.children,oldNodes);assert.equal(controller.previewPlacement().length,6);
-    assert.throws(()=>controller.summarizePlacement(),/rejection statistics/i);
+    const graphStats=controller.summarizePlacement();assert.equal(graphStats.total,6);assert.equal(graphStats.accepted,6);assert.equal(graphStats.graphStages.length,5);assert.deepEqual(oldRoot.children,oldNodes);
     assert.equal(controller.respawn(),6);assert.equal(controller.spawnedRoot,oldRoot);
     assert(oldNodes.every(n=>!n.isValid));
     assert.deepEqual(oldRoot.children.map(n=>n.worldPosition.x),[0,2,4,6,8,10]);

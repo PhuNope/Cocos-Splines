@@ -167,6 +167,18 @@ try{
  assert(runner.evaluate(compilePopulationGraph(transformExample),ctx).instances.length>0);
  const surfaceExample=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/SurfacePopulationGraph.json','utf8'));
  assert(runner.evaluate(compilePopulationGraph(surfaceExample),surfaceCtx).instances.length>0);
+ // Exact trace from cached values, with no extra raycasts or RNG pass.
+ const tracePlan=chain([{type:'range',startProgress:0,endProgress:.8},ground,align,{type:'obstacle',clearance:0}, {type:'density',density:0}]);
+ const traceBefore=rayCount;const traced=runner.evaluate(tracePlan,surfaceCtx,true);
+ assert.equal(rayCount,traceBefore+4);assert.equal(traced.instances.length,0);
+ assert.deepEqual(traced.diagnostics.map(d=>d.reason),['density','collider','surface','density','exclusion']);
+ assert.deepEqual(traced.stages.map(s=>[s.type,s.input,s.output,s.rejected]),[['count',0,5,0],['range',5,4,1],['surface',4,3,1],['align',3,3,0],['obstacle',3,2,1],['density',2,0,2],['prefab',0,0,0],['output',0,0,0]]);
+ assert(Math.abs(traced.diagnostics[1].position.y-2-Math.SQRT1_2)<1e-9);
+ const traceRays=rayCount,again=runner.evaluate(tracePlan,surfaceCtx,true);assert.equal(rayCount,traceRays);assert.deepEqual(again.diagnostics,traced.diagnostics);
+ traced.diagnostics[1].position.y=999;traced.stages[1].examples[0]=999;
+ assert.deepEqual(runner.evaluate(tracePlan,surfaceCtx,true).diagnostics,again.diagnostics);
+ assert.deepEqual(runner.evaluate(tracePlan,surfaceCtx,true).stages,again.stages);
+ assert.equal(runner.evaluate(tracePlan,surfaceCtx).diagnostics,undefined);
  // Visual model parity with the authoritative runtime compiler.
  const visual=require(root+'/dist/SplinePopulationGraphVisualModel.js');
  let visualText=DEFAULT_POPULATION_GRAPH;

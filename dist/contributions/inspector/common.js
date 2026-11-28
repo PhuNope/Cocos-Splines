@@ -525,7 +525,27 @@ function formatPlacementSummary(stats){
     if(sum!==stats.total||stats.byReason.accepted!==stats.accepted)
         throw Error('Placement reason totals do not match candidate count.');
     const pct=stats.total?Math.round(stats.accepted/stats.total*1000)/10:0;
+    let graphText='';
+    if(stats.graphStages!==undefined){
+        const stages=stats.graphStages;
+        if(!Array.isArray(stages)||stages.length<3||stages.length>31)throw Error('Invalid Population Graph stage count.');
+        const ids=new Set();let previous=0,rejections=0;
+        const distributions=['count','spacing','random','jitter'];
+        const filters=['range','density','offset','rotation','scale','align','surface','obstacle'];
+        const stageRows=stages.map((s,i)=>{
+            if(!s||typeof s.id!=='string'||!/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(s.id)||ids.has(s.id)||
+               !(i===0?distributions:i===stages.length-2?['prefab']:i===stages.length-1?['output']:filters).includes(s.type)||
+               ![s.input,s.output,s.rejected].every(n=>Number.isInteger(n)&&n>=0&&n<=2048)||
+               s.input!==previous||(i===0?(s.output!==stats.total||s.rejected!==0):s.output+s.rejected!==s.input)||
+               !Array.isArray(s.examples)||s.examples.length!==Math.min(s.rejected,3)||s.examples.some((n,j)=>!Number.isInteger(n)||n<0||n>2047||(j>0&&n<=s.examples[j-1])))
+                throw Error('Invalid Population Graph stage statistics.');
+            ids.add(s.id);previous=s.output;rejections+=s.rejected;
+            return s.id+' ('+s.type+'): '+s.input+' → '+s.output+' | Rejected: '+s.rejected+(s.examples.length?' (index '+s.examples.join(', ')+')':'');
+        });
+        if(previous!==stats.accepted||rejections!==stats.rejected)throw Error('Population Graph stage totals mismatch.');
+        graphText='\n\nGraph stages (candidate counts; source path omitted):\n'+stageRows.join('\n')+'\nRange rejections are included in Exclusion.';
+    }
     return 'Total: '+stats.total+'  |  Accepted: '+stats.accepted+' ('+pct+'%)  |  Rejected: '+
-        stats.rejected+'\n'+rows.join('\n')+'\nSnapshot: press Analyze Placement again to refresh.';
+        stats.rejected+'\n'+rows.join('\n')+graphText+'\nSnapshot: press Analyze Placement again to refresh.';
 }
 module.exports={makeInspector,style,callEditor,escapeHtml,formatPlacementSummary};

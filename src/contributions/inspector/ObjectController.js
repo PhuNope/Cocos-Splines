@@ -14,7 +14,7 @@ const template=base.template+`
  <button class="spl-pg-up" type="button">↑ Move</button><button class="spl-pg-down" type="button">↓ Move</button><button class="spl-pg-remove" type="button">Remove</button>
  </div>
  <div class="spl-pg-fields"></div><button class="spl-pg-apply" type="button">Apply parameters</button>
- <div class="spl-pg-note">Edits affect local graph only. Respawn explicitly to update instances. Scene placement gizmos preview accepted candidates.</div>
+ <div class="spl-pg-note">Edits affect local graph only. Respawn explicitly to update instances. Analyze Placement shows exact per-node counts; gizmos show accepted and rejected positions.</div>
 </details>`;
 const style=base.style+`
 .spl-pg-chain{display:flex;flex-direction:column;gap:3px;padding:6px 0}
@@ -96,15 +96,15 @@ module.exports={...base,template,style,$,
  },
  ready(){
   base.ready.call(this);
-  this.$.pgChain.addEventListener('click',event=>{
+  this.$.pgChain?.addEventListener('click',event=>{
    const id=event.target?.closest?.('[data-pg-node]')?.dataset?.pgNode;
    if(id){this._pgSelected=id;render(this);}
   });
-  const click=(k,action)=>this.$[k].addEventListener('click',()=>commit(this,action()));
+  const click=(k,action)=>this.$[k]?.addEventListener('click',()=>commit(this,action()));
   click('pgReplace',()=>({kind:'distribution',type:this.$.pgDistribution.value}));
   click('pgInsert',()=>({kind:'insert',type:this.$.pgFilter.value}));
   click('pgRemove',()=>({kind:'remove'}));click('pgUp',()=>({kind:'move',delta:-1}));click('pgDown',()=>({kind:'move',delta:1}));
-  this.$.pgApply.addEventListener('click',()=>{
+  this.$.pgApply?.addEventListener('click',()=>{
    try{
     const g=model.parse(this._pgRenderedText),n=g.nodes.find(n=>n.id===this._pgSelected),d=model.TYPES[n.type],params={};
     for(const widget of this.$.pgFields.querySelectorAll('[data-pg-param]')){

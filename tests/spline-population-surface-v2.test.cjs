@@ -173,6 +173,9 @@ try{
       {id:'prefab',type:'prefab',input:'filter',weights:[1]},
       {id:'out',type:'output',input:'prefab'}]});
     const graphPreview=ctrl.previewPopulationGraph();assert.deepEqual(graphPreview.map(p=>p.index),[1]);
+    const originalNodes=ctrl.spawnedRoot.children.slice(),rayStart=physics.calls.length;
+    const stats=ctrl.summarizePlacement();assert.equal(stats.total,3);assert.equal(stats.accepted,1);assert.equal(stats.byReason.surface,1);assert.equal(stats.byReason.collider,1);assert.equal(physics.calls.length,rayStart+3);
+    assert.deepEqual(ctrl.spawnedRoot.children,originalNodes);assert.deepEqual(ctrl.previewPlacement().map(p=>p.reason),['collider','accepted','surface']);
     assert.equal(ctrl.respawn(),1);assert.equal(ctrl.spawnedRoot.children[0].worldPosition.y,-1.5);
     assert.equal(ctrl.spawnedRoot.children[0].worldRotation.axes.y.y,1);
     const committed=ctrl.spawnedRoot.children.slice();ctrl.surfaceColliders=[];
