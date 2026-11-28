@@ -149,9 +149,9 @@ try{
  assert.deepEqual(filtered.map(p=>p.prefabSlot),base.filter(p=>[0,3,4].includes(p.index)).map(p=>p.prefabSlot));
  const rays=rayCount;assert.deepEqual(run(filteredStages,surfaceCtx),filtered);assert.equal(rayCount,rays);
  const changedObstacle={...surfaceCtx,obstacles:{revision:'obstacle-b',shapes:[]}};
- const changed=runner.evaluate(chain(filteredStages),changedObstacle);
- assert.deepEqual(changed.instances.map(p=>p.index),[0,1,3,4]);
- assert.deepEqual(changed.metrics,{computed:4,reused:4,nodes:8});assert.equal(rayCount,rays);
+ const changedFilter=runner.evaluate(chain(filteredStages),changedObstacle);
+ assert.deepEqual(changedFilter.instances.map(p=>p.index),[0,1,3,4]);
+ assert.deepEqual(changedFilter.metrics,{computed:4,reused:4,nodes:8});assert.equal(rayCount,rays);
  const changedSurface={...changedObstacle,surface:{...surface,revision:'surface-b'}};
  runner.evaluate(chain(filteredStages),changedSurface);assert.equal(rayCount,rays+5);
  const last=runner.metrics;
