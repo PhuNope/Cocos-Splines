@@ -284,7 +284,7 @@ export class SplineTrainController extends Component {
             if(this.enableTraffic){
                 const transitions=this.trafficTransitions(route),head=normalizeTrainHead(route.metric,distance,this.cars.length,this.centerSpacing);
                 if(this.dynamicRouting&&head>route.metric.length-this.trafficStopGap)throw Error('Dynamic train must fit before initial endpoint stop margin.');
-                if(route.metric.loop&&(distance!==head||head<trainTailOffset(this.cars.length,this.centerSpacing)))
+                if(route.metric.loop&&(distance<trainTailOffset(this.cars.length,this.centerSpacing)||distance>=route.metric.length))
                     throw Error('Train loop traffic must initialize with all cars after the seam.');
                 if(transitions.length&&head>transitions[0].distance-this.trafficStopGap)
                     throw Error('Train traffic must initialize before the first junction.');

@@ -44,19 +44,25 @@ export function trainTailOffset(carCount:number,spacing:number):number{
         throw Error('Train requires 1–128 cars and spacing .01–10000.');
     return (carCount-1)*spacing;
 }
+function wrapDistance(distance:number,length:number):number{
+    const r=distance%length;
+    // Avoid adding length to positive fractions (can round to the seam).
+    const wrapped=r<0?r+length:r;
+    return wrapped>=length||wrapped===0?0:wrapped;
+}
 export function normalizeTrainHead(route:TrainRouteMetric,head:number,carCount:number,spacing:number):number{
     const tail=trainTailOffset(carCount,spacing);
     if(!Number.isFinite(head)||Math.abs(head)>1e12)throw Error('Invalid train head distance.');
     // A loop must have room for one more center spacing across its seam.
     if(route.loop?carCount*spacing>route.length:tail>route.length)
         throw Error('Train does not fit on route.');
-    return route.loop?((head%route.length)+route.length)%route.length:Math.max(tail,Math.min(route.length,head));
+    return route.loop?wrapDistance(head,route.length):Math.max(tail,Math.min(route.length,head));
 }
 export function locateTrainCars(route:TrainRouteMetric,head:number,carCount:number,spacing:number):TrainCarLocation[]{
     const h=normalizeTrainHead(route,head,carCount,spacing);
     return Array.from({length:carCount},(_,i)=>{
         let d=h-i*spacing;
-        if(route.loop)d=((d%route.length)+route.length)%route.length;
+        if(route.loop)d=wrapDistance(d,route.length);
         // Exact internal boundary belongs to the next leg (travel direction).
         let lo=0,hi=route.legs.length-1;
         while(lo<hi){const mid=(lo+hi)>>>1;if(d>=route.legs[mid].end)lo=mid+1;else hi=mid;}

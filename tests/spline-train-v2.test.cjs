@@ -18,6 +18,8 @@ try{
  assert.deepEqual(locateTrainCars(loop,2,3,4).map(x=>x.routeDistance),[2,28,24]);
  assert.deepEqual(advanceTrainHead(loop,28,4,2,3,4),{distance:6,arrived:false});
  assert.throws(()=>normalizeTrainHead(loop,0,8,4),/fit/);
+ assert.equal(normalizeTrainHead(loop,4.1,3,1),4.1);
+ assert.equal(normalizeTrainHead(loop,30-Number.EPSILON*16,1,1),30-Number.EPSILON*16);
  assert.throws(()=>compileTrainRoute([{arc:[{progress:0,distance:0},{progress:1,distance:0}],backwards:false}],false));
  class Vec3{constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}clone(){return new Vec3(this.x,this.y,this.z);}static dot(a,b){return a.x*b.x+a.y*b.y+a.z*b.z;}}
  class Quat{constructor(x=0,y=0,z=0,w=1){Object.assign(this,{x,y,z,w});}clone(){return Object.assign(new Quat(),this);}static fromEuler(o){return o;}static fromAxes(o,x,y,z){o.axes={x,y,z};return o;}static multiply(o,a){return Object.assign(o,a);}}
