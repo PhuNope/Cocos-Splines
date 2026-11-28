@@ -54,6 +54,9 @@ try{
     clone(){return new Vec3(this.x,this.y,this.z);}
     set(x,y,z){if(x&&typeof x==='object')return this.set(x.x,x.y,x.z);
       Object.assign(this,{x,y,z});return this;}
+    lengthSqr(){return this.x*this.x+this.y*this.y+this.z*this.z;}
+    static subtract(out,a,b){return out.set(a.x-b.x,a.y-b.y,a.z-b.z);}
+    static normalize(out,a){const length=Math.hypot(a.x,a.y,a.z);return length?out.set(a.x/length,a.y/length,a.z/length):out.set(0,0,0);}
     static add(out,a,b){return out.set(a.x+b.x,a.y+b.y,a.z+b.z);}
     static transformQuat(out,a){return out.set(a);}
   }
@@ -101,7 +104,7 @@ try{
   Module._load=function(name,parent,isMain){
     if(name==='cc')return cc;
     if(name==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};
-    if(name==='../Core/SplineContainer')return {SplineContainer:class SplineContainer{}};
+    if(name==='../Core/SplineContainer'||name==='./SplineContainer')return {SplineContainer:class SplineContainer{}};
     if(name==='./SplineModifiers')return {SplineModifiers:class SplineModifiers{}};
     if(name==='./SplineNoise')return {SplineNoise:class SplineNoise{}};
     if(name==='./SplineInstantiate')return {InstantiateMethod:{Count:0,Distance:1}};
@@ -111,7 +114,8 @@ try{
     const {SplineObjectController}=require(
       path.join(tmp,'Components','SplineObjectController.js'));
     const spline={count:2,closed:false,length:10,node:new Node('spline'),
-      getRevision:()=>1,evaluateWorldPosition:t=>new Vec3(t*10,0,0),
+      segmentCount:1,getRevision:()=>1,evaluateWorldPosition:t=>new Vec3(t*10,0,0),
+      evaluateTangent:()=>new Vec3(1,0,0),evaluateUp:()=>new Vec3(0,1,0),
       evaluateRotation:()=>new Quat()};
     const ctrl=new SplineObjectController();ctrl.spline=spline;
     ctrl.prefabs=[{id:'A'}];ctrl.count=3;ctrl.alignToSpline=true;
@@ -159,6 +163,22 @@ try{
     const signatureOff=ctrl.signature();
     ctrl.surfaceOffset=-99;
     assert.equal(ctrl.signature(),signatureOff,'Disabled surface settings ignored');
+    // Graph uses real shared world-frame adapter and the same explicit-target
+    // raycast path, independently of ordinary conform/avoid toggles.
+    ctrl.usePopulationGraph=true;ctrl.populationGraphJson=JSON.stringify({version:1,output:'out',nodes:[
+      {id:'source',type:'spline'},{id:'dist',type:'count',input:'source',count:3},
+      {id:'project',type:'surface',input:'dist',rayHeight:10,rayDepth:20,surfaceOffset:.5},
+      {id:'align',type:'align',input:'project',alignment:'surface'},
+      {id:'filter',type:'obstacle',input:'align',clearance:0},
+      {id:'prefab',type:'prefab',input:'filter',weights:[1]},
+      {id:'out',type:'output',input:'prefab'}]});
+    const graphPreview=ctrl.previewPopulationGraph();assert.deepEqual(graphPreview.map(p=>p.index),[1]);
+    assert.equal(ctrl.respawn(),1);assert.equal(ctrl.spawnedRoot.children[0].worldPosition.y,-1.5);
+    assert.equal(ctrl.spawnedRoot.children[0].worldRotation.axes.y.y,1);
+    const committed=ctrl.spawnedRoot.children.slice();ctrl.surfaceColliders=[];
+    assert.throws(()=>ctrl.respawn(),/surface/i);assert.deepEqual(ctrl.spawnedRoot.children,committed);
+    ctrl.surfaceColliders=[ground];ctrl.obstacleColliders=[];assert.equal(ctrl.respawn(),2);
+    assert.deepEqual(ctrl.spawnedRoot.children.map(n=>n.name),['Spline Object 000','Spline Object 001']);
   }finally{Module._load=previous;}
   const pkg=require(root+'/package.json');
   assert(pkg.scripts.test.includes('spline-population-surface-v2.test.cjs'));

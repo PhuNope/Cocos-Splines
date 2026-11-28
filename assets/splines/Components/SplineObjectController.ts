@@ -147,6 +147,8 @@ export class SplineObjectController extends Component {
     private _signature='';
     private _graphMetrics:PopulationGraphMetrics={computed:0,reused:0,nodes:0};
     private _graphWarning='';
+    /** Last automatic graph rebuild error; runtime does not spam the console. */
+    public getPopulationGraphError():string{return this._graphWarning;}
     public getPopulationGraphMetrics():PopulationGraphMetrics{return {...this._graphMetrics};}
     private rand(index:number,channel:number):number{
         let v=(this.seed|0)^Math.imul(index+13,0x9e3779b9)^Math.imul(channel+7,0x85ebca6b);
@@ -492,8 +494,8 @@ export class SplineObjectController extends Component {
     update():void{
         if(EDITOR_NOT_IN_PREVIEW||!this._runtimeSpawned||!this.rebuildOnChange)return;
         if(!this.usePopulationGraph){if(this.signature()!==this._signature)this.respawn();return;}
-        try{if(this.signature()!==this._signature)this.respawn();}
-        catch(error){const message=String(error);if(message!==this._graphWarning){this._graphWarning=message;console.warn('[Cocos Splines] Population Graph: '+message);}}
+        try{if(this.signature()!==this._signature)this.respawn();else this._graphWarning='';}
+        catch(error){this._graphWarning=String(error);}
     }
     /** Spawn only if the serialized/generated root has no children. */
     public spawn():number{
@@ -706,7 +708,7 @@ export class SplineObjectController extends Component {
         if(this.spawnedRoot?.isValid){
             for(const n of [...this.spawnedRoot.children]){n.removeFromParent();n.destroy();}
         }
-        this._generated=[];this._runtimeSpawned=false;this._graphMetrics={computed:0,reused:0,nodes:0};
+        this._generated=[];this._runtimeSpawned=false;this._graphMetrics={computed:0,reused:0,nodes:0};this._graphWarning='';
     }
     onDisable():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
     onDestroy():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}

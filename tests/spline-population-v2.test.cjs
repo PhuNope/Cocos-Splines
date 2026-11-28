@@ -95,10 +95,10 @@ try{
     getComponent(){return null;}
   }
   class Component{constructor(){this.node=new Node();this.enabled=true;}}
-  let failPrefab=false;
+  let failPrefab=false,failAfter=0;
   const created=[],cc={_decorator:{ccclass:()=>cl=>cl,property:()=>{},
     menu:()=>cl=>cl},Component,Vec3,Quat,Node,Prefab:class{},Enum:x=>x,
-    instantiate:(prefab)=>{if(failPrefab&&prefab.id==='B')throw Error('Injected instantiate failure');const obj=new Node('clone-'+prefab.id);obj.templateId=prefab.id;created.push(obj);return obj;}};
+    instantiate:(prefab)=>{if(failPrefab&&prefab.id==='B'&&failAfter--<=0)throw Error('Injected instantiate failure');const obj=new Node('clone-'+prefab.id);obj.templateId=prefab.id;created.push(obj);return obj;}};
   const original=Module._load;
   Module._load=function(name,parent,isMain){
     if(name==='cc')return cc;
@@ -182,14 +182,22 @@ try{
     assert(oldRoot.children.every(n=>n.worldPosition.y===2&&n.templateId==='B'&&n.scale.x===2&&n.worldRotation.axes.length===3));
     assert.equal(controller.getPopulationGraphMetrics().nodes,6);
     const committed=oldRoot.children.slice();
-    failPrefab=true;assert.throws(()=>controller.respawn(),/instantiate failure/i);failPrefab=false;
+    const allocationStart=created.length;failAfter=2;failPrefab=true;assert.throws(()=>controller.respawn(),/instantiate failure/i);failPrefab=false;
+    assert.equal(created.length,allocationStart+2);assert(created.slice(allocationStart).every(n=>!n.isValid));
     assert.deepEqual(oldRoot.children,committed);assert(committed.every(n=>n.isValid));
     controller.populationGraphJson='bad';assert.throws(()=>controller.respawn());assert.deepEqual(oldRoot.children,committed);
     controller.populationGraphAsset={json:graph};assert.equal(controller.respawn(),6);
     controller.populationGraphAsset=null;controller.populationGraphJson=JSON.stringify(graph);
     controller.spawnOnStart=true;assert.equal(controller.spawn(),0);
     controller.rebuildOnChange=true;const same=oldRoot.children.slice();controller.update();assert.deepEqual(oldRoot.children,same);
-    graph.nodes[1].spacing=5;controller.populationGraphJson=JSON.stringify(graph);controller.update();assert.equal(oldRoot.children.length,3);
+    controller.populationGraphJson='invalid';controller.update();assert(controller.getPopulationGraphError());assert.deepEqual(oldRoot.children,same);
+    graph.nodes[1].spacing=5;controller.populationGraphJson=JSON.stringify(graph);controller.update();assert.equal(oldRoot.children.length,3);assert.equal(controller.getPopulationGraphError(),'');
+    graph.nodes[0].slot=1;controller.populationGraphJson=JSON.stringify(graph);assert.throws(()=>controller.respawn(),/slot 1/i);
+    controller.graphSplineB=spline;assert.equal(controller.respawn(),3);
+    const emptyController=new SplineObjectController();emptyController.usePopulationGraph=true;emptyController.graphSplineB=spline;emptyController.prefabs=controller.prefabs;emptyController.populationGraphJson=JSON.stringify(graph);
+    failAfter=1;failPrefab=true;assert.throws(()=>emptyController.respawn(),/instantiate failure/i);failPrefab=false;
+    assert.equal(emptyController.spawnedRoot,null);assert.equal(emptyController.node.children.length,0);
+    assert.equal(emptyController.respawn(),3);emptyController.onDestroy();assert.equal(emptyController.spawnedRoot.children.length,0);
     controller.onDisable();assert.equal(oldRoot.children.length,0);
     controller.onEnable();assert.equal(oldRoot.children.length,3);
     controller.onDestroy();assert.equal(oldRoot.children.length,0);
