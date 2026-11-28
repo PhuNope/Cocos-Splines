@@ -2,7 +2,8 @@
  * route transition allows a long train to retain several exits simultaneously.
  * The shared FIFO gate still counts each admitted train once per exit.
  * Open routes with a stable prefix, including append-only dynamic history.
- * No reverse seeks, cyclic routes or repeated exits.
+ * Fixed periodic routes reuse one transition index per exit; the held
+ * occurrence distances are rebased after each wrap. No reverse seeks.
  */
 import {splineTrafficGate} from './SplineTrafficGate';
 export interface TrainTrafficTransition {
@@ -23,8 +24,9 @@ export class SplineTrainTrafficBinding {
         if(this.waiting)splineTrafficGate.release(this.waiting.token);
         this.waiting=null;
     }
-    public prepare(transitions:ReadonlyArray<TrainTrafficTransition>,from:number,to:number,tailOffset:number,clearance:number,stopGap:number):TrainTrafficMove{
-        if(![from,to,tailOffset,clearance,stopGap].every(Number.isFinite)||from<0||to<from||tailOffset<0||clearance<0||stopGap<=0)
+    public prepare(transitions:ReadonlyArray<TrainTrafficTransition>,from:number,to:number,tailOffset:number,clearance:number,stopGap:number,period=0):TrainTrafficMove{
+        if(![from,to,tailOffset,clearance,stopGap,period].every(Number.isFinite)||from<0||to<from||tailOffset<0||clearance<0||stopGap<=0||period<0||
+           (period>0&&(from>=period||period<=tailOffset+clearance+stopGap||to-from>period-stopGap+1e-8)))
             throw Error('Invalid train traffic movement.');
         for(const [index,h] of this.held){
             const current=transitions[index],slot=splineTrafficGate.reservation(h.token);
@@ -41,9 +43,18 @@ export class SplineTrainTrafficBinding {
             this.cancelWait();
         };
         try{
-            for(let index=0;index<transitions.length;index++){
-                const t=transitions[index];
-                if(t.distance<=from||t.distance-stopGap>to||this.held.has(index))continue;
+            const events=transitions.map((t,index)=>({index,t:period>0&&t.distance<=from?{...t,distance:t.distance+period}:t}));
+            if(period>0)events.sort((a,b)=>a.t.distance-b.t.distance);
+            for(const {index,t} of events){
+                if(t.distance<=from||t.distance-stopGap>to)continue;
+                const held=this.held.get(index);
+                if(held){
+                    if(period===0||Math.abs(held.transition.distance-t.distance)<1e-8)continue;
+                    // Do not overwrite a previous lap's occupied slot. Stop
+                    // at the new margin, commit physical motion, then retry.
+                    // Loop fit guarantees the old tail can clear by then.
+                    distance=Math.max(from,t.distance-stopGap);blocked=true;break;
+                }
                 // Keep the exact queued token across retries, preserving FIFO.
                 if(this.waiting&&this.waiting.index!==index)this.cancelWait();
                 const token=this.waiting?.token??{};
@@ -61,6 +72,9 @@ export class SplineTrainTrafficBinding {
                 if(distance-tailOffset>h.transition.distance+clearance){
                     splineTrafficGate.release(h.token);this.held.delete(index);
                 }
+            }
+            if(period>0&&distance>=period){
+                for(const h of this.held.values())h.transition.distance-=period;
             }
         }};
     }

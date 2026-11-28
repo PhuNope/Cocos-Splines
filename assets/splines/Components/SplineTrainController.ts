@@ -14,7 +14,7 @@ const {ccclass,property,menu}=_decorator;
 export class SplineTrainLeg {
     @property({type:SplineContainer}) spline:SplineContainer|null=null;
     @property({type:CCBoolean}) backwards=false;
-    @property({type:SplineJunction,tooltip:'For traffic mode: junction from previous leg into this leg. Leave empty on first leg.'}) entryJunction:SplineJunction|null=null;
+    @property({type:SplineJunction,tooltip:'Traffic: junction into this leg. First leg is seam junction for fixed loops; empty for open routes.'}) entryJunction:SplineJunction|null=null;
     @property({type:CCInteger,min:0,tooltip:'Link index on the previous leg at its travel endpoint.'}) junctionEntryIndex=0;
     @property({type:CCInteger,min:0,tooltip:'Destination link index at this leg start.'}) junctionExitIndex=1;
 }
@@ -49,7 +49,7 @@ export class SplineTrainController extends Component {
     @property({tooltip:'Additional local Euler rotation applied to every car.'}) rotationOffset=new Vec3();
     @property({min:0,max:1,tooltip:'Maximum world gap between consecutive route leg endpoints.'}) maxJoinGap=.01;
     @property({min:0,max:180,tooltip:'Maximum travel tangent angle between route legs.'}) maxJoinAngle=30;
-    @property({type:CCBoolean,tooltip:'Open fixed routes only. Every internal join requires a junction and explicit link indexes.'}) enableTraffic=false;
+    @property({type:CCBoolean,tooltip:'Every join requires explicit junction links, including the first leg on fixed loops.'}) enableTraffic=false;
     @property({min:.001,max:1,tooltip:'Stop this far before a blocked junction (head center). Add vehicle front length if needed.'}) trafficStopGap=.05;
     @property({min:0,max:10000,tooltip:'Extra world arc beyond tail center before releasing a passed junction.'}) trafficTailClearance=.5;
     @property({type:CCBoolean,tooltip:'Manual endpoint junction branching; exactly one initial leg, open route and traffic required.'}) dynamicRouting=false;
@@ -63,6 +63,7 @@ export class SplineTrainController extends Component {
     private trafficSpacing=0;
     private trafficClearance=0;
     private trafficStopMargin=0;
+    private completedLaps=0;
     private route:PreparedRoute|null=null;
     private head=0;
     private playing=false;
@@ -73,6 +74,7 @@ export class SplineTrainController extends Component {
     public get routeLength():number{return this.route?.metric.length??0;}
     public get isPlaying():boolean{return this.playing;}
     public get lastError():string{return this.error;}
+    public get trafficCompletedLaps():number{return this.completedLaps;}
     public get trafficWaiting():boolean{return this.traffic.waitingIndex>=0;}
     public get trafficReservations():number{return this.traffic.reservedCount;}
     public getCarLocations():TrainCarLocation[]{return this.locations.map(p=>({...p}));}
@@ -126,17 +128,21 @@ export class SplineTrainController extends Component {
         return {legs:prepared,metric:compileTrainRoute(prepared,this.loopRoute),gap:this.maxJoinGap,angle:this.maxJoinAngle};
     }
     private trafficTransitions(route:PreparedRoute,configs:ReadonlyArray<SplineTrainLeg>=this.legs,committedCount=0):TrainTrafficTransition[]{
-        if(route.metric.loop)throw Error('Train traffic currently requires an open route.');
+        if(route.metric.loop&&this.dynamicRouting)throw Error('Dynamic train traffic currently requires an open route.');
         if(!Number.isFinite(this.trafficStopGap)||this.trafficStopGap<.001||this.trafficStopGap>1||
            !Number.isFinite(this.trafficTailClearance)||this.trafficTailClearance<0||this.trafficTailClearance>10000)
             throw Error('Invalid train traffic clearances.');
         const transitions:TrainTrafficTransition[]=[];
-        for(let i=1;i<route.legs.length;i++){
-            const config=configs[i],junction=config.entryJunction,a=config.junctionEntryIndex,b=config.junctionExitIndex;
+        const count=route.legs.length,loop=route.metric.loop;
+        if(loop&&route.metric.length<=trainTailOffset(this.cars.length,this.centerSpacing)+this.trafficTailClearance+this.trafficStopGap)
+            throw Error('Train loop needs room for tail clearance and stop margin.');
+        // Internal joins in ascending distance, then the last-to-first seam.
+        for(let step=1;step<(loop?count+1:count);step++){
+            const i=step%count,config=configs[i],junction=config.entryJunction,a=config.junctionEntryIndex,b=config.junctionExitIndex;
             if(!junction||junction.enabled===false||junction.node?.isValid===false||
                !SplineJunction.active.has(junction)||!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b)
                 throw Error('Train traffic requires an active junction and distinct link indexes at leg '+(i+1)+'.');
-            const entry=junction.connections[a],exit=junction.connections[b],previous=route.legs[i-1],next=route.legs[i];
+            const entry=junction.connections[a],exit=junction.connections[b],previous=route.legs[(i+count-1)%count],next=route.legs[i];
             const from=previous.backwards?0:1,to=next.backwards?1:0;
             if(!entry||!exit||entry.spline!==previous.spline||exit.spline!==next.spline||
                Math.abs(entry.getProgress()-from)>1e-6||Math.abs(exit.getProgress()-to)>1e-6)
@@ -147,11 +153,11 @@ export class SplineTrainController extends Component {
                ![JunctionTrafficSignal.Green,JunctionTrafficSignal.Red,JunctionTrafficSignal.Yellow].includes(exit.trafficSignal))
                 throw Error('Invalid train traffic exit capacity or signal.');
             if(transitions.some(t=>t.junction===junction&&t.exitIndex===b))throw Error('Train traffic route cannot repeat a reserved exit.');
-            const distance=route.metric.legs[i].start;
+            const distance=i===0?route.metric.length:route.metric.legs[i].start;
             if(route.metric.legs[i].length<=this.trafficStopGap)throw Error('Train traffic leg is shorter than the stop margin.');
             // A blocked train must fit before its first junction. Leave a
             // strictly positive route distance between head and the gate.
-            if(i===1&&distance-this.trafficStopGap<trainTailOffset(this.cars.length,this.centerSpacing))
+            if(step===1&&distance-this.trafficStopGap<trainTailOffset(this.cars.length,this.centerSpacing))
                 throw Error('Train does not fit before first traffic junction.');
             transitions.push({distance,junction,exitIndex:b,capacity:exit.maxFollowers,green:exit.trafficSignal===JunctionTrafficSignal.Green});
         }
@@ -278,6 +284,8 @@ export class SplineTrainController extends Component {
             if(this.enableTraffic){
                 const transitions=this.trafficTransitions(route),head=normalizeTrainHead(route.metric,distance,this.cars.length,this.centerSpacing);
                 if(this.dynamicRouting&&head>route.metric.length-this.trafficStopGap)throw Error('Dynamic train must fit before initial endpoint stop margin.');
+                if(route.metric.loop&&(distance!==head||head<trainTailOffset(this.cars.length,this.centerSpacing)))
+                    throw Error('Train loop traffic must initialize with all cars after the seam.');
                 if(transitions.length&&head>transitions[0].distance-this.trafficStopGap)
                     throw Error('Train traffic must initialize before the first junction.');
                 this.place(route,head);
@@ -310,13 +318,20 @@ export class SplineTrainController extends Component {
             if(!!this.trafficRoute!==this.enableTraffic)throw Error('Train traffic mode changed; disable and reinitialize safely.');
             if(this.enableTraffic){
                 const transitions=this.trafficTransitions(route);this.verifyTrafficLayout(route,transitions);
-                const move=this.traffic.prepare(transitions,this.head,next.distance,trainTailOffset(this.cars.length,this.centerSpacing),this.trafficTailClearance,this.trafficStopGap);
-                try{this.place(route,move.distance);move.commit();}catch(error){move.rollback();throw error;}
+                const period=route.metric.loop?route.metric.length:0;
+                // Bounded work: at most one occurrence of each exit per tick.
+                // Very large timesteps discard excess motion rather than skip gates.
+                const target=period>0?this.head+Math.min(this.speed*dt,period-this.trafficStopGap):next.distance;
+                const move=this.traffic.prepare(transitions,this.head,target,trainTailOffset(this.cars.length,this.centerSpacing),this.trafficTailClearance,this.trafficStopGap,period);
+                try{
+                    this.place(route,move.distance);move.commit();
+                    if(period>0&&move.distance>=period)this.completedLaps++;
+                }catch(error){move.rollback();throw error;}
                 if(!move.blocked&&next.arrived)this.pause();
             }else{this.place(route,next.distance);if(next.arrived)this.pause();}
         }catch(error){this.error=String(error);this.pause();}
     }
-    private resetTraffic():void{this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.dynamicLegs=[];this.pendingLeg=null;this.dynamicFinished=false;this.initialized=false;}
+    private resetTraffic():void{this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.dynamicLegs=[];this.pendingLeg=null;this.dynamicFinished=false;this.completedLaps=0;this.initialized=false;}
     onDisable():void{this.pause();this.resetTraffic();}
     onDestroy():void{this.pause();this.resetTraffic();this.route=null;this.locations=[];}
 }

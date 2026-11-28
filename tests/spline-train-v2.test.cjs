@@ -98,7 +98,26 @@ try{
   fork.connections[2].exitDirection=2;const rollback=new SplineTrainController();rollback.legs=[{spline:main,backwards:false}];rollback.cars=[new Node(),new Node()];rollback.centerSpacing=3;rollback.startDistance=6;rollback.enableTraffic=true;rollback.dynamicRouting=true;rollback.speed=4;
   rollback.onEnable();assert(rollback.requestJunctionExit(fork,0,2));rollback.cars[1].fail=true;rollback.lateUpdate(2);
   assert.equal(rollback.currentDistance,6);assert.equal(rollback.getRouteHistory().length,1);assert.equal(gate.size,0);assert(!rollback.isPlaying);
-  rollback.play();rollback.lateUpdate(2);assert.equal(rollback.getRouteHistory().length,2);assert.equal(gate.count(fork,2),1);rollback.onDisable();assert.equal(gate.size,0);
+  rollback.play();rollback.lateUpdate(1.25);assert.equal(rollback.getRouteHistory().length,2);assert.equal(gate.count(fork,2),1);rollback.onDisable();assert.equal(gate.size,0);
+  // Fixed loop: seam gate, wrap, tail retention and bounded repeated history.
+  const la=spline(0,10),lb=spline(10,0),join=junction(la,lb),seam=junction(lb,la);
+  const cyc=new SplineTrainController();cyc.legs=[{spline:la,backwards:false,entryJunction:seam,junctionEntryIndex:0,junctionExitIndex:1},{spline:lb,backwards:false,entryJunction:join,junctionEntryIndex:0,junctionExitIndex:1}];
+  cyc.cars=[new Node(),new Node(),new Node()];cyc.centerSpacing=2;cyc.startDistance=4;cyc.speed=1;cyc.enableTraffic=true;cyc.loopRoute=true;cyc.maxJoinAngle=180;cyc.trafficStopGap=.1;cyc.trafficTailClearance=.5;
+  cyc.onEnable();assert.equal(cyc.lastError,'');assert.equal(cyc.currentDistance,4);
+  join.connections[1].trafficSignal=1;cyc.lateUpdate(5.95);assert(Math.abs(cyc.currentDistance-9.9)<1e-8);assert(cyc.trafficWaiting);
+  join.connections[1].trafficSignal=0;cyc.lateUpdate(.01);assert.equal(gate.count(join,1),1);assert(cyc.currentDistance<10);
+  cyc.lateUpdate(5);assert.equal(gate.count(join,1),0);
+  seam.connections[1].trafficSignal=2;cyc.lateUpdate(10);assert(Math.abs(cyc.currentDistance-19.9)<1e-8);assert.equal(cyc.trafficCompletedLaps,0);assert.equal(gate.waiting(seam,1),1);
+  seam.connections[1].trafficSignal=0;cyc.lateUpdate(1.1);assert(Math.abs(cyc.currentDistance-1)<1e-8);assert.equal(cyc.trafficCompletedLaps,1);assert.equal(gate.count(seam,1),1);
+  assert.deepEqual(cyc.getCarLocations().map(p=>p.legIndex),[0,1,1]);
+  const other={};assert(!gate.move(other,seam,1,1));cyc.lateUpdate(3);assert.equal(gate.count(seam,1),1);
+  cyc.lateUpdate(1);assert.equal(gate.count(seam,1),0);assert(gate.move(other,seam,1,1));gate.release(other);
+  for(let i=0;i<200;i++){cyc.lateUpdate(100);assert.equal(cyc.lastError,'');assert(cyc.trafficReservations<=2);assert.equal(cyc.getRouteHistory().length,2);assert.equal(gate.waitingCount,0);}
+  assert(cyc.trafficCompletedLaps>100);assert(cyc.isPlaying);
+  cyc.onDisable();assert.equal(gate.size,0);assert.equal(cyc.trafficCompletedLaps,0);
+  cyc.startDistance=1;cyc.onEnable();assert.match(cyc.lastError,/after the seam/);assert.equal(gate.size,0);
+  cyc.startDistance=4;cyc.trafficTailClearance=16;cyc.onEnable();assert.match(cyc.lastError,/tail clearance/);assert.equal(gate.size,0);
+  cyc.trafficTailClearance=.5;cyc.legs[0].entryJunction=null;cyc.onEnable();assert.match(cyc.lastError,/active junction/);assert.equal(gate.size,0);
  }finally{Module._load=original;}
  console.log('TRAIN CONTROLLER V2 PASS: world arc route math, reversed legs, fixed consist, loop fitting, cache, rollback and runtime-only placement.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
