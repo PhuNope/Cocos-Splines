@@ -22,6 +22,7 @@ type FrameField=ReturnType<typeof createWorldFrameField>;
 interface PreparedLeg {spline:SplineContainer;backwards:boolean;arc:ReturnType<typeof headwayWorldArc>;field:FrameField}
 interface PreparedRoute {legs:PreparedLeg[];metric:TrainRouteMetric;gap:number;angle:number}
 interface Pose {node:Node;position:Vec3;rotation:Quat}
+export interface TrainHistoryLeg {spline:SplineContainer;backwards:boolean;start:number;end:number;entryJunction:SplineJunction|null;junctionEntryIndex:number;junctionExitIndex:number}
 const v=(p:{x:number;y:number;z:number},sign=1)=>new Vec3(p.x*sign,p.y*sign,p.z*sign);
 const finite=(p:{x:number;y:number;z:number})=>[p.x,p.y,p.z].every(Number.isFinite);
 const ancestor=(a:Node,b:Node):boolean=>{
@@ -51,12 +52,17 @@ export class SplineTrainController extends Component {
     @property({type:CCBoolean,tooltip:'Open fixed routes only. Every internal join requires a junction and explicit link indexes.'}) enableTraffic=false;
     @property({min:.001,max:1,tooltip:'Stop this far before a blocked junction (head center). Add vehicle front length if needed.'}) trafficStopGap=.05;
     @property({min:0,max:10000,tooltip:'Extra world arc beyond tail center before releasing a passed junction.'}) trafficTailClearance=.5;
+    @property({type:CCBoolean,tooltip:'Manual endpoint junction branching; exactly one initial leg, open route and traffic required.'}) dynamicRouting=false;
+    private dynamicLegs:SplineTrainLeg[]=[];
+    private pendingLeg:SplineTrainLeg|null=null;
+    private dynamicFinished=false;
     private readonly traffic=new SplineTrainTrafficBinding();
     private trafficRoute:PreparedRoute|null=null;
     private trafficLayout:TrainTrafficTransition[]=[];
     private trafficCars:Node[]=[];
     private trafficSpacing=0;
     private trafficClearance=0;
+    private trafficStopMargin=0;
     private route:PreparedRoute|null=null;
     private head=0;
     private playing=false;
@@ -70,8 +76,14 @@ export class SplineTrainController extends Component {
     public get trafficWaiting():boolean{return this.traffic.waitingIndex>=0;}
     public get trafficReservations():number{return this.traffic.reservedCount;}
     public getCarLocations():TrainCarLocation[]{return this.locations.map(p=>({...p}));}
-    private prepare():PreparedRoute{
-        if(!Array.isArray(this.legs)||this.legs.length<1||this.legs.length>MAX_TRAIN_LEGS||
+    public get awaitingRouteChoice():boolean{return this.dynamicLegs.length>0&&!this.dynamicFinished&&!this.pendingLeg&&!!this.route&&this.head>=this.route.metric.length-this.trafficStopGap;}
+    public getRouteHistory():TrainHistoryLeg[]{
+        const config=this.dynamicLegs.length?this.dynamicLegs:this.legs;
+        return (this.route?.legs??[]).map((l,i)=>({spline:l.spline,backwards:l.backwards,start:this.route!.metric.legs[i].start,end:this.route!.metric.legs[i].end,
+            entryJunction:config[i]?.entryJunction??null,junctionEntryIndex:config[i]?.junctionEntryIndex??0,junctionExitIndex:config[i]?.junctionExitIndex??1}));
+    }
+    private prepare(config:ReadonlyArray<SplineTrainLeg>=this.legs):PreparedRoute{
+        if(!Array.isArray(config)||config.length<1||config.length>MAX_TRAIN_LEGS||
            !Array.isArray(this.cars)||this.cars.length<1||this.cars.length>MAX_TRAIN_CARS||
            !Number.isFinite(this.maxJoinGap)||this.maxJoinGap<0||this.maxJoinGap>1||
            !Number.isFinite(this.maxJoinAngle)||this.maxJoinAngle<0||this.maxJoinAngle>180)
@@ -85,7 +97,7 @@ export class SplineTrainController extends Component {
         const cached=this.route,old=new Map<SplineContainer,PreparedLeg>();
         for(const l of cached?.legs??[])old.set(l.spline,l);
         const prepared:PreparedLeg[]=[];
-        for(const leg of this.legs){
+        for(const leg of config){
             const spline=leg?.spline;
             if(!spline||spline.count<2||spline.node.isValid===false||spline.enabled===false||spline.node.activeInHierarchy===false||typeof leg.backwards!=='boolean')
                 throw Error('Train requires active spline legs, no missing slots.');
@@ -113,14 +125,14 @@ export class SplineTrainController extends Component {
         }
         return {legs:prepared,metric:compileTrainRoute(prepared,this.loopRoute),gap:this.maxJoinGap,angle:this.maxJoinAngle};
     }
-    private trafficTransitions(route:PreparedRoute):TrainTrafficTransition[]{
+    private trafficTransitions(route:PreparedRoute,configs:ReadonlyArray<SplineTrainLeg>=this.legs,committedCount=0):TrainTrafficTransition[]{
         if(route.metric.loop)throw Error('Train traffic currently requires an open route.');
         if(!Number.isFinite(this.trafficStopGap)||this.trafficStopGap<.001||this.trafficStopGap>1||
            !Number.isFinite(this.trafficTailClearance)||this.trafficTailClearance<0||this.trafficTailClearance>10000)
             throw Error('Invalid train traffic clearances.');
         const transitions:TrainTrafficTransition[]=[];
         for(let i=1;i<route.legs.length;i++){
-            const config=this.legs[i],junction=config.entryJunction,a=config.junctionEntryIndex,b=config.junctionExitIndex;
+            const config=configs[i],junction=config.entryJunction,a=config.junctionEntryIndex,b=config.junctionExitIndex;
             if(!junction||junction.enabled===false||junction.node?.isValid===false||
                !SplineJunction.active.has(junction)||!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b)
                 throw Error('Train traffic requires an active junction and distinct link indexes at leg '+(i+1)+'.');
@@ -130,12 +142,13 @@ export class SplineTrainController extends Component {
                Math.abs(entry.getProgress()-from)>1e-6||Math.abs(exit.getProgress()-to)>1e-6)
                 throw Error('Train traffic junction links must match the route leg endpoints.');
             const dir=exit.exitDirection===JunctionExitDirection.Forward?false:exit.exitDirection===JunctionExitDirection.Backward?true:previous.backwards;
-            if(dir!==next.backwards)throw Error('Train traffic junction exit direction conflicts with route.');
+            if(i>=committedCount&&dir!==next.backwards)throw Error('Train traffic junction exit direction conflicts with route.');
             if(!Number.isInteger(exit.maxFollowers)||exit.maxFollowers<0||exit.maxFollowers>4096||
                ![JunctionTrafficSignal.Green,JunctionTrafficSignal.Red,JunctionTrafficSignal.Yellow].includes(exit.trafficSignal))
                 throw Error('Invalid train traffic exit capacity or signal.');
             if(transitions.some(t=>t.junction===junction&&t.exitIndex===b))throw Error('Train traffic route cannot repeat a reserved exit.');
             const distance=route.metric.legs[i].start;
+            if(route.metric.legs[i].length<=this.trafficStopGap)throw Error('Train traffic leg is shorter than the stop margin.');
             // A blocked train must fit before its first junction. Leave a
             // strictly positive route distance between head and the gate.
             if(i===1&&distance-this.trafficStopGap<trainTailOffset(this.cars.length,this.centerSpacing))
@@ -146,10 +159,91 @@ export class SplineTrainController extends Component {
     }
     private verifyTrafficLayout(route:PreparedRoute,transitions:TrainTrafficTransition[]):void{
         if(route!==this.trafficRoute||this.centerSpacing!==this.trafficSpacing||
-           this.trafficTailClearance!==this.trafficClearance||this.cars.length!==this.trafficCars.length||
+           this.trafficTailClearance!==this.trafficClearance||this.trafficStopGap!==this.trafficStopMargin||this.cars.length!==this.trafficCars.length||
            this.cars.some((c,i)=>c!==this.trafficCars[i])||transitions.length!==this.trafficLayout.length||
            transitions.some((t,i)=>{const old=this.trafficLayout[i];return t.distance!==old.distance||t.junction!==old.junction||t.exitIndex!==old.exitIndex;}))
             throw Error('Train traffic route or consist changed; disable and reinitialize safely.');
+    }
+    private validateDynamicConfig():void{
+        if(!this.enableTraffic||this.loopRoute||this.legs.length!==1||!this.legs[0]?.spline||
+           this.legs[0].spline.closed||this.legs[0].entryJunction)
+            throw Error('Dynamic train requires traffic, one open initial leg without junction, and no loop.');
+        const first=this.dynamicLegs[0];
+        if(first&&(first.spline!==this.legs[0].spline||first.backwards!==this.legs[0].backwards))
+            throw Error('Dynamic train initial leg changed; reinitialize safely.');
+    }
+    private candidateLeg(junction:SplineJunction,entryIndex:number,exitIndex:number):SplineTrainLeg{
+        const from=this.dynamicLegs[this.dynamicLegs.length-1];
+        if(!from||!junction||!SplineJunction.active.has(junction)||junction.enabled===false||
+           !Number.isInteger(entryIndex)||!Number.isInteger(exitIndex)||entryIndex<0||exitIndex<0||entryIndex===exitIndex)
+            throw Error('Invalid dynamic train junction selection.');
+        const entry=junction.connections[entryIndex],exit=junction.connections[exitIndex];
+        if(!entry||entry.spline!==from.spline||Math.abs(entry.getProgress()-(from.backwards?0:1))>1e-6||!exit?.spline)
+            throw Error('Dynamic train selection must join the current route endpoint.');
+        if(![JunctionExitDirection.Preserve,JunctionExitDirection.Forward,JunctionExitDirection.Backward].includes(exit.exitDirection))
+            throw Error('Invalid dynamic train exit direction.');
+        const backwards=exit.exitDirection===JunctionExitDirection.Backward||
+            (exit.exitDirection===JunctionExitDirection.Preserve&&from.backwards);
+        if(exit.spline.closed||this.dynamicLegs.some(l=>l.spline===exit.spline))
+            throw Error('Dynamic train history cannot revisit a spline or enter a closed spline.');
+        if(Math.abs(exit.getProgress()-(backwards?1:0))>1e-6)
+            throw Error('Dynamic train exit must be a full spline endpoint.');
+        const leg=new SplineTrainLeg();leg.spline=exit.spline;leg.backwards=backwards;
+        leg.entryJunction=junction;leg.junctionEntryIndex=entryIndex;leg.junctionExitIndex=exitIndex;
+        return leg;
+    }
+    /** Explicit branch selection. Only the next uncommitted endpoint can
+     * change. Replacing a blocked choice cancels its FIFO token. */
+    public requestJunctionExit(junction:SplineJunction,entryIndex:number,exitIndex:number):boolean{
+        if(EDITOR_NOT_IN_PREVIEW||!this.dynamicRouting||!this.initialized||this.dynamicFinished||!this.dynamicLegs.length)return false;
+        try{
+            this.validateDynamicConfig();
+            const leg=this.candidateLeg(junction,entryIndex,exitIndex);
+            const current=this.prepare(this.dynamicLegs);
+            this.verifyTrafficLayout(current,this.trafficTransitions(current,this.dynamicLegs,this.dynamicLegs.length));
+            const configs=[...this.dynamicLegs,leg],route=this.prepare(configs);
+            this.trafficTransitions(route,configs,this.dynamicLegs.length);
+            const prior=this.pendingLeg;
+            if(!prior||prior.entryJunction!==junction||prior.junctionEntryIndex!==entryIndex||prior.junctionExitIndex!==exitIndex||
+               prior.spline!==leg.spline||prior.backwards!==leg.backwards)this.traffic.cancelWait();
+            this.pendingLeg=leg;this.error='';return true;
+        }catch(error){this.error=String(error);return false;}
+    }
+    /** Declare the current endpoint the destination. No further branch
+     * requests until the next safe initialization. Existing slots remain. */
+    public finishDynamicRoute():boolean{
+        if(EDITOR_NOT_IN_PREVIEW||!this.dynamicRouting||!this.initialized||!this.dynamicLegs.length)return false;
+        this.pendingLeg=null;this.traffic.cancelWait();this.dynamicFinished=true;return true;
+    }
+    private advanceDynamic(dt:number):void{
+        this.validateDynamicConfig();
+        const history=this.dynamicLegs,current=this.prepare(history),transitions=this.trafficTransitions(current,history,history.length);
+        this.verifyTrafficLayout(current,transitions);
+        const next=advanceTrainHead(current.metric,this.head,this.speed,dt,this.cars.length,this.centerSpacing);
+        const limit=current.metric.length-this.trafficStopGap;
+        let configs=history,route=current,layout=transitions;
+        let target=this.dynamicFinished?next.distance:Math.min(next.distance,limit);
+        if(this.pendingLeg&&next.distance>=limit){
+            const pending=this.pendingLeg;
+            // Validate the requested exit again, but never silently choose a
+            // different branch if its direction or link changed while waiting.
+            const checked=this.candidateLeg(pending.entryJunction!,pending.junctionEntryIndex,pending.junctionExitIndex);
+            if(checked.spline!==pending.spline||checked.backwards!==pending.backwards)
+                throw Error('Pending dynamic train exit changed; choose again.');
+            configs=[...history,pending];route=this.prepare(configs);layout=this.trafficTransitions(route,configs,history.length);
+            const extended=advanceTrainHead(route.metric,this.head,this.speed,dt,this.cars.length,this.centerSpacing);
+            // One new decision per tick. Never overshoot an undecided endpoint.
+            target=Math.min(extended.distance,route.metric.length-this.trafficStopGap);
+        }
+        const move=this.traffic.prepare(layout,this.head,target,trainTailOffset(this.cars.length,this.centerSpacing),this.trafficTailClearance,this.trafficStopGap);
+        try{
+            const appended=configs!==history&&!move.blocked;
+            this.place(appended?route:current,move.distance);move.commit();
+            if(appended){
+                this.dynamicLegs=configs;this.trafficRoute=route;this.trafficLayout=layout;this.pendingLeg=null;
+            }
+            if(this.dynamicFinished&&next.arrived&&!move.blocked)this.pause();
+        }catch(error){move.rollback();throw error;}
     }
     private place(route:PreparedRoute,distance:number):void{
         const head=normalizeTrainHead(route.metric,distance,this.cars.length,this.centerSpacing);
@@ -178,14 +272,19 @@ export class SplineTrainController extends Component {
     public seekRouteDistance(distance:number):boolean{
         if(EDITOR_NOT_IN_PREVIEW)return false;
         try{
-            const route=this.prepare();
             if(this.trafficRoute)throw Error('Train traffic forbids seeking after initialization; use pause/play, or safely disable and reinitialize.');
+            if(this.dynamicRouting)this.validateDynamicConfig();
+            const route=this.prepare();
             if(this.enableTraffic){
                 const transitions=this.trafficTransitions(route),head=normalizeTrainHead(route.metric,distance,this.cars.length,this.centerSpacing);
+                if(this.dynamicRouting&&head>route.metric.length-this.trafficStopGap)throw Error('Dynamic train must fit before initial endpoint stop margin.');
                 if(transitions.length&&head>transitions[0].distance-this.trafficStopGap)
                     throw Error('Train traffic must initialize before the first junction.');
                 this.place(route,head);
-                this.trafficRoute=route;this.trafficLayout=transitions;this.trafficCars=this.cars.slice();this.trafficSpacing=this.centerSpacing;this.trafficClearance=this.trafficTailClearance;
+                this.trafficRoute=route;this.trafficLayout=transitions;this.trafficCars=this.cars.slice();this.trafficSpacing=this.centerSpacing;this.trafficClearance=this.trafficTailClearance;this.trafficStopMargin=this.trafficStopGap;
+                if(this.dynamicRouting){
+                    const first=new SplineTrainLeg();first.spline=this.legs[0].spline;first.backwards=this.legs[0].backwards;this.dynamicLegs=[first];
+                }
             }else this.place(route,distance);
             this.initialized=true;return true;
         }
@@ -205,6 +304,8 @@ export class SplineTrainController extends Component {
     lateUpdate(dt:number):void{
         if(EDITOR_NOT_IN_PREVIEW||!this.playing||!Number.isFinite(dt)||dt<=0)return;
         try{
+            if((this.dynamicLegs.length>0)!==this.dynamicRouting)throw Error('Dynamic train mode changed; disable and reinitialize safely.');
+            if(this.dynamicRouting){this.advanceDynamic(dt);return;}
             const route=this.prepare(),next=advanceTrainHead(route.metric,this.head,this.speed,dt,this.cars.length,this.centerSpacing);
             if(!!this.trafficRoute!==this.enableTraffic)throw Error('Train traffic mode changed; disable and reinitialize safely.');
             if(this.enableTraffic){
@@ -215,7 +316,7 @@ export class SplineTrainController extends Component {
             }else{this.place(route,next.distance);if(next.arrived)this.pause();}
         }catch(error){this.error=String(error);this.pause();}
     }
-    private resetTraffic():void{this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.initialized=false;}
+    private resetTraffic():void{this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.dynamicLegs=[];this.pendingLeg=null;this.dynamicFinished=false;this.initialized=false;}
     onDisable():void{this.pause();this.resetTraffic();}
     onDestroy():void{this.pause();this.resetTraffic();this.route=null;this.locations=[];}
 }

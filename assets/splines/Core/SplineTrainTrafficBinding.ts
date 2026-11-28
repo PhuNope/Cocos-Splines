@@ -1,7 +1,8 @@
 /** Consist-wide traffic reservation lifecycle. One private gate owner per
  * route transition allows a long train to retain several exits simultaneously.
  * The shared FIFO gate still counts each admitted train once per exit.
- * Fixed open routes only: no reverse seeks, cyclic routes or repeated exits.
+ * Open routes with a stable prefix, including append-only dynamic history.
+ * No reverse seeks, cyclic routes or repeated exits.
  */
 import {splineTrafficGate} from './SplineTrafficGate';
 export interface TrainTrafficTransition {
@@ -42,7 +43,7 @@ export class SplineTrainTrafficBinding {
         try{
             for(let index=0;index<transitions.length;index++){
                 const t=transitions[index];
-                if(t.distance<=from||t.distance>to||this.held.has(index))continue;
+                if(t.distance<=from||t.distance-stopGap>to||this.held.has(index))continue;
                 // Keep the exact queued token across retries, preserving FIFO.
                 if(this.waiting&&this.waiting.index!==index)this.cancelWait();
                 const token=this.waiting?.token??{};

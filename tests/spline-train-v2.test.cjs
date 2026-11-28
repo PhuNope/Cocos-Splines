@@ -76,6 +76,29 @@ try{
   t.play();t.lateUpdate(2);assert.equal(gate.size,2);gate.releaseJunction(j1);t.lateUpdate(.1);assert.match(t.lastError,/invalidated/);assert.equal(t.isPlaying,false);assert.equal(gate.count(j2,1),1);
   t.onDestroy();assert.equal(gate.size,0);
   t.startDistance=15;t.onEnable();assert.match(t.lastError,/before the first junction/);assert.equal(gate.size,0);
+  // Manual dynamic branch history. A branch may be changed while waiting,
+  // but never after admission; wagons sample the committed prefix.
+  const main=spline(0,10),left=spline(10,25),right=spline(35,10),end=spline(35,60);
+  const fork=junction(main,left);fork.connections.push({spline:right,getProgress:()=>1,exitDirection:2,maxFollowers:1,trafficSignal:0});
+  const nextFork=junction(right,end);nextFork.connections[0].getProgress=()=>0;
+  const d=new SplineTrainController();d.legs=[{spline:main,backwards:false}];d.cars=[new Node(),new Node(),new Node()];d.centerSpacing=3;d.startDistance=6;d.speed=1;d.enableTraffic=true;d.dynamicRouting=true;d.trafficStopGap=.1;d.trafficTailClearance=.5;
+  d.onEnable();d.lateUpdate(10);assert.equal(d.currentDistance,9.9);assert(d.awaitingRouteChoice);assert.equal(d.getRouteHistory().length,1);
+  fork.connections[1].trafficSignal=1;assert(d.requestJunctionExit(fork,0,1));d.lateUpdate(.01);
+  assert.equal(d.currentDistance,9.9);assert(d.trafficWaiting);assert.equal(gate.waiting(fork,1),1);
+  assert(d.requestJunctionExit(fork,0,2));assert.equal(gate.waiting(fork,1),0);d.lateUpdate(.01);
+  assert.equal(d.getRouteHistory().length,2);assert.equal(d.getRouteHistory()[1].spline,right);assert.equal(gate.count(fork,2),1);assert(d.currentDistance<10);
+  assert(!d.requestJunctionExit(fork,0,1)); // already committed branch
+  fork.connections[2].exitDirection=1; // later switch change must not redirect wagons
+  d.lateUpdate(3);assert(d.currentDistance>12);assert(d.getCarLocations()[1].legIndex===0);assert(d.getRouteHistory()[1].backwards);
+  assert(d.requestJunctionExit(nextFork,0,1));d.lateUpdate(100);
+  assert.equal(d.getRouteHistory().length,3);assert.equal(d.getRouteHistory()[2].spline,end);assert.equal(d.currentDistance,59.9);assert(d.awaitingRouteChoice);assert.equal(gate.size,0);
+  assert(d.finishDynamicRoute());d.lateUpdate(1);assert.equal(d.currentDistance,60);assert(!d.isPlaying);assert(!d.requestJunctionExit(fork,0,1));
+  d.onDestroy();assert.equal(gate.size,0);
+  // Failed transform while admitting must roll back the proposed history and slot.
+  fork.connections[2].exitDirection=2;const rollback=new SplineTrainController();rollback.legs=[{spline:main,backwards:false}];rollback.cars=[new Node(),new Node()];rollback.centerSpacing=3;rollback.startDistance=6;rollback.enableTraffic=true;rollback.dynamicRouting=true;rollback.speed=4;
+  rollback.onEnable();assert(rollback.requestJunctionExit(fork,0,2));rollback.cars[1].fail=true;rollback.lateUpdate(2);
+  assert.equal(rollback.currentDistance,6);assert.equal(rollback.getRouteHistory().length,1);assert.equal(gate.size,0);assert(!rollback.isPlaying);
+  rollback.play();rollback.lateUpdate(2);assert.equal(rollback.getRouteHistory().length,2);assert.equal(gate.count(fork,2),1);rollback.onDisable();assert.equal(gate.size,0);
  }finally{Module._load=original;}
  console.log('TRAIN CONTROLLER V2 PASS: world arc route math, reversed legs, fixed consist, loop fitting, cache, rollback and runtime-only placement.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
