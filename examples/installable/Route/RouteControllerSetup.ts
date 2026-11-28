@@ -7,5 +7,6 @@ export class CocosSplinesRouteControllerExampleV2 extends Component{
     public startItinerary():boolean{return this.route?.startRoute()??false;}
     public pauseItinerary():boolean{return this.route?.pauseRoute()??false;}
     public resumeItinerary():boolean{return this.route?.resumeRoute()??false;}
+    public replanItinerary():boolean{return this.route?.replanCurrentWaypoint()??false;}
     public stopItinerary():void{this.route?.stopRoute();}
 }

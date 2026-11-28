@@ -442,9 +442,12 @@ export class SplineAnimate extends Component {
     }
     /** Safe read-only explanation for reachable, no-route, or invalid topology. */
     public inspectRouteTo(destination:SplineContainer,progress=1):SplineRouteDiagnosis{
-        const current=this.source();
-        return inspectSplineRoute(current!,this.currentProgress,destination,progress,{
-            startDirection:this._travelDirection,transferPenalty:this.routeTransferPenalty,
+        return this.inspectRouteFrom(this.source()!,this.currentProgress,this._travelDirection,destination,progress);
+    }
+    /** Read-only hypothetical leg using the same routing policy as this follower. */
+    public inspectRouteFrom(source:SplineContainer,sourceProgress:number,direction:Direction,destination:SplineContainer,progress=1):SplineRouteDiagnosis{
+        return inspectSplineRoute(source,sourceProgress,destination,progress,{
+            startDirection:direction,transferPenalty:this.routeTransferPenalty,
             costSpace:this.routeCostSpace===RouteCostSpace.World?'world':'local',
             ...(this.routeMaxWorldGap>0?{maxWorldGap:this.routeMaxWorldGap}:{})
         });
@@ -460,6 +463,9 @@ export class SplineAnimate extends Component {
     }
     /** Stop route navigation without teleporting or releasing the currently
      * occupied exit. Clear only the pending admission and destination. */
+    /** Pause and discard only the pending queue request. Keep the active
+     * destination and occupied exit, so a controller can safely replan. */
+    public suspendRouteNavigation():void{this.pause();this.cancelTrafficWait();}
     public cancelRouteNavigation():void{
         this.pause();this.cancelTrafficWait();this._arrivalDelivered=null;
         this.routeDestination=null;

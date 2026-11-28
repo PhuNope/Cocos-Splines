@@ -6,19 +6,21 @@ try{
  class Component{constructor(){this.enabled=true;this.node={isValid:true,activeInHierarchy:true};}}
  class SplineContainer extends Component{constructor(){super();this.count=2;this.length=10;}distanceAtT(t){return t*t*10;}}
  class SplineAnimate extends Component{
-  constructor(){super();this.currentSpline=new SplineContainer();this.junctionMode=0;this.routeDestination=null;this.routeDestinationProgress=0;this.stopOnRouteArrival=false;this.routeArrived=false;this.isPlaying=false;this.isWaitingForTraffic=false;this.commands=[];this.cancels=0;}
-  inspectRouteTo(s,p){return s.unreachable?{status:'unreachable',route:null,message:'No route'}:{status:'reachable',route:{},message:'OK'};}
+  constructor(){super();this.currentSpline=new SplineContainer();this.currentProgress=0;this.travelDirection=1;this.routeCostSpace=0;this.inspections=[];this.junctionMode=0;this.routeDestination=null;this.routeDestinationProgress=0;this.stopOnRouteArrival=false;this.routeArrived=false;this.isPlaying=false;this.isWaitingForTraffic=false;this.commands=[];this.cancels=0;}
+  inspectRouteTo(s,p){return this.inspectRouteFrom(this.currentSpline,this.currentProgress,this.travelDirection,s,p);}
+  inspectRouteFrom(from,p,dir,s,goal){this.inspections.push([from,p,dir,s,goal]);return s.unreachable||s.requiredDirection&&dir!==s.requiredDirection?{status:'unreachable',route:null,message:'No route'}:{status:'reachable',route:{steps:s.empty?[]:[{kind:'travel',direction:s.arrivalDirection||dir,distance:5}],distance:s.empty?0:5,cost:s.empty?0:5.2,switchCount:s.empty?0:1},message:'OK'};}
+  suspendRouteNavigation(){this.pause();this.isWaitingForTraffic=false;}
   followRouteTo(s,p,stop){this.junctionMode=4;this.routeDestination=s;this.routeDestinationProgress=p;this.stopOnRouteArrival=stop;this.routeArrived=false;this.commands.push([s,p]);}
   play(){this.isPlaying=true;}pause(){this.isPlaying=false;}
   cancelRouteNavigation(){this.pause();this.routeDestination=null;this.junctionMode=0;this.routeArrived=false;this.cancels++;}
-  arrive(){this.currentSpline=this.routeDestination;this.routeArrived=true;this.pause();}
+  arrive(){this.currentSpline=this.routeDestination;this.currentProgress=this.routeDestinationProgress;this.travelDirection=this.currentSpline.arrivalDirection||this.travelDirection;this.routeArrived=true;this.pause();}
  }
  const orig=Module._load;let editor=false;
  Module._load=function(name,parent,isMain){
   if(name==='cc')return {_decorator:{ccclass:()=>x=>x,menu:()=>x=>x,property:()=>{}},Component,Enum:x=>x};
   if(name==='cc/env')return {get EDITOR_NOT_IN_PREVIEW(){return editor;}};
   if(name==='../Core/SplineContainer')return {SplineContainer};
-  if(name==='./SplineAnimate')return {SplineAnimate,JunctionMode:{Off:0,ShortestRoute:4}};
+  if(name==='./SplineAnimate')return {SplineAnimate,JunctionMode:{Off:0,ShortestRoute:4},RouteCostSpace:{Local:0,World:1}};
   return orig.call(this,name,parent,isMain);
  };
  try{
@@ -42,6 +44,21 @@ try{
   assert(r.startRoute());f.pause();r.lateUpdate(0);assert.equal(r.state,'failed');assert.match(r.lastError,/stopped/);
   assert(r.startRoute());r.onDisable();assert.equal(r.state,'idle');assert.equal(f.routeDestination,null);
   r.waypoints=[w(a,0,0,1,11)];assert(!r.startRoute());assert.match(r.lastError,/Invalid route waypoint/);
+  // Preview chains direction across legs, including empty routes and repeat return.
+  const pf=new SplineAnimate(),pr=new SplineRouteController();pr.follower=pf;pr.repeat=true;pf.routeCostSpace=1;
+  const c=new SplineContainer(),empty=new SplineContainer();c.arrivalDirection=-1;empty.empty=true;b.requiredDirection=-1;
+  pr.waypoints=[w(c,.5,2),w(empty,.5,3),w(b,.7,4)];
+  const report=pr.previewItinerary();assert.equal(report.status,'reachable');assert.equal(report.costSpace,'world');assert.equal(report.distance,15);assert.equal(report.switchCount,3);assert.equal(report.dwellSeconds,9);assert.equal(report.legs.length,4);
+  assert.deepEqual(report.legs.map(l=>[l.startDirection,l.arrivalDirection]),[[1,-1],[-1,-1],[-1,-1],[-1,-1]]);assert(report.legs[3].repeatReturn);assert.equal(pf.commands.length,0);assert.equal(pf.currentProgress,0);
+  b.requiredDirection=1;const bad=pr.previewItinerary();assert.equal(bad.status,'unreachable');assert.equal(bad.legs[3].status,'unchecked');assert.equal(bad.distance,5);
+  pr.requireReachableItinerary=true;assert(!pr.startRoute());assert.equal(pf.commands.length,0);pr.requireReachableItinerary=false;b.requiredDirection=undefined;
+  pr.repeat=false;pr.waypoints=[w(c),w(b)];pr.maxRouteRetries=2;pr.retryDelay=.5;c.unreachable=true;
+  assert(pr.startRoute());assert.equal(pr.state,'retrying');assert(!pf.isPlaying);assert.equal(pr.routeRetryCount,0);
+  pr.lateUpdate(.25);assert.equal(pr.routeRetryRemaining,.25);assert(pr.pauseRoute());pr.lateUpdate(10);assert.equal(pr.routeRetryRemaining,.25);assert(pr.resumeRoute());
+  pr.lateUpdate(.25);assert.equal(pr.routeRetryCount,1);assert.equal(pr.state,'retrying');c.unreachable=false;pr.lateUpdate(.5);assert.equal(pr.routeRetryCount,2);assert.equal(pr.state,'traveling');
+  pf.isWaitingForTraffic=true;const commands=pf.commands.length;assert(!pr.replanCurrentWaypoint());pr.lateUpdate(100);assert.equal(pf.commands.length,commands);pf.isWaitingForTraffic=false;assert(pr.replanCurrentWaypoint());
+  pf.arrive();pr.lateUpdate(0);b.unreachable=true;pr.lateUpdate(0);assert.equal(pr.state,'retrying');assert.equal(pr.routeRetryCount,0);pr.lateUpdate(100);assert.equal(pr.routeRetryCount,1);pr.lateUpdate(100);assert.equal(pr.state,'failed');assert.match(pr.lastError,/No route/);assert.equal(pf.routeDestination,null);
+  b.unreachable=false;assert(pr.startRoute());pf.pause();pr.lateUpdate(0);assert.equal(pr.state,'retrying');pr.lateUpdate(.5);assert.equal(pr.state,'traveling');assert(pf.isPlaying);pr.stopRoute();
   editor=true;r.waypoints=[w(a)];assert(!r.startRoute());r.onEnable();r.lateUpdate(1);assert.equal(f.routeDestination,null);
  }finally{Module._load=orig;}
  console.log('ROUTE CONTROLLER V2 PASS: waypoint modes, delayed start, dwell, pause, repeat, ownership, failure and lifecycle.');

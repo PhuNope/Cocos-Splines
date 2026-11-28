@@ -2,8 +2,10 @@ import {_decorator,Component,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
 import {SplineContainer} from '../Core/SplineContainer';
 import {SplinePositionMode,toNormalizedDistance} from '../Core/SplinePosition';
-import {SplineAnimate,JunctionMode} from './SplineAnimate';
+import {SplineAnimate,JunctionMode,RouteCostSpace} from './SplineAnimate';
 import type {SplineRouteDiagnosis} from '../Core/SplineNetwork';
+import {previewSplineItinerary} from '../Core/SplineRouteItineraryMath';
+import type {ItineraryPreview} from '../Core/SplineRouteItineraryMath';
 const {ccclass,property,menu}=_decorator;
 Enum(SplinePositionMode);
 @ccclass('Splines.SplineRouteWaypoint')
@@ -14,7 +16,7 @@ export class SplineRouteWaypoint {
     @property({min:0}) distance=0;
     @property({min:0,max:3600,tooltip:'Seconds to wait after arrival.'}) dwellSeconds=0;
 }
-export type RouteControllerState='idle'|'traveling'|'dwelling'|'paused'|'completed'|'failed';
+export type RouteControllerState='idle'|'traveling'|'dwelling'|'retrying'|'paused'|'completed'|'failed';
 interface Waypoint {spline:SplineContainer;progress:number;dwellSeconds:number}
 const owners=new WeakMap<SplineAnimate,SplineRouteController>();
 const active=(s:SplineContainer|null|undefined):s is SplineContainer=>!!s&&s.enabled!==false&&s.node?.isValid!==false&&s.node?.activeInHierarchy!==false&&s.count>=2&&Number.isFinite(s.length)&&s.length>1e-8;
@@ -29,12 +31,19 @@ export class SplineRouteController extends Component {
     @property({type:[SplineRouteWaypoint]}) waypoints:SplineRouteWaypoint[]=[];
     @property({tooltip:'Start after all onEnable callbacks have run.'}) playOnStart=true;
     @property({tooltip:'Repeat itinerary from current arrival, without teleporting.'}) repeat=false;
+    @property({tooltip:'Validate the complete greedy itinerary before starting (including repeat return).'} ) requireReachableItinerary=false;
+    @property({min:0,max:32,step:1,tooltip:'Automatic retries per waypoint after unreachable route or owned follower stop; 0 disables.'}) maxRouteRetries=0;
+    @property({min:.05,max:60,tooltip:'Seconds between retry attempts.'}) retryDelay=1;
+    private retryCount=0;
+    private retryBudget=0;
+    private retryInterval=1;
+    private retryRemaining=0;
     private pendingStart=false;
     private driven:SplineAnimate|null=null;
     private itinerary:Waypoint[]=[];
     private index=-1;
     private stateValue:RouteControllerState='idle';
-    private pausedFrom:'traveling'|'dwelling'='traveling';
+    private pausedFrom:'traveling'|'dwelling'|'retrying'='traveling';
     private remaining=0;
     private error='';
     private repeatSnapshot=false;
@@ -65,6 +74,18 @@ export class SplineRouteController extends Component {
         const w=this.readWaypoint(this.waypoints[index]);
         return this.follower.inspectRouteTo(w.spline,w.progress);
     }
+    public get routeRetryCount():number{return this.retryCount;}
+    public get routeRetryRemaining():number{return this.retryRemaining;}
+    /** Read-only sequential preview, using current serialized waypoint settings. */
+    public previewItinerary(startIndex=0):ItineraryPreview<SplineContainer>{
+        const f=this.follower;if(!this.live(f)||!active(f.currentSpline))throw Error('Route preview requires an active follower source.');
+        return this.preview(f,Array.from(this.waypoints,w=>this.readWaypoint(w)),startIndex,this.repeat);
+    }
+    private preview(f:SplineAnimate,itinerary:Waypoint[],index:number,repeat:boolean):ItineraryPreview<SplineContainer>{
+        return previewSplineItinerary({spline:f.currentSpline!,progress:f.currentProgress},f.travelDirection,itinerary,index,repeat,
+            f.routeCostSpace===RouteCostSpace.World?'world':'local',
+            (from,dir,to)=>f.inspectRouteFrom(from.spline,from.progress,dir,to.spline,to.progress));
+    }
     private ownsCommand():boolean{
         const f=this.driven,w=this.itinerary[this.index];
         return !!f&&!!w&&owners.get(f)===this&&f.junctionMode===JunctionMode.ShortestRoute&&
@@ -79,18 +100,28 @@ export class SplineRouteController extends Component {
         this.driven=null;
     }
     private fail(error:unknown,cancel=true):false{
-        this.release(cancel);this.error=String(error);this.stateValue='failed';this.remaining=0;return false;
+        this.release(cancel);this.error=String(error);this.stateValue='failed';this.remaining=0;this.retryRemaining=0;return false;
     }
-    private activate(index:number):void{
+    private scheduleRetry(message:string):void{
+        if(this.retryCount>=this.retryBudget)throw Error(message);
+        this.driven!.suspendRouteNavigation();
+        this.stateValue='retrying';this.error=message;this.retryRemaining=this.retryInterval;this.remaining=0;
+    }
+    private activate(index:number,resetRetries=true):void{
         const f=this.driven,w=this.itinerary[index];
         if(!this.live(f)||owners.get(f)!==this||!w||!active(w.spline))
             throw Error('Route follower or waypoint no longer available.');
         const diagnosis=f.inspectRouteTo(w.spline,w.progress);
-        if(diagnosis.status!=='reachable'||!diagnosis.route)throw Error(diagnosis.message||'Waypoint unreachable.');
-        // Set index only after preflight, so a failed next waypoint still
-        // allows cleanup of the previously owned follower command.
+        if(resetRetries)this.retryCount=0;
+        if(diagnosis.status!=='reachable'||!diagnosis.route){
+            const message=diagnosis.message||'Waypoint unreachable.';
+            if(diagnosis.status!=='unreachable'||this.retryCount>=this.retryBudget)throw Error(message);
+            // Own a paused command for the pending waypoint. This cancels the
+            // previous pending admission but never releases the occupied exit.
+            this.index=index;f.followRouteTo(w.spline,w.progress,true);this.scheduleRetry(message);return;
+        }
         this.index=index;f.followRouteTo(w.spline,w.progress,true);f.play();
-        this.stateValue='traveling';this.error='';this.remaining=0;
+        this.stateValue='traveling';this.error='';this.remaining=0;this.retryRemaining=0;
     }
     public startRoute(startIndex=0):boolean{
         if(EDITOR_NOT_IN_PREVIEW)return false;
@@ -103,15 +134,19 @@ export class SplineRouteController extends Component {
             if(!Array.isArray(this.waypoints)||this.waypoints.length<1||this.waypoints.length>128||
                !Number.isInteger(startIndex)||startIndex<0||startIndex>=this.waypoints.length||typeof this.repeat!=='boolean')
                 throw Error('Route requires 1–128 waypoints and a valid start index.');
-            const itinerary=this.waypoints.map(w=>this.readWaypoint(w));
+            if(!Number.isInteger(this.maxRouteRetries)||this.maxRouteRetries<0||this.maxRouteRetries>32||
+               !Number.isFinite(this.retryDelay)||this.retryDelay<.05||this.retryDelay>60)throw Error('Invalid route retry policy.');
+            const itinerary=Array.from(this.waypoints,w=>this.readWaypoint(w));
+            if(this.requireReachableItinerary){const report=this.preview(f,itinerary,startIndex,this.repeat);if(report.status!=='reachable')throw Error(report.message);}
+            this.retryBudget=this.maxRouteRetries;this.retryInterval=this.retryDelay;this.retryCount=0;this.retryRemaining=0;
             this.itinerary=itinerary;this.index=-1;this.visited=0;this.repeatSnapshot=this.repeat;
             owners.set(f,this);this.driven=f;this.activate(startIndex);return true;
         }catch(error){return this.fail(error);}
     }
     public pauseRoute():boolean{
-        if(EDITOR_NOT_IN_PREVIEW||!this.driven||!['traveling','dwelling'].includes(this.stateValue))return false;
+        if(EDITOR_NOT_IN_PREVIEW||!this.driven||!['traveling','dwelling','retrying'].includes(this.stateValue))return false;
         if(!this.ownsCommand())return this.fail('Follower route changed externally.',false);
-        this.pausedFrom=this.stateValue as 'traveling'|'dwelling';this.driven.pause();this.stateValue='paused';return true;
+        this.pausedFrom=this.stateValue as 'traveling'|'dwelling'|'retrying';this.driven.pause();this.stateValue='paused';return true;
     }
     public resumeRoute():boolean{
         if(EDITOR_NOT_IN_PREVIEW||this.stateValue!=='paused'||!this.live(this.driven))return false;
@@ -120,8 +155,17 @@ export class SplineRouteController extends Component {
         if(this.stateValue==='traveling'&&!this.driven.routeArrived)this.driven.play();
         return true;
     }
+    /** Explicit replan while traveling or retrying. Never cancel a live
+     * traffic wait; the follower already recalculates on admission retry. */
+    public replanCurrentWaypoint():boolean{
+        if(EDITOR_NOT_IN_PREVIEW||!this.live(this.driven)||!['traveling','retrying'].includes(this.stateValue))return false;
+        if(!this.ownsCommand())return this.fail('Follower route changed externally.',false);
+        if(this.driven.routeArrived||this.driven.isWaitingForTraffic)return false;
+        try{this.activate(this.index,false);return this.stateValue==='traveling';}
+        catch(error){return this.fail(error);}
+    }
     public stopRoute():void{
-        this.pendingStart=false;this.release(!EDITOR_NOT_IN_PREVIEW);this.stateValue='idle';this.index=-1;this.remaining=0;this.error='';this.itinerary=[];this.visited=0;
+        this.pendingStart=false;this.release(!EDITOR_NOT_IN_PREVIEW);this.stateValue='idle';this.index=-1;this.remaining=0;this.error='';this.itinerary=[];this.visited=0;this.retryCount=0;this.retryRemaining=0;
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW)this.pendingStart=this.playOnStart;}
     onDisable():void{this.stopRoute();}
@@ -140,8 +184,15 @@ export class SplineRouteController extends Component {
             if(this.stateValue==='traveling'){
                 if(f.routeArrived){
                     f.pause();this.visited++;this.remaining=this.itinerary[this.index].dwellSeconds;this.stateValue='dwelling';
-                }else if(!f.isPlaying)this.fail('Follower stopped before waypoint arrival.');
+                }else if(!f.isPlaying)this.scheduleRetry('Follower stopped before waypoint arrival.');
                 return;
+            }
+            if(this.stateValue==='retrying'){
+                if(f.isPlaying){this.fail('Follower resumed externally during route retry.');return;}
+                if(!Number.isFinite(dt)||dt<0)return;
+                this.retryRemaining=Math.max(0,this.retryRemaining-dt);
+                if(this.retryRemaining>0)return;
+                this.retryCount++;this.activate(this.index,false);return;
             }
             if(this.stateValue!=='dwelling')return;
             if(f.isPlaying){this.fail('Follower resumed externally during waypoint dwell.');return;}
