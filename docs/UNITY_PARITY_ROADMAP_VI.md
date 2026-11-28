@@ -300,7 +300,8 @@ Road không biến dạng asset nguồn, stable frames, extrusion, caps, terrain
 Follower speeds, junction routing, trains/wagons, projection, triggers và connection constraints. **Exit:** deterministic routing/event tests.
 
 - [x] Phase 5.1a — fixed-route SplineTrainController: ordered full spline legs and reverse traversal, single world-arc head, 1–128 independent cars, consistent center spacing, open clamp/stop and continuous loop wrap, endpoint/tangent validation, shared world arc and stable frame cache, runtime seek/play/pause/restart, pose preflight and best-effort rollback, native serialized fields and installable API example. Native Creator acceptance pending.
-- [ ] Phase 5.1b — dynamic junction route history and consist-wide traffic admission/release; physical coupler/bogie and orientation smoothing as separate extensions.
+- [x] Phase 5.1b1 — fixed open route consist-wide admission: explicit endpoint junction link indices, shared SplineTrafficGate FIFO and signals, independent token per route transition, multi-junction retention until tail center plus clearance passes, blocked head stop margin, rollback of newly acquired slots, pause/disable cleanup and guarded initialization. No traffic seeks, live route edits, loop or repeated exit in this slice. Native acceptance pending.
+- [ ] Phase 5.1b2 — dynamic junction route history and loop traffic; physical coupler/bogie and orientation smoothing as separate extensions.
 - [ ] Phase 5.2 — Route Controller.
 - [ ] Phase 5.3 — Group Controller.
 - [ ] Phase 5.4 — Speed Profile.

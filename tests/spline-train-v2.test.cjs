@@ -24,13 +24,14 @@ try{
  class Node{constructor(){this.parent=null;this.isValid=true;this.activeInHierarchy=true;this.worldPosition=new Vec3();this.worldRotation=new Quat();}setWorldPosition(p){if(this.fail){this.fail=false;throw Error('injected transform failure');}this.worldPosition=p.clone();}setWorldRotation(q){this.worldRotation=q.clone();}}
  class Component{constructor(){this.node=new Node();this.enabled=true;}}
  class SplineContainer{}
- let editor=false,frameBuilds=0;
- const cc={_decorator:{ccclass:()=>x=>x,menu:()=>x=>x,property:()=>{}},Component,Node,Vec3,Quat,CCBoolean:'boolean'};
+ let editor=false,frameBuilds=0;const activeJunctions=new Set();
+ const cc={_decorator:{ccclass:()=>x=>x,menu:()=>x=>x,property:()=>{}},Component,Node,Vec3,Quat,CCBoolean:'boolean',CCInteger:'integer'};
  const original=Module._load;
  Module._load=function(name,parent,isMain){
   if(name==='cc')return cc;
   if(name==='cc/env')return {get EDITOR_NOT_IN_PREVIEW(){return editor;}};
   if(name==='../Core/SplineContainer')return {SplineContainer};
+  if(name==='./SplineJunction')return {SplineJunction:{active:activeJunctions},JunctionExitDirection:{Preserve:0,Forward:1,Backward:2},JunctionTrafficSignal:{Green:0,Red:1,Yellow:2}};
   if(name==='../Core/SplineHeadwayWorldArc')return {headwayWorldArc:s=>s.arc};
   if(name==='../Core/SplineWorldFrames')return {createWorldFrameField:s=>{frameBuilds++;return {at:p=>({position:new Vec3(s.start+(s.end-s.start)*p),tangent:new Vec3(Math.sign(s.end-s.start)),right:new Vec3(0,0,-Math.sign(s.end-s.start)),up:new Vec3(0,1,0)})};}};
   return original.call(this,name,parent,isMain);
@@ -56,6 +57,25 @@ try{
   train.loopRoute=true;assert.equal(train.seekRouteDistance(16),false);assert.match(train.lastError,/discontinuity/i);
   train.loopRoute=false;editor=true;assert.equal(train.seekRouteDistance(20),false);editor=false;
   train.onDisable();assert.equal(train.isPlaying,false);
+  const {splineTrafficGate:gate}=require(dir+'/Core/SplineTrafficGate.js');
+  const junction=(from,to,reverse=false)=>{const j={node:new Node(),enabled:true,connections:[{spline:from,getProgress:()=>1},{spline:to,getProgress:()=>reverse?1:0,exitDirection:reverse?2:1,maxFollowers:1,trafficSignal:0}]};activeJunctions.add(j);return j;};
+  const x=spline(0,10),y=spline(10,13),z=spline(13,40),j1=junction(x,y),j2=junction(y,z);
+  const t=new SplineTrainController();t.legs=[{spline:x,backwards:false},{spline:y,backwards:false,entryJunction:j1,junctionEntryIndex:0,junctionExitIndex:1},{spline:z,backwards:false,entryJunction:j2,junctionEntryIndex:0,junctionExitIndex:1}];
+  t.cars=[new Node(),new Node(),new Node()];t.centerSpacing=3;t.startDistance=6;t.speed=4;t.enableTraffic=true;t.trafficStopGap=.1;t.trafficTailClearance=.5;
+  j1.connections[1].trafficSignal=1;t.onEnable();assert.equal(t.currentDistance,6);t.lateUpdate(2);
+  assert.equal(t.currentDistance,9.9);assert(t.trafficWaiting);assert.equal(gate.waiting(j1,1),1);assert.equal(gate.count(j1,1),0);
+  t.lateUpdate(2);assert.equal(gate.waiting(j1,1),1);assert.equal(t.currentDistance,9.9);
+  j1.connections[1].trafficSignal=0;const competitor={};assert(!gate.move(competitor,j1,1,1));
+  t.lateUpdate(1);assert.equal(t.currentDistance,13.9);assert.equal(t.trafficReservations,2);assert.equal(gate.count(j1,1),1);assert.equal(gate.count(j2,1),1);assert(!t.trafficWaiting);
+  assert(!gate.move(competitor,j1,1,1));t.lateUpdate(.65);assert.equal(gate.count(j1,1),1); // tail exactly at clearance boundary
+  t.lateUpdate(.1);assert.equal(gate.count(j1,1),0);assert.equal(gate.count(j2,1),1);assert(gate.move(competitor,j1,1,1));
+  t.pause();assert.equal(gate.count(j2,1),1);assert.equal(t.seekRouteDistance(0),false);assert.equal(gate.count(j2,1),1);
+  t.play();t.lateUpdate(1);assert.equal(gate.count(j2,1),0);assert.equal(t.trafficReservations,0);
+  t.onDisable();gate.release(competitor);assert.equal(gate.size,0);assert.equal(gate.waitingCount,0);
+  t.onEnable();t.cars[1].fail=true;t.lateUpdate(2);assert.equal(t.currentDistance,6);assert.equal(gate.size,0);assert.equal(t.isPlaying,false);
+  t.play();t.lateUpdate(2);assert.equal(gate.size,2);gate.releaseJunction(j1);t.lateUpdate(.1);assert.match(t.lastError,/invalidated/);assert.equal(t.isPlaying,false);assert.equal(gate.count(j2,1),1);
+  t.onDestroy();assert.equal(gate.size,0);
+  t.startDistance=15;t.onEnable();assert.match(t.lastError,/before the first junction/);assert.equal(gate.size,0);
  }finally{Module._load=original;}
  console.log('TRAIN CONTROLLER V2 PASS: world arc route math, reversed legs, fixed consist, loop fitting, cache, rollback and runtime-only placement.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
