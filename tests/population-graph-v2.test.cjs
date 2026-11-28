@@ -48,5 +48,58 @@ try{
  assert.equal(runner.evaluate(compilePopulationGraph(one),{sources:[source],prefabSlotCount:1}).instances[0].progress,0);
  const example=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/BasicPopulationGraph.json','utf8'));
  assert(runner.evaluate(compilePopulationGraph(example),ctx).instances.length>0);
+ // Distribution nodes and range masks preserve stable candidate indexes.
+ const {distributionDistances,inPopulationProgressRange}=require(dir+'/Core/SplinePopulationDistributionMath.js');
+ const distribute=(node,range)=>compilePopulationGraph({version:1,output:'out',nodes:[
+  {id:'path',type:'spline'},{id:'dist',input:'path',...node},
+  ...(range?[{id:'range',type:'range',input:'dist',...range}]:[]),
+  {id:'variant',type:'prefab',input:range?'range':'dist',weights:[1,3],seed:55},
+  {id:'out',type:'output',input:'variant'}]});
+ const samples=(node,range,context=ctx)=>runner.evaluate(distribute(node,range),context).instances;
+ assert.deepEqual(samples({type:'spacing',spacing:3}).map(p=>p.distance),[0,3,6,9]);
+ assert.deepEqual(samples({type:'spacing',spacing:3,includeEnd:true}).map(p=>p.distance),[0,3,6,9,10]);
+ assert.deepEqual(samples({type:'spacing',spacing:5,includeEnd:true}).map(p=>p.distance),[0,5,10]);
+ assert.deepEqual(samples({type:'spacing',spacing:5,includeEnd:true},null,{...ctx,sources:[closed]}).map(p=>p.distance),[0,5]);
+ assert.deepEqual(samples({type:'spacing',spacing:20,includeEnd:true}).map(p=>p.distance),[0,10]);
+ const random={type:'random',count:32,seed:19};
+ const randomAll=samples(random);
+ assert.deepEqual(samples(random),randomAll);
+ assert(randomAll.some((p,i)=>i>0&&p.progress<randomAll[i-1].progress));
+ assert(randomAll.every(p=>p.progress>=0&&p.progress<1&&Math.abs(p.position.x-p.distance)<1e-9));
+ assert.notDeepEqual(samples({...random,seed:20}).map(p=>p.progress),randomAll.map(p=>p.progress));
+ const ranged=samples(random,{startProgress:.2,endProgress:.7});
+ assert.deepEqual(ranged,randomAll.filter(p=>p.progress>=.2&&p.progress<.7));
+ const countNode={type:'count',count:11};
+ assert.deepEqual(samples(countNode,{startProgress:.7,endProgress:1}).map(p=>p.index),[7,8,9,10]);
+ assert.deepEqual(samples(countNode,{startProgress:.4,endProgress:.4}),[]);
+ assert.throws(()=>samples(countNode,{startProgress:.8,endProgress:.2}),/closed path/i);
+ const closedCtx={...ctx,sources:[closed]};
+ assert.deepEqual(samples({type:'count',count:10},{startProgress:.8,endProgress:.2},closedCtx).map(p=>p.index),[0,1,8,9]);
+ assert.deepEqual(samples({type:'count',count:10},{startProgress:0,endProgress:1},closedCtx).map(p=>p.index),Array.from({length:10},(_,i)=>i));
+ assert.equal(inPopulationProgressRange(0,1,0,true),false);
+ const centered=samples({type:'jitter',count:4,jitter:0});
+ assert.deepEqual(centered.map(p=>p.distance),[1.25,3.75,6.25,8.75]);
+ const jitter={type:'jitter',count:32,jitter:1,seed:7};
+ const jittered=samples(jitter);
+ assert(jittered.every((p,i)=>p.progress>=i/32&&p.progress<(i+1)/32));
+ assert.deepEqual(samples(jitter),jittered);
+ assert.notDeepEqual(jittered.map(p=>p.progress),samples({...jitter,seed:8}).map(p=>p.progress));
+ assert.equal(distributionDistances(2048,true,{type:'spacing',spacing:1}).length,2048);
+ assert.throws(()=>distributionDistances(2048,false,{type:'spacing',spacing:1,includeEnd:true}),/2048/i);
+ assert.throws(()=>samples({type:'spacing',spacing:.001}),/2048/i);
+ for(const node of [{type:'spacing',spacing:0},{type:'random',count:2049},{type:'jitter',count:4,jitter:1.1},{type:'random',count:4,seed:1.5}])assert.throws(()=>distribute(node));
+ assert.throws(()=>distribute(countNode,{startProgress:-1,endProgress:1}));
+ const good=distribute(random,{startProgress:.2,endProgress:.7});
+ runner.evaluate(good,ctx);
+ const changedRange=runner.evaluate(distribute(random,{startProgress:.3,endProgress:.7}),ctx);
+ assert.deepEqual(changedRange.metrics,{computed:3,reused:2,nodes:5});
+ const lastMetrics=runner.metrics;
+ assert.throws(()=>samples(countNode,{startProgress:.8,endProgress:.2}),/closed path/i);
+ assert.deepEqual(runner.metrics,lastMetrics);
+ assert.deepEqual(runner.evaluate(distribute(random,{startProgress:.3,endProgress:.7}),ctx).metrics,{computed:0,reused:5,nodes:5});
+ for(const file of ['SpacingPopulationGraph','RandomPopulationGraph','JitterPopulationGraph']){
+  const g=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/'+file+'.json','utf8'));
+  assert(runner.evaluate(compilePopulationGraph(g),ctx).instances.length>0);
+ }
  console.log('POPULATION GRAPH V2 PASS: typed DAG, arc-count placement, shared policy, deterministic prefab slots, cache and rollback.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

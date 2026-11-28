@@ -5,8 +5,9 @@
 import {planPopulation,populationGate,validatePopulationPolicy} from './SplinePopulationMath';
 import type {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationVector} from './SplinePopulationMath';
 import {selectWeightedPrefab,validatePrefabWeights} from './SplinePopulationPlacementMath';
+import {distributionDistances,inPopulationProgressRange} from './SplinePopulationDistributionMath';
 export type PopulationGraphPort='path'|'candidates'|'instances';
-export type PopulationGraphNodeType='spline'|'count'|'density'|'prefab'|'output';
+export type PopulationGraphNodeType='spline'|'count'|'spacing'|'random'|'jitter'|'range'|'density'|'prefab'|'output';
 export interface PopulationGraphFrame {
     position:PopulationVector;forward:PopulationVector;up:PopulationVector;distance:number;
 }
@@ -16,6 +17,7 @@ export interface PopulationGraphSource {
 export interface PopulationGraphNode {
     id:string;type:PopulationGraphNodeType;input?:string;slot?:number;
     count?:number;includeEnd?:boolean;density?:number;seed?:number;
+    spacing?:number;jitter?:number;startProgress?:number;endProgress?:number;
     densityKeys?:PopulationDensityKey[];exclusions?:PopulationExclusion[];minWorldSpacing?:number;
     weights?:number[];
 }
@@ -47,6 +49,10 @@ const copyPoint=<T extends PopulationGraphPoint>(p:T):T=>({...p,position:copyVec
 const TYPES:Readonly<Record<PopulationGraphNodeType,{input:PopulationGraphPort|null;output:PopulationGraphPort;params:ReadonlyArray<string>}>>={
     spline:{input:null,output:'path',params:['slot']},
     count:{input:'path',output:'candidates',params:['count','includeEnd']},
+    spacing:{input:'path',output:'candidates',params:['spacing','includeEnd']},
+    random:{input:'path',output:'candidates',params:['count','seed']},
+    jitter:{input:'path',output:'candidates',params:['count','seed','jitter']},
+    range:{input:'candidates',output:'candidates',params:['startProgress','endProgress']},
     density:{input:'candidates',output:'candidates',params:['density','seed','densityKeys','exclusions','minWorldSpacing']},
     prefab:{input:'candidates',output:'instances',params:['weights','seed']},
     output:{input:'instances',output:'instances',params:[]},
@@ -82,6 +88,15 @@ export function compilePopulationGraph(raw:unknown):PopulationGraphPlan{
         if(type==='spline'&&item.slot!==undefined&&!integer(item.slot,0,2))throw Error('Population Graph spline slot must be 0–2.');
         if(type==='count'&&(!integer(item.count,1,LIMIT)||(item.includeEnd!==undefined&&typeof item.includeEnd!=='boolean')))
             throw Error('Population Graph count must be 1–2048 with optional boolean includeEnd.');
+        if(type==='spacing'&&(!bound(item.spacing,.001,10000)||(item.includeEnd!==undefined&&typeof item.includeEnd!=='boolean')))
+            throw Error('Population Graph spacing must be .001–10000 world units with optional boolean includeEnd.');
+        if(type==='random'||type==='jitter'){
+            if(!integer(item.count,1,LIMIT)||(item.seed!==undefined&&!integer(item.seed,-2147483647,2147483647)))
+                throw Error('Population Graph random/jitter requires count 1–2048 and a valid seed.');
+            if(type==='jitter'&&item.jitter!==undefined&&!bound(item.jitter,0,1))throw Error('Population Graph jitter must be in [0,1].');
+        }
+        if(type==='range'&&(!bound(item.startProgress,0,1)||!bound(item.endProgress,0,1)))
+            throw Error('Population Graph range requires start/end progress in [0,1].');
         if(type==='density'){
             if(item.density!==undefined&&!bound(item.density,0,1)||item.seed!==undefined&&!integer(item.seed,-2147483647,2147483647)||
                item.minWorldSpacing!==undefined&&!bound(item.minWorldSpacing,0,10000))
@@ -166,19 +181,21 @@ function basis(a:PopulationGraphFrame,b:PopulationGraphFrame,t:number):{forward:
     const up=unit({x:u.x-dot*forward.x,y:u.y-dot*forward.y,z:u.z-dot*forward.z});
     return {forward,up};
 }
-function countPoints(source:PopulationGraphSource,n:Readonly<PopulationGraphNode>):PopulationGraphPoint[]{
-    const frames=source.frames,total=frames[frames.length-1].distance,count=n.count!;
-    // Closed loops never duplicate the seam. Open count=1 always starts at zero.
-    const divisor=count===1?1:source.closed||n.includeEnd===false?count:count-1;
-    const result:PopulationGraphPoint[]=[];let cursor=0;
-    for(let index=0;index<count;index++){
-        const progress=index/divisor,distance=progress*total;
-        while(cursor<frames.length-2&&frames[cursor+1].distance<distance)cursor++;
-        const a=frames[cursor],b=frames[cursor+1],span=b.distance-a.distance;
+function distributionPoints(source:PopulationGraphSource,n:Readonly<PopulationGraphNode>):PopulationGraphPoint[]{
+    const frames=source.frames,total=frames[frames.length-1].distance;
+    // The distribution owns candidate indices. Random points deliberately
+    // remain in original index order (not sorted by progress), so filtering
+    // and weighted selection retain deterministic identity.
+    const samples=distributionDistances(total,source.closed,n);
+    return samples.map(({distance,progress},index)=>{
+        let lo=0,hi=frames.length-1;
+        // First frame at or beyond the sample; handles arbitrary order in
+        // O(log frames) and skips zero-distance runs when possible.
+        while(lo+1<hi){const mid=(lo+hi)>>>1;if(frames[mid].distance<distance)lo=mid;else hi=mid;}
+        const a=frames[lo],b=frames[hi],span=b.distance-a.distance;
         const t=span>0?(distance-a.distance)/span:0;
-        result.push({index,progress,distance,position:mix(a.position,b.position,t),...basis(a,b,t)});
-    }
-    return result;
+        return {index,progress,distance,position:mix(a.position,b.position,t),...basis(a,b,t)};
+    });
 }
 /** Cache keys use the source revision contract; the host must change revision
  * whenever source geometry changes. Failed runs preserve the committed cache,
@@ -204,8 +221,12 @@ export class PopulationGraphRunner {
             const input=parent?.value;let value:Value;
             if(n.type==='spline'){
                 value={kind:'path',source:{...source!,frames:source!.frames.map((f:PopulationGraphFrame)=>({...f,position:copyVec(f.position),forward:copyVec(f.forward),up:copyVec(f.up)}))}};
-            }else if(n.type==='count'&&input?.kind==='path'){
-                value={kind:'candidates',closed:input.source.closed,points:countPoints(input.source,n)};
+            }else if((n.type==='count'||n.type==='spacing'||n.type==='random'||n.type==='jitter')&&input?.kind==='path'){
+                value={kind:'candidates',closed:input.source.closed,points:distributionPoints(input.source,n)};
+            }else if(n.type==='range'&&input?.kind==='candidates'){
+                // Validate open wrapping even on an empty upstream list.
+                inPopulationProgressRange(0,n.startProgress!,n.endProgress!,input.closed);
+                value={kind:'candidates',closed:input.closed,points:input.points.filter(p=>inPopulationProgressRange(p.progress,n.startProgress!,n.endProgress!,input.closed))};
             }else if(n.type==='density'&&input?.kind==='candidates'){
                 const p=policy(n,input.closed);validatePopulationPolicy(p);
                 const kept=new Set(planPopulation(input.points,p));
