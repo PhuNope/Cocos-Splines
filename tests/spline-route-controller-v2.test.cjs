@@ -10,6 +10,7 @@ try{
   inspectRouteTo(s,p){return this.inspectRouteFrom(this.currentSpline,this.currentProgress,this.travelDirection,s,p);}
   inspectRouteFrom(from,p,dir,s,goal){this.inspections.push([from,p,dir,s,goal]);return s.unreachable||s.requiredDirection&&dir!==s.requiredDirection?{status:'unreachable',route:null,message:'No route'}:{status:'reachable',route:{steps:s.empty?[]:[{kind:'travel',direction:s.arrivalDirection||dir,distance:5}],distance:s.empty?0:5,cost:s.empty?0:5.2,switchCount:s.empty?0:1},message:'OK'};}
   suspendRouteNavigation(){this.pause();this.isWaitingForTraffic=false;}
+  setCurrentSpline(s,p,d){if(this.failPlacement){this.failPlacement=false;throw Error('injected formation placement failure');}this.currentSpline=s;this.currentProgress=p;this.travelDirection=d;}
   followRouteTo(s,p,stop){this.junctionMode=4;this.routeDestination=s;this.routeDestinationProgress=p;this.stopOnRouteArrival=stop;this.routeArrived=false;this.commands.push([s,p]);}
   play(){this.isPlaying=true;}pause(){this.isPlaying=false;}
   cancelRouteNavigation(){this.pause();this.routeDestination=null;this.junctionMode=0;this.routeArrived=false;this.cancels++;}
@@ -20,6 +21,7 @@ try{
   if(name==='cc')return {_decorator:{ccclass:()=>x=>x,menu:()=>x=>x,property:()=>{}},Component,Enum:x=>x};
   if(name==='cc/env')return {get EDITOR_NOT_IN_PREVIEW(){return editor;}};
   if(name==='../Core/SplineContainer')return {SplineContainer};
+  if(name==='../Core/SplineHeadwayWorldArc')return {headwayWorldArc:s=>s.arc||[{progress:0,distance:0},{progress:1,distance:10}]};
   if(name==='./SplineAnimate')return {SplineAnimate,JunctionMode:{Off:0,ShortestRoute:4},RouteCostSpace:{Local:0,World:1}};
   return orig.call(this,name,parent,isMain);
  };
@@ -75,7 +77,25 @@ try{
   g.followers=[gf];g.lateUpdate();assert.equal(g.state,'failed');assert(!gf.isPlaying&&!g2.isPlaying);assert.equal(followerControllerRate(g2),1);
   g.followers=[gf,gf];assert(!g.startGroup());g.followers=[gf,g2];g2.target=gf.node;assert(!g.startGroup());g2.target=null;
   assert(g.startGroup());g.onDisable();assert.equal(g.state,'idle');assert(!gf.isPlaying&&!g2.isPlaying);assert.equal(followerControllerOwner(gf),undefined);
-  editor=true;assert(!g.startGroup());r.waypoints=[w(a)];assert(!r.startRoute());r.onEnable();r.lateUpdate(1);assert.equal(f.routeDestination,null);
+  const {planGroupFormation,GroupFormationMode:M}=require(dir+'/Core/SplineGroupFormationMath.js');
+  const arc=[{progress:0,distance:0},{progress:.5,distance:2},{progress:1,distance:10}];
+  assert.deepEqual(planGroupFormation(arc,false,3,M.NormalizedRange,0,1,1).points.map(p=>p.worldDistance),[0,2,10]);
+  assert.deepEqual(planGroupFormation(arc,false,3,M.WorldRange,0,1,1).points.map(p=>p.worldDistance),[0,5,10]);
+  assert.deepEqual(planGroupFormation(arc,true,4,M.WorldRange,0,1,1).points.map(p=>p.worldDistance),[0,2.5,5,7.5]);
+  assert.deepEqual(planGroupFormation(arc,true,3,M.FixedWorldSpacing,.75,.25,2,true).points.map(p=>p.worldDistance),[0,8,6]);
+  assert.throws(()=>planGroupFormation(arc,true,4,M.FixedWorldSpacing,0,1,3),/fit/);
+  assert.throws(()=>planGroupFormation(arc,false,2,M.WorldRange,.5,.5,1),/length/);
+  assert.throws(()=>planGroupFormation(arc,false,2,M.WorldRange,.8,.2,1));
+  assert.throws(()=>planGroupFormation([{progress:0,distance:0},{progress:1,distance:0}],false,2,M.WorldRange,0,1,1));
+  const sf=new SplineContainer();sf.arc=arc;gf.currentSpline=g2.currentSpline=sf;gf.currentProgress=.2;g2.currentProgress=.4;
+  g.formationSpline=sf;g.formationMode=M.FixedWorldSpacing;g.formationSpacing=3;g.formationBackwards=true;
+  assert.equal(g.previewFormation().points.length,2);assert.equal(gf.currentProgress,.2);
+  g2.enableTrafficCapacity=true;assert(!g.initializeFormation());assert.equal(gf.currentProgress,.2);g2.enableTrafficCapacity=false;
+  g2.failPlacement=true;assert(!g.initializeFormation());assert.match(g.lastError,/injected/);assert.equal(gf.currentProgress,.2);assert.equal(g2.currentProgress,.4);assert.equal(gf.travelDirection,1);
+  assert(g.initializeFormation());assert.equal(gf.currentProgress,.5625);assert.equal(g2.currentProgress,0);assert.equal(gf.travelDirection,-1);assert.equal(g.inspectSpacing().minWorldGap,3);
+  g2.currentSpline=a;assert.equal(g.inspectSpacing(),null);g2.currentSpline=sf;
+  g.initializeFormationOnStart=true;assert(g.startGroup());assert(!g.initializeFormation());g.stopGroup();
+  editor=true;assert(!g.initializeFormation());assert(!g.startGroup());r.waypoints=[w(a)];assert(!r.startRoute());r.onEnable();r.lateUpdate(1);assert.equal(f.routeDestination,null);
  }finally{Module._load=orig;}
  console.log('ROUTE CONTROLLER V2 PASS: waypoint modes, delayed start, dwell, pause, repeat, ownership, failure and lifecycle.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

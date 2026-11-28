@@ -1,13 +1,18 @@
-import {_decorator,Component} from 'cc';
+import {_decorator,Component,Enum} from 'cc';
 import {EDITOR_NOT_IN_PREVIEW} from 'cc/env';
-import {SplineAnimate} from './SplineAnimate';
+import {SplineAnimate,JunctionMode} from './SplineAnimate';
+import {SplineContainer} from '../Core/SplineContainer';
+import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
+import {GroupFormationMode,planGroupFormation,groupWorldGaps} from '../Core/SplineGroupFormationMath';
+import type {GroupFormationPlan} from '../Core/SplineGroupFormationMath';
 import {claimFollowerController,releaseFollowerController,followerControllerOwner,setFollowerControllerRate,validFollowerRate} from '../Core/SplineFollowerControlRegistry';
 const {ccclass,property,menu}=_decorator;
+Enum(GroupFormationMode);
 export type SplineGroupState='idle'|'playing'|'paused'|'completed'|'failed';
 export interface SplineGroupStatus {total:number;playing:number;stopped:number;trafficWaiting:number;headwayBlocked:number;proximityBlocked:number}
 interface Member {follower:SplineAnimate;target:SplineAnimate['node'];resume:boolean}
 /** Independent followers, one playback owner. No shared transform writer,
- * teleports, forced junction choices, or direct traffic gate mutation. */
+ * continuous teleports, forced junction choices, or direct traffic gate mutation. */
 @ccclass('Splines.SplineGroupController')
 @menu('Splines/Spline Group Controller')
 export class SplineGroupController extends Component{
@@ -15,6 +20,13 @@ export class SplineGroupController extends Component{
     followers:SplineAnimate[]=[];
     @property({tooltip:'Start the group after follower enable callbacks.'}) playOnStart=true;
     @property({min:.01,max:10,tooltip:'Runtime playback rate multiplier; does not change follower Speed or Duration.'}) speedMultiplier=1;
+    @property({type:SplineContainer,tooltip:'Optional source for explicit formation initialization; followers must already use it.'}) formationSpline:SplineContainer|null=null;
+    @property({type:Enum(GroupFormationMode)}) formationMode=GroupFormationMode.WorldRange;
+    @property({range:[0,1,.001],slide:true}) formationStart=0;
+    @property({range:[0,1,.001],slide:true}) formationEnd=1;
+    @property({min:.001,max:10000}) formationSpacing=2;
+    @property({tooltip:'Reverse placement order and travel direction.'}) formationBackwards=false;
+    @property({tooltip:'Initialize formation before group playback. Requires stopped non-traffic followers.'}) initializeFormationOnStart=false;
     private members:Member[]=[];
     private stateValue:SplineGroupState='idle';
     private error='';
@@ -75,12 +87,65 @@ export class SplineGroupController extends Component{
         }
         return status;
     }
+    private formationSource():SplineContainer{
+        const s=this.formationSpline;
+        if(!s||s.enabled===false||s.node?.isValid===false||s.node?.activeInHierarchy===false||s.count<2)
+            throw Error('Formation requires an active spline.');
+        return s;
+    }
+    /** Read-only positions for the configured count, without claiming followers. */
+    public previewFormation():GroupFormationPlan{
+        const s=this.formationSource();
+        return planGroupFormation(headwayWorldArc(s),s.closed===true,this.followers.length,this.formationMode,
+            this.formationStart,this.formationEnd,this.formationSpacing,this.formationBackwards);
+    }
+    /** Centerline arc gaps between members currently on the same spline.
+     * Null if split across routes. Does not measure collider clearance. */
+    public inspectSpacing():ReturnType<typeof groupWorldGaps>|null{
+        const followers=this.members.length?this.members.map(m=>m.follower):this.followers;
+        if(!Array.isArray(followers)||!followers.length||followers.some(f=>!this.live(f)))return null;
+        const source=followers[0].currentSpline;
+        if(!source||followers.some(f=>f.currentSpline!==source))return null;
+        return groupWorldGaps(headwayWorldArc(source),followers.map(f=>f.currentProgress),source.closed===true);
+    }
+    private placeFormation(members:Member[]):void{
+        const s=this.formationSource(),plan=this.previewFormation(),direction=this.formationBackwards?-1:1;
+        for(const {follower:f,target} of members){
+            if(f.isPlaying||f.currentSpline!==s||f.enableTrafficCapacity||f.trafficReservation||f.isWaitingForTraffic||
+               f.junctionMode!==JunctionMode.Off||f.routeDestination)
+                throw Error('Formation requires stopped followers on the same spline with junction routing and traffic capacity disabled.');
+            // A driven parent of the source would invalidate every sampled pose.
+            let n:typeof target|null=s.node,depth=0;
+            while(n){if(n===target||++depth>256)throw Error('Formation target must not contain the source spline.');n=n.parent;}
+        }
+        const previous=members.map(({follower:f})=>({f,progress:f.currentProgress,direction:f.travelDirection}));
+        let touched=0;
+        try{
+            for(let i=0;i<members.length;i++){
+                touched++;
+                members[i].follower.setCurrentSpline(s,plan.points[i].progress,direction);
+            }
+        }catch(error){
+            for(let i=touched-1;i>=0;i--){const p=previous[i];try{p.f.setCurrentSpline(s,p.progress,p.direction);}catch{}}
+            throw error;
+        }
+    }
+    /** Explicit non-traffic initialization, never while this group is owned.
+     * No route events; best-effort rollback of follower coordinates on error. */
+    public initializeFormation():boolean{
+        if(EDITOR_NOT_IN_PREVIEW||this.members.length)return false;
+        try{
+            const members=this.validateMembers();
+            this.placeFormation(members);this.error='';return true;
+        }catch(error){this.error=String(error);return false;}
+    }
     public startGroup():boolean{
         if(EDITOR_NOT_IN_PREVIEW)return false;
         this.pendingStart=false;
         if(this.members.length)return false;
         try{
             const members=this.validateMembers();
+            if(this.initializeFormationOnStart)this.placeFormation(members);
             // Preflight all members before touching any playback state.
             for(const m of members){
                 if(!claimFollowerController(m.follower,this))throw Error('Follower already controlled.');
