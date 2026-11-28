@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "output": "output",
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "distribution",
+      "type": "count",
+      "input": "source",
+      "count": 12
+    },
+    {
+      "id": "stage0",
+      "input": "distribution",
+      "type": "offset",
+      "offset": {
+        "x": 0.5,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "id": "stage1",
+      "input": "stage0",
+      "type": "rotation",
+      "minDegrees": {
+        "x": 0,
+        "y": -30,
+        "z": 0
+      },
+      "maxDegrees": {
+        "x": 0,
+        "y": 30,
+        "z": 0
+      },
+      "seed": 13
+    },
+    {
+      "id": "stage2",
+      "input": "stage1",
+      "type": "scale",
+      "minScale": 0.8,
+      "maxScale": 1.2,
+      "seed": 17
+    },
+    {
+      "id": "prefabs",
+      "type": "prefab",
+      "input": "stage2",
+      "weights": [
+        1,
+        3
+      ],
+      "seed": 17
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "prefabs"
+    }
+  ]
+}

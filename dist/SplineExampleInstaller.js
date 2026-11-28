@@ -65,6 +65,8 @@ const FILES=Object.freeze([
  ['Population/SpacingPopulationGraph.json','examples/installable/Population/SpacingPopulationGraph.json'],
  ['Population/RandomPopulationGraph.json','examples/installable/Population/RandomPopulationGraph.json'],
  ['Population/JitterPopulationGraph.json','examples/installable/Population/JitterPopulationGraph.json'],
+ ['Population/TransformPopulationGraph.json','examples/installable/Population/TransformPopulationGraph.json'],
+ ['Population/SurfacePopulationGraph.json','examples/installable/Population/SurfacePopulationGraph.json'],
  ['GeometryGraph/BasicRibbonGraph.json','examples/installable/GeometryGraph/BasicRibbonGraph.json'],
  ['GeometryGraph/BasicTubeGraph.json','examples/installable/GeometryGraph/BasicTubeGraph.json'],
  ['GeometryGraph/TransformPathGraph.json','examples/installable/GeometryGraph/TransformPathGraph.json'],

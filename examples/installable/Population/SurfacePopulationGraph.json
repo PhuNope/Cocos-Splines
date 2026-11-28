@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "output": "output",
+  "nodes": [
+    {
+      "id": "source",
+      "type": "spline"
+    },
+    {
+      "id": "distribution",
+      "type": "count",
+      "input": "source",
+      "count": 12
+    },
+    {
+      "id": "stage0",
+      "input": "distribution",
+      "type": "surface",
+      "rayHeight": 5,
+      "rayDepth": 10,
+      "skipMissing": false
+    },
+    {
+      "id": "stage1",
+      "input": "stage0",
+      "type": "align",
+      "alignment": "surface"
+    },
+    {
+      "id": "stage2",
+      "input": "stage1",
+      "type": "obstacle",
+      "clearance": 0.1,
+      "footprintRadius": 0.1
+    },
+    {
+      "id": "stage3",
+      "input": "stage2",
+      "type": "density",
+      "minWorldSpacing": 0.1
+    },
+    {
+      "id": "prefabs",
+      "type": "prefab",
+      "input": "stage3",
+      "weights": [
+        1,
+        3
+      ],
+      "seed": 17
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "input": "prefabs"
+    }
+  ]
+}

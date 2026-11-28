@@ -27,7 +27,7 @@ try {
  assert.equal(demo.output,'output');
  assert.deepEqual(demo.nodes.map(n=>n.type),
    ['spline','offset','width','ribbon','output']);
- for(const [file,type] of [['SpacingPopulationGraph','spacing'],['RandomPopulationGraph','random'],['JitterPopulationGraph','jitter']]){
+ for(const [file,type] of [['SpacingPopulationGraph','spacing'],['RandomPopulationGraph','random'],['JitterPopulationGraph','jitter'],['TransformPopulationGraph','rotation'],['SurfacePopulationGraph','surface']]){
   const g=JSON.parse(fs.readFileSync(path.join(first.folder,'Population/'+file+'.json'),'utf8'));
   assert(g.nodes.some(n=>n.type===type));
  }

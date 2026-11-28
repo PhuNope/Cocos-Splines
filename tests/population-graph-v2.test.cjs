@@ -101,5 +101,71 @@ try{
   const g=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/'+file+'.json','utf8'));
   assert(runner.evaluate(compilePopulationGraph(g),ctx).instances.length>0);
  }
+ // Transform/filter pipeline with host snapshots. Preserve candidate identity,
+ // surface miss handling, normal alignment, scale, RNG and atomic cache.
+ const chain=(stages)=>compilePopulationGraph({version:1,output:'out',nodes:[
+  {id:'path',type:'spline'},{id:'dist',type:'count',input:'path',count:5},
+  ...stages.map((s,i)=>({id:'stage'+i,input:i?'stage'+(i-1):'dist',...s})),
+  {id:'variant',type:'prefab',input:stages.length?'stage'+(stages.length-1):'dist',weights:[1,3],seed:55},
+  {id:'out',type:'output',input:'variant'}]});
+ const run=(stages,context=ctx)=>runner.evaluate(chain(stages),context).instances;
+ const base=run([]);
+ const localOffset=run([{type:'offset',offset:v(2,3,4)}]);
+ assert.deepEqual(localOffset[0].position,v(4,3,-2));
+ assert.deepEqual(run([{type:'offset',offset:v(2,3,4),space:'world'}])[0].position,v(2,3,4));
+ const yaw={type:'rotation',minDegrees:v(0,90,0),maxDegrees:v(0,90,0)};
+ const rotated=run([yaw]);assert(Math.abs(rotated[0].forward.z+1)<1e-9);
+ assert(Math.abs(rotated[0].forward.x)<1e-9);
+ const randomRotation={type:'rotation',minDegrees:v(-20,-180,-15),maxDegrees:v(20,180,15),seed:23};
+ const randomScale={type:'scale',minScale:.5,maxScale:1.5,seed:23};
+ const transforms=[randomRotation,randomScale];
+ const transformed=run(transforms);
+ assert.deepEqual(run(transforms),transformed);
+ assert.notDeepEqual(run([{...randomRotation,seed:24},randomScale]),transformed);
+ assert(transformed.every(p=>p.scale>=.5&&p.scale<=1.5&&Math.abs(Math.hypot(p.forward.x,p.forward.y,p.forward.z)-1)<1e-9&&Math.abs(p.up.x*p.forward.x+p.up.y*p.forward.y+p.up.z*p.forward.z)<1e-9));
+ assert.deepEqual(run([{type:'range',startProgress:.25,endProgress:.75},...transforms]),transformed.filter(p=>p.progress>=.25&&p.progress<.75));
+ assert.deepEqual(run(transforms).map(p=>p.prefabSlot),base.map(p=>p.prefabSlot));
+ assert.equal(run([{type:'scale',minScale:2,maxScale:2},{type:'scale',minScale:3,maxScale:3}])[0].scale,6);
+ assert.deepEqual(run([yaw,{type:'align',alignment:'world'}])[0].forward,v(0,0,1));
+ let rayCount=0;
+ const surface={revision:'surface-a',targetCount:1,raycast:(origin,length)=>{
+  rayCount++;assert.equal(length,15);
+  if(origin.x===5)return [];
+  return [{targetIndex:99,distance:1,point:v(origin.x,4,origin.z),normal:v(0,1)},
+   {targetIndex:0,distance:3,point:v(origin.x,2,origin.z),normal:v(0,1,1)}];
+ }};
+ const ground={type:'surface',surfaceOffset:1,skipMissing:true},align={type:'align',alignment:'surface'};
+ const obstacles={revision:'obstacle-a',shapes:[{kind:'aabb',bounds:{center:v(2.5,2+Math.SQRT1_2,Math.SQRT1_2),halfExtents:v(.1,.1,.1)}}]};
+ const surfaceCtx={...ctx,surface,obstacles};
+ const projected=run([ground,align],surfaceCtx);
+ assert.deepEqual(projected.map(p=>p.index),[0,1,3,4]);
+ assert(Math.abs(projected[0].up.y-Math.SQRT1_2)<1e-9);
+ assert(Math.abs(projected[0].position.y-2-Math.SQRT1_2)<1e-9);
+ const keepMiss=run([{...ground,skipMissing:false},align],surfaceCtx);
+ assert.equal(keepMiss[2].surfaceNormal,null);assert.deepEqual(keepMiss[2].position,base[2].position);
+ const filteredStages=[ground,align,{type:'obstacle',clearance:0,footprintRadius:0},randomScale];
+ const filtered=run(filteredStages,surfaceCtx);
+ assert.deepEqual(filtered.map(p=>p.index),[0,3,4]);
+ assert.deepEqual(filtered.map(p=>p.prefabSlot),base.filter(p=>[0,3,4].includes(p.index)).map(p=>p.prefabSlot));
+ const rays=rayCount;assert.deepEqual(run(filteredStages,surfaceCtx),filtered);assert.equal(rayCount,rays);
+ const changedObstacle={...surfaceCtx,obstacles:{revision:'obstacle-b',shapes:[]}};
+ const changed=runner.evaluate(chain(filteredStages),changedObstacle);
+ assert.deepEqual(changed.instances.map(p=>p.index),[0,1,3,4]);
+ assert.deepEqual(changed.metrics,{computed:4,reused:4,nodes:8});assert.equal(rayCount,rays);
+ const changedSurface={...changedObstacle,surface:{...surface,revision:'surface-b'}};
+ runner.evaluate(chain(filteredStages),changedSurface);assert.equal(rayCount,rays+5);
+ const last=runner.metrics;
+ assert.throws(()=>run(filteredStages,{...changedSurface,surface:{...surface,revision:'fail',raycast:()=>{throw Error('ray failed');}}}),/ray failed/);
+ assert.deepEqual(runner.metrics,last);
+ assert.throws(()=>run(filteredStages,ctx),/surface snapshot/i);
+ assert.throws(()=>run([{type:'obstacle'}],ctx),/obstacle snapshot/i);
+ const copy=run(filteredStages,changedSurface);copy[0].surfaceNormal.y=100;
+ assert(Math.abs(run(filteredStages,changedSurface)[0].surfaceNormal.y-Math.SQRT1_2)<1e-9);
+ for(const bad of [{type:'offset',offset:v(10001)},{type:'rotation',minDegrees:v(1),maxDegrees:v(0)},{type:'scale',minScale:0,maxScale:1},{type:'align',alignment:'bad'},{type:'surface',rayHeight:0,rayDepth:0},{type:'obstacle',footprintRadius:101}])assert.throws(()=>chain([bad]));
+ assert(Object.isFrozen(chain([yaw]).nodes[2].minDegrees));
+ const transformExample=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/TransformPopulationGraph.json','utf8'));
+ assert(runner.evaluate(compilePopulationGraph(transformExample),ctx).instances.length>0);
+ const surfaceExample=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/SurfacePopulationGraph.json','utf8'));
+ assert(runner.evaluate(compilePopulationGraph(surfaceExample),surfaceCtx).instances.length>0);
  console.log('POPULATION GRAPH V2 PASS: typed DAG, arc-count placement, shared policy, deterministic prefab slots, cache and rollback.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}

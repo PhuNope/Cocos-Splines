@@ -6,8 +6,13 @@ import {planPopulation,populationGate,validatePopulationPolicy} from './SplinePo
 import type {PopulationCandidate,PopulationDensityKey,PopulationExclusion,PopulationVector} from './SplinePopulationMath';
 import {selectWeightedPrefab,validatePrefabWeights} from './SplinePopulationPlacementMath';
 import {distributionDistances,inPopulationProgressRange} from './SplinePopulationDistributionMath';
+import {validateSurfaceSettings,projectSurfaceCandidates} from './SplinePopulationSurfaceMath';
+import type {PopulationSurfaceRaycast} from './SplinePopulationSurfaceMath';
+import {filterPopulationShapeCandidates} from './SplinePopulationPreciseMath';
+import type {PopulationObstacleShape} from './SplinePopulationPreciseMath';
+import {offsetPopulationPoint,rotatePopulationPoint,scalePopulationPoint,alignPopulationPoint} from './SplinePopulationTransformMath';
 export type PopulationGraphPort='path'|'candidates'|'instances';
-export type PopulationGraphNodeType='spline'|'count'|'spacing'|'random'|'jitter'|'range'|'density'|'prefab'|'output';
+export type PopulationGraphNodeType='spline'|'count'|'spacing'|'random'|'jitter'|'range'|'density'|'offset'|'rotation'|'scale'|'align'|'surface'|'obstacle'|'prefab'|'output';
 export interface PopulationGraphFrame {
     position:PopulationVector;forward:PopulationVector;up:PopulationVector;distance:number;
 }
@@ -20,6 +25,11 @@ export interface PopulationGraphNode {
     spacing?:number;jitter?:number;startProgress?:number;endProgress?:number;
     densityKeys?:PopulationDensityKey[];exclusions?:PopulationExclusion[];minWorldSpacing?:number;
     weights?:number[];
+    offset?:PopulationVector;space?:'frame'|'world';
+    minDegrees?:PopulationVector;maxDegrees?:PopulationVector;
+    minScale?:number;maxScale?:number;alignment?:'upright'|'surface'|'world';
+    rayHeight?:number;rayDepth?:number;surfaceOffset?:number;minNormalY?:number;skipMissing?:boolean;
+    clearance?:number;footprintRadius?:number;
 }
 export interface PopulationGraph {version:1;nodes:PopulationGraphNode[];output:string}
 export interface PopulationGraphPlan {readonly nodes:ReadonlyArray<Readonly<PopulationGraphNode>>;readonly output:string}
@@ -27,9 +37,15 @@ export interface PopulationGraphContext {
     sources:ReadonlyArray<PopulationGraphSource|undefined>;
     /** Native host will resolve these slots later. No Prefab refs in JSON. */
     prefabSlotCount:number;
+    /** Host snapshots: revision must change when targets, transforms or query results change. */
+    surface?:{revision:string;targetCount:number;raycast:PopulationSurfaceRaycast};
+    obstacles?:{revision:string;shapes:ReadonlyArray<PopulationObstacleShape>};
 }
 export interface PopulationGraphPoint extends PopulationCandidate {
     distance:number;forward:PopulationVector;up:PopulationVector;
+    /** Uniform multiplier of authored prefab scale; omitted means 1. */
+    scale?:number;
+    surfaceNormal?:PopulationVector|null;
 }
 export interface PopulationGraphInstance extends PopulationGraphPoint {prefabSlot:number}
 export interface PopulationGraphMetrics {computed:number;reused:number;nodes:number}
@@ -45,7 +61,7 @@ const integer=(x:unknown,min:number,max:number):x is number=>bound(x,min,max)&&N
 const vec=(x:unknown):x is PopulationVector=>record(x)&&['x','y','z'].every(k=>bound(x[k],-1e7,1e7));
 const keys=(x:Record<string,unknown>,allowed:ReadonlyArray<string>)=>Object.keys(x).every(k=>allowed.includes(k));
 const copyVec=(p:PopulationVector):PopulationVector=>({x:p.x,y:p.y,z:p.z});
-const copyPoint=<T extends PopulationGraphPoint>(p:T):T=>({...p,position:copyVec(p.position),forward:copyVec(p.forward),up:copyVec(p.up)});
+const copyPoint=<T extends PopulationGraphPoint>(p:T):T=>({...p,position:copyVec(p.position),forward:copyVec(p.forward),up:copyVec(p.up),...(p.surfaceNormal?{surfaceNormal:copyVec(p.surfaceNormal)}:{})});
 const TYPES:Readonly<Record<PopulationGraphNodeType,{input:PopulationGraphPort|null;output:PopulationGraphPort;params:ReadonlyArray<string>}>>={
     spline:{input:null,output:'path',params:['slot']},
     count:{input:'path',output:'candidates',params:['count','includeEnd']},
@@ -54,6 +70,12 @@ const TYPES:Readonly<Record<PopulationGraphNodeType,{input:PopulationGraphPort|n
     jitter:{input:'path',output:'candidates',params:['count','seed','jitter']},
     range:{input:'candidates',output:'candidates',params:['startProgress','endProgress']},
     density:{input:'candidates',output:'candidates',params:['density','seed','densityKeys','exclusions','minWorldSpacing']},
+    offset:{input:'candidates',output:'candidates',params:['offset','space']},
+    rotation:{input:'candidates',output:'candidates',params:['minDegrees','maxDegrees','seed']},
+    scale:{input:'candidates',output:'candidates',params:['minScale','maxScale','seed']},
+    align:{input:'candidates',output:'candidates',params:['alignment']},
+    surface:{input:'candidates',output:'candidates',params:['rayHeight','rayDepth','surfaceOffset','minNormalY','skipMissing']},
+    obstacle:{input:'candidates',output:'candidates',params:['clearance','footprintRadius']},
     prefab:{input:'candidates',output:'instances',params:['weights','seed']},
     output:{input:'instances',output:'instances',params:[]},
 };
@@ -64,12 +86,18 @@ function policy(n:Readonly<PopulationGraphNode>,closed:boolean){
     return {density:n.density??1,seed:n.seed??0,densityKeys:n.densityKeys??[],
         exclusions:n.exclusions??[],minWorldSpacing:n.minWorldSpacing??0,closed};
 }
+function surfaceSettings(n:Readonly<PopulationGraphNode>,targetCount:number){
+    return {rayHeight:n.rayHeight??5,rayDepth:n.rayDepth??10,surfaceOffset:n.surfaceOffset??0,
+        minNormalY:n.minNormalY??0,skipMissing:n.skipMissing??true,targetCount};
+}
+const vectorParam=(v:unknown,limit:number):v is PopulationVector=>record(v)&&keys(v,['x','y','z'])&&['x','y','z'].every(k=>bound(v[k],-limit,limit));
 function freezeNode(n:PopulationGraphNode):Readonly<PopulationGraphNode>{
     const value=JSON.parse(JSON.stringify(n)) as PopulationGraphNode;
     for(const k of ['densityKeys','exclusions','weights'] as const){
         const array=value[k];
         if(array){for(const entry of array)if(typeof entry==='object')Object.freeze(entry);Object.freeze(array);}
     }
+    for(const k of ['offset','minDegrees','maxDegrees'] as const)if(value[k])Object.freeze(value[k]);
     return Object.freeze(value);
 }
 export function compilePopulationGraph(raw:unknown):PopulationGraphPlan{
@@ -112,6 +140,25 @@ export function compilePopulationGraph(raw:unknown):PopulationGraphPlan{
             if(new Set(p.densityKeys.map(k=>k.progress)).size!==p.densityKeys.length)
                 throw Error('Population Graph duplicate density progress.');
         }
+        if(type==='offset'&&(!vectorParam(item.offset,10000)||(item.space!==undefined&&item.space!=='frame'&&item.space!=='world')))
+            throw Error('Population Graph offset requires bounded xyz and frame/world space.');
+        if(type==='rotation'){
+            const a=item.minDegrees,b=item.maxDegrees;
+            if(!vectorParam(a,360)||!vectorParam(b,360)||a.x>b.x||a.y>b.y||a.z>b.z)
+                throw Error('Population Graph rotation requires ordered degree ranges within -360–360.');
+        }
+        if(type==='scale'&&(!bound(item.minScale,.001,100)||!bound(item.maxScale,.001,100)||item.minScale>item.maxScale))
+            throw Error('Population Graph scale requires ordered multipliers .001–100.');
+        if((type==='rotation'||type==='scale')&&item.seed!==undefined&&!integer(item.seed,-2147483647,2147483647))
+            throw Error('Population Graph transform seed invalid.');
+        if(type==='align'&&!['upright','surface','world'].includes(item.alignment as string))throw Error('Population Graph alignment invalid.');
+        if(type==='surface'){
+            for(const k of ['rayHeight','rayDepth','surfaceOffset','minNormalY','skipMissing'] as const)
+                if(item[k]===null)throw Error('Population Graph surface parameter cannot be null.');
+            validateSurfaceSettings(surfaceSettings(item as unknown as PopulationGraphNode,1));
+        }
+        if(type==='obstacle'&&((item.clearance!==undefined&&!bound(item.clearance,0,10000))||
+           (item.footprintRadius!==undefined&&!bound(item.footprintRadius,0,100))))throw Error('Population Graph obstacle clearance/radius invalid.');
         if(type==='prefab'){
             if(item.seed!==undefined&&!integer(item.seed,-2147483647,2147483647))
                 throw Error('Invalid Population Graph prefab seed.');
@@ -215,7 +262,16 @@ export class PopulationGraphRunner {
             const source=n.type==='spline'?context.sources[n.slot??0]:undefined;
             if(n.type==='spline')validateSource(source);
             if(n.type==='prefab')validatePrefabWeights(n.weights!,context.prefabSlotCount);
-            const key=JSON.stringify([n,parent?.version??null,source?.revision??null,source?.closed??null,n.type==='prefab'?context.prefabSlotCount:null]);
+            const surface=n.type==='surface'?context.surface:undefined,obstacles=n.type==='obstacle'?context.obstacles:undefined;
+            const validRevision=(r:unknown)=>typeof r==='string'&&r.length>0&&r.length<=8192;
+            if(n.type==='surface'){
+                if(!surface||!validRevision(surface.revision)||typeof surface.raycast!=='function')throw Error('Population Graph requires a surface snapshot and revision.');
+                validateSurfaceSettings(surfaceSettings(n,surface.targetCount));
+            }
+            if(n.type==='obstacle'&&(!obstacles||!validRevision(obstacles.revision)||!Array.isArray(obstacles.shapes)||obstacles.shapes.length>64))
+                throw Error('Population Graph requires an obstacle snapshot and revision.');
+            const key=JSON.stringify([n,parent?.version??null,source?.revision??null,source?.closed??null,n.type==='prefab'?context.prefabSlotCount:null,
+                surface?.revision??null,surface?.targetCount??null,obstacles?.revision??null]);
             const prior=this.cache.get(n.id);
             if(prior?.key===key){next.set(n.id,prior);reused++;continue;}
             const input=parent?.value;let value:Value;
@@ -231,6 +287,21 @@ export class PopulationGraphRunner {
                 const p=policy(n,input.closed);validatePopulationPolicy(p);
                 const kept=new Set(planPopulation(input.points,p));
                 value={kind:'candidates',closed:input.closed,points:input.points.filter(x=>kept.has(x.index))};
+            }else if(n.type==='offset'&&input?.kind==='candidates'){
+                value={...input,points:input.points.map(p=>offsetPopulationPoint(p,n.offset!,n.space??'frame'))};
+            }else if(n.type==='rotation'&&input?.kind==='candidates'){
+                value={...input,points:input.points.map(p=>rotatePopulationPoint(p,n.minDegrees!,n.maxDegrees!,n.seed??0))};
+            }else if(n.type==='scale'&&input?.kind==='candidates'){
+                value={...input,points:input.points.map(p=>scalePopulationPoint(p,n.minScale!,n.maxScale!,n.seed??0))};
+            }else if(n.type==='align'&&input?.kind==='candidates'){
+                value={...input,points:input.points.map(p=>alignPopulationPoint(p,n.alignment!))};
+            }else if(n.type==='surface'&&input?.kind==='candidates'){
+                const projected=projectSurfaceCandidates(input.points.map(copyPoint),surfaceSettings(n,surface!.targetCount),surface!.raycast);
+                const originals=new Map(input.points.map(p=>[p.index,p]));
+                value={...input,points:projected.map(p=>({...originals.get(p.index)!,position:copyVec(p.position),surfaceNormal:p.surfaceNormal?copyVec(p.surfaceNormal):null}))};
+            }else if(n.type==='obstacle'&&input?.kind==='candidates'){
+                const kept=new Set(filterPopulationShapeCandidates(input.points,obstacles!.shapes,n.clearance??0,n.footprintRadius??0).map(p=>p.index));
+                value={...input,points:input.points.filter(p=>kept.has(p.index))};
             }else if(n.type==='prefab'&&input?.kind==='candidates'){
                 value={kind:'instances',points:input.points.map(p=>({...p,prefabSlot:selectWeightedPrefab(n.weights!,populationGate(n.seed??0,p.index))}))};
             }else if(n.type==='output'&&input?.kind==='instances')value=input;
