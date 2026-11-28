@@ -38,7 +38,7 @@ function state(panel){
 }
 function message(panel,text){panel.$.pgMessage.textContent=text;}
 function render(panel){
- const s=state(panel);panel.$.pgPanel.hidden=!s.enabled;
+ const s=state(panel);panel._pgRenderState=JSON.stringify([s.enabled,s.locked,s.text]);panel.$.pgPanel.hidden=!s.enabled;
  const controls=['pgDistribution','pgReplace','pgFilter','pgInsert','pgUp','pgDown','pgRemove','pgApply'];
  for(const k of controls)panel.$[k].disabled=true;
  panel.$.pgChain.innerHTML='';panel.$.pgFields.innerHTML='';panel._pgRenderedText=null;
@@ -89,10 +89,10 @@ function commit(panel,action){
 }
 module.exports={...base,template,style,$,
  update(dump){
-  const prior=state(this),previousDump=this._splineDump;
+  const previousDump=this._splineDump;
   base.update.call(this,dump);
-  const next=state(this);
-  if(previousDump!==dump||prior.text!==next.text||prior.enabled!==next.enabled||prior.locked!==next.locked||this._pgRenderedText!==next.text)render(this);
+  const next=state(this),key=JSON.stringify([next.enabled,next.locked,next.text]);
+  if(previousDump!==dump||this._pgRenderState!==key)render(this);
  },
  ready(){
   base.ready.call(this);
@@ -117,5 +117,5 @@ module.exports={...base,template,style,$,
    }catch(error){message(this,String(error?.message||error));}
   });
  },
- close(){base.close.call(this);this._pgSelected=null;this._pgRenderedText=null;}
+ close(){base.close.call(this);this._pgSelected=null;this._pgRenderedText=null;this._pgRenderState=null;}
 };
