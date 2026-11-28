@@ -55,6 +55,7 @@ const FILES=Object.freeze([
  ['ExampleGallery.ts','examples/installable/ExampleGallery.ts'],
  ['Train/TrainSingleSpline.ts','docs/examples/TrainSingleSpline.ts'],
  ['Train/TrainRouteConsist.ts','docs/examples/TrainRouteConsist.ts'],
+ ['Train/TrainControllerSetup.ts','examples/installable/Train/TrainControllerSetup.ts'],
  ['Road/RoadUvSetup.ts','docs/examples/RoadUvSetup.ts'],
  ['Extrude/ExtrudeTubeSetup.ts','docs/examples/ExtrudeTubeSetup.ts'],
  ['Junction/JunctionRoadPatchSetup.ts','docs/examples/JunctionRoadPatchSetup.ts'],
