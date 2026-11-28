@@ -820,9 +820,12 @@ export class SplineAnimate extends Component {
                 if(!profile?.appliesTo(s)){
                     this.resetProfileRate();this.advance(remaining*base,base);break;
                 }
-                const sample=profile.sample(this.currentProgress,!!s.closed);
-                const target=Math.min(10000,base*sample.multiplier,sample.limit);
-                const ramp=rampPlaybackRate(Math.min(this.profileRate,sample.limit),target,step,profile.acceleration,profile.deceleration);
+                const arc=profile.zoneLookaheadDistance>0&&profile.zones?.length?headwayWorldArc(s):null;
+                const sample=profile.samplePlayback(this.currentProgress,!!s.closed,base,this._travelDirection,
+                    this.loopMode===LoopMode.Loop,arc);
+                const limit=Math.min(sample.limit,sample.approachLimit);
+                const target=Math.min(10000,base*sample.multiplier,limit);
+                const ramp=rampPlaybackRate(Math.min(this.profileRate,limit),target,step,profile.acceleration,profile.deceleration);
                 this.profileRate=ramp.end;
                 this.advance(step*ramp.average,Math.max(1e-10,ramp.average));
                 remaining-=step;

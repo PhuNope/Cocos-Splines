@@ -65,3 +65,29 @@ export function rampPlaybackRate(current:number,target:number,dt:number,accelera
     const average=((current+end)*.5*time+target*(dt-time))/dt;
     return {end:time<dt?target:end,average};
 }
+
+/** World-distance envelope for upcoming zone entries on the current spline.
+ * Rate is dimensionless; this is not a physical acceleration guarantee.
+ * Caller supplies the validated sampled centerline arc. */
+export function lookaheadSpeedZoneLimit(zones:ReadonlyArray<Readonly<SpeedProfileZoneData>>,
+    progress:number,direction:1|-1,wrap:boolean,lookahead:number,target:number,
+    length:number,distanceAt:(progress:number)=>number):number{
+    if(!Number.isFinite(progress)||progress<0||progress>1||
+       (direction!==1&&direction!==-1)||!Number.isFinite(lookahead)||lookahead<0||
+       !Number.isFinite(target)||target<0||!Number.isFinite(length)||length<=0)
+        throw Error('Invalid speed zone lookahead.');
+    if(lookahead===0)return Infinity;
+    const here=distanceAt(progress);
+    let limit=Infinity;
+    for(const z of zones){
+        if(z.maxMultiplier>=target||(z.start===1&&z.end===0))continue;
+        const entry=direction===1?z.start:z.end;
+        let distance=direction*(distanceAt(entry)-here);
+        if(distance<0&&wrap)distance+=length;
+        if(distance<0||distance>=lookahead)continue;
+        const u=distance/lookahead;
+        limit=Math.min(limit,Math.sqrt(z.maxMultiplier*z.maxMultiplier+
+            (target*target-z.maxMultiplier*z.maxMultiplier)*u));
+    }
+    return limit;
+}

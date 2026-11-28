@@ -91,7 +91,7 @@ try {
     lease.releaseFollowerController(animate,owner);animate.restart();animate.update(.5);assert.equal(target.worldPosition.x,2.5);
     // Opt-in speed curve, capped combined rate and time-average ramp.
     const {SplineSpeedProfile}=require(path.join(out,'Components','SplineSpeedProfile.js'));
-    const {compileSpeedProfile,sampleSpeedProfile,rampPlaybackRate,SpeedProfileInterpolation}=require(path.join(out,'Core','SplineSpeedProfileMath.js'));
+    const {compileSpeedProfile,sampleSpeedProfile,rampPlaybackRate,lookaheadSpeedZoneLimit,SpeedProfileInterpolation}=require(path.join(out,'Core','SplineSpeedProfileMath.js'));
     const curve=compileSpeedProfile([{progress:1,multiplier:2},{progress:0,multiplier:1}],[{start:.8,end:.2,maxMultiplier:.5}],SpeedProfileInterpolation.Linear);
     assert.equal(sampleSpeedProfile(curve,.5,true).multiplier,1.5);
     assert.equal(sampleSpeedProfile(curve,.9,true).limit,.5);assert.equal(sampleSpeedProfile(curve,1,true).limit,.5);
@@ -100,6 +100,18 @@ try {
     assert.throws(()=>compileSpeedProfile([{progress:0,multiplier:1},{progress:0,multiplier:2}],[],0),/Duplicate/);
     assert.deepEqual(rampPlaybackRate(0,2,1,4,4),{end:2,average:1.5});
     assert.deepEqual(rampPlaybackRate(2,1,1,4,2),{end:1,average:1.25});
+    const limits=[{start:.5,end:.6,maxMultiplier:.5}];
+    const ahead=(p,d,wrap,look=4,length=10,zones=limits)=>lookaheadSpeedZoneLimit(zones,p,d,wrap,look,2,length,x=>x*length);
+    assert.equal(ahead(0,1,false),Infinity);
+    assert.equal(ahead(.5,1,false),.5);
+    assert.equal(ahead(.6,-1,false),.5);
+    assert(Math.abs(ahead(.3,1,false)-Math.sqrt(2.125))<1e-9);
+    assert.equal(ahead(.8,1,false),Infinity);
+    assert(Math.abs(ahead(.9,1,true,7)-Math.sqrt(.25+3.75*6/7))<1e-9);
+    assert.equal(ahead(.3,1,false,4,30),Infinity);
+    assert.equal(ahead(.3,1,false,0),Infinity);
+    assert.equal(ahead(.5,1,false,4,10,[...limits,{start:.5,end:.7,maxMultiplier:.25}]),.25);
+    assert.throws(()=>ahead(.5,1,false,-1),/Invalid/);
     const profile=new SplineSpeedProfile();profile.node=new Node('speed-profile');profile.spline=source;
     profile.keys=[{progress:0,multiplier:2}];profile.acceleration=2;profile.deceleration=2;
     animate.speedProfile=profile;animate.method=AnimateMethod.Time;animate.duration=4;animate.restart();animate.update(1);
@@ -113,6 +125,10 @@ try {
     assert(lease.claimFollowerController(animate,owner));lease.setFollowerControllerRate(animate,owner,.5);
     animate.update(1);assert(Math.abs(target.worldPosition.x-2.5)<1e-7);assert.equal(animate.currentProfileRate,1);
     lease.releaseFollowerController(animate,owner);
+    profile.zoneLookaheadDistance=4;profile.zones=limits;animate.restart();animate.update(.6);
+    assert(animate.isPlaying);assert(target.worldPosition.x>1&&target.worldPosition.x<3);
+    assert(animate.currentProfileRate<2);
+    profile.zoneLookaheadDistance=0;profile.zones=[];
     profile.spline={};animate.restart();animate.update(1);assert.equal(target.worldPosition.x,2.5);
     animate.speedProfile=null;animate.restart();
     // Two named spline paths connected at progress 0.5; events must be called

@@ -309,7 +309,9 @@ Follower speeds, junction routing, trains/wagons, projection, triggers và conne
 - [x] Phase 5.3a — independent follower Group Controller: shared exclusive route/group lease, batch preflight, deferred start, pause/resume active subset, group runtime speed factor without serialized mutation, live traffic/headway/proximity counts, cleanup and installable example; existing follower motion and traffic retained. Native acceptance pending.
 - [x] Phase 5.3b — group formation preview and explicit stopped same-spline non-traffic initialization, normalized/world range and fixed world spacing, wrapped/full closed ranges without duplicate seam, backwards ordering, fit/overlap validation, best-effort pose rollback, centerline gap diagnostics, optional initialization on group start, examples and offline tests. Native acceptance pending; active spacing remains existing headway/proximity rather than forced repositioning.
 - [x] Phase 5.4a — opt-in SplineSpeedProfile: spatial rate keys, step/linear/smooth interpolation, overlapping/wrapped rate-cap zones, source filtering, cached validated curves, combined modifier/group playback rate ramp, bounded substeps with existing traversal/traffic authority, lifecycle resets, diagnostic and example. Native acceptance pending.
-- [ ] Phase 5.4b — world-distance lookahead braking and boundary-aware zone sampling, speed profile scene gizmo diagnostics.
+- [x] Phase 5.4b1 — opt-in sampled World centerline lookahead for upcoming rate-cap zone entries, forward/reverse and closed Loop seam, minimum overlapping approach envelopes, default 0 preserves 5.4a, shared World arc cache, integration regression cases. Dimensionless rate envelope, not a physical acceleration guarantee. Native acceptance pending.
+- [ ] Phase 5.4b2 — boundary-aware zone sampling (narrow zones, junction and seam transitions).
+- [ ] Phase 5.4b3 — speed profile scene gizmo diagnostics.
 - [ ] Phase 5.5 — Lane Changer.
 - [ ] Phase 5.6 — Event Track.
 - [ ] Phase 5.7 — Object Pooling.

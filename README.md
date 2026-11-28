@@ -119,6 +119,10 @@ SplineContainer Inspector → **Cocos Splines JSON · Round-trip (V1)** exports 
 
 SplineContainer Inspector → **SVG Path · Import / Export (2D)** accepts one SVG `<path>` or plain `d` commands M/L/H/V/C/S/Q/T/Z (absolute or relative). SVG Y-down is converted to Cocos XY2D Y-up. Import generates a **new sibling spline** and never rewrites the source; choose Units per SVG pixel. Export reads the spline’s **resolved natural cubic controls**, producing local-space SVG text for XY2D or XZ2D; no file write is performed. SVG arcs (`A`), `transform`, multiple paths and other SVG shapes are rejected explicitly. Full native Creator 3.8.8 validation is pending. See `docs/SVG_INTEROP_V2_VI.md`.
 
+### Speed Zone Lookahead — Phase 5.4b1 (v2 preview)
+
+Set **SplineSpeedProfile → Zone Lookahead Distance** above zero to progressively cap playback rate before entering a slower zone, measured along the sampled World centerline. Forward/reverse and closed Loop seam approaches are supported. Zero retains 5.4a behavior. The cap is dimensionless and may override the configured rate ramp; it is not physical braking on an offset trajectory. Boundary-exact handling of very narrow zones, prediction across junctions and scene gizmos remain pending.
+
 ## Documentation
 
 Start at [`docs/index.html`](docs/index.html) for the multi-page guide, Inspector usage, API references and TypeScript examples.
