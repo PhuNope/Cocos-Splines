@@ -18,6 +18,8 @@ import {meshColliderWorldBvh} from '../Core/SplineMeshColliderAdapter';
 import type {ProximityTriangleMesh} from '../Core/SplineProximityMesh';
 import {aabbFromCenterHalfExtents,type ProximityAabb,type ProximityObb,type ProximityCapsule} from '../Core/SplineProximityShapes';
 import { SplineModifiers } from './SplineModifiers';
+import {SplineSpeedProfile} from './SplineSpeedProfile';
+import {rampPlaybackRate} from '../Core/SplineSpeedProfileMath';
 import { SplineEventCallbacks, type SplineEventCallback } from '../Core/SplineEventCallbacks';
 import { clamp01, crosses, easing, inverseEasing, orderCrossings, buildOffsetArcLUT, offsetProgressToDistanceFraction, offsetDistanceFractionToProgress, type OffsetArcLUT, type Direction, type Crossing } from '../Core/SplineTraversal';
 const {ccclass,property,menu,executeInEditMode}= _decorator;
@@ -51,6 +53,12 @@ export class SplineAnimate extends Component {
     spline:SplineContainer|null=null;
     @property({type:Node,tooltip:'If unset, this component node is moved.'}) target:Node|null=null;
     @property({type:SplineModifiers,tooltip:'Optional path-local Offset, Speed, Roll keyframe modifiers.'}) modifiers:SplineModifiers|null=null;
+    @property({type:SplineSpeedProfile,tooltip:'Optional spatial playback-rate curve and rate ramp.'}) speedProfile:SplineSpeedProfile|null=null;
+    private profileRate=0;
+    private profileError='';
+    public get currentProfileRate():number{return this.profileRate;}
+    public get speedProfileError():string{return this.profileError;}
+    private resetProfileRate():void{this.profileRate=0;this.profileError='';}
     @property({type:Enum(AnimateMethod)}) method:AnimateMethod=AnimateMethod.Time;
     @property({min:0.001,tooltip:'Seconds to complete one traversal when Method = Time.'}) duration=4;
     @property({min:0,tooltip:'Units per second. With Constant Speed with Offset enabled.'}) speed=2;
@@ -409,7 +417,7 @@ export class SplineAnimate extends Component {
             : Math.max(0.001,this.duration);
     }
     onEnable():void {
-        this.clearTraffic();
+        this.resetProfileRate();this.clearTraffic();
         if(this.upMode===SplineUpMode.TargetLocal)this.captureTargetLocalUp();
         if(EDITOR_NOT_IN_PREVIEW){
             if(this.previewInEditor)this.previewAt(this.coordinateRaw(this.source(),this.previewPositionMode,this.previewProgress,this.previewDistance));
@@ -421,17 +429,17 @@ export class SplineAnimate extends Component {
         this.playing=this.playOnStart;
         this.apply(this._raw);this.syncSpatialTraffic();
     }
-    onDisable():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
-    onDestroy():void { this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
+    onDisable():void { this.resetProfileRate();this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview(); }
+    onDestroy():void { this.resetProfileRate();this.clearSpatialTraffic();this.clearTraffic(); if(EDITOR_NOT_IN_PREVIEW)this.restorePreview();this._endReachedCallbacks.clear();this._beginningReachedCallbacks.clear();this._routeArrivedCallbacks.clear(); }
     public play():void {this.playing=true;}
-    public pause():void {this.playing=false;splineProximityRegistry.clearVelocity(this);}
+    public pause():void {this.profileRate=0;this.playing=false;splineProximityRegistry.clearVelocity(this);}
     public restart():void {
-        this.clearTraffic();
+        this.resetProfileRate();this.clearTraffic();
         this._activeSpline=null;this._travelDirection=1;this._requestedExit=-1;this._arrivalDelivered=null;this.resetJunctionBlend();
         this._raw=0;this.elapsed=0;this.playing=true;this.apply(this._raw);this.syncSpatialTraffic();
         splineProximityRegistry.clearVelocity(this);
     }
-    public reverseTravel():void {this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncSpatialTraffic();splineProximityRegistry.clearVelocity(this);}
+    public reverseTravel():void {this.resetProfileRate();this._travelDirection=this._travelDirection===1?-1:1;this.cancelTrafficWait();this.syncSpatialTraffic();splineProximityRegistry.clearVelocity(this);}
     /** Read-only route preview for tools/gameplay. Does not move the follower. */
     public planRouteTo(destination:SplineContainer,progress=1):SplineRoute|null{
         const current=this.source();
@@ -694,7 +702,7 @@ export class SplineAnimate extends Component {
     }
     /** Switch to a source manually, without firing triggers or traveling. */
     public setCurrentSpline(spline:SplineContainer,progress=0,direction:Direction=1):void{
-        this.clearTraffic();
+        this.resetProfileRate();this.clearTraffic();
         this._arrivalDelivered=null;this.resetJunctionBlend();this._activeSpline=spline;this._travelDirection=direction===-1?-1:1;
         this._raw=this.rawAtProgress(progress,spline);
         this.elapsed=this._raw*this.getDuration();this.apply(this._raw);this.syncSpatialTraffic();
@@ -716,7 +724,7 @@ export class SplineAnimate extends Component {
     }
     /** Seek does not dispatch triggers unless explicitly requested. */
     public seek(t:number,fireEvents=false):void {
-        this.clearTraffic();
+        this.resetProfileRate();this.clearTraffic();
         this._arrivalDelivered=null;
         const previous=this.currentProgress;
         // An explicit seek intentionally cancels any in-progress junction interpolation.
@@ -762,9 +770,13 @@ export class SplineAnimate extends Component {
         const startRotation={x:beforeRotation.x,y:beforeRotation.y,
             z:beforeRotation.z,w:beforeRotation.w};
         const startSpline=spline;
-        const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
-        const rate=Math.max(0.01,multiplier)*followerControllerRate(this);
-        this.advance(dt*rate,rate);
+        if(this.speedProfile?.appliesTo(spline))this.advanceSpeedProfile(dt);
+        else{
+            this.resetProfileRate();
+            const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
+            const rate=Math.max(0.01,multiplier)*followerControllerRate(this);
+            this.advance(dt*rate,rate);
+        }
         if(!this.playing||!this.enableProximityAvoidance||!this.proximityPredictAgents||
            this.source()!==startSpline){
             splineProximityRegistry.clearVelocity(this);
@@ -792,6 +804,34 @@ export class SplineAnimate extends Component {
                     splineProximityRegistry.setAngularSpeed(this,angularSpeed);
             }
         }else splineProximityRegistry.clearVelocity(this);
+    }
+    /** Opt-in bounded substeps resample spatial keys, while the existing
+     * advance path remains the sole authority for triggers and traffic.
+     * Zones cap the combined rate immediately at each sample; ramp applies
+     * to the remaining rate changes. Long frame excess is dropped. */
+    private advanceSpeedProfile(dt:number):void{
+        let remaining=Math.min(dt,64/30);
+        try{
+            for(let i=0;i<64&&remaining>1e-10&&this.playing;i++){
+                const s=this.source(),profile=this.speedProfile;
+                if(!s)break;
+                const step=Math.min(remaining,1/30);
+                const base=Math.max(.01,this.modifiers?.sample(this.currentProgress).speed||1)*followerControllerRate(this);
+                if(!profile?.appliesTo(s)){
+                    this.resetProfileRate();this.advance(remaining*base,base);break;
+                }
+                const sample=profile.sample(this.currentProgress,!!s.closed);
+                const target=Math.min(10000,base*sample.multiplier,sample.limit);
+                const ramp=rampPlaybackRate(Math.min(this.profileRate,sample.limit),target,step,profile.acceleration,profile.deceleration);
+                this.profileRate=ramp.end;
+                this.advance(step*ramp.average,Math.max(1e-10,ramp.average));
+                remaining-=step;
+                if(!this.playing||this.isWaitingForTraffic||this.isHeadwayBlocked||this.isProximityBlocked){
+                    this.profileRate=0;break;
+                }
+            }
+            this.profileError='';
+        }catch(error){this.pause();this.profileError=String(error);}
     }
     /** Preview never dispatches gameplay events and never follows junctions. */
     public previewAt(t:number):boolean {

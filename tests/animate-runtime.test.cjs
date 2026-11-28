@@ -89,6 +89,32 @@ try {
     assert.equal(target.worldPosition.x,5);assert.equal(animate.duration,4);
     animate.method=AnimateMethod.Speed;animate.speed=5;animate.restart();animate.update(.5);assert.equal(target.worldPosition.x,5);assert.equal(animate.speed,5);
     lease.releaseFollowerController(animate,owner);animate.restart();animate.update(.5);assert.equal(target.worldPosition.x,2.5);
+    // Opt-in speed curve, capped combined rate and time-average ramp.
+    const {SplineSpeedProfile}=require(path.join(out,'Components','SplineSpeedProfile.js'));
+    const {compileSpeedProfile,sampleSpeedProfile,rampPlaybackRate,SpeedProfileInterpolation}=require(path.join(out,'Core','SplineSpeedProfileMath.js'));
+    const curve=compileSpeedProfile([{progress:1,multiplier:2},{progress:0,multiplier:1}],[{start:.8,end:.2,maxMultiplier:.5}],SpeedProfileInterpolation.Linear);
+    assert.equal(sampleSpeedProfile(curve,.5,true).multiplier,1.5);
+    assert.equal(sampleSpeedProfile(curve,.9,true).limit,.5);assert.equal(sampleSpeedProfile(curve,1,true).limit,.5);
+    assert.equal(sampleSpeedProfile(curve,.2,true).limit,Infinity);
+    assert.throws(()=>sampleSpeedProfile(curve,.5,false),/closed/);
+    assert.throws(()=>compileSpeedProfile([{progress:0,multiplier:1},{progress:0,multiplier:2}],[],0),/Duplicate/);
+    assert.deepEqual(rampPlaybackRate(0,2,1,4,4),{end:2,average:1.5});
+    assert.deepEqual(rampPlaybackRate(2,1,1,4,2),{end:1,average:1.25});
+    const profile=new SplineSpeedProfile();profile.node=new Node('speed-profile');profile.spline=source;
+    profile.keys=[{progress:0,multiplier:2}];profile.acceleration=2;profile.deceleration=2;
+    animate.speedProfile=profile;animate.method=AnimateMethod.Time;animate.duration=4;animate.restart();animate.update(1);
+    assert(Math.abs(target.worldPosition.x-2.5)<1e-7);assert(Math.abs(animate.currentProfileRate-2)<1e-7);
+    animate.pause();assert.equal(animate.currentProfileRate,0);animate.play();animate.update(.5);
+    assert(Math.abs(target.worldPosition.x-3.125)<1e-7);
+    profile.zones=[{start:0,end:1,maxMultiplier:.5}];animate.update(.5);assert(Math.abs(target.worldPosition.x-3.75)<1e-7);
+    assert.equal(animate.currentProfileRate,.5);
+    profile.keys=[{progress:0,multiplier:NaN}];animate.update(.1);assert(!animate.isPlaying);assert.match(animate.speedProfileError,/Invalid speed profile key/);
+    profile.keys=[{progress:0,multiplier:2}];profile.zones=[];profile.acceleration=0;animate.restart();
+    assert(lease.claimFollowerController(animate,owner));lease.setFollowerControllerRate(animate,owner,.5);
+    animate.update(1);assert(Math.abs(target.worldPosition.x-2.5)<1e-7);assert.equal(animate.currentProfileRate,1);
+    lease.releaseFollowerController(animate,owner);
+    profile.spline={};animate.restart();animate.update(1);assert.equal(target.worldPosition.x,2.5);
+    animate.speedProfile=null;animate.restart();
     // Two named spline paths connected at progress 0.5; events must be called
     // when crossed even if the follower traverses the junction within one update.
     const {SplineTrigger,TriggerDirection}=require(path.join(out,'Components','SplineTrigger.js'));
