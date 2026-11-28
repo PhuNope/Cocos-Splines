@@ -24,6 +24,17 @@ export class SplineTrainTrafficBinding {
         if(this.waiting)splineTrafficGate.release(this.waiting.token);
         this.waiting=null;
     }
+    /** Remap live tokens after a committed open-route prefix removal. No gate
+     * release/reacquire: FIFO and occupied slots retain their exact owner. */
+    public discardOpenPrefix(count:number,offset:number):void{
+        if(!Number.isInteger(count)||count<1||!Number.isFinite(offset)||offset<=0||
+           [...this.held.keys()].some(i=>i<count)||(this.waiting&&this.waiting.index<count))
+            throw Error('Cannot discard occupied or queued train history.');
+        const remapped=new Map<number,Held>();
+        for(const [index,h] of this.held)remapped.set(index-count,{token:h.token,transition:{...h.transition,distance:h.transition.distance-offset}});
+        this.held=remapped;
+        if(this.waiting)this.waiting={index:this.waiting.index-count,token:this.waiting.token};
+    }
     public prepare(transitions:ReadonlyArray<TrainTrafficTransition>,from:number,to:number,tailOffset:number,clearance:number,stopGap:number,period=0):TrainTrafficMove{
         if(![from,to,tailOffset,clearance,stopGap,period].every(Number.isFinite)||from<0||to<from||tailOffset<0||clearance<0||stopGap<=0||period<0||
            (period>0&&(from>=period||period<=tailOffset+clearance+stopGap||to-from>period-stopGap+1e-8)))

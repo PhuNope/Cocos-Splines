@@ -3,10 +3,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=path.resolve(__dirname,'..'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'spline-train-'));
 try{
  cp.execFileSync('tsc',['-p',root+'/tsconfig.runtime.json','--noEmit','false','--outDir',dir],{stdio:'pipe'});
- const {compileTrainRoute,locateTrainCars,normalizeTrainHead,advanceTrainHead,trainProgressAtDistance}=require(dir+'/Core/SplineTrainMath.js');
+ const {compileTrainRoute,locateTrainCars,normalizeTrainHead,advanceTrainHead,trainProgressAtDistance,trainHistoryDiscardCount}=require(dir+'/Core/SplineTrainMath.js');
  const arc=(length)=>[{progress:0,distance:0},{progress:.5,distance:length*.25},{progress:1,distance:length}];
  const leg=(length,backwards=false)=>({arc:arc(length),backwards});
  const route=compileTrainRoute([leg(10),leg(20,true)],false);
+ assert.equal(trainHistoryDiscardCount(route,16.5,6,.5),0);
+ assert.equal(trainHistoryDiscardCount(route,16.5001,6,.5),1);
+ assert.equal(trainHistoryDiscardCount(route,30,0,0),1);
  assert.equal(route.length,30);assert.equal(trainProgressAtDistance(arc(10),2.5),.5);
  assert.equal(normalizeTrainHead(route,0,3,4),8);
  assert.deepEqual(locateTrainCars(route,14,3,4).map(x=>[x.legIndex,x.routeDistance]),[[1,14],[1,10],[0,6]]);
@@ -93,7 +96,7 @@ try{
   fork.connections[2].exitDirection=1; // later switch change must not redirect wagons
   d.lateUpdate(3);assert(d.currentDistance>12);assert(d.getCarLocations()[1].legIndex===0);assert(d.getRouteHistory()[1].backwards);
   assert(d.requestJunctionExit(nextFork,0,1));d.lateUpdate(100);
-  assert.equal(d.getRouteHistory().length,3);assert.equal(d.getRouteHistory()[2].spline,end);assert.equal(d.currentDistance,59.9);assert(d.awaitingRouteChoice);assert.equal(gate.size,0);
+  assert.equal(d.getRouteHistory().length,1);assert.equal(d.getRouteHistory()[0].spline,end);assert.equal(d.historyStartDistance,35);assert.equal(d.historyDiscardedLegs,2);assert.equal(d.currentDistance,59.9);assert(d.awaitingRouteChoice);assert.equal(gate.size,0);
   assert(d.finishDynamicRoute());d.lateUpdate(1);assert.equal(d.currentDistance,60);assert(!d.isPlaying);assert(!d.requestJunctionExit(fork,0,1));
   d.onDestroy();assert.equal(gate.size,0);
   // Failed transform while admitting must roll back the proposed history and slot.
@@ -101,6 +104,39 @@ try{
   rollback.onEnable();assert(rollback.requestJunctionExit(fork,0,2));rollback.cars[1].fail=true;rollback.lateUpdate(2);
   assert.equal(rollback.currentDistance,6);assert.equal(rollback.getRouteHistory().length,1);assert.equal(gate.size,0);assert(!rollback.isPlaying);
   rollback.play();rollback.lateUpdate(1.25);assert.equal(rollback.getRouteHistory().length,2);assert.equal(gate.count(fork,2),1);rollback.onDisable();assert.equal(gate.size,0);
+  // Dynamic repeat: compact cleared legs, retain absolute coordinates,
+  // reuse an earlier spline only after its tail clearance has passed.
+  const da=spline(0,10),db=spline(10,0),dj1=junction(da,db),dj2=junction(db,da);
+  const dyn=new SplineTrainController();dyn.legs=[{spline:da,backwards:false}];dyn.cars=[new Node(),new Node(),new Node()];dyn.centerSpacing=2;dyn.startDistance=4;dyn.speed=1;dyn.enableTraffic=true;dyn.dynamicRouting=true;dyn.maxJoinAngle=180;dyn.trafficStopGap=.1;dyn.trafficTailClearance=.5;
+  dyn.onEnable();assert(dyn.requestJunctionExit(dj1,0,1));dyn.lateUpdate(10.5);
+  assert.equal(dyn.currentDistance,14.5);assert.equal(dyn.historyDiscardedLegs,0);assert.equal(gate.count(dj1,1),1);
+  assert(!dyn.requestJunctionExit(dj2,0,1));assert.match(dyn.lastError,/retained history/);
+  dyn.lateUpdate(.1);assert.equal(dyn.historyDiscardedLegs,1);assert.equal(dyn.historyStartDistance,10);assert.equal(gate.count(dj1,1),0);
+  assert.equal(dyn.getRouteHistory()[0].entryJunction,null);assert.equal(dyn.getRouteHistory()[0].start,10);assert.equal(dyn.getRouteHistory()[0].spline,db);
+  assert(Math.abs(dyn.getCarLocations()[2].routeDistance-10.6)<1e-8);
+  assert(dyn.getCarLocations().every(p=>p.legIndex===0));
+  assert(dyn.requestJunctionExit(dj2,0,1));dyn.lateUpdate(100);
+  assert.equal(dyn.historyDiscardedLegs,2);assert.equal(dyn.getRouteHistory()[0].spline,da);
+  for(let i=0;i<200;i++){
+   const last=dyn.currentDistance,origin=dyn.historyStartDistance;
+   const j=dyn.getRouteHistory()[0].spline===da?dj1:dj2;
+   assert(dyn.requestJunctionExit(j,0,1),dyn.lastError);dyn.lateUpdate(100);
+   assert.equal(dyn.lastError,'');assert(dyn.currentDistance>last);assert(dyn.historyStartDistance>origin);
+   assert.equal(dyn.getRouteHistory().length,1);assert.equal(gate.size,0);assert.equal(gate.waitingCount,0);
+  }
+  assert.equal(dyn.historyDiscardedLegs,202);assert.equal(dyn.historyStartDistance,2020);
+  dyn.onDisable();assert.equal(dyn.historyStartDistance,0);assert.equal(dyn.getRouteHistory().length,0);
+  // Rebase while a later reservation remains held and a subsequent exit
+  // is queued. Preserve exact FIFO ownership, do not release/reacquire.
+  const ca=spline(0,10),cb=spline(10,13),ccs=spline(13,18),cd=spline(18,40),cj1=junction(ca,cb),cj2=junction(cb,ccs),cj3=junction(ccs,cd);
+  const compact=new SplineTrainController();compact.legs=[{spline:ca,backwards:false}];compact.cars=[new Node(),new Node(),new Node()];compact.centerSpacing=3;compact.startDistance=6;compact.speed=1;compact.enableTraffic=true;compact.dynamicRouting=true;compact.trafficStopGap=.1;compact.trafficTailClearance=.5;
+  compact.onEnable();assert(compact.requestJunctionExit(cj1,0,1));compact.lateUpdate(100);assert.equal(compact.currentDistance,12.9);
+  assert(compact.requestJunctionExit(cj2,0,1));compact.lateUpdate(3);assert.equal(compact.trafficReservations,2);
+  cj3.connections[1].trafficSignal=1;assert(compact.requestJunctionExit(cj3,0,1));compact.lateUpdate(100);
+  assert.equal(compact.historyStartDistance,10);assert.equal(compact.getRouteHistory().length,2);assert.equal(gate.count(cj1,1),0);assert.equal(gate.count(cj2,1),1);assert.equal(gate.waiting(cj3,1),1);assert(compact.trafficWaiting);
+  const queuedOther={};cj3.connections[1].trafficSignal=0;assert(!gate.move(queuedOther,cj3,1,1));
+  compact.lateUpdate(.2);assert.equal(gate.count(cj3,1),1);assert.equal(gate.waiting(cj3,1),1);assert.equal(compact.getRouteHistory().length,3);
+  compact.lateUpdate(100);assert.equal(compact.getRouteHistory().length,1);assert.equal(gate.size,0);assert(gate.move(queuedOther,cj3,1,1));gate.release(queuedOther);compact.onDestroy();
   // Fixed loop: seam gate, wrap, tail retention and bounded repeated history.
   const la=spline(0,10),lb=spline(10,0),join=junction(la,lb),seam=junction(lb,la);
   const cyc=new SplineTrainController();cyc.legs=[{spline:la,backwards:false,entryJunction:seam,junctionEntryIndex:0,junctionExitIndex:1},{spline:lb,backwards:false,entryJunction:join,junctionEntryIndex:0,junctionExitIndex:1}];

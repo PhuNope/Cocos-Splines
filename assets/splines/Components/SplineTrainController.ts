@@ -5,7 +5,7 @@ import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {createWorldFrameField} from '../Core/SplineWorldFrames';
 import {compileTrainRoute,locateTrainCars,normalizeTrainHead,advanceTrainHead,MAX_TRAIN_CARS,MAX_TRAIN_LEGS} from '../Core/SplineTrainMath';
 import type {TrainRouteMetric,TrainCarLocation} from '../Core/SplineTrainMath';
-import {trainTailOffset} from '../Core/SplineTrainMath';
+import {trainTailOffset,trainHistoryDiscardCount} from '../Core/SplineTrainMath';
 import {SplineJunction,JunctionExitDirection,JunctionTrafficSignal} from './SplineJunction';
 import {SplineTrainTrafficBinding} from '../Core/SplineTrainTrafficBinding';
 import type {TrainTrafficTransition} from '../Core/SplineTrainTrafficBinding';
@@ -54,6 +54,9 @@ export class SplineTrainController extends Component {
     @property({min:0,max:10000,tooltip:'Extra world arc beyond tail center before releasing a passed junction.'}) trafficTailClearance=.5;
     @property({type:CCBoolean,tooltip:'Manual endpoint junction branching; exactly one initial leg, open route and traffic required.'}) dynamicRouting=false;
     private dynamicLegs:SplineTrainLeg[]=[];
+    private dynamicInitial:SplineTrainLeg|null=null;
+    private historyOffset=0;
+    private discardedLegs=0;
     private pendingLeg:SplineTrainLeg|null=null;
     private dynamicFinished=false;
     private readonly traffic=new SplineTrainTrafficBinding();
@@ -70,18 +73,21 @@ export class SplineTrainController extends Component {
     private initialized=false;
     private error='';
     private locations:TrainCarLocation[]=[];
-    public get currentDistance():number{return this.head;}
-    public get routeLength():number{return this.route?.metric.length??0;}
+    public get currentDistance():number{return this.head+this.historyOffset;}
+    /** Origin of retained history in cumulative route coordinates. */
+    public get historyStartDistance():number{return this.historyOffset;}
+    public get historyDiscardedLegs():number{return this.discardedLegs;}
+    public get routeLength():number{return this.route?this.route.metric.length+this.historyOffset:0;}
     public get isPlaying():boolean{return this.playing;}
     public get lastError():string{return this.error;}
     public get trafficCompletedLaps():number{return this.completedLaps;}
     public get trafficWaiting():boolean{return this.traffic.waitingIndex>=0;}
     public get trafficReservations():number{return this.traffic.reservedCount;}
-    public getCarLocations():TrainCarLocation[]{return this.locations.map(p=>({...p}));}
+    public getCarLocations():TrainCarLocation[]{return this.locations.map(p=>({...p,routeDistance:p.routeDistance+this.historyOffset}));}
     public get awaitingRouteChoice():boolean{return this.dynamicLegs.length>0&&!this.dynamicFinished&&!this.pendingLeg&&!!this.route&&this.head>=this.route.metric.length-this.trafficStopGap;}
     public getRouteHistory():TrainHistoryLeg[]{
         const config=this.dynamicLegs.length?this.dynamicLegs:this.legs;
-        return (this.route?.legs??[]).map((l,i)=>({spline:l.spline,backwards:l.backwards,start:this.route!.metric.legs[i].start,end:this.route!.metric.legs[i].end,
+        return (this.route?.legs??[]).map((l,i)=>({spline:l.spline,backwards:l.backwards,start:this.route!.metric.legs[i].start+this.historyOffset,end:this.route!.metric.legs[i].end+this.historyOffset,
             entryJunction:config[i]?.entryJunction??null,junctionEntryIndex:config[i]?.junctionEntryIndex??0,junctionExitIndex:config[i]?.junctionExitIndex??1}));
     }
     private prepare(config:ReadonlyArray<SplineTrainLeg>=this.legs):PreparedRoute{
@@ -157,7 +163,7 @@ export class SplineTrainController extends Component {
             if(route.metric.legs[i].length<=this.trafficStopGap)throw Error('Train traffic leg is shorter than the stop margin.');
             // A blocked train must fit before its first junction. Leave a
             // strictly positive route distance between head and the gate.
-            if(step===1&&distance-this.trafficStopGap<trainTailOffset(this.cars.length,this.centerSpacing))
+            if(step===1&&(!this.dynamicRouting||this.historyOffset===0)&&distance-this.trafficStopGap<trainTailOffset(this.cars.length,this.centerSpacing))
                 throw Error('Train does not fit before first traffic junction.');
             transitions.push({distance,junction,exitIndex:b,capacity:exit.maxFollowers,green:exit.trafficSignal===JunctionTrafficSignal.Green});
         }
@@ -174,7 +180,7 @@ export class SplineTrainController extends Component {
         if(!this.enableTraffic||this.loopRoute||this.legs.length!==1||!this.legs[0]?.spline||
            this.legs[0].spline.closed||this.legs[0].entryJunction)
             throw Error('Dynamic train requires traffic, one open initial leg without junction, and no loop.');
-        const first=this.dynamicLegs[0];
+        const first=this.dynamicInitial;
         if(first&&(first.spline!==this.legs[0].spline||first.backwards!==this.legs[0].backwards))
             throw Error('Dynamic train initial leg changed; reinitialize safely.');
     }
@@ -191,7 +197,7 @@ export class SplineTrainController extends Component {
         const backwards=exit.exitDirection===JunctionExitDirection.Backward||
             (exit.exitDirection===JunctionExitDirection.Preserve&&from.backwards);
         if(exit.spline.closed||this.dynamicLegs.some(l=>l.spline===exit.spline))
-            throw Error('Dynamic train history cannot revisit a spline or enter a closed spline.');
+            throw Error('Dynamic train cannot enter a closed spline or revisit a spline still in retained history.');
         if(Math.abs(exit.getProgress()-(backwards?1:0))>1e-6)
             throw Error('Dynamic train exit must be a full spline endpoint.');
         const leg=new SplineTrainLeg();leg.spline=exit.spline;leg.backwards=backwards;
@@ -248,8 +254,33 @@ export class SplineTrainController extends Component {
             if(appended){
                 this.dynamicLegs=configs;this.trafficRoute=route;this.trafficLayout=layout;this.pendingLeg=null;
             }
+            this.compactDynamicHistory();
             if(this.dynamicFinished&&next.arrived&&!move.blocked)this.pause();
         }catch(error){move.rollback();throw error;}
+    }
+    /** Called only after placement and reservation release have committed.
+     * Reuse prepared frames; this is a coordinate rebase, not a second pose
+     * write. Keep absolute public distances while bounding the working set. */
+    private compactDynamicHistory():void{
+        const route=this.route!;
+        const count=trainHistoryDiscardCount(route.metric,this.head,trainTailOffset(this.cars.length,this.centerSpacing),this.trafficTailClearance);
+        if(!count)return;
+        const offset=route.metric.legs[count].start;
+        const legs=route.legs.slice(count),metric=compileTrainRoute(legs,false);
+        const configs=this.dynamicLegs.slice(count);
+        // The incoming gate of the retained first leg is already cleared.
+        // Drop its junction reference; all subsequent links remain immutable.
+        const first=new SplineTrainLeg();
+        first.spline=configs[0].spline;first.backwards=configs[0].backwards;configs[0]=first;
+        const next:PreparedRoute={...route,legs,metric};
+        const layout=this.trafficLayout.slice(count).map((t,i)=>({...t,distance:metric.legs[i+1].start}));
+        const head=this.head-offset;
+        const locations=this.locations.map(p=>({...p,legIndex:p.legIndex-count,routeDistance:p.routeDistance-offset}));
+        if(locations.some(p=>p.legIndex<0)||!Number.isFinite(this.historyOffset+offset))
+            throw Error('Invalid dynamic train history rebase.');
+        this.traffic.discardOpenPrefix(count,offset);
+        this.dynamicLegs=configs;this.trafficRoute=next;this.route=next;this.trafficLayout=layout;
+        this.head=head;this.locations=locations;this.historyOffset+=offset;this.discardedLegs+=count;
     }
     private place(route:PreparedRoute,distance:number):void{
         const head=normalizeTrainHead(route.metric,distance,this.cars.length,this.centerSpacing);
@@ -291,7 +322,7 @@ export class SplineTrainController extends Component {
                 this.place(route,head);
                 this.trafficRoute=route;this.trafficLayout=transitions;this.trafficCars=this.cars.slice();this.trafficSpacing=this.centerSpacing;this.trafficClearance=this.trafficTailClearance;this.trafficStopMargin=this.trafficStopGap;
                 if(this.dynamicRouting){
-                    const first=new SplineTrainLeg();first.spline=this.legs[0].spline;first.backwards=this.legs[0].backwards;this.dynamicLegs=[first];
+                    const first=new SplineTrainLeg();first.spline=this.legs[0].spline;first.backwards=this.legs[0].backwards;this.dynamicLegs=[first];this.dynamicInitial=first;
                 }
             }else this.place(route,distance);
             this.initialized=true;return true;
@@ -331,7 +362,7 @@ export class SplineTrainController extends Component {
             }else{this.place(route,next.distance);if(next.arrived)this.pause();}
         }catch(error){this.error=String(error);this.pause();}
     }
-    private resetTraffic():void{this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.dynamicLegs=[];this.pendingLeg=null;this.dynamicFinished=false;this.completedLaps=0;this.initialized=false;}
+    private resetTraffic():void{if(this.dynamicLegs.length){this.route=null;this.locations=[];this.head=0;}this.traffic.clear();this.trafficRoute=null;this.trafficLayout=[];this.trafficCars=[];this.dynamicLegs=[];this.dynamicInitial=null;this.historyOffset=0;this.discardedLegs=0;this.pendingLeg=null;this.dynamicFinished=false;this.completedLaps=0;this.initialized=false;}
     onDisable():void{this.pause();this.resetTraffic();}
     onDestroy():void{this.pause();this.resetTraffic();this.route=null;this.locations=[];}
 }

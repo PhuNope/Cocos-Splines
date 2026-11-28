@@ -78,3 +78,14 @@ export function advanceTrainHead(route:TrainRouteMetric,head:number,speed:number
     const distance=normalizeTrainHead(route,start+speed*dt,carCount,spacing);
     return {distance,arrived:!route.loop&&distance>=route.length};
 }
+
+/** Retain the leg occupied by the tail and every join within its rear
+ * clearance. Always keep at least the final leg. Strict comparison matches
+ * the traffic release rule; a tail exactly on the margin is not clear. */
+export function trainHistoryDiscardCount(route:TrainRouteMetric,head:number,tailOffset:number,clearance:number):number{
+    if(route.loop||![head,tailOffset,clearance].every(Number.isFinite)||head<tailOffset||head>route.length||tailOffset<0||clearance<0)
+        throw Error('Invalid dynamic train history bounds.');
+    let count=0;
+    while(count<route.legs.length-1&&head-tailOffset>route.legs[count].end+clearance)count++;
+    return count;
+}
