@@ -80,10 +80,10 @@ try{
     static add(out,a,b){return out.set(a.x+b.x,a.y+b.y,a.z+b.z);}
     static transformQuat(out,p){return out.set(p);}
   }
-  class Quat{static multiply(out){return out;}static fromEuler(out){return out;}}
+  class Quat{static multiply(out){return out;}static fromEuler(out){return out;}static fromAxes(out,x,y,z){out.axes=[x,y,z];return out;}}
   class Node{
     constructor(name='node'){this.name=name;this.uuid=name;this.children=[];this.parent=null;
-      this.isValid=true;this.scale=new Vec3(1,1,1);this.worldPosition=new Vec3();
+      this.isValid=true;this.active=true;this.scale=new Vec3(1,1,1);this.worldPosition=new Vec3();
       this.worldRotation=new Quat();}
     setParent(p){this.removeFromParent();this.parent=p;if(p)p.children.push(this);}
     removeFromParent(){if(!this.parent)return;const i=this.parent.children.indexOf(this);
@@ -95,14 +95,16 @@ try{
     getComponent(){return null;}
   }
   class Component{constructor(){this.node=new Node();this.enabled=true;}}
+  let failPrefab=false;
   const created=[],cc={_decorator:{ccclass:()=>cl=>cl,property:()=>{},
     menu:()=>cl=>cl},Component,Vec3,Quat,Node,Prefab:class{},Enum:x=>x,
-    instantiate:(prefab)=>{const obj=new Node('clone-'+prefab.id);obj.templateId=prefab.id;created.push(obj);return obj;}};
+    instantiate:(prefab)=>{if(failPrefab&&prefab.id==='B')throw Error('Injected instantiate failure');const obj=new Node('clone-'+prefab.id);obj.templateId=prefab.id;created.push(obj);return obj;}};
   const original=Module._load;
   Module._load=function(name,parent,isMain){
     if(name==='cc')return cc;
     if(name==='cc/env')return {EDITOR_NOT_IN_PREVIEW:false};
-    if(name==='../Core/SplineContainer')return {SplineContainer:class SplineContainer{}};
+    if(name==='./SplineWorldFrames')return {createWorldFrameField:(source,a,b,steps)=>({frames:Array.from({length:steps+1},(_,i)=>({position:source.evaluateWorldPosition(i/steps),tangent:new Vec3(1,0,0),up:new Vec3(0,1,0)}))})};
+    if(name==='../Core/SplineContainer'||name==='./SplineContainer')return {SplineContainer:class SplineContainer{}};
     if(name==='./SplineModifiers')return {SplineModifiers:class SplineModifiers{}};
     if(name==='./SplineNoise')return {SplineNoise:class SplineNoise{}};
     if(name==='./SplineInstantiate')return {InstantiateMethod:{Count:0,Distance:1}};
@@ -115,7 +117,7 @@ try{
     assert.equal(new SplinePopulationExclusion().startProgress,0);
     const controller=new SplineObjectController();
     const spline={count:3,closed:false,length:10,node:new Node('spline'),
-      getRevision:()=>1,evaluateWorldPosition:t=>new Vec3(10*t,0,0),
+      segmentCount:1,getRevision:()=>1,evaluateWorldPosition:t=>new Vec3(10*t,0,0),
       evaluateRotation:()=>new Quat()};
     controller.spline=spline;controller.prefabs=[{id:'A'},{id:'B'}];
     controller.count=6;controller.alignToSpline=false;
@@ -163,6 +165,34 @@ try{
     controller.enablePopulationRules=false;controller.respawn();
     assert.deepEqual(created.slice(-6).map(n=>n.name),legacy.map(x=>x.name),
       'Turning rules off restores legacy population output');
+    // Same controller/root, graph mode uses graph parameters only.
+    const graph={version:1,output:'out',nodes:[{id:'source',type:'spline'},{id:'dist',type:'spacing',input:'source',spacing:2,includeEnd:true},
+      {id:'shift',type:'offset',input:'dist',offset:{x:0,y:2,z:0},space:'world'},
+      {id:'scale',type:'scale',input:'shift',minScale:2,maxScale:2},
+      {id:'variant',type:'prefab',input:'scale',weights:[0,1],seed:0},{id:'out',type:'output',input:'variant'}]};
+    controller.usePopulationGraph=true;controller.populationGraphJson=JSON.stringify(graph);
+    controller.offset=new Vec3(100,100,100);controller.count=99;controller.scaleMultiplier=9;
+    const oldRoot=controller.spawnedRoot,oldNodes=oldRoot.children.slice();
+    const preview=controller.previewPopulationGraph();assert.equal(preview.length,6);
+    assert.deepEqual(oldRoot.children,oldNodes);assert.equal(controller.previewPlacement().length,6);
+    assert.throws(()=>controller.summarizePlacement(),/rejection statistics/i);
+    assert.equal(controller.respawn(),6);assert.equal(controller.spawnedRoot,oldRoot);
+    assert(oldNodes.every(n=>!n.isValid));
+    assert.deepEqual(oldRoot.children.map(n=>n.worldPosition.x),[0,2,4,6,8,10]);
+    assert(oldRoot.children.every(n=>n.worldPosition.y===2&&n.templateId==='B'&&n.scale.x===2&&n.worldRotation.axes.length===3));
+    assert.equal(controller.getPopulationGraphMetrics().nodes,6);
+    const committed=oldRoot.children.slice();
+    failPrefab=true;assert.throws(()=>controller.respawn(),/instantiate failure/i);failPrefab=false;
+    assert.deepEqual(oldRoot.children,committed);assert(committed.every(n=>n.isValid));
+    controller.populationGraphJson='bad';assert.throws(()=>controller.respawn());assert.deepEqual(oldRoot.children,committed);
+    controller.populationGraphAsset={json:graph};assert.equal(controller.respawn(),6);
+    controller.populationGraphAsset=null;controller.populationGraphJson=JSON.stringify(graph);
+    controller.spawnOnStart=true;assert.equal(controller.spawn(),0);
+    controller.rebuildOnChange=true;const same=oldRoot.children.slice();controller.update();assert.deepEqual(oldRoot.children,same);
+    graph.nodes[1].spacing=5;controller.populationGraphJson=JSON.stringify(graph);controller.update();assert.equal(oldRoot.children.length,3);
+    controller.onDisable();assert.equal(oldRoot.children.length,0);
+    controller.onEnable();assert.equal(oldRoot.children.length,3);
+    controller.onDestroy();assert.equal(oldRoot.children.length,0);
   }finally{Module._load=original;}
   const pkg=require(root+'/package.json');
   assert(pkg.scripts.test.includes('tests/spline-population-v2.test.cjs'));

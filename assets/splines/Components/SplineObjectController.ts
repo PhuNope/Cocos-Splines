@@ -1,4 +1,4 @@
-import { _decorator, CCFloat, Component, Prefab, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, SphereCollider, CapsuleCollider, MeshCollider, Mesh, MeshRenderer, gfx, PhysicsSystem, geometry } from 'cc';
+import { _decorator, CCFloat, Component, Prefab, JsonAsset, Node, instantiate, Vec3, Quat, Enum, Collider, BoxCollider, SphereCollider, CapsuleCollider, MeshCollider, Mesh, MeshRenderer, gfx, PhysicsSystem, geometry } from 'cc';
 import { EDITOR_NOT_IN_PREVIEW } from 'cc/env';
 import { SplineContainer } from '../Core/SplineContainer';
 import { SplineModifiers } from './SplineModifiers';
@@ -19,6 +19,10 @@ import {prefabHierarchyRadius,prefabMeshAabbRadius,prefabBoxRadius,
     type FootprintNode} from '../Core/SplinePrefabFootprintMath';
 import {PopulationSurfacePlacement,PopulationSurfaceSettings,projectSurfaceCandidates,surfaceBasis} from '../Core/SplinePopulationSurfaceMath';
 import {filterSharedOccupancy,type SharedOccupancyCandidate,type SharedOccupant} from '../Core/SplineSharedOccupancyMath';
+import {DEFAULT_POPULATION_GRAPH,parsePopulationGraph,PopulationGraphRunner} from '../Core/SplinePopulationGraph';
+import type {PopulationGraphPlan,PopulationGraphContext,PopulationGraphInstance,PopulationGraphMetrics} from '../Core/SplinePopulationGraph';
+import type {PopulationSurfaceRaycast} from '../Core/SplinePopulationSurfaceMath';
+import {samplePopulationGraphSource,stagePopulationGraphInstances} from '../Core/SplinePopulationGraphHost';
 const {ccclass,property,menu}=_decorator;
 // Offline legacy 'cc' mocks do not all implement this Cocos Editor decorator.
 // The real Creator decorator is always used when available.
@@ -55,6 +59,12 @@ export class SplineObjectController extends Component {
     @property({type:[CCFloat],tooltip:'Weights aligned by index to Prefabs. Exactly one value per slot, zero disables a variant; max 128.'})
     prefabWeights:number[]=[];
     @property({type:Node,tooltip:'Generated children parent; defaults to this Node.'}) parentNode:Node|null=null;
+    @property({tooltip:'Use the Population Graph instead of ordinary placement and filtering settings.'}) usePopulationGraph=false;
+    @property({type:JsonAsset,tooltip:'Optional Population Graph JSON asset; takes precedence over local graph JSON.'}) populationGraphAsset:JsonAsset|null=null;
+    @property({multiline:true,tooltip:'Local typed Population Graph v1 JSON, used when no graph asset is assigned.'}) populationGraphJson=DEFAULT_POPULATION_GRAPH;
+    @property({type:SplineContainer}) graphSplineB:SplineContainer|null=null;
+    @property({type:SplineContainer}) graphSplineC:SplineContainer|null=null;
+    @property({min:2,max:64,step:1,tooltip:'World path sampling per curve for graph distribution.'}) graphSamplesPerCurve=16;
     @property({type:SplineModifiers}) modifiers:SplineModifiers|null=null;
     @property({type:SplineNoise,tooltip:'Optional seeded layered offset in spline-frame Right/Up/Forward coordinates. No Knot changes.'})
     noise:SplineNoise|null=null;
@@ -135,6 +145,9 @@ export class SplineObjectController extends Component {
     private _runtimeSpawned=false;
     private _generated:Node[]=[];
     private _signature='';
+    private _graphMetrics:PopulationGraphMetrics={computed:0,reused:0,nodes:0};
+    private _graphWarning='';
+    public getPopulationGraphMetrics():PopulationGraphMetrics{return {...this._graphMetrics};}
     private rand(index:number,channel:number):number{
         let v=(this.seed|0)^Math.imul(index+13,0x9e3779b9)^Math.imul(channel+7,0x85ebca6b);
         v=Math.imul(v^(v>>>16),0x7feb352d);v=Math.imul(v^(v>>>15),0x846ca68b);
@@ -218,11 +231,14 @@ export class SplineObjectController extends Component {
             surfaceOffset:this.surfaceOffset,minNormalY:this.minSurfaceNormalY,
             skipMissing:this.skipMissingSurface,targetCount:targets.length,
         };
+        return projectSurfaceCandidates(candidates,settings,this.surfaceRaycast(targets));
+    }
+    private surfaceRaycast(targets:ReadonlyArray<Collider>):PopulationSurfaceRaycast{
         if(!PhysicsSystem?.instance||typeof PhysicsSystem.instance.raycast!=='function'||
            typeof geometry?.Ray!=='function')
             throw Error('Surface Conform requires a working Physics 3D raycast in the active Scene.');
         const physics=PhysicsSystem.instance;
-        return projectSurfaceCandidates(candidates,settings,(origin,length)=>{
+        return (origin,length)=>{
             const ray=new geometry.Ray(origin.x,origin.y,origin.z,0,-1,0);
             if(!physics.raycast(ray,0xffffffff,length,false))return [];
             const results=physics.raycastResults;
@@ -234,7 +250,7 @@ export class SplineObjectController extends Component {
                     point:{x:p?.x??NaN,y:p?.y??NaN,z:p?.z??NaN},
                     normal:{x:n?.x??NaN,y:n?.y??NaN,z:n?.z??NaN}};
             });
-        });
+        };
     }
     /** Cache immutable World BVHs by mesh identity + hash + collider pose/bounds.
      * Weak keys prevent detached obstacle references from being retained.
@@ -354,7 +370,69 @@ export class SplineObjectController extends Component {
         }
         return entries;
     }
+    private graphText():string{
+        if(!this.populationGraphAsset)return this.populationGraphJson;
+        return JSON.stringify(this.populationGraphAsset.json);
+    }
+    private graphSource(slot:number):SplineContainer|null{
+        return slot===0?(this.spline||this.node.parent?.getComponent(SplineContainer)||null):slot===1?this.graphSplineB:this.graphSplineC;
+    }
+    private graphSignature(plan:PopulationGraphPlan,text:string):string{
+        const matrix=(node:Node|undefined|null)=>{
+            const m=node?.worldMatrix;return m?[m.m00,m.m01,m.m02,m.m04,m.m05,m.m06,m.m08,m.m09,m.m10,m.m12,m.m13,m.m14]:null;
+        };
+        const colliderKey=(c:Collider)=>{
+            if(!c)return null;
+            const bounds=c.worldBounds;
+            return [c.node?.uuid,c.enabled,c.node?.isValid,c.node?.activeInHierarchy,matrix(c.node),bounds?.center,bounds?.halfExtents,
+                typeof BoxCollider==='function'&&c instanceof BoxCollider?[c.center,c.size]:null,
+                typeof CapsuleCollider==='function'&&c instanceof CapsuleCollider?[c.center,c.radius,c.cylinderHeight,c.direction]:null,
+                typeof MeshCollider==='function'&&c instanceof MeshCollider?[c.mesh?.uuid,c.mesh?.hash,c.mesh?.allowDataAccess,c.convex,c.center]:null];
+        };
+        return JSON.stringify(['populationGraph',text,this.graphSamplesPerCurve,this.prefabs.map(p=>p?.uuid),
+            this.parentNode?.uuid,matrix(this.parentNode||this.node),this.spawnedRoot?.isValid?matrix(this.spawnedRoot):matrix(this.parentNode||this.node),
+            plan.nodes.filter(n=>n.type==='spline').map(n=>{
+                const s=this.graphSource(n.slot??0);return [s?.node?.uuid,s?.getRevision(),s?.closed,s?.enabled,s?.node?.isValid,s?.node?.activeInHierarchy,matrix(s?.node)];
+            }),plan.nodes.some(n=>n.type==='surface')?this.surfaceColliders.map(colliderKey):null,
+            plan.nodes.some(n=>n.type==='obstacle')?[this.useMeshColliderBVH,this.obstacleColliders.map(colliderKey)]:null]);
+    }
+    /** Read-only evaluation of current graph inputs. Explicit respawn always
+     * uses a fresh runner so moving physics results never reuse stale queries. */
+    private prepareGraphPlacement():{instances:PopulationGraphInstance[];metrics:PopulationGraphMetrics;signature:string}{
+        const text=this.graphText(),plan=parsePopulationGraph(text);
+        if(!Array.isArray(this.prefabs)||this.prefabs.length<1||this.prefabs.length>128||this.prefabs.some(p=>!p))
+            throw Error('Population Graph requires 1–128 nonempty Prefab slots; slot order is preserved.');
+        const sources:PopulationGraphContext['sources'][number][]=[];
+        for(const n of plan.nodes)if(n.type==='spline'){
+            const slot=n.slot??0,s=this.graphSource(slot);
+            if(!s||s.enabled===false||s.node?.isValid===false||s.node?.activeInHierarchy===false||s.count<2)
+                throw Error('Population Graph requires an active SplineContainer in slot '+slot+'.');
+            sources[slot]=samplePopulationGraphSource(s,this.graphSamplesPerCurve);
+        }
+        const context:PopulationGraphContext={sources,prefabSlotCount:this.prefabs.length};
+        if(plan.nodes.some(n=>n.type==='surface')){
+            const targets=this.surfaceTargets();
+            context.surface={revision:'fresh-surface',targetCount:targets.length,raycast:this.surfaceRaycast(targets)};
+        }
+        if(plan.nodes.some(n=>n.type==='obstacle'))context.obstacles={revision:'fresh-obstacles',shapes:this.obstacleShapes()};
+        const result=new PopulationGraphRunner().evaluate(plan,context);
+        return {...result,signature:this.graphSignature(plan,text)};
+    }
+    public previewPopulationGraph():PopulationGraphInstance[]{return this.prepareGraphPlacement().instances;}
+    private respawnPopulationGraph():number{
+        const prepared=this.prepareGraphPlacement();
+        const previous=this.spawnedRoot?.isValid?this.spawnedRoot:null;
+        const parent=this.parentNode||this.node;
+        // Same generated-root ownership contract as ordinary Object Controller.
+        // A new root is staged inactive; existing root transforms are preserved.
+        const staged=stagePopulationGraphInstances(previous,parent,this.prefabs,prepared.instances);
+        this.spawnedRoot=staged.root;this._generated=staged.nodes;
+        this._signature=prepared.signature;this._runtimeSpawned=!EDITOR_NOT_IN_PREVIEW;
+        this._graphMetrics=prepared.metrics;this._graphWarning='';
+        return staged.nodes.length;
+    }
     private signature():string{
+        if(this.usePopulationGraph){const text=this.graphText();return this.graphSignature(parsePopulationGraph(text),text);}
         const spline=this.spline||this.node.parent?.getComponent(SplineContainer)||null;
         return JSON.stringify([spline?.getRevision(),spline?.node.worldMatrix,this.prefabs.map(p=>p?.uuid),
             this.usePrefabWeights,this.usePrefabWeights?this.prefabWeights:null,this.parentNode?.uuid,
@@ -411,7 +489,12 @@ export class SplineObjectController extends Component {
             ]:null,this.alignToSpline,this.includeEndPoint]);
     }
     onEnable():void{if(!EDITOR_NOT_IN_PREVIEW&&this.spawnOnStart)this.spawn();}
-    update():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned&&this.rebuildOnChange&&this.signature()!==this._signature)this.respawn();}
+    update():void{
+        if(EDITOR_NOT_IN_PREVIEW||!this._runtimeSpawned||!this.rebuildOnChange)return;
+        if(!this.usePopulationGraph){if(this.signature()!==this._signature)this.respawn();return;}
+        try{if(this.signature()!==this._signature)this.respawn();}
+        catch(error){const message=String(error);if(message!==this._graphWarning){this._graphWarning=message;console.warn('[Cocos Splines] Population Graph: '+message);}}
+    }
     /** Spawn only if the serialized/generated root has no children. */
     public spawn():number{
         if(this.spawnedRoot?.isValid&&this.spawnedRoot.children.length){this._signature=this.signature();return 0;}
@@ -419,10 +502,12 @@ export class SplineObjectController extends Component {
     }
     /** Authoritative preflight for both read-only preview and Respawn. */
     public previewPlacement():PlacementDiagnostic[]{
+        if(this.usePopulationGraph)return this.previewPopulationGraph().map(p=>({index:p.index,progress:p.progress,position:p.position,radius:0,reason:'accepted'}));
         return this.preparePlacement(true)?.diagnostics??[];
     }
     /** Read-only exact candidate counts (not the limited drawn Gizmo markers). */
     public summarizePlacement():PlacementSummary{
+        if(this.usePopulationGraph)throw Error('Population Graph preview shows accepted candidates only; per-stage rejection statistics are not available yet.');
         return summarizePlacementDiagnostics(this.previewPlacement());
     }
     public placementPreviewRevision():string{
@@ -560,6 +645,7 @@ export class SplineObjectController extends Component {
     }
     /** Only clear old generated instances AFTER all placement validation. */
     public respawn():number{
+        if(this.usePopulationGraph)return this.respawnPopulationGraph();
         const prepared=this.preparePlacement(false);
         if(!prepared){this.clear();this._signature=this.signature();return 0;}
         const {spline,variants,weights,start,closedLoop,span,steps,total,accepted,surfacePlan}=prepared;
@@ -620,7 +706,7 @@ export class SplineObjectController extends Component {
         if(this.spawnedRoot?.isValid){
             for(const n of [...this.spawnedRoot.children]){n.removeFromParent();n.destroy();}
         }
-        this._generated=[];this._runtimeSpawned=false;
+        this._generated=[];this._runtimeSpawned=false;this._graphMetrics={computed:0,reused:0,nodes:0};
     }
     onDisable():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
     onDestroy():void{if(!EDITOR_NOT_IN_PREVIEW&&this._runtimeSpawned)this.clear();}
