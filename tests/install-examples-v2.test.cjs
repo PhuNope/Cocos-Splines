@@ -22,6 +22,7 @@ try {
      assert(!fs.existsSync(target+'.meta'), 'No extension UUIDs should be copied');
  }
  assert(fs.readFileSync(path.join(first.folder,'Train/TrainControllerSetup.ts'),'utf8').includes('SplineTrainController'));
+ assert(fs.readFileSync(path.join(first.folder,'Route/RouteControllerSetup.ts'),'utf8').includes('SplineRouteController'));
  const demo=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicRibbonGraph.json'),'utf8'));
  assert.equal(demo.version,1);

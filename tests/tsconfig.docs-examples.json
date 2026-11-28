@@ -20,6 +20,7 @@
     "../examples/installable/Traffic/TrafficSignalsSetup.ts",
     "../examples/installable/Population/PrefabSpawningSetup.ts",
     "../examples/installable/Population/PopulationGraphSetup.ts",
-    "../examples/installable/Train/TrainControllerSetup.ts"
+    "../examples/installable/Train/TrainControllerSetup.ts",
+    "../examples/installable/Route/RouteControllerSetup.ts"
   ]
 }

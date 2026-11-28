@@ -458,6 +458,13 @@ export class SplineAnimate extends Component {
         this.junctionMode=JunctionMode.ShortestRoute;
         this._arrivalDelivered=null;
     }
+    /** Stop route navigation without teleporting or releasing the currently
+     * occupied exit. Clear only the pending admission and destination. */
+    public cancelRouteNavigation():void{
+        this.pause();this.cancelTrafficWait();this._arrivalDelivered=null;
+        this.routeDestination=null;
+        if(this.junctionMode===JunctionMode.ShortestRoute)this.junctionMode=JunctionMode.Off;
+    }
     private pendingRouteArrival(spline:SplineContainer):number|null{
         if(this.junctionMode!==JunctionMode.ShortestRoute||
            this.routeDestination!==spline||!Number.isFinite(this.routeDestinationProgress))return null;
