@@ -167,5 +167,51 @@ try{
  assert(runner.evaluate(compilePopulationGraph(transformExample),ctx).instances.length>0);
  const surfaceExample=JSON.parse(fs.readFileSync(root+'/examples/installable/Population/SurfacePopulationGraph.json','utf8'));
  assert(runner.evaluate(compilePopulationGraph(surfaceExample),surfaceCtx).instances.length>0);
+ // Visual model parity with the authoritative runtime compiler.
+ const visual=require(root+'/dist/SplinePopulationGraphVisualModel.js');
+ let visualText=DEFAULT_POPULATION_GRAPH;
+ for(const type of visual.DISTRIBUTIONS){
+  visualText=visual.edit(visualText,{kind:'distribution',id:'distribution',type});
+  parsePopulationGraph(visualText);
+ }
+ for(const type of visual.FILTERS){
+  visualText=visual.edit(visualText,{kind:'insert',id:'distribution',type});
+  parsePopulationGraph(visualText);
+ }
+ const ordered=visual.parse(visualText);
+ assert.equal(ordered.nodes.length,4+visual.FILTERS.length);
+ const filter=ordered.nodes[2].id;
+ visualText=visual.edit(visualText,{kind:'move',id:filter,delta:1});
+ parsePopulationGraph(visualText);
+ visualText=visual.edit(visualText,{kind:'remove',id:filter});parsePopulationGraph(visualText);
+ assert.throws(()=>visual.edit(visualText,{kind:'remove',id:'source'}));
+ assert.throws(()=>visual.edit(visualText,{kind:'insert',id:'output',type:'offset'}));
+ assert.throws(()=>visual.edit(visualText,{kind:'parameters',id:'distribution',params:{count:0}}));
+ for(const file of fs.readdirSync(root+'/examples/installable/Population').filter(f=>f.endsWith('Graph.json'))){
+  const text=fs.readFileSync(root+'/examples/installable/Population/'+file,'utf8');
+  assert.deepEqual(visual.parse(text).nodes,parsePopulationGraph(text).nodes);
+ }
+ // Fake Inspector: native dump commit, read-only shared asset, invalid edits.
+ const panel=require(root+'/dist/contributions/inspector/ObjectController.js');
+ const el=()=>({events:{},innerHTML:'',textContent:'',value:'',disabled:false,hidden:false,addEventListener(k,fn){this.events[k]=fn;},render(){},querySelectorAll(){return this.widgets||[];}});
+ const inspector={$:{}},commits=[];
+ for(const k of Object.keys(panel.$))inspector.$[k]=el();
+ const dump={value:{usePopulationGraph:{value:true},populationGraphAsset:{value:null},populationGraphJson:{value:DEFAULT_POPULATION_GRAPH}}};
+ inspector.$.p_populationGraphJson.dispatch=function(event){assert.equal(event,'change-dump');assert.equal(this.dump,dump.value.populationGraphJson);commits.push(this.dump.value);};
+ panel.ready.call(inspector);panel.update.call(inspector,dump);
+ assert(inspector.$.pgChain.innerHTML.includes('data-pg-node="distribution"'));
+ assert.equal(inspector.$.pgRemove.disabled,true);
+ inspector.$.pgFilter.value='offset';inspector.$.pgInsert.events.click();
+ assert.equal(commits.length,1);parsePopulationGraph(commits[0]);
+ const select=id=>inspector.$.pgChain.events.click({target:{closest:()=>({dataset:{pgNode:id}})}});
+ select('offset1');inspector.$.pgFields.widgets=[{dataset:{pgParam:'offset'},value:'{"x":2,"y":0,"z":0}'},{dataset:{pgParam:'space'},value:'world'}];
+ inspector.$.pgApply.events.click();assert.equal(commits.length,2);
+ assert.deepEqual(visual.parse(commits[1]).nodes.find(n=>n.id==='offset1').offset,{x:2,y:0,z:0});
+ inspector.$.pgFields.widgets[0].value='{"x":99999,"y":0,"z":0}';inspector.$.pgApply.events.click();assert.equal(commits.length,2);
+ dump.value.populationGraphAsset.value={uuid:'shared'};panel.update.call(inspector,dump);
+ inspector.$.pgInsert.events.click();assert.equal(commits.length,2);assert(inspector.$.pgInsert.disabled);
+ dump.value.populationGraphAsset.value=null;dump.value.populationGraphJson.values=[commits[1],commits[1]];panel.update.call(inspector,dump);
+ inspector.$.pgRemove.events.click();assert.equal(commits.length,2);
+ panel.close.call(inspector);
  console.log('POPULATION GRAPH V2 PASS: typed DAG, arc-count placement, shared policy, deterministic prefab slots, cache and rollback.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
