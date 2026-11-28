@@ -18,7 +18,7 @@ export class SplineRouteWaypoint {
 }
 export type RouteControllerState='idle'|'traveling'|'dwelling'|'retrying'|'paused'|'completed'|'failed';
 interface Waypoint {spline:SplineContainer;progress:number;dwellSeconds:number}
-const owners=new WeakMap<SplineAnimate,SplineRouteController>();
+import {followerControllerOwner,claimFollowerController,releaseFollowerController} from '../Core/SplineFollowerControlRegistry';
 const active=(s:SplineContainer|null|undefined):s is SplineContainer=>!!s&&s.enabled!==false&&s.node?.isValid!==false&&s.node?.activeInHierarchy!==false&&s.count>=2&&Number.isFinite(s.length)&&s.length>1e-8;
 /** Itinerary orchestration only: SplineAnimate owns movement, junction
  * selection, traffic, spatial avoidance and exact arrival placement.
@@ -88,14 +88,14 @@ export class SplineRouteController extends Component {
     }
     private ownsCommand():boolean{
         const f=this.driven,w=this.itinerary[this.index];
-        return !!f&&!!w&&owners.get(f)===this&&f.junctionMode===JunctionMode.ShortestRoute&&
+        return !!f&&!!w&&followerControllerOwner(f)===this&&f.junctionMode===JunctionMode.ShortestRoute&&
             f.routeDestination===w.spline&&f.routeDestinationProgress===w.progress&&f.stopOnRouteArrival;
     }
     private release(cancel:boolean):void{
         const f=this.driven;
-        if(f&&owners.get(f)===this){
+        if(f&&followerControllerOwner(f)===this){
             if(cancel&&this.live(f)&&this.ownsCommand())f.cancelRouteNavigation();
-            owners.delete(f);
+            releaseFollowerController(f,this);
         }
         this.driven=null;
     }
@@ -109,7 +109,7 @@ export class SplineRouteController extends Component {
     }
     private activate(index:number,resetRetries=true):void{
         const f=this.driven,w=this.itinerary[index];
-        if(!this.live(f)||owners.get(f)!==this||!w||!active(w.spline))
+        if(!this.live(f)||followerControllerOwner(f)!==this||!w||!active(w.spline))
             throw Error('Route follower or waypoint no longer available.');
         const diagnosis=f.inspectRouteTo(w.spline,w.progress);
         if(resetRetries)this.retryCount=0;
@@ -129,7 +129,7 @@ export class SplineRouteController extends Component {
         if(this.driven)return false; // use stopRoute first; no implicit takeover
         try{
             const f=this.follower;
-            if(!this.live(f)||!active(f.currentSpline)||owners.has(f))
+            if(!this.live(f)||!active(f.currentSpline)||followerControllerOwner(f)!==undefined)
                 throw Error('Route requires an active, unowned follower with a valid source.');
             if(!Array.isArray(this.waypoints)||this.waypoints.length<1||this.waypoints.length>128||
                !Number.isInteger(startIndex)||startIndex<0||startIndex>=this.waypoints.length||typeof this.repeat!=='boolean')
@@ -140,7 +140,7 @@ export class SplineRouteController extends Component {
             if(this.requireReachableItinerary){const report=this.preview(f,itinerary,startIndex,this.repeat);if(report.status!=='reachable')throw Error(report.message);}
             this.retryBudget=this.maxRouteRetries;this.retryInterval=this.retryDelay;this.retryCount=0;this.retryRemaining=0;
             this.itinerary=itinerary;this.index=-1;this.visited=0;this.repeatSnapshot=this.repeat;
-            owners.set(f,this);this.driven=f;this.activate(startIndex);return true;
+            if(!claimFollowerController(f,this))throw Error('Follower already controlled.');this.driven=f;this.activate(startIndex);return true;
         }catch(error){return this.fail(error);}
     }
     public pauseRoute():boolean{

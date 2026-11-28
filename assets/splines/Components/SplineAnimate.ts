@@ -7,6 +7,7 @@ import { SplineJunction, JunctionExitDirection, JunctionTrafficSignal, type Spli
 import {nextShortestJunctionExit,planSplineRoute,inspectSplineRoute,findUnavailableTrafficExits,
     type SplineRoute,type SplineRouteDiagnosis} from '../Core/SplineNetwork';
 import {splineTrafficGate} from '../Core/SplineTrafficGate';
+import {followerControllerRate} from '../Core/SplineFollowerControlRegistry';
 import {splineHeadwayRegistry} from '../Core/SplineHeadway';
 import {headwayWorldArc} from '../Core/SplineHeadwayWorldArc';
 import {laneLateralOffset} from '../Core/SplineLaneLayout';
@@ -762,7 +763,7 @@ export class SplineAnimate extends Component {
             z:beforeRotation.z,w:beforeRotation.w};
         const startSpline=spline;
         const multiplier=this.modifiers?.sample(this.currentProgress).speed||1;
-        const rate=Math.max(0.01,multiplier);
+        const rate=Math.max(0.01,multiplier)*followerControllerRate(this);
         this.advance(dt*rate,rate);
         if(!this.playing||!this.enableProximityAvoidance||!this.proximityPredictAgents||
            this.source()!==startSpline){

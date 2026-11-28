@@ -23,6 +23,7 @@ try {
  }
  assert(fs.readFileSync(path.join(first.folder,'Train/TrainControllerSetup.ts'),'utf8').includes('SplineTrainController'));
  assert(fs.readFileSync(path.join(first.folder,'Route/RouteControllerSetup.ts'),'utf8').includes('SplineRouteController'));
+ assert(fs.readFileSync(path.join(first.folder,'Group/GroupControllerSetup.ts'),'utf8').includes('SplineGroupController'));
  const demo=JSON.parse(fs.readFileSync(
    path.join(first.folder,'GeometryGraph/BasicRibbonGraph.json'),'utf8'));
  assert.equal(demo.version,1);

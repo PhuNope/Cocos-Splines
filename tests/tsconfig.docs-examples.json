@@ -21,6 +21,7 @@
     "../examples/installable/Population/PrefabSpawningSetup.ts",
     "../examples/installable/Population/PopulationGraphSetup.ts",
     "../examples/installable/Train/TrainControllerSetup.ts",
-    "../examples/installable/Route/RouteControllerSetup.ts"
+    "../examples/installable/Route/RouteControllerSetup.ts",
+    "../examples/installable/Group/GroupControllerSetup.ts"
   ]
 }

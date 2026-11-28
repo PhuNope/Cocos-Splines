@@ -82,6 +82,13 @@ try {
     animate.restart();animate.update(1);assert.equal(target.worldPosition.x,5);
     animate.update(2);assert.equal(target.worldPosition.x,5);
 
+    // Shared controller rate affects both Time and Speed without editing settings.
+    const lease=require(path.join(out,'Core','SplineFollowerControlRegistry.js')),owner={};
+    assert(lease.claimFollowerController(animate,owner));lease.setFollowerControllerRate(animate,owner,2);
+    animate.method=AnimateMethod.Time;animate.duration=4;animate.loopMode=LoopMode.Once;animate.restart();animate.update(1);
+    assert.equal(target.worldPosition.x,5);assert.equal(animate.duration,4);
+    animate.method=AnimateMethod.Speed;animate.speed=5;animate.restart();animate.update(.5);assert.equal(target.worldPosition.x,5);assert.equal(animate.speed,5);
+    lease.releaseFollowerController(animate,owner);animate.restart();animate.update(.5);assert.equal(target.worldPosition.x,2.5);
     // Two named spline paths connected at progress 0.5; events must be called
     // when crossed even if the follower traverses the junction within one update.
     const {SplineTrigger,TriggerDirection}=require(path.join(out,'Components','SplineTrigger.js'));

@@ -59,7 +59,23 @@ try{
   pf.isWaitingForTraffic=true;const commands=pf.commands.length;assert(!pr.replanCurrentWaypoint());pr.lateUpdate(100);assert.equal(pf.commands.length,commands);pf.isWaitingForTraffic=false;assert(pr.replanCurrentWaypoint());
   pf.arrive();pr.lateUpdate(0);b.unreachable=true;pr.lateUpdate(0);assert.equal(pr.state,'retrying');assert.equal(pr.routeRetryCount,0);pr.lateUpdate(100);assert.equal(pr.routeRetryCount,1);pr.lateUpdate(100);assert.equal(pr.state,'failed');assert.match(pr.lastError,/No route/);assert.equal(pf.routeDestination,null);
   b.unreachable=false;assert(pr.startRoute());pf.pause();pr.lateUpdate(0);assert.equal(pr.state,'retrying');pr.lateUpdate(.5);assert.equal(pr.state,'traveling');assert(pf.isPlaying);pr.stopRoute();
-  editor=true;r.waypoints=[w(a)];assert(!r.startRoute());r.onEnable();r.lateUpdate(1);assert.equal(f.routeDestination,null);
+  // Group shares the same ownership lease, and does not mutate route settings.
+  const {SplineGroupController}=require(dir+'/Components/SplineGroupController.js');
+  const {followerControllerRate,followerControllerOwner}=require(dir+'/Core/SplineFollowerControlRegistry.js');
+  const gf=new SplineAnimate(),g2=new SplineAnimate(),g=new SplineGroupController();
+  g.followers=[gf,g2];g.speedMultiplier=2;g.onEnable();assert.equal(g.state,'idle');g.lateUpdate();
+  assert.equal(g.state,'playing');assert(gf.isPlaying&&g2.isPlaying);assert.equal(followerControllerRate(gf),2);
+  const blockedRoute=new SplineRouteController();blockedRoute.follower=gf;blockedRoute.waypoints=[w(a)];
+  assert(!blockedRoute.startRoute());assert.equal(followerControllerOwner(gf),g);assert(gf.isPlaying);
+  const duplicateGroup=new SplineGroupController();duplicateGroup.followers=[new SplineAnimate(),gf];assert(!duplicateGroup.startGroup());assert.equal(followerControllerOwner(duplicateGroup.followers[0]),undefined);
+  gf.isWaitingForTraffic=true;g2.isHeadwayBlocked=true;assert.deepEqual(g.getStatus(),{total:2,playing:2,stopped:0,trafficWaiting:1,headwayBlocked:1,proximityBlocked:0});
+  g2.pause();assert(g.pauseGroup());assert(!gf.isPlaying);assert(gf.isWaitingForTraffic);assert(g.setSpeedMultiplier(.5));assert.equal(followerControllerRate(gf),.5);assert(g.resumeGroup());assert(gf.isPlaying);assert(!g2.isPlaying);
+  assert(!g.setSpeedMultiplier(0));assert.equal(followerControllerRate(gf),.5);gf.pause();g.lateUpdate();assert.equal(g.state,'completed');assert.equal(followerControllerRate(gf),1);assert.equal(followerControllerOwner(g2),undefined);
+  assert(blockedRoute.startRoute());assert(!g.startGroup());blockedRoute.stopRoute();assert(g.startGroup());
+  g.followers=[gf];g.lateUpdate();assert.equal(g.state,'failed');assert(!gf.isPlaying&&!g2.isPlaying);assert.equal(followerControllerRate(g2),1);
+  g.followers=[gf,gf];assert(!g.startGroup());g.followers=[gf,g2];g2.target=gf.node;assert(!g.startGroup());g2.target=null;
+  assert(g.startGroup());g.onDisable();assert.equal(g.state,'idle');assert(!gf.isPlaying&&!g2.isPlaying);assert.equal(followerControllerOwner(gf),undefined);
+  editor=true;assert(!g.startGroup());r.waypoints=[w(a)];assert(!r.startRoute());r.onEnable();r.lateUpdate(1);assert.equal(f.routeDestination,null);
  }finally{Module._load=orig;}
  console.log('ROUTE CONTROLLER V2 PASS: waypoint modes, delayed start, dwell, pause, repeat, ownership, failure and lifecycle.');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
